@@ -1,4 +1,8 @@
 #include <stdint.h>
+#include <stdio.h>
+
+#include <thread>
+#include <chrono>
 
 union MusicPlayer {
     uint8_t unknown[0x10];
@@ -8,31 +12,13 @@ union MusicPlayer {
     };
     struct {
         uint8_t _padding[0x5];
-        uint16_t currentSequenceAddressInMem;
-    };
-    struct {
-        uint8_t _padding[0x7];
-        uint16_t currentNoteAddressInMem;
-    };
-    struct {
-        uint8_t _padding[0x9];
-        uint8_t stanzasLeftInSequence;
-    };
-    struct {
-        uint8_t _padding[0xA];
-        uint8_t tickCounter; 
-    };
-    struct {
-        uint8_t _padding[0xB];
-        uint8_t noteOnDuration;
-    };
-    struct {
-        uint8_t _padding[0xC];
-        uint8_t restDuration;
-    };
-    struct {
-        uint8_t _padding[0xD];
-        uint8_t speakerIsOff;
+        uint16_t currentSequenceAddressInMem;  // 0x5
+        uint16_t currentNoteAddressInMem;      // 0x7
+        uint8_t  stanzasLeftInSequence;        // 0x9
+        uint8_t  tickCounter;                  // 0xA
+        uint8_t  noteOnDuration;               // 0xB
+        uint8_t  restDuration;                 // 0xC
+        uint8_t  speakerIsOff;                 // 0xD
     };
 };
 
@@ -43,8 +29,13 @@ extern uint8_t mem[0x10000];
 
 extern uint16_t frequencyLookupTable[0x100];
 
-void TurnOnPCSpeaker(uint16_t frequency);
-void TurnOffPCSpeaker();
+void TurnOnPCSpeaker(uint16_t frequency) {
+    printf("* SPEAKER ON FREQ %d *\n", frequency);
+}
+
+void TurnOffPCSpeaker() {
+    printf("* SPEAKER OFF *\n");
+}
 
 // pit_interrupt_service_routine is an ISR on INT 0x1C, the programmable
 // timer. This code reads from state in memory (mem) and the MusicPlayer
@@ -112,5 +103,42 @@ void pit_interrupt_service_routine(union MusicPlayer* player) {
         player->currentNoteAddressInMem = *(uint16_t*)&mem[si + 1];
         player->tickCounter = 1;
         player->speakerIsOff = 1;
+    }
+}
+
+void main() {
+
+    FILE *fp = fopen("76a4-0000.bin", "rb");
+    if (fp != NULL) {
+        fread(mem, 1, 0x1000, fp);
+        fclose(fp);
+    }
+
+    fp = fopen("76a4-0000.bin", "rb");
+    if (fp != NULL) {
+        fseek(fp, 0x24, SEEK_SET);
+        fread(frequencyLookupTable, 1, 0x100, fp);
+        fclose(fp);
+    }
+
+    uint16_t songOffset = 0x280;
+    uint8_t repeats = mem[songOffset];
+    uint16_t curNoteAddress = *(uint16_t*)&mem[songOffset + 1];
+
+    union MusicPlayer mp{};
+
+    mp.currentSequenceAddressInMem = songOffset;
+    mp.currentNoteAddressInMem = curNoteAddress;
+    mp.stanzasLeftInSequence = repeats;
+    mp.tickCounter = 1;
+    mp.speakerIsOff = 1;
+    mp.isrEnabled = 1;
+
+    while(mp.isrEnabled)
+    {
+        printf("tick\n");
+        pit_interrupt_service_routine(&mp);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(55));
     }
 }
