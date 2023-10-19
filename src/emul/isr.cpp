@@ -7,11 +7,11 @@
 union MusicPlayer {
     uint8_t unknown[0x10];
     struct {
-        uint8_t _padding[0x2];
+        uint8_t _padding0[0x2];
         uint8_t isrEnabled; 
     };
     struct {
-        uint8_t _padding[0x5];
+        uint8_t _padding1[0x5];
         uint16_t currentSequenceAddressInMem;  // 0x5
         uint16_t currentNoteAddressInMem;      // 0x7
         uint8_t  stanzasLeftInSequence;        // 0x9
@@ -25,9 +25,9 @@ union MusicPlayer {
 const unsigned short int pp__0SONG = 0xe580; // 0SONG size: 23
 // {0x01, 0x4b, 0x02, 0x01, 0xbe, 0x01, 0x01, 0x4b, 0x02, 0x01, 0xd9, 0x01, 0x01, 0xf4, 0x01, 0x01, 0x0f, 0x02, 0x01, 0x30, 0x02, 0x00, 0x00}
 
-extern uint8_t mem[0x10000];
+uint8_t mem[0x1000];
 
-extern uint16_t frequencyLookupTable[0x100];
+uint16_t frequencyLookupTable[0x100];
 
 void TurnOnPCSpeaker(uint16_t frequency) {
     printf("* SPEAKER ON FREQ %d *\n", frequency);
@@ -48,16 +48,17 @@ void pit_interrupt_service_routine(union MusicPlayer* player) {
         return;
 
     player->tickCounter--;
-    if (player->tickCounter == 0) {
-        if ((player->speakerIsOff) || (player->restDuration == 0)) {
-            // Speaker is already off or no rest between notes
-            // Continue to next note change
-        } else {
-            player->tickCounter = player->restDuration;
-            TurnOffPCSpeaker();
-            player->speakerIsOff = 1;
-            return;
-        }
+    if (player->tickCounter > 0)
+        return;
+
+    if ((player->speakerIsOff) || (player->restDuration == 0)) {
+        // Speaker is already off or no rest between notes
+        // Continue to next note change
+    } else {
+        player->tickCounter = player->restDuration;
+        TurnOffPCSpeaker();
+        player->speakerIsOff = 1;
+        return;
     }
 
     for(;;) {
@@ -106,7 +107,7 @@ void pit_interrupt_service_routine(union MusicPlayer* player) {
     }
 }
 
-void main() {
+int main() {
 
     FILE *fp = fopen("76a4-0000.bin", "rb");
     if (fp != NULL) {
@@ -141,4 +142,6 @@ void main() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(55));
     }
+
+    return 0;
 }
