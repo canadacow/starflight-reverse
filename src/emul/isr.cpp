@@ -17,6 +17,16 @@ union MusicPlayer {
         uint8_t speakerIsOff;
         uint8_t _rest[0x10 - 0xD - 1];
     };
+    struct {
+        uint8_t _padding[0xC];
+        uint8_t restDuration;
+        uint8_t _rest[0x10 - 0xC - 1];
+    };
+    struct {
+        uint8_t _padding[0xB];
+        uint8_t noteOnDuration;
+        uint8_t _rest[0x10 - 0xB - 1];
+    };
 };
 
 extern uint8_t mem[0x10000];
@@ -38,21 +48,16 @@ void pit_interrupt_service_routine(union MusicPlayer* player) {
 
     player->tickCounter--;
     if (player->tickCounter == 0) {
-        if (player->speakerIsOff) {
-            // Speaker is already off
-            goto NextNoteChange;
+        if ((player->speakerIsOff) || (player->restDuration == 0)) {
+            // Speaker is already off or no rest between notes
+            // Continue to next note change
+        } else {
+            player->tickCounter = player->restDuration;
+            TurnOffPCSpeaker();
+            player->speakerIsOff = 1;
+            return;
         }
-        if (player->unknown[0xC] == 0) {
-            // No rest between notes
-            goto NextNoteChange;
-        }
-        player->tickCounter = player->unknown[0xC];
-        TurnOffPCSpeaker();
-        player->speakerIsOff = 1;
-        return;
     }
-
-NextNoteChange:
 
     for(;;) {
         uint16_t si = *(uint16_t*)&player->unknown[0x7];
@@ -64,18 +69,18 @@ NextNoteChange:
                 al &= 0x3F;
                 ah++;
             }
-            player->unknown[0xB] = al;
-            player->unknown[0xC] = ah;
+            player->noteOnDuration = al;
+            player->restDuration = ah;
             al = mem[si];
             ++si;
             *(uint16_t*)&player->unknown[0x7] = si;
             if (al == 0xFF) {
-                player->tickCounter = player->unknown[0xB];
+                player->tickCounter = player->noteOnDuration;
                 TurnOffPCSpeaker();
                 player->speakerIsOff = 1;
                 return;
             }
-            ah = player->unknown[0xB] - player->unknown[0xC];
+            ah = player->noteOnDuration - player->restDuration;
             player->tickCounter = ah;
             uint16_t dx = al;
             TurnOnPCSpeaker(frequencyLookupTable[dx]);
