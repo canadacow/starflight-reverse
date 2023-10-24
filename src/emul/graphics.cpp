@@ -16,7 +16,7 @@ static SDL_Texture *texture;
 #include <vector>
 
 #define WIDTH 640
-#define HEIGHT 480
+#define HEIGHT 400
 
 std::vector<uint32_t> pixels;
 
@@ -359,7 +359,7 @@ void GraphicsInit()
 void GraphicsUpdate()
 {
 #ifdef SDL
-    SDL_UpdateTexture(texture, NULL, pixels.data(), pixels.size() * sizeof(uint32_t));
+    SDL_UpdateTexture(texture, NULL, pixels.data(), WIDTH * sizeof(uint32_t));
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
