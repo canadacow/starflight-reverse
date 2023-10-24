@@ -13,15 +13,17 @@ static SDL_Texture *texture;
 #include<math.h>
 #include"graphics.h"
 
-#define WIDTH 640
-#define HEIGHT 400
+#include <vector>
 
-uint32_t* pixels;
+#define WIDTH 640
+#define HEIGHT 480
+
+std::vector<uint32_t> pixels;
 
 int cursorx = 0;
 int cursory = 0;
 
-int colortable[16] =
+uint32_t colortable[16] =
 {
 0x000000, // black
 0x0000AA, // blue
@@ -41,7 +43,7 @@ int colortable[16] =
 0xFFFFFF,
 };
 
-static char vgafont8[256*8] =
+static uint8_t vgafont8[256*8] =
 {
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 0x7e,0x81,0xa5,0x81,0xbd,0x99,0x81,0x7e,
@@ -330,7 +332,9 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 #endif
-    pixels = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
+    pixels = std::vector<uint32_t>();
+    pixels.resize(WIDTH * HEIGHT * 1000);
+
     GraphicsClear(0);
     return 0;
 }
@@ -355,7 +359,7 @@ void GraphicsInit()
 void GraphicsUpdate()
 {
 #ifdef SDL
-    SDL_UpdateTexture(texture, NULL, pixels, WIDTH * sizeof(uint32_t));
+    SDL_UpdateTexture(texture, NULL, pixels.data(), pixels.size() * sizeof(uint32_t));
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
