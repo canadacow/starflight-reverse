@@ -2,7 +2,7 @@
 // ==== Directory of the STAR files ====
 // =====================================
 
-typedef struct { int idx; char* name; int fileno, start, end, size, nblocks, blocksize, lsize; } DIRENTRY;
+typedef struct { int idx; const char* name; int fileno, start, end, size, nblocks, blocksize, lsize; } DIRENTRY;
 
 DIRENTRY dir[]=
 {

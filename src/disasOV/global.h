@@ -11,7 +11,7 @@ typedef struct
 {
     int id;
     int startaddress;
-    char *name;
+    const char *name;
 } OVERLAYS;
 
 extern OVERLAYS overlays[];
@@ -22,7 +22,7 @@ typedef struct
 {
     int ovidx; /* the ovidx and the wordp defines a word */
     int wordp;
-    char *newword;
+    const char *newword;
 
 } WORDRENAME;
 

@@ -2,7 +2,7 @@
 // =========== Dictionary ==========
 // =================================
 
-typedef struct { int ov; unsigned short code, word; char immediate; unsigned char flags; char* name; } WORD;
+typedef struct { int ov; unsigned short code, word; char immediate; unsigned char flags; const char* name; } WORD;
 
 WORD dictionary[]=
 {

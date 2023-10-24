@@ -9,7 +9,7 @@
 struct WORD dictionary[10000];
 int nwords = 0;
 
-char* GetWordName(WORD *word)
+const char* GetWordName(WORD *word)
 {
     int i;
     for(i = 0; renamewords[i].newword != NULL; i++)
@@ -44,7 +44,7 @@ WORD* GetWordByAddr(unsigned short addr, int ovidx)
     return &dictionary[nwords-1];
 }
 
-char* GetWordNameByAddr(unsigned short addr, int ovidx)
+const char* GetWordNameByAddr(unsigned short addr, int ovidx)
 {
     return GetWordName(GetWordByAddr(addr, ovidx));
 }
@@ -169,7 +169,7 @@ void WriteDictionary(unsigned char *mem, FILE *fp, int ovidx)
     }
 }
 
-void WriteAllDictionary(char* filename)
+void WriteAllDictionary(const char* filename)
 {
     int i;
     FILE *fp = fopen(filename, "w");
@@ -190,7 +190,7 @@ void WriteAllDictionary(char* filename)
     fprintf(fp, "WORD dictionary[]=\n{\n");
     for(i=0; i<nwords; i++)
     {
-        char *name = GetWordName(&dictionary[i]);
+        const char *name = GetWordName(&dictionary[i]);
         char escapedname[512];
         int offset = 0;
         for(int j=0; j<strlen(name); j++)

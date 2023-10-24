@@ -569,12 +569,12 @@ void ExtractDataFile(const char* filename)
 char* ExtractString(int offset, int ovidx)
 {
   static char str[257];
-  int class   = STARB[offset+0x9];
+  int sfClass   = STARB[offset+0x9];
   int species = STARB[offset+0xa];
   int size = STARB[offset+11];
 
   if (offset < 0x1000) return NULL;
-  if (class != 0x30) return NULL;
+  if (sfClass != 0x30) return NULL;
 
   memcpy(str, &STARB[offset+12], size);
   str[size] = 0;

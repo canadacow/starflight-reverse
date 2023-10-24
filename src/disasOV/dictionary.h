@@ -38,10 +38,10 @@ extern struct WORD dictionary[10000];
 void SortDictionary();
 void ParseVocabulary(unsigned char *mem, int linkp, int decrypt, int ovidx);
 WORD* GetWordByAddr(unsigned short addr, int ovidx);
-char* GetWordNameByAddr(unsigned short addr, int ovidx);
-char* GetWordName(WORD *dict);
+const char* GetWordNameByAddr(unsigned short addr, int ovidx);
+const char* GetWordName(WORD *dict);
 void WriteDictionary(unsigned char *mem, FILE *fp, int ovidx);
-void WriteAllDictionary(char* filename);
+void WriteAllDictionary(const char* filename);
 void DictionaryConsistencyCheck();
 
 #endif

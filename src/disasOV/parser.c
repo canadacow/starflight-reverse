@@ -21,13 +21,13 @@ Variables GetEmptyVariables()
     return vars;
 }
 
-char* GetVariable(Variables *vars, WORD *e, int stackidxfromtop)
+const char* GetVariable(Variables *vars, WORD *e, int stackidxfromtop)
 {
-    static char *def = "h";
-    static char *default1 = "unknown";
-    static char *default2 = "callp1";
-    static char *default3 = "callp0";
-    static char *default4 = "never";
+    static const char *def = "h";
+    static const char *default1 = "unknown";
+    static const char *default2 = "callp1";
+    static const char *default3 = "callp0";
+    static const char *default4 = "never";
     int varidx;
     int stackidx = vars->nstack - 1 - stackidxfromtop;
     if (stackidx < 0)
@@ -193,7 +193,7 @@ int DisasmRange(int offset, int size, int ovidx, int minaddr, int maxaddr)
 
 int GetWordInstructionLength(int addr, WORD *e, int ovidx)
 {
-    char *s = GetWordName(e);
+    const char *s = GetWordName(e);
 
     if (strcmp(s, "(ABORT\")") == 0)
     {
@@ -279,7 +279,7 @@ void ParseRuleFunction(int minaddr, int maxaddr, WORD *d, int ovidx)
     pline[d->wordp+0].done = 1;
     pline[d->wordp+1].done = 1;
     pline[d->wordp+2].done = 1;
-    pline[d->wordp+0].str = malloc(STRINGLEN);
+    pline[d->wordp+0].str = (char*)malloc(STRINGLEN);
     snprintf(pline[d->wordp+0].str, STRINGLEN, "\nvoid %s() // %s rule\n{\n  int b;\n\n", Forth2CString(GetWordName(d)), GetWordName(d));
 
     /*
@@ -362,8 +362,8 @@ void ParseRuleFunction(int minaddr, int maxaddr, WORD *d, int ovidx)
         if (i < RULECNT-1) sprintf(ifthen, "  if (b)\n  {\n    %s  }\n\n", func);
         else sprintf(ifthen, "  if (b)\n  {\n    %s  }\n}\n\n", func);
 
-        char try[8192];
-        try[0] = 0;
+        char searchTry[8192];
+        searchTry[0] = 0;
 
         for(j=0; j<n; j++)
         {
@@ -386,13 +386,13 @@ void ParseRuleFunction(int minaddr, int maxaddr, WORD *d, int ovidx)
             }
             SetWordExtern(p, e, e->ovidx);
             GetMacro(p, e, d, func, e->ovidx);
-            strcat(try, "  ");
-            strcat(try, func);
+            strcat(searchTry, "  ");
+            strcat(searchTry, func);
             // TODO, might be the exchanged
-            if (flag) strcat(try, "  b = b && Pop();\n"); else strcat(try, "  b = b && !Pop();\n");
+            if (flag) strcat(searchTry, "  b = b && Pop();\n"); else strcat(searchTry, "  b = b && !Pop();\n");
         }
-        pline[RULEARRp + i*2].str = malloc(strlen(try)+STRINGLEN);
-        sprintf(pline[RULEARRp + i*2].str, "  b = 1;\n%s%s", try, ifthen);
+        pline[RULEARRp + i*2].str = (char*)malloc(strlen(searchTry)+STRINGLEN);
+        sprintf(pline[RULEARRp + i*2].str, "  b = 1;\n%s%s", searchTry, ifthen);
     }
 }
 
@@ -400,7 +400,7 @@ void ParseCaseFunction(int minaddr, int maxaddr, WORD *d, int ovidx)
 {
     int par = d->wordp;
     int ofs = d->wordp;
-    char *s = GetWordName(d);
+    const char *s = GetWordName(d);
     pline[ofs].str = (char*)malloc(4096);
     pline[ofs].str[0] = 0;
     int n = Read16(par);
@@ -408,7 +408,7 @@ void ParseCaseFunction(int minaddr, int maxaddr, WORD *d, int ovidx)
     pline[ofs+1].done = 1;
     int i;
     char temp[256];
-    pline[ofs-1].str = malloc(STRINGLEN);
+    pline[ofs-1].str = (char*)malloc(STRINGLEN);
     snprintf(pline[ofs-1].str, STRINGLEN, "\nvoid %s() // %s\n{\n", Forth2CString(s), s);
     sprintf(pline[ofs].str, "  switch(Pop()) // %s\n  {\n", s);
     for(i=0; i<n; i++)

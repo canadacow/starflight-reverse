@@ -1,7 +1,7 @@
 #ifndef STARSYSTEM_H
 #define STARSYSTEM_H
 
-typedef struct { int instanceoffset, x, y, species, nplanets, orbitmask, loggedmask, flaredate; } STARSYSTEMENTRY;
+typedef struct { int instanceoffset, species, x, y, nplanets, orbitmask, loggedmask, flaredate; } STARSYSTEMENTRY;
 
 STARSYSTEMENTRY starsystem[]=
 {
@@ -278,7 +278,7 @@ STARSYSTEMENTRY starsystem[]=
   { .instanceoffset=0x0000, .species=-1, .x=  0, .y=  0, .nplanets=0, .orbitmask=0x00, .loggedmask=0x00, .flaredate=0 }
 };
 
-typedef struct { int instanceoffset, starsystemoffset, x, y, orbit, species, seed; } PLANETENTRY;
+typedef struct { int instanceoffset, starsystemoffset, species, x, y, orbit, seed; } PLANETENTRY;
 
 PLANETENTRY planets[]=
 {

@@ -1,7 +1,10 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-    extern int colortable[16];
+#include <stdint.h>
+
+
+    extern uint32_t colortable[16];
 
     void GraphicsInit();
     void GraphicsUpdate();

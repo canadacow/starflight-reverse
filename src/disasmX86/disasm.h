@@ -63,17 +63,17 @@ static unsigned decode_b(BYTE *, unsigned, char *);
 static unsigned decode_ff(BYTE *, unsigned, char *);
 static unsigned decode_bioscall(BYTE *, unsigned, char *);
 
-static char *byte_reg[] = { "al","cl","dl","bl","ah","ch","dh","bh" };
-static char *word_reg[] = { "ax","cx","dx","bx","sp","bp","si","di" };
-static char *seg_reg[] = { "es","cs","ss","ds", "unknown_seg_reg", "unknown_seg_reg", "unknown_seg_reg", "unknown_seg_reg" };
-static char *index_reg[] = { "bx+si", "bx+di", "bp+si", "bp+di", "si", "di", "bp", "bx" };
-static char *nul_reg[] = { "??", "??", "??", "??", "??", "??", "??", "??" };
-static char *condition[] =
+static const char *byte_reg[] = { "al","cl","dl","bl","ah","ch","dh","bh" };
+static const char *word_reg[] = { "ax","cx","dx","bx","sp","bp","si","di" };
+static const char *seg_reg[] = { "es","cs","ss","ds", "unknown_seg_reg", "unknown_seg_reg", "unknown_seg_reg", "unknown_seg_reg" };
+static const char *index_reg[] = { "bx+si", "bx+di", "bp+si", "bp+di", "si", "di", "bp", "bx" };
+static const char *nul_reg[] = { "??", "??", "??", "??", "??", "??", "??", "??" };
+static const char *condition[] =
 {
     "o","no","b","ae","z","nz","be","a","s","ns","p","np","l","ge","le","g"
 };
 
-static char *itext[] =
+static const char *itext[] =
 { 
     "", "add", "push", "pop", "or", "adc", "sbb", "and",
     "es:", "daa", "sub", "cs:", "das", "xor", "ss:", "aaa", "cmp", "ds:",
@@ -88,22 +88,22 @@ static char *itext[] =
 
 enum instructions
 {
-    none, add, push, pop, or, adc, sbb, and, es, daa,
-    sub, cs, das, xor, ss, aaa, cmp, ds, aas, inc, dec, jump, test, xchg,
+    none, add, push, pop, OR, adc, sbb, AND, es, daa,
+    sub, cs, das, XOR, ss, aaa, cmp, ds, aas, inc, dec, jump, test, xchg,
     mov, lea, nop, cbw, cwd, call, wait, pushf, popf, sahf, lahf, movs,
     cmps, stos, lods, scas, ret, les, lds, retf, intr, into, iret, rol,
     ror, rcl, rcr, shl, shr, sar, aam, aad, xlat, esc, loopne, loope, loop,
-    jcxz, in, out, jmp, lock, repz, repnz, hlt, cmc, not, neg, mul, imul,
-    divide, idiv, clc, stc, cli, sti, cld, std, db, illegal
+    jcxz, in, out, jmp, lock, repz, repnz, hlt, cmc, NOT, neg, mul, imul,
+    divide, idiv, clc, stc, cli, sti, cld, STD, db, illegal
 };
 
 
 #define DF_PREFIX  1
 #define DF_NOSPACE 2
 
-static int table_8x[] = { add, or, adc, sbb, and, sub, xor, cmp };
+static int table_8x[] = { add, OR, adc, sbb, AND, sub, XOR, cmp };
 static int table_dx[] = { rol, ror, rcl, rcr, shl, shr, shl, sar };
-static int table_f67[] = { test, illegal, not, neg, mul, imul, divide, idiv };
+static int table_f67[] = { test, illegal, NOT, neg, mul, imul, divide, idiv };
 static int table_fe[] = { inc, dec, illegal, illegal, illegal, illegal, illegal, illegal };
 static int table_ff[] = { inc, dec, call, call, jmp, jmp, push, illegal };
     
@@ -123,12 +123,12 @@ static struct Disasm
 { add, decode_axd16 },          /* 0x05 */
 { push,decode_pushpopseg },     /* 0x06 */
 { pop, decode_pushpopseg },     /* 0x07 */
-{ or,  decode_br8 },            /* 0x08 */
-{ or,  decode_wr16 },           /* 0x09 */
-{ or,  decode_r8b },            /* 0x0a */
-{ or,  decode_r16w },           /* 0x0b */
-{ or,  decode_ald8 },           /* 0x0c */
-{ or,  decode_axd16 },          /* 0x0d */
+{ OR,  decode_br8 },            /* 0x08 */
+{ OR,  decode_wr16 },           /* 0x09 */
+{ OR,  decode_r8b },            /* 0x0a */
+{ OR,  decode_r16w },           /* 0x0b */
+{ OR,  decode_ald8 },           /* 0x0c */
+{ OR,  decode_axd16 },          /* 0x0d */
 { push,decode_pushpopseg },     /* 0x0e */
 { db,  decode_databyte },       /* 0x0f */
 { adc, decode_br8 },            /* 0x10 */
@@ -147,12 +147,12 @@ static struct Disasm
 { sbb, decode_axd16 },          /* 0x1d */
 { push,decode_pushpopseg },     /* 0x1e */
 { pop, decode_pushpopseg },     /* 0x1f */
-{ and, decode_br8 },            /* 0x20 */
-{ and, decode_wr16 },           /* 0x21 */
-{ and, decode_r8b },            /* 0x22 */
-{ and, decode_r16w },           /* 0x23 */
-{ and, decode_ald8 },           /* 0x24 */
-{ and, decode_axd16 },          /* 0x25 */
+{ AND, decode_br8 },            /* 0x20 */
+{ AND, decode_wr16 },           /* 0x21 */
+{ AND, decode_r8b },            /* 0x22 */
+{ AND, decode_r16w },           /* 0x23 */
+{ AND, decode_ald8 },           /* 0x24 */
+{ AND, decode_axd16 },          /* 0x25 */
 { es,  NULL, DF_PREFIX },       /* 0x26 */
 { daa },                        /* 0x27 */
 { sub, decode_br8 },            /* 0x28 */
@@ -163,12 +163,12 @@ static struct Disasm
 { sub, decode_axd16 },          /* 0x2d */
 { cs,  NULL, DF_PREFIX },       /* 0x2e */
 { das },                        /* 0x2f */
-{ xor, decode_br8 },            /* 0x30 */
-{ xor, decode_wr16 },           /* 0x31 */
-{ xor, decode_r8b },            /* 0x32 */
-{ xor, decode_r16w },           /* 0x33 */
-{ xor, decode_ald8 },           /* 0x34 */
-{ xor, decode_axd16 },          /* 0x35 */
+{ XOR, decode_br8 },            /* 0x30 */
+{ XOR, decode_wr16 },           /* 0x31 */
+{ XOR, decode_r8b },            /* 0x32 */
+{ XOR, decode_r16w },           /* 0x33 */
+{ XOR, decode_ald8 },           /* 0x34 */
+{ XOR, decode_axd16 },          /* 0x35 */
 { ss,  NULL, DF_PREFIX },       /* 0x36 */
 { aaa },                        /* 0x37 */
 { cmp, decode_br8 },            /* 0x38 */
@@ -368,7 +368,7 @@ static struct Disasm
 { cli },                        /* 0xfa */
 { sti },                        /* 0xfb */
 { cld },                        /* 0xfc */
-{ std },                        /* 0xfd */
+{ STD },                        /* 0xfd */
 { none,decode_b, 0, table_fe }, /* 0xfe */
 { none,decode_ff,0, table_ff }, /* 0xff */
 };

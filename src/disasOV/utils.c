@@ -37,7 +37,7 @@ char* Escape(char* pStr)
 }
 
 
-char* Forth2CString(char *in)
+char* Forth2CString(const char *in)
 {
     static char out[1024];
     memset(out, 0, 1024);

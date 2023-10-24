@@ -30,31 +30,31 @@ IADDR
 
 unsigned char starb[362496];
 
-void IHeader(int a, unsigned int *next, unsigned int *previous, unsigned int *children, unsigned int *class, unsigned int *species, DIRENTRY **de)
+void IHeader(int a, unsigned int *next, unsigned int *previous, unsigned int *children, unsigned int *sfClass, unsigned int *species, DIRENTRY **de)
 {
   *next = ((starb[a+0])<<0) | ((starb[a+1])<<8) | ((starb[a+2])<<16);
   *previous = ((starb[a+3])<<0) | ((starb[a+4])<<8) | ((starb[a+5])<<16);
   *children = ((starb[a+6])<<0) | ((starb[a+7])<<8) | ((starb[a+8])<<16);
-  *class = starb[a+0x9];
+  *sfClass = starb[a+0x9];
   *species = starb[a+0xa];
-  *de = GetDirByIdx(*class);
+  *de = GetDirByIdx(*sfClass);
 }
 
 void IterSibling(FILE *fp, FILE *fph, int iter, int first)
 {
     int addr = first;
 
-    unsigned int next, previous, children, class, species;
+    unsigned int next, previous, children, sfClass, species;
     DIRENTRY *de;
 
     int i;
     do
     {
         unsigned int a = addr;
-        IHeader(a, &next, &previous, &children, &class, &species, &de);
+        IHeader(a, &next, &previous, &children, &sfClass, &species, &de);
 
         fprintf(fph, "  { .instanceoffset=0x%06x, .sib=0x%06x, .prev=0x%06x, .off=0x%06x, .class=0x%02x, .species=0x%02x }, // ",
-          addr, next, previous, children, class, species);
+          addr, next, previous, children, sfClass, species);
           for(int i=0; i<strlen(de->name); i++)
               if (de->name[i] != ' ') fprintf(fph, "%c", de->name[i]);
         fprintf(fph, "\n");
@@ -79,32 +79,32 @@ void IterSibling(FILE *fp, FILE *fph, int iter, int first)
         //fprintf(fp, "0x%06x: 0x%06x 0x%06x 0x%06x 0x%02x 0x%02x %s\n", addr, next, previous, children, class, species, GetDirByIdx(class));
         for(int i=0; i<strlen(de->name); i++)
             if (de->name[i] != ' ') fprintf(fp, "%c", de->name[i]);
-        if (class == 0x0d) // bank lsize=9
+        if (sfClass == 0x0d) // bank lsize=9
         {
             fprintf(fp, "    %i %i balance:%i %i %i", starb[a+11], starb[a+12], starb[a+13]|(starb[a+14]<<8), starb[a+15], starb[a+16]);
         }
-        if (class == 0x0e) // bank-trans lsize=6
+        if (sfClass == 0x0e) // bank-trans lsize=6
         {
             fprintf(fp, "    %i %i amount:%i %i %i", starb[a+11], starb[a+12], starb[a+13]|(starb[a+14]<<8), starb[a+15], starb[a+16]);
         }
-        if (class == 0x35) // message
+        if (sfClass == 0x35) // message
         {
             fprintf(fp, "    '");
             HuffmanDecode(fp, (char*)&starb[a+26], starb[a+25]);
             fprintf(fp, "'");
         }
-        if (class == 0x1b) // message
+        if (sfClass == 0x1b) // message
         {
             fprintf(fp, "    '");
             HuffmanDecode(fp, (char*)&starb[a+41], starb[a+40]);
             fprintf(fp, "'");
         }
-        if (class == 0x20) // planet lsize=0
+        if (sfClass == 0x20) // planet lsize=0
         {
             fprintf(fp, "    species=0x%02x seed=0x%04x", starb[a+0xa], addr);
         }
 #ifdef STARFLT1
-        if (class == 0x30) // string
+        if (sfClass == 0x30) // string
         {
           //if (species == 32)
               fprintf(fp, "    '");
@@ -122,7 +122,7 @@ void IterSibling(FILE *fp, FILE *fph, int iter, int first)
           */
         }
 
-        if (class == 0x17) // starsystem lsize=8 for starflt1, lsize=9 for starflt2
+        if (sfClass == 0x17) // starsystem lsize=8 for starflt1, lsize=9 for starflt2
         {
             fprintf(fp, "    species=%2i flaredate=%4i x=%4i y=%4i orbitmask=0x%02x loggedmask=%i",
                 starb[a+0xa],
@@ -133,7 +133,7 @@ void IterSibling(FILE *fp, FILE *fph, int iter, int first)
                 starb[a+0x12]);
         }
 /*
-        if (class == 0x44) // creatures lsize=17 for starflt1
+        if (sfClass == 0x44) // creatures lsize=17 for starflt1
         {
             fprintf(fp, "    species=%2i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i",
               (int)starb[a+0xa], (int)starb[a+11], (int)starb[a+12], (int)starb[a+13], starb[a+14], starb[a+15], starb[a+16], starb[a+17],
@@ -143,7 +143,7 @@ void IterSibling(FILE *fp, FILE *fph, int iter, int first)
         }
         */
 #else
-        if (class == 0x17) // starsystem lsize=9 for starflt2
+        if (sfClass == 0x17) // starsystem lsize=9 for starflt2
         {
             fprintf(fp, "    %i %i %i %i %i %i %i", starb[a+11], starb[a+12], starb[a+13], starb[a+14], starb[a+15], starb[a+16], starb[a+17]);
         }
@@ -216,7 +216,7 @@ void ExtractInstance(const char* filenametxt, const char* filenameh)
 
 void ExtractStrings(const char* filenameh)
 {
-  unsigned int next, previous, children, class, species;
+  unsigned int next, previous, children, sfClass, species;
   DIRENTRY *de;
 
   FILE *fp = fopen(filenameh, "w");
@@ -241,7 +241,7 @@ void ExtractStrings(const char* filenameh)
 
   do
   {
-    IHeader(a, &next, &previous, &children, &class, &species, &de);
+    IHeader(a, &next, &previous, &children, &sfClass, &species, &de);
     fprintf(fp, "  { .offset=0x%06x, .string=\"", a);
     if (species == 32 && a < limitaddress)
     {
