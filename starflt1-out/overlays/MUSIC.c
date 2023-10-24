@@ -413,6 +413,7 @@ void INITMUS() // INITMUS
     WE2D6(); // WE2D6
     Push(Read16(cc_MUSSEG)); // MUSSEG
     Push(Read16(cc_MUSINT)); // MUSINT
+    printf("Here!!!!!\n");
     WE2DE(); // WE2DE
     Push(0x001c);
     _ro__ex_SET_rc_(); // (!SET)

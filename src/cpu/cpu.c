@@ -7,6 +7,11 @@ unsigned short regsp;
 unsigned short regbp;
 unsigned short int regsi = 0x129; // current vocabulary address (the forth pc pointer)
 
+unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
+{
+    return ((unsigned long)segment << 4) + offset;
+}
+
 void Write8(unsigned short offset, unsigned char x)
 {
     mem[offset] = x;

@@ -1,5 +1,6 @@
 #ifdef SDL
 #include<SDL2/SDL.h>
+#include<SDL2/SDL_render.h>
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
@@ -13,7 +14,7 @@ static SDL_Texture *texture;
 #include"graphics.h"
 
 #define WIDTH 640
-#define HEIGHT 480
+#define HEIGHT 400
 
 uint32_t* pixels;
 
@@ -303,7 +304,7 @@ static char vgafont8[256*8] =
 static int GraphicsInitThread(void *ptr)
 {
 #ifdef SDL
-    window = SDL_CreateWindow("Hello World!", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Hello World!", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH * 3, HEIGHT * 3, SDL_WINDOW_SHOWN);
     if (window == NULL)
     {
         printf("SDL_CreateWindow Error: %s", SDL_GetError());
@@ -318,6 +319,8 @@ static int GraphicsInitThread(void *ptr)
         SDL_Quit();
         return 0;
     }
+
+    SDL_RenderSetScale(renderer, 3.0f, 3.0f);
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WIDTH, HEIGHT);
     if (texture == NULL)

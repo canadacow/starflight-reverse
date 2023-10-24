@@ -52,6 +52,16 @@ void ParseOverlay(int ovidx)
     sprintf(filename, OUTDIR"/overlays/%s", overlays[ovidx].name);
     StackAnalysis(ovidx);
     Transpile(filename, &head, ovidx, minaddr, maxaddr, WRITE_DICT | WRITE_HEADER | WRITE_EXTERN | WRITE_VARIABLES);
+
+    sprintf(filename, OUTDIR"/overlays/%s.bin", overlays[ovidx].name);
+    FILE *fp = fopen(filename, "wb");
+    if (fp == NULL)
+    {
+        fprintf(stderr, "Error: Cannot open file %s\n", filename);
+        exit(1);
+    }
+    fwrite(head.buf, 1, head.ovlsize, fp);
+    fclose(fp);
 }
 
 void LoadSTARFLT()

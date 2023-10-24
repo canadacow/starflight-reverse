@@ -56,7 +56,7 @@ int DisasmRange(int offset, int size, int ovidx, int minaddr, int maxaddr);
 
 // -----------------------------------------
 
-inline void AddFlow(LineDesc* pline, controlflowenum newflow)
+static inline void AddFlow(LineDesc* pline, controlflowenum newflow)
 {
   if (newflow == CLOSE)
   {
@@ -72,7 +72,7 @@ inline void AddFlow(LineDesc* pline, controlflowenum newflow)
     pline->flow.flow = newflow;
 }
 
-inline _Bool ContainsFlow(LineDesc* pline, controlflowenum flow)
+static inline _Bool ContainsFlow(LineDesc* pline, controlflowenum flow)
 {
   return pline->flow.flow == flow;
   /*

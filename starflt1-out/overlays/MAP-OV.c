@@ -400,6 +400,33 @@ void WE673() // WE673
 // 0xe685: WORD 'WE687' codep=0x224c wordp=0xe687 params=0 returns=0
 // ================================================
 
+/*
+void WE687() {
+    int i, j, k, l;
+
+    SetColor(GREY2);
+    DrawLine(0x0011, 0x00c7, 0x0011, 0x001e);
+
+    for (i = 0x002b; i < 0x00c7; i += 0x000a) {
+        PlotPoint(0x0012, i);
+    }
+
+    for (j = 0x0053; j < 0x00c7; j += 0x0032) {
+        PlotPoint(0x0013, j);
+    }
+
+    DrawLine(0x009c, 0x001d, 0x0011, 0x001d);
+
+    for (k = 0x0019; k < 0x009c; k += 5) {
+        DrawLine(k, 0x001e, k, 0x001f);
+    }
+
+    for (l = 0x002d; l < 0x009c; l += 0x0019) {
+        PlotPoint(l, 0x0020);
+    }
+}
+*/
+
 void WE687() // WE687
 {
   unsigned short int i, imax, j, jmax, k, kmax, l, lmax;

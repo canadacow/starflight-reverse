@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<string.h>
+#include <stdlib.h>
 
 #include"../cpu/cpu.h"
 #include"../emul/call.h"
@@ -7,6 +8,8 @@
 #include"../disasOV/global.h"
 #include"../patch/patch.h"
 #include"data.h"
+
+#include <png.h>
 
 void Continue()
 {
@@ -39,7 +42,8 @@ char* GetColorMap(int idx)
 
 void StoreImage(int idx, int seg)
 {
-    char filename[128];
+    char filename[256];
+    memset(filename, 0, sizeof(filename));
     sprintf(filename, OUTDIR"/maps/planet_%i_%i_%i.ppm",
         planetseeds[idx].x/8,
         planetseeds[idx].y/8,
@@ -66,6 +70,60 @@ void StoreImage(int idx, int seg)
     }
     fprintf(fp, "\n");
     fclose(fp);
+}
+
+void StoreImagePNG(int idx, int seg)
+{
+    char filename[256];
+    memset(filename, 0, sizeof(filename));
+    sprintf(filename, OUTDIR"/maps/planet_%i_%i_%i.png",
+        planetseeds[idx].x/8,
+        planetseeds[idx].y/8,
+        planetseeds[idx].orbit);
+
+    char* palette = GetColorMap(idx);
+
+    FILE *fp = fopen(filename, "wb");
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    png_init_io(png_ptr, fp);
+
+    png_set_IHDR(png_ptr, info_ptr, 48, 48,
+                 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    png_write_info(png_ptr, info_ptr);
+
+    png_bytep row = (png_bytep) malloc(3 * 48 * sizeof(png_byte));
+    for(int j=23; j>=0; j--)
+    {
+        for(int i=0; i<48; i++)
+        {
+            int c = ((int)((signed char)Read8Long(seg, j*48+i)))+128;
+            row[i*3] = c;
+            row[i*3+1] = c;
+            row[i*3+2] = c;
+        }
+        png_write_row(png_ptr, row);
+    }
+
+    for(int j=23; j>=0; j--)
+    {
+        for(int i=0; i<48; i++)
+        {
+            int c = ((int)((signed char)Read8Long(seg, j*48+i)));
+            c = c<0?0:((c >> 1) & 0x38);
+            c = palette[c] & 0xF;
+            row[i*3] = (colortable[c]>>16)&0xFF;
+            row[i*3+1] = (colortable[c]>>8)&0xFF;
+            row[i*3+2] = (colortable[c]>>0)&0xFF;
+        }
+        png_write_row(png_ptr, row);
+    }
+
+    png_write_end(png_ptr, NULL);
+    fclose(fp);
+    if (png_ptr && info_ptr) png_destroy_write_struct(&png_ptr, &info_ptr);
+    if (row) free(row);
 }
 
 void StoreImage2(int idx, char *data, int w, int h)
@@ -165,7 +223,7 @@ int main()
           DrawContour(idx);
         }
         */
-        StoreImage(idx, 0x7e51);
+        StoreImagePNG(idx, 0x7e51);
         idx++;
     }
     return 0;

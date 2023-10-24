@@ -891,6 +891,33 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             cx = Pop();
             Write16Long(0, bx*4+0, ax);
             Write16Long(0, bx*4+2, cx);
+
+            // Write out 1024 bytes at ax,cx to a file
+            char filename[64];
+            sprintf(filename, "%04x-%04x.bin", cx, ax);
+            printf("write interrupt vector table - %s\n", filename);
+            FILE *fp = fopen(filename, "wb");
+            if (fp != NULL)
+            {
+                unsigned long addr = ComputeAddress(cx, ax);
+                fwrite(&m[addr], 1, 1024, fp);
+                fclose(fp);
+            }
+
+            if(bx == 0x1c)
+            {
+                unsigned short tempbx = 0;
+
+                sprintf(filename, "%04x-%04x.bin", cx, tempbx);
+                printf("write ISR jump - %s\n", filename);
+                fp = fopen(filename, "wb");
+                if (fp != NULL)
+                {
+                    unsigned long addr = ComputeAddress(cx, tempbx);
+                    fwrite(&m[addr], 1, 1024, fp);
+                    fclose(fp);
+                }
+            }
         }
         break;
 
@@ -1726,9 +1753,23 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // ---------------------------------------------
         // --- sound stuff ---
 
-        case 0x2638: break; // BEEPON_2
-        case 0x2653: break; // "BEEPOFF"
-        case 0x2618: Pop(); break; // "TONE"
+        case 0x2638: 
+            {
+                printf("Beep\n");
+                break; // BEEPON_2  
+            }
+            
+        case 0x2653: 
+            {
+                printf("Beep off\n");
+                break; // "BEEPOFF"
+            }
+        
+        case 0x2618: 
+            {
+                printf("Tone\n");
+                Pop(); break; // "TONE"
+            }
 
         // --- graphics ---
         case 0x97cc: // COLORMAP. Determine color from given value. For example from landscape height

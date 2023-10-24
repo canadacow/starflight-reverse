@@ -1014,8 +1014,8 @@ void ParseAsmFunctions(int ovidx, int minaddr, int maxaddr)
     for(i=0; i<nwords; i++)
     {
         if ((dictionary[i].ovidx != ovidx) && (ovidx != -1)) continue;
-        //printf("disasm dict entry %i\n", i);
-        DisasmRange(dictionary[i].codep, 0x100000, ovidx, minaddr, maxaddr);
+        printf("disasm dict entry ovidx %i wordp 0x%x codep: 0x%x i: 0x%x mix 0x%x max 0x%x\n", dictionary[i].ovidx, dictionary[i].wordp, dictionary[i].codep, i, minaddr, maxaddr);
+        DisasmRange(dictionary[i].codep, 0x100000, ovidx, dictionary[i].wordp, maxaddr);
     }
     if (ovidx == -1)
     {

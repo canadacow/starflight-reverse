@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O2 -Werror-implicit-function-declaration
+CFLAGS = -O0 -g -Werror-implicit-function-declaration
 
 all: disasOV1 disasOV2 emulate emulatesdl extractplanets1 extractplanetsdata1 extractdata1 extractinstance1 extractinstance2 extractvessels1 emulatecomm1
 
@@ -85,7 +85,7 @@ emulatesdl: src/emul/emul.c src/emul/call.c cpu.o src/emul/findword.c src/emul/c
 	$(CC) $(CFLAGS) -DSTARFLT1 -DSDL src/emul/emul.c src/emul/call.c src/emul/findword.c src/emul/callstack.c cpu.o src/disasOV/global.c src/emul/graphics.c src/emul/fract.c -o emulatesdl -lSDL2
 
 extractplanets1: src/extract/extractplanets.c src/emul/call.c src/emul/findword.c src/emul/callstack.c cpu.o src/disasOV/global.c src/emul/graphics.c src/emul/fract.c patch.o
-	$(CC) $(CFLAGS) -DSTARFLT1 src/extract/extractplanets.c src/emul/call.c src/emul/findword.c src/emul/callstack.c cpu.o src/disasOV/global.c src/emul/graphics.c src/emul/fract.c patch.o -o extractplanets1
+	$(CC) $(CFLAGS) -DSTARFLT1 src/extract/extractplanets.c src/emul/call.c src/emul/findword.c src/emul/callstack.c cpu.o src/disasOV/global.c src/emul/graphics.c src/emul/fract.c patch.o -lpng -o extractplanets1
 
 extractplanetsdata1: src/extract/extractplanetsdata.c src/emul/call.c src/emul/findword.c src/emul/callstack.c cpu.o src/disasOV/global.c src/emul/graphics.c src/emul/fract.c patch.o
 	$(CC) $(CFLAGS) -DSTARFLT1 src/extract/extractplanetsdata.c src/emul/call.c src/emul/findword.c src/emul/callstack.c cpu.o src/disasOV/global.c src/emul/graphics.c src/emul/fract.c patch.o -o extractplanetsdata1
