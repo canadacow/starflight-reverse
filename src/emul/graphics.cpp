@@ -1,9 +1,10 @@
 #ifdef SDL
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_render.h>
-static SDL_Window *window;
-static SDL_Renderer *renderer;
-static SDL_Texture *texture;
+static SDL_Window *window = NULL;
+static SDL_Renderer *renderer  = NULL;
+static SDL_Texture* graphicsTexture = NULL;
+static SDL_Texture* textTexture = NULL;
 #endif
 
 #include<stdio.h>
@@ -15,10 +16,25 @@ static SDL_Texture *texture;
 
 #include <vector>
 
-#define WIDTH 640
-#define HEIGHT 400
+#define TEXT_MODE_WIDTH 640
+#define TEXT_MODE_HEIGHT 400
 
-std::vector<uint32_t> pixels;
+#define GRAPHICS_MODE_WIDTH 160
+#define GRAPHICS_MODE_HEIGHT 200
+
+#define WINDOW_WIDTH 1920
+#define WINDOW_HEIGHT 1200
+
+enum SFGraphicsMode
+{
+    Text = 0,
+    Graphics = 1,
+};
+
+SFGraphicsMode graphicsMode = Text;
+
+std::vector<uint32_t> graphicsPixels;
+std::vector<uint32_t> textPixels;
 
 int cursorx = 0;
 int cursory = 0;
@@ -306,7 +322,7 @@ static uint8_t vgafont8[256*8] =
 static int GraphicsInitThread(void *ptr)
 {
 #ifdef SDL
-    window = SDL_CreateWindow("Hello World!", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH * 3, HEIGHT * 3, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Hello World!", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL)
     {
         printf("SDL_CreateWindow Error: %s", SDL_GetError());
@@ -322,18 +338,30 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    SDL_RenderSetScale(renderer, 3.0f, 3.0f);
+    SDL_RenderSetScale(renderer, (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH, (float)WINDOW_HEIGHT / (float)GRAPHICS_MODE_HEIGHT);
 
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WIDTH, HEIGHT);
-    if (texture == NULL)
+    graphicsTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
+    if (graphicsTexture == NULL)
+    {
+        printf("SDL_CreateTexture Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    // Create the text mode texture
+    textTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, TEXT_MODE_WIDTH, TEXT_MODE_HEIGHT);
+    if (textTexture == NULL)
     {
         printf("SDL_CreateTexture Error: %s", SDL_GetError());
         SDL_Quit();
         return 0;
     }
 #endif
-    pixels = std::vector<uint32_t>();
-    pixels.resize(WIDTH * HEIGHT * 1000);
+    graphicsPixels = std::vector<uint32_t>();
+    graphicsPixels.resize(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT);
+
+    textPixels = std::vector<uint32_t>();
+    textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
     GraphicsClear(0);
     return 0;
@@ -359,9 +387,29 @@ void GraphicsInit()
 void GraphicsUpdate()
 {
 #ifdef SDL
-    SDL_UpdateTexture(texture, NULL, pixels.data(), WIDTH * sizeof(uint32_t));
+    SDL_Texture* currentTexture = NULL;
+    uint32_t stride = 0;
+    const void* data = nullptr;
+
+    // Choose the correct texture based on the current mode
+    if (graphicsMode == SFGraphicsMode::Graphics)
+    {
+        currentTexture = graphicsTexture;
+        stride = GRAPHICS_MODE_WIDTH;
+        data = graphicsPixels.data();
+    }
+    else if (graphicsMode == SFGraphicsMode::Text)
+    {
+        currentTexture = textTexture;
+        stride = TEXT_MODE_WIDTH;
+        data = textPixels.data();
+    }
+
+    fprintf(stderr, "Current texture: %p\n", currentTexture);
+
+    SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
     SDL_RenderPresent(renderer);
     SDL_PumpEvents();
 #endif
@@ -387,7 +435,8 @@ void GraphicsWait()
 void GraphicsQuit()
 {
 #ifdef SDL
-    SDL_DestroyTexture(texture);
+    SDL_DestroyTexture(graphicsTexture);
+    SDL_DestroyTexture(textTexture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
 #endif
@@ -417,7 +466,7 @@ void GraphicsChar(unsigned char s)
             {
                 color = 0xFFFFFFFF;
             }
-            pixels[(cursory*8+jj) * 640 + (cursorx*8+ii)] = color;
+            textPixels[(cursory*8+jj) * TEXT_MODE_WIDTH + (cursorx*8+ii)] = color;
         }
     }
     cursorx++;
@@ -439,15 +488,26 @@ void GraphicsText(char *s, int n)
 // 0 = text, 1 = ega graphics
 void GraphicsMode(int mode)
 {
+    graphicsMode = (SFGraphicsMode)mode;
     GraphicsClear(0);
 }
 
 void GraphicsClear(int color)
 {
-    //memset(pixels, 0, WIDTH * HEIGHT * sizeof(uint32_t));
-    for(int i=0; i<WIDTH*HEIGHT; i++)
+    uint32_t pixel = colortable[color&0xF]; 
+    if(graphicsMode == Graphics)
+    {   
+        for(auto& p : graphicsPixels)
+        {
+            p = pixel;
+        }
+    }
+    else
     {
-        pixels[i] = colortable[color&0xF];
+        for(auto& p : textPixels)
+        {
+            p = pixel;
+        }
     }
     GraphicsUpdate();
 }
@@ -455,10 +515,8 @@ void GraphicsClear(int color)
 
 void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 {
-    x1 <<= 2;
-    y1 = 400-(y1<<1);
-    x2 <<= 2;
-    y2 = 400 - (y2<<1);
+    y1 = 200 - y1;
+    y2 = 200 - y2;
     float x = x1;
     float y = y1;
     float dx = (x2 - x1);
@@ -470,7 +528,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
     dy /= n;
     for(int i=0; i<=n; i++)
     {
-        pixels[(int)y*WIDTH+(int)x] = colortable[color&0xF];
+        graphicsPixels[(uint32_t)y* GRAPHICS_MODE_WIDTH + (uint32_t)x] = colortable[color&0xF];
         x += dx;
         y += dy;
     }
@@ -479,16 +537,8 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 
 void GraphicsPixel(int x, int y, int color)
 {
-    x <<= 2;
-    y = 400-(y<<1);
-    pixels[(y+0)*WIDTH+(x+0)] = colortable[color&0xF];
-    pixels[(y+0)*WIDTH+(x+1)] = colortable[color&0xF];
-    pixels[(y+1)*WIDTH+(x+1)] = colortable[color&0xF];
-    pixels[(y+1)*WIDTH+(x+0)] = colortable[color&0xF];
-    pixels[(y+0)*WIDTH+(x+2)] = colortable[color&0xF];
-    pixels[(y+1)*WIDTH+(x+2)] = colortable[color&0xF];
-    pixels[(y+0)*WIDTH+(x+3)] = colortable[color&0xF];
-    pixels[(y+1)*WIDTH+(x+3)] = colortable[color&0xF];
+    y = 200 - y;
+    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x] = colortable[color&0xF];
 }
 
 void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
@@ -498,22 +548,15 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
     for(int y=y1; y>y1-h; y--)
     for(int x=x1; x<x1+w; x++)
     {
-        int x0 = x << 2;
-        int y0 = 400 - (y << 1);
+        int x0 = x;
+        int y0 = 200 - y;
         if (x0 >= 0)
         if (y0 >= 0)
-        if (x0 < WIDTH)
-        if (y0 < HEIGHT)
+        if (x0 < GRAPHICS_MODE_WIDTH)
+        if (y0 < GRAPHICS_MODE_HEIGHT)
         if ((*img) & (1<<(15-n)))
         {
-            pixels[(y0+0) * WIDTH + (x0+0)] = colortable[color&0xF];
-            pixels[(y0+0) * WIDTH + (x0+1)] = colortable[color&0xF];
-            pixels[(y0+1) * WIDTH + (x0+0)] = colortable[color&0xF];
-            pixels[(y0+1) * WIDTH + (x0+1)] = colortable[color&0xF];
-            pixels[(y0+0) * WIDTH + (x0+0+2)] = colortable[color&0xF];
-            pixels[(y0+0) * WIDTH + (x0+1+2)] = colortable[color&0xF];
-            pixels[(y0+1) * WIDTH + (x0+0+2)] = colortable[color&0xF];
-            pixels[(y0+1) * WIDTH + (x0+1+2)] = colortable[color&0xF];
+            graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = colortable[color&0xF];
         }
         n++;
         if (n == 16)
@@ -628,14 +671,14 @@ void GraphicsSave(char *filename)
   printf("Store image %s\n", filename);
 
   fprintf(file, "P3\n");
-  fprintf(file, "%i %i\n", WIDTH, HEIGHT);
+  fprintf(file, "%i %i\n", GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
   fprintf(file, "255\n");
 
-  for(int j=0; j<HEIGHT; j++)
+  for(int j=0; j<GRAPHICS_MODE_HEIGHT; j++)
   {
-      for(int i=0; i<WIDTH; i++)
+      for(int i=0; i<GRAPHICS_MODE_WIDTH; i++)
       {
-          int c = pixels[j * WIDTH + i];
+          int c = graphicsPixels[j * GRAPHICS_MODE_WIDTH + i];
           fprintf(file, "%i %i %i ", (c>>16)&0xFF, (c>>8)&0xFF, (c>>0)&0xFF);
       }
       fprintf(file, "\n");
