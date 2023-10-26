@@ -19,10 +19,13 @@
     void GraphicsChar(unsigned char s);
     void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode);
     void GraphicsPixel(int x, int y, int color);
+    void GraphicsPixelDirect(int x, int y, uint32_t color);
     void GraphicsBLT(int x1, int y1, int w, int h, char* image, int color);
     unsigned short GraphicsGetChar();
     int GraphicsCharsInBuffer();
     void GraphicsSave(char *filename);
+
+    uint32_t GraphicsPeek(int x, int y);
 
 
 #endif

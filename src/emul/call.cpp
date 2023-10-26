@@ -2009,13 +2009,40 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x906b: // 'LCOPYBLK' TODO
             {
-                uint16_t a = Pop();
-                uint16_t b = Pop();
-                uint16_t c = Pop();
-                uint16_t d = Pop();
-                uint16_t e = Pop();
-                uint16_t f = Pop();
-                printf("LCOPYBLK %i %i %i %i %i %i\n", a,b,c,d,e,f);
+                auto lcopyblk = [](int fulx, int fuly, int flrx, int flry, int tulx, int tuly) {
+                    int fx = fulx;
+                    int fy = fuly;
+                    int tx = tulx;
+                    int ty = tuly;
+                    int dy = (tuly > fuly) ? -1 : 1;
+                    int bytesPerRow = abs(flrx - fulx) + 1;
+                    int numRows = abs(flry - fuly) + 1;
+
+                    for (int i = 0; i < numRows; i++) {
+                        auto tmpFx = fx;
+                        auto tmpTx = tx;
+                        for(int j = 0; j < bytesPerRow; ++j)
+                        {
+                            auto pixel = GraphicsPeek(tmpFx, fy);
+                            GraphicsPixelDirect(tmpTx, ty, pixel);
+                            ++tmpTx;
+                            ++tmpFx;
+                        }
+
+                        fy += dy;
+                        ty += dy;
+                    }
+                };
+
+                uint16_t tuly = Pop();
+                uint16_t tulx = Pop();
+                uint16_t flry = Pop();
+                uint16_t flrx = Pop();
+                uint16_t fuly = Pop();
+                uint16_t fulx = Pop();
+                printf("LCOPYBLK fulx: %i, fuly: %i, flrx: %i, flry: %i, tulx: %i, tuly: %i\n", fulx, fuly, flrx, flry, tulx, tuly);
+
+                lcopyblk(fulx, fuly, flrx, flry, tulx, tuly);
             }
             //exit(1);
         break;

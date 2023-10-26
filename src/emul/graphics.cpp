@@ -510,6 +510,29 @@ void GraphicsClear(int color)
     GraphicsUpdate();
 }
 
+uint32_t GraphicsPeek(int x, int y)
+{
+    y = 200 - y;
+
+    if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
+    {
+        return 0;
+    }
+
+    return graphicsPixels[y * GRAPHICS_MODE_WIDTH + x];
+}
+
+void GraphicsPixelDirect(int x, int y, uint32_t color)
+{
+    y = 200 - y;
+
+    if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
+    {
+        return;
+    }
+
+    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x] = color;
+}
 
 void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 {
