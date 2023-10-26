@@ -375,9 +375,9 @@ void GraphicsInit()
         printf("SDL_Init Error: %s\n", SDL_GetError());
         return;
     }
-    FILE* file;
-    file = freopen("stdout", "w", stdout); // redirects stdout
-    file = freopen("stderr", "w", stderr); // redirects stderr
+    //FILE* file;
+    //file = freopen("stdout", "w", stdout); // redirects stdout
+    //file = freopen("stderr", "w", stderr); // redirects stderr
     GraphicsInitThread(NULL);
 #else
     GraphicsInitThread(NULL);
@@ -404,8 +404,6 @@ void GraphicsUpdate()
         stride = TEXT_MODE_WIDTH;
         data = textPixels.data();
     }
-
-    fprintf(stderr, "Current texture: %p\n", currentTexture);
 
     SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
     SDL_RenderClear(renderer);
@@ -528,6 +526,10 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
     dy /= n;
     for(int i=0; i<=n; i++)
     {
+        if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
+        {
+            continue;
+        }
         graphicsPixels[(uint32_t)y* GRAPHICS_MODE_WIDTH + (uint32_t)x] = colortable[color&0xF];
         x += dx;
         y += dy;
@@ -538,6 +540,12 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 void GraphicsPixel(int x, int y, int color)
 {
     y = 200 - y;
+
+    if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
+    {
+        return;
+    }
+
     graphicsPixels[y * GRAPHICS_MODE_WIDTH + x] = colortable[color&0xF];
 }
 
@@ -546,23 +554,27 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
     short int *img = (short int*)image;
     int n = 0;
     for(int y=y1; y>y1-h; y--)
-    for(int x=x1; x<x1+w; x++)
     {
-        int x0 = x;
-        int y0 = 200 - y;
-        if (x0 >= 0)
-        if (y0 >= 0)
-        if (x0 < GRAPHICS_MODE_WIDTH)
-        if (y0 < GRAPHICS_MODE_HEIGHT)
-        if ((*img) & (1<<(15-n)))
+        for(int x=x1; x<x1+w; x++)
         {
-            graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = colortable[color&0xF];
-        }
-        n++;
-        if (n == 16)
-        {
-            n = 0;
-            img++;
+            int x0 = x;
+            int y0 = 200 - y;
+            if(x0 < 0 || x0 >= GRAPHICS_MODE_WIDTH || y0 < 0 || y0 >= GRAPHICS_MODE_HEIGHT)
+            {
+                continue;
+            }
+
+            if ((*img) & (1<<(15-n)))
+            {
+                graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = colortable[color&0xF];
+            }
+            
+            n++;
+            if (n == 16)
+            {
+                n = 0;
+                img++;
+            }
         }
     }
     GraphicsUpdate();

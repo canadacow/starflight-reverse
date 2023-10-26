@@ -13,6 +13,8 @@
 #include"findword.h"
 #include"../disasOV/global.h"
 
+#include <stack>
+
 unsigned int debuglevel = 0;
 
 const unsigned short cs = 0x192;
@@ -1755,13 +1757,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x2638: 
             {
-                printf("Beep\n");
+                //printf("Beep\n");
                 break; // BEEPON_2  
             }
             
         case 0x2653: 
             {
-                printf("Beep off\n");
+                //printf("Beep off\n");
                 break; // "BEEPOFF"
             }
         
@@ -1810,8 +1812,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0x97f0: mov    [55FF],ax // DCOLOR
 
         case 0x8E4F:  // TODO Move entire display to/from seg
-            //printf("move display from 0x%04x:0x%04x to 0x%04x:0x%04x\n",
-            //    Read16(regsp+2), Read16(regsp+0), Read16(regsp+6), Read16(regsp+4));
+            printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n",
+                Read16(regsp+2), Read16(regsp+0), Read16(regsp+6), Read16(regsp+4));
             Pop();
             Pop();
             Pop();
@@ -1847,7 +1849,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x9002: // "LPLOT" TODO
-            //printf("LPLOT %i %i\n", Pop(), Pop());
+            printf("LPLOT (TODO) %i %i\n", Pop(), Pop());
             Pop();
             Pop();
             //exit(1);
@@ -1869,7 +1871,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             int x2 = Pop();
             int y1 = Pop();
             int x1 = Pop();
-            //printf("BLT %i %i %i %i\n", x1, y1, x2, y2);
+            /*
+            printf("EXTENTX (TODO) %i %i %i %i\n", x1, y1, x2, y2);
+            int color = 5;
+            for(int x = x1; x <= x2; x++) {
+                GraphicsPixel(x, y1, color);
+                GraphicsPixel(x, y2, color);
+            }
+            for(int y = y1; y <= y2; y++) {
+                GraphicsPixel(x1, y, color);
+                GraphicsPixel(x2, y, color);
+            }
+            */
             //exit(1);
            }
         break;
@@ -1910,7 +1923,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             {
                 int VIN = Read16(0x569B);
                 int nIN = Read16(0x5686);
-                //printf("scanpoly 0x%04x %i\n", VIN, nIN);
+                printf("scanpoly (TODO) 0x%04x %i\n", VIN, nIN);
                 for(int i=0; i<nIN; i++)
                 {
                     //printf("%i %i\n", Read16(VIN + i*4 + 0), Read16(VIN + i*4 + 2));
@@ -1929,19 +1942,81 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x9055: // LFILLPOLY TODO
         {
-            printf("LFILLPOLY\n");
+            printf("LFILLPOLY (TODO)\n");
             int color = Read16(0x55F2); // COLOR
+
+            /* 
+            #define XSTART (*((uint16_t*)&memory[0x57B7]))
+#define XEND (*((uint16_t*)&memory[0x57C2]))
+#define YMIN (*((uint16_t*)&memory[0x57EC]))
+#define YMAX (*((uint16_t*)&memory[0x57F7]))
+#define SCAN (*((uint16_t*)&memory[0x57D9]))
+#define YLINE (*((uint16_t*)&memory[0x57CE]))
+#define IRIGHT (*((uint16_t*)&memory[0x5745]))
+#define BUF_SEG (*((uint16_t*)&memory[0x5648]))
+#define YTABL (*((uint16_t*)&memory[0x563A]))
+            */
+
+            {
+                    std::stack<uint16_t> s;
+                    bx = Read16(0x57EC); // YMIN;
+                    bx += Read16(0x57F7); // YMAX;
+                    bx++;
+                    bx >>= 1;
+                    bx <<= 1;
+                    bx += Read16(0x57D9); //SCAN;
+                    uint16_t ax = 0;
+                    uint16_t cx = 0;
+                    ax = Read16(bx);
+                    bx++;
+                    cx = Read16(bx);
+                    if (cx >= ax) {
+                        // Enabling all color planes for drawing operations on the EGA.
+                        uint16_t ymax = Read16(0x57F7); // YMAX
+                        ++ymax;
+                        Write16(0x57F7, ymax); // YMAX++;
+                        cx = Read16(0x57EC); //YMIN;
+                        do {
+                            s.push(cx);
+                            Write16(0x57CE, cx); // YLINE
+                            cx <<= 1;
+                            bx = Read16(0x57D9); //SCAN;
+                            bx += cx;
+                            ax = 0;
+                            ax = Read16(bx);
+                            Write16(0x57B7, ax); // XSTART
+                            bx++;
+                            ax = Read16(bx);
+                            Write16(0x57C2, ax); // XEND
+                            printf("LFILLPOLY Color %d YMIN %d YMAX %d, XSTART %d, XEND %d\n",
+                                color,
+                                Read16(0x57EC),
+                                Read16(0x57F7),
+                                Read16(0x57B7),
+                                Read16(0x57C2)
+                            );
+                            //FVLIN();
+                            cx = s.top(); s.pop();
+                            cx++;
+                        } while (cx != Read16(0x57F7)); //YMAX
+
+                        --ymax;
+                        Write16(0x57F7, ymax); // YMAX--;
+                    }
+            }
         }
         break;
 
         case 0x906b: // 'LCOPYBLK' TODO
-            Pop();
-            Pop();
-            Pop();
-            Pop();
-            Pop();
-            Pop();
-            //printf("LCOPYBLK %i %i %i %i %i %i\n", Pop(), Pop(), Pop(), Pop(), Pop(), Pop());
+            {
+                uint16_t a = Pop();
+                uint16_t b = Pop();
+                uint16_t c = Pop();
+                uint16_t d = Pop();
+                uint16_t e = Pop();
+                uint16_t f = Pop();
+                printf("LCOPYBLK %i %i %i %i %i %i\n", a,b,c,d,e,f);
+            }
             //exit(1);
         break;
 
@@ -2006,7 +2081,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x8F8B: // "BFILL" TODO
         {
             int color = Read16(0x55F2); // COLOR
-            //printf("bfill color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
+            printf("bfill (TODO) color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
             GraphicsClear(color);
         }
         break;
@@ -2422,6 +2497,20 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         }
 
+        case 0x4af3: // +BIT
+        {
+            unsigned short num = Pop(); // Pop the number from the stack
+            unsigned short count = 0;
+            for (int i = 0; i < 16; i++) {
+                if (num & 1) {
+                    count++;
+                }
+                num >>= 1;
+            }
+            Push(count); // Push the result back onto the stack
+            break;
+        }
+
         case 0x4b08: // D2*
         {
           unsigned int ax = Pop();
@@ -2643,7 +2732,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x910f: // TODO L@PIXEL
-          //printf("L@PIXEL sp=0x%04x 0x%02x\n", regsp, Read8(0x910f));
+          printf("L@PIXEL (TODO) sp=0x%04x 0x%02x\n", regsp, Read8(0x910f));
           //printf("0x%04x\n", Read16(0x910f+1));
           //printf("0x%04x\n", Read16(0x910f+3));
           //exit(1);

@@ -12964,7 +12964,6 @@ void RRND() // RRND
   Push(Pop() + Pop()); // +
 }
 
-
 // ================================================
 // 0x4aea: WORD '+BIT' codep=0x4af3 wordp=0x4af3 params=1 returns=1
 // ================================================
@@ -12979,6 +12978,19 @@ void RRND() // RRND
 // 0x4b01: lodsw
 // 0x4b02: mov    bx,ax
 // 0x4b04: jmp    word ptr [bx]
+
+void _plus_BIT() // +BIT
+{
+  unsigned short num = Pop(); // Pop the number from the stack
+  unsigned short count = 0;
+  for (int i = 0; i < 16; i++) {
+    if (num & 1) {
+      count++;
+    }
+    num >>= 1;
+  }
+  Push(count); // Push the result back onto the stack
+}
 
 // ================================================
 // 0x4b06: WORD 'D2*' codep=0x4b08 wordp=0x4b08 params=2 returns=2
