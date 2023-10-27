@@ -423,6 +423,35 @@ void Find() // "(FIND)"
     }
 }
 
+void POLY_WINDOW_FILL()
+{
+    uint16_t color = Pop();
+    uint16_t x1 = Pop();
+    uint16_t y1 = Pop();
+    uint16_t x0 = Pop();
+    uint16_t y0 = Pop();
+
+    if(x0 > x1)
+    {
+        uint16_t temp = x0;
+        x0 = x1;
+        x1 = temp;
+    }
+    if(y0 > y1)
+    {
+        uint16_t temp = y0;
+        y0 = y1;
+        y1 = temp;
+    }
+
+    for(uint16_t y = y0; y < y1; ++y)
+    {
+        for(uint16_t x = x0; x < x1; ++x)
+        {
+            GraphicsPixel(x, y, color);
+        }
+    }
+}
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
@@ -441,11 +470,21 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         // --- call functions ---
 
         case 0x224c: // call
-            bx += 2;
-            regbp -= 2;
-            Write16(regbp, regsi);
-            regsi = bx;
-            DefineCallStack(regbp, 1);
+            {
+                uint16_t nextInstr = bx + 2;
+                if(nextInstr == 0xa0f0)
+                {
+                    POLY_WINDOW_FILL();
+                }
+                else
+                {
+                    bx += 2;
+                    regbp -= 2;
+                    Write16(regbp, regsi);
+                    regsi = bx;
+                    DefineCallStack(regbp, 1);
+                }
+            }
         break;
 
         case 0x1692: // "EXIT"
@@ -1849,10 +1888,32 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x9002: // "LPLOT" TODO
-            printf("LPLOT (TODO) %i %i\n", Pop(), Pop());
-            Pop();
-            Pop();
-            //exit(1);
+            {
+                auto lplot = [](int x, int y) {
+                    int offset;
+                    unsigned char color_mask, pixel_data;
+
+                    // Fetch pixel data from the buffer
+                    pixel_data = GraphicsPeek(x, y);
+
+                    int color = Read16(0x55F2); // COLOR
+
+                    // Calculate color mask
+                    color_mask = (color & 1) ? 0xF0 : 0x0F;
+
+                    // Apply color mask to pixel data
+                    pixel_data = (pixel_data & color_mask) | ((color << 4) & ~color_mask);
+
+                    // Write pixel data back to the buffer
+                    GraphicsPixel(x, y, pixel_data);
+                };
+
+                int y = Pop();
+                int x = Pop();
+
+                printf("LPLOT (TODO) %i %i\n", x, y);
+                lplot(x, y);
+            }
         break;
 
         case 0x93B1: // "BEXTENT" Part of Bit Block Image Transfer (BLT)
@@ -1912,7 +1973,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             int y0 = Read16(0x5863);
             int w = Read16(0x5887);
             int h = Read16(0x5892);
-            //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x\n", x0, y0, w, h, color, bltseg, bltoffs);
+            printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x\n", x0, y0, w, h, color, bltseg, bltoffs);
             GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color);
             }
             //exit(1);
@@ -1943,6 +2004,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x9055: // LFILLPOLY TODO
         {
             printf("LFILLPOLY (TODO)\n");
+            PrintCallstacktrace(bx);
+            //exit(-1);
             int color = Read16(0x55F2); // COLOR
 
             /* 
@@ -2023,7 +2086,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto tmpTx = tx;
                         for(int j = 0; j < bytesPerRow; ++j)
                         {
-                            auto pixel = GraphicsPeek(tmpFx, fy);
+                            auto pixel = GraphicsPeekDirect(tmpFx, fy);
                             GraphicsPixelDirect(tmpTx, ty, pixel);
                             ++tmpTx;
                             ++tmpFx;
@@ -2986,6 +3049,10 @@ enum RETURNCODE Step()
       PrintCallstacktrace(bx);
     }
 */
+    //printf("  0x%04x  %15s   %s\n", regsi, GetOverlayName(regsi, ovidx), FindWord(bx+2, ovidx));
+    //int ovidx = GetOverlayIndex(Read16(0x55a5));
+    //printf("Step 0x%04x - OV %s WORD 0x%04x %s\n", execaddr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
+
     enum RETURNCODE ret = Call(execaddr, bx);
     return ret;
 }

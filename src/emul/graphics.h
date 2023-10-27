@@ -25,7 +25,8 @@
     int GraphicsCharsInBuffer();
     void GraphicsSave(char *filename);
 
-    uint32_t GraphicsPeek(int x, int y);
+    uint8_t GraphicsPeek(int x, int y);
+    uint32_t GraphicsPeekDirect(int x, int y);
 
 
 #endif

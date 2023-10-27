@@ -15,15 +15,17 @@ static SDL_Texture* textTexture = NULL;
 #include"graphics.h"
 
 #include <vector>
+#include <assert.h>
+#include <algorithm>
 
 #define TEXT_MODE_WIDTH 640
-#define TEXT_MODE_HEIGHT 400
+#define TEXT_MODE_HEIGHT 200
 
 #define GRAPHICS_MODE_WIDTH 160
 #define GRAPHICS_MODE_HEIGHT 200
 
 #define WINDOW_WIDTH 1920
-#define WINDOW_HEIGHT 1200
+#define WINDOW_HEIGHT 1440
 
 enum SFGraphicsMode
 {
@@ -375,9 +377,9 @@ void GraphicsInit()
         printf("SDL_Init Error: %s\n", SDL_GetError());
         return;
     }
-    //FILE* file;
-    //file = freopen("stdout", "w", stdout); // redirects stdout
-    //file = freopen("stderr", "w", stderr); // redirects stderr
+    FILE* file;
+    file = freopen("stdout", "w", stdout); // redirects stdout
+    file = freopen("stderr", "w", stderr); // redirects stderr
     GraphicsInitThread(NULL);
 #else
     GraphicsInitThread(NULL);
@@ -510,7 +512,16 @@ void GraphicsClear(int color)
     GraphicsUpdate();
 }
 
-uint32_t GraphicsPeek(int x, int y)
+uint8_t GraphicsPeek(int x, int y)
+{
+    auto pixel = GraphicsPeekDirect(x, y);
+
+    auto it = std::find(std::begin(colortable), std::end(colortable), pixel);
+    assert(it != std::end(colortable));
+    return std::distance(std::begin(colortable), it);
+}
+
+uint32_t GraphicsPeekDirect(int x, int y)
 {
     y = 200 - y;
 
@@ -587,9 +598,22 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
                 continue;
             }
 
+            bool hasPixel = false;
+
             if ((*img) & (1<<(15-n)))
             {
-                graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = colortable[color&0xF];
+                auto pixel = colortable[color&0xF];
+                graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = pixel;
+                if(pixel)
+                {
+                    printf("█");
+                    hasPixel = true;
+                }
+            }
+
+            if(!hasPixel)
+            {
+                printf("░");
             }
             
             n++;
@@ -599,6 +623,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
                 img++;
             }
         }
+        printf("\n");
     }
     GraphicsUpdate();
 }
