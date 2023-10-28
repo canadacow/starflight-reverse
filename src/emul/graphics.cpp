@@ -523,7 +523,7 @@ uint8_t GraphicsPeek(int x, int y)
 
 uint32_t GraphicsPeekDirect(int x, int y)
 {
-    y = 200 - y;
+    y = 199 - y;
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
     {
@@ -535,7 +535,7 @@ uint32_t GraphicsPeekDirect(int x, int y)
 
 void GraphicsPixelDirect(int x, int y, uint32_t color)
 {
-    y = 200 - y;
+    y = 199 - y;
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
     {
@@ -547,8 +547,8 @@ void GraphicsPixelDirect(int x, int y, uint32_t color)
 
 void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 {
-    y1 = 200 - y1;
-    y2 = 200 - y2;
+    y1 = 199 - y1;
+    y2 = 199 - y2;
     float x = x1;
     float y = y1;
     float dx = (x2 - x1);
@@ -573,7 +573,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 
 void GraphicsPixel(int x, int y, int color)
 {
-    y = 200 - y;
+    y = 199 - y;
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
     {
@@ -592,7 +592,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
         for(int x=x1; x<x1+w; x++)
         {
             int x0 = x;
-            int y0 = 200 - y;
+            int y0 = 199 - y;
             if(x0 < 0 || x0 >= GRAPHICS_MODE_WIDTH || y0 < 0 || y0 >= GRAPHICS_MODE_HEIGHT)
             {
                 continue;

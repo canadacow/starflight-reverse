@@ -56,7 +56,7 @@ int GetOverlayIndex(int address)
     exit(1);
 }
 
-char* FindWord(int word, int ovidx)
+const char* FindWordCanFail(int word, int ovidx, bool canFail)
 {
     if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5)); // "OV#"
 
@@ -67,8 +67,19 @@ char* FindWord(int word, int ovidx)
         if (word == dictionary[i].word) return dictionary[i].name;
     } while(dictionary[++i].name != NULL);
     if (word == 0x0) return "";
-    fprintf(stderr, "Error: Cannot find word 0x%04x\n", word);
-    exit(1);
+
+    if(!canFail)
+    {
+        fprintf(stderr, "Error: Cannot find word 0x%04x\n", word);
+        exit(1);
+   }
+
+   return "unknown";
+}
+
+const char* FindWord(int word, int ovidx)
+{
+    return FindWordCanFail(word, ovidx, false);
 }
 
 int FindWordByName(char* s, int n)

@@ -444,9 +444,9 @@ void POLY_WINDOW_FILL()
         y1 = temp;
     }
 
-    for(uint16_t y = y0; y < y1; ++y)
+    for(uint16_t y = y0; y <= y1; ++y)
     {
-        for(uint16_t x = x0; x < x1; ++x)
+        for(uint16_t x = x0; x <= x1; ++x)
         {
             GraphicsPixel(x, y, color);
         }
@@ -2787,13 +2787,27 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x4892: break; // "CAPSON" Turn on caps
 
         case 0x6cd6: // TODO E>CGA
-        printf("TODO E>CGA\n");
-        PrintCallstacktrace(bx);
-        PrintCStack();
-        exit(1);
+        {
+            //printf("TODO E>CGA\n");
+            dx = Pop(); // COLOR
+            dx &= 0x0F;
+            uint16_t ax = 0;
+            uint16_t si = 0x4FDC;
+            for (cx = 0x0010; cx > 0; --cx) {
+                ax = Read8(si++) & 0x000F;
+                if (ax == dx) {
+                    ax = cx;
+                    break;
+                }
+            }
+            si = 0x4FBB + ax - 1;
+            ax = Read8(si++);
+            Push(ax);
+        }
+        
         // 0x6cd6: pop    dx
         // 0x6cd7: and    dx,0F
-        // 0x6cda: push   sisar
+        // 0x6cda: push   si
         // 0x6cdb: xor    ax,ax
         // 0x6cdd: push   ax
         // 0x6cde: mov    cx,0010
@@ -2822,13 +2836,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x910f: // TODO L@PIXEL
-          printf("L@PIXEL (TODO) sp=0x%04x 0x%02x\n", regsp, Read8(0x910f));
-          //printf("0x%04x\n", Read16(0x910f+1));
-          //printf("0x%04x\n", Read16(0x910f+3));
-          //exit(1);
-          Pop();
-          Pop();
-          Push(0);
+            {
+                uint16_t y = Pop();
+                uint16_t x = Pop();
+                uint8_t c = GraphicsPeek(x, y);
+                //printf("L@PIXEL (TODO) x=%d, y=%d c=%d", x, y, c);
+                Push(c);
+            }
         break;
 
         case 0x4b17: // TODO EASY-BITS for SQRT
