@@ -114,8 +114,10 @@ void PrintCache()
 
 // ------------------------------------------------
 
-unsigned char STARA[256000];
-unsigned char STARB[362496];
+uint8_t STARA[256000];
+uint8_t STARA_ORIG[256000];
+uint8_t STARB[362496];
+uint8_t STARB_ORIG[362496];
 
 bool Serialize(uint64_t& combinedHash, std::string& filename)
 {
@@ -149,7 +151,16 @@ bool Serialize(uint64_t& combinedHash, std::string& filename)
 
     // Copy STARA and STARB into the combined buffer
     memcpy(combinedData.data(), STARA, sizeof(STARA));
+    for(size_t i = 0; i < sizeof(STARA); i++)
+    {
+        combinedData[i] ^= STARA_ORIG[i];
+    }
+
     memcpy(combinedData.data() + sizeof(STARA), STARB, sizeof(STARB));
+    for(size_t i = 0; i < sizeof(STARB); i++)
+    {
+        combinedData[i + sizeof(STARA)] ^= STARB_ORIG[i];
+    }
 
     // Compress the combined buffer
     std::vector<unsigned char> compressedData(ZSTD_compressBound(totalSize));
@@ -212,7 +223,16 @@ bool Deserialize(const std::string& filename)
 
     // Copy the decompressed data to STARA and STARB
     memcpy(STARA, decompressedData.data(), sizeof(STARA));
+    for(size_t i = 0; i < sizeof(STARA); i++)
+    {
+        STARA[i] ^= STARA_ORIG[i];
+    }
+
     memcpy(STARB, decompressedData.data() + sizeof(STARA), sizeof(STARB));
+    for(size_t i = 0; i < sizeof(STARB); i++)
+    {
+        STARB[i] ^= STARB_ORIG[i];
+    }
 
     ZSTD_freeDCtx(dctx);
     fclose(file);
@@ -3283,25 +3303,28 @@ void LoadSTARFLT(std::string hash)
     ret = fread(&mem[0x100], FILESTAR0SIZE, 1, fp);
     fclose(fp);
 
+    fp = fopen(FILESTARA, "rb");
+    if (fp == NULL)
+    {
+        fprintf(stderr, "Cannot open file %s\n", FILESTARA);
+        exit(1);
+    }
+    ret = fread(STARA_ORIG, 256000, 1, fp);
+    fclose(fp);
+
+    fp = fopen(FILESTARB, "rb");
+    if (fp == NULL)
+    {
+        fprintf(stderr, "Cannot open file %s\n", FILESTARB);
+        exit(1);
+    }
+    ret = fread(STARB_ORIG, 362496, 1, fp);
+    fclose(fp);
+
     if(hash.length() == 0)
     {
-        fp = fopen(FILESTARA, "rb");
-        if (fp == NULL)
-        {
-            fprintf(stderr, "Cannot open file %s\n", FILESTARA);
-            exit(1);
-        }
-        ret = fread(STARA, 256000, 1, fp);
-        fclose(fp);
-
-        fp = fopen(FILESTARB, "rb");
-        if (fp == NULL)
-        {
-            fprintf(stderr, "Cannot open file %s\n", FILESTARB);
-            exit(1);
-        }
-        ret = fread(STARB, 362496, 1, fp);
-        fclose(fp);
+        memcpy(STARA, STARA_ORIG, sizeof(STARA));
+        memcpy(STARB, STARB_ORIG, sizeof(STARB));
     }
     else
     {
