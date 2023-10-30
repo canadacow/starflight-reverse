@@ -14,6 +14,16 @@
 #include"../disasOV/global.h"
 
 #include <stack>
+#include <assert.h>
+#include <dirent.h>
+#include <string>
+#include <algorithm>
+#include <vector>
+#include <iomanip>
+#include <sstream>
+
+#include <zstd.h>
+#include <xxhash.h>
 
 unsigned int debuglevel = 0;
 
@@ -107,10 +117,130 @@ void PrintCache()
 unsigned char STARA[256000];
 unsigned char STARB[362496];
 
+bool Serialize(uint64_t& combinedHash, std::string& filename)
+{
+    uint64_t hashA = XXH64(STARA, sizeof(STARA), 0);
+    combinedHash = XXH64(STARB, sizeof(STARB), hashA);
+
+    std::stringstream ss;
+    ss << std::hex << combinedHash;
+    filename = "sf-" + ss.str() + ".zst";
+    
+    FILE* file = fopen(filename.c_str(), "wb");
+    if (file == NULL)
+    {
+        printf("Could not open file %s\n", filename.c_str());
+        return false;
+    }
+
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
+    if (cctx == NULL)
+    {
+        printf("Could not create ZSTD_CCtx\n");
+        fclose(file);
+        return false;
+    }
+
+    // Calculate the total size of STARA and STARB
+    size_t totalSize = sizeof(STARA) + sizeof(STARB);
+
+    // Create a buffer to hold both STARA and STARB
+    std::vector<unsigned char> combinedData(totalSize);
+
+    // Copy STARA and STARB into the combined buffer
+    memcpy(combinedData.data(), STARA, sizeof(STARA));
+    memcpy(combinedData.data() + sizeof(STARA), STARB, sizeof(STARB));
+
+    // Compress the combined buffer
+    std::vector<unsigned char> compressedData(ZSTD_compressBound(totalSize));
+    size_t const cSize = ZSTD_compressCCtx(cctx, compressedData.data(), compressedData.size(), combinedData.data(), totalSize, 1);
+    if (ZSTD_isError(cSize))
+    {
+        printf("Error compressing data: %s\n", ZSTD_getErrorName(cSize));
+        ZSTD_freeCCtx(cctx);
+        fclose(file);
+        return false;
+    }
+
+    // Write the compressed data to the file
+    fwrite(compressedData.data(), 1, cSize, file);
+
+    ZSTD_freeCCtx(cctx);
+    fclose(file);
+    return true;
+}
+
+bool Deserialize(const std::string& filename)
+{
+    FILE* file = fopen(filename.c_str(), "rb");
+    if (file == NULL)
+    {
+        printf("Could not open file %s\n", filename);
+        return false;
+    }
+
+    ZSTD_DCtx* dctx = ZSTD_createDCtx();
+    if (dctx == NULL)
+    {
+        printf("Could not create ZSTD_DCtx\n");
+        fclose(file);
+        return false;
+    }
+
+    // Get the file size
+    fseek(file, 0, SEEK_END);
+    size_t compressedSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // Read the compressed data from the file
+    std::vector<unsigned char> compressedData(compressedSize);
+    fread(compressedData.data(), 1, compressedSize, file);
+
+    // Prepare a buffer for the decompressed data
+    size_t totalSize = sizeof(STARA) + sizeof(STARB);
+    std::vector<unsigned char> decompressedData(totalSize);
+
+    // Decompress the data
+    size_t const dSize = ZSTD_decompressDCtx(dctx, decompressedData.data(), decompressedData.size(), compressedData.data(), compressedSize);
+    if (ZSTD_isError(dSize))
+    {
+        printf("Error decompressing data: %s\n", ZSTD_getErrorName(dSize));
+        ZSTD_freeDCtx(dctx);
+        fclose(file);
+        return false;
+    }
+
+    // Copy the decompressed data to STARA and STARB
+    memcpy(STARA, decompressedData.data(), sizeof(STARA));
+    memcpy(STARB, decompressedData.data() + sizeof(STARA), sizeof(STARB));
+
+    ZSTD_freeDCtx(dctx);
+    fclose(file);
+    return true;
+}
+
+
+
 void HandleInterrupt()
 {
     static int disktransferaddress_segment = -1;
     static int disktransferaddress_offset = -1;
+
+    #pragma pack(push, 1)
+    struct FCB {
+        uint8_t driveNumber; // 0 = default, 1 = A:, 2 = B:, etc.
+        char filename[8]; // Filename (8 bytes, padded with spaces)
+        char extension[3]; // Extension (3 bytes, padded with spaces)
+        uint16_t currentBlockNumber; // Current block number
+        uint16_t recordSize; // Record size in 128-byte records
+        uint32_t fileSize; // File size in records
+        uint16_t dateOfLastWrite; // Date of last write (in DOS date format)
+        uint16_t timeOfLastWrite; // Time of last write (in DOS time format)
+        uint8_t reserved[8]; // Reserved
+        uint8_t recordWithinCurrentBlock; // Record within current block
+        uint32_t randomRecordNumber; // Random record number
+    };
+    #pragma pack(pop)
 
     int i = 0;
     int interrupt = Pop();
@@ -166,18 +296,37 @@ void HandleInterrupt()
     } else
     if ((interrupt == 0x21) && ((ax>>8) == 0x22))
     {
-        // random write
-        int size = Read16(dx+0x0E);
-        int block = Read16(dx+0x21) + (mem[dx+0x23]<<16);
+        const FCB* fcb = (const FCB*)&mem[dx];
 
-        printf("Write %c block=%i size=%i\n", Read8(dx+5), block, size);
-        char *star = Read8(dx+5)=='A'?STARA:STARB;
-        if (((size+1)*block) > sizeof(STARB))
+        auto size = fcb->fileSize;
+        auto block = fcb->randomRecordNumber;
+
+        const uint8_t* dataSource = (const uint8_t*)&m[(disktransferaddress_segment<<4)+disktransferaddress_offset];
+
+        auto filename = std::string(fcb->filename);
+        filename.erase(std::remove_if(filename.begin(), filename.end(), ::isspace), filename.end());
+
+        size_t recordSizeBytes = fcb->recordSize;
+
+        size_t offset = fcb->randomRecordNumber * fcb->recordSize;
+
+        uint8_t* fileTarget = nullptr;
+        if(filename == "STARA")
         {
-          printf("write above limit\n");
-          exit(1);
+            fileTarget = (uint8_t*)&STARA[offset];
         }
-        memcpy(&star[block*size], &m[(disktransferaddress_segment<<4)+disktransferaddress_offset], size);
+        else if(filename == "STARB")
+        {
+            fileTarget = (uint8_t*)&STARB[offset];
+        }
+        else
+        {
+            assert(false);
+        }
+
+        memcpy(fileTarget, dataSource, recordSizeBytes);
+
+        printf("Write %s block=%llu size=%llu\n", filename.c_str(), offset, recordSizeBytes);
         ax = 0x0;
     } else
     if ((interrupt == 0x21) && ((ax>>8) == 0x21))
@@ -185,15 +334,37 @@ void HandleInterrupt()
         // random read
         //record size
 
-        int size = Read16(dx+0x0E);
-        int block = Read16(dx+0x21) + (mem[dx+0x23]<<16);
-        char *star = Read8(dx+5)=='A'?STARA:STARB;
-        if (((size+1)*block) > sizeof(STARB))
+        const FCB* fcb = (const FCB*)&mem[dx];
+
+        auto size = fcb->fileSize;
+        auto block = fcb->randomRecordNumber;
+
+        auto filename = std::string(fcb->filename);
+        filename.erase(std::remove_if(filename.begin(), filename.end(), ::isspace), filename.end());
+
+        size_t offset = fcb->randomRecordNumber * fcb->recordSize;
+
+        const uint8_t* fileSource = nullptr;
+        if(filename == "STARA")
         {
-          printf("read above limit\n");
-          exit(1);
+            fileSource = (const uint8_t*)&STARA[offset];
         }
-        memcpy(&m[(disktransferaddress_segment<<4)+disktransferaddress_offset], &star[block*size], size);
+        else if(filename == "STARB")
+        {
+            fileSource = (const uint8_t*)&STARB[offset];
+        }
+        else
+        {
+            assert(false);
+        }
+
+        uint8_t* dataTarget = (const uint8_t*)&m[(disktransferaddress_segment<<4)+disktransferaddress_offset];
+        size_t recordSizeBytes = fcb->recordSize;
+
+        memcpy(dataTarget, fileSource, recordSizeBytes);
+
+        printf("Read %s block=%llu size=%llu\n", filename.c_str(), offset, recordSizeBytes);
+
         ax = 0x0;
     } else
     if ((interrupt == 0x21) && ((ax>>8) == 0x11)) // find first file
@@ -453,6 +624,8 @@ void POLY_WINDOW_FILL()
     }
 }
 
+
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
@@ -657,8 +830,34 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x16a3: // "GO"
-            bx = Pop();
-            printf("jump to %x. Either stop (0x0) or restart (0x100)\n", bx);
+            {
+                uint64_t binHash = 0;
+                std::string filename{};
+
+                bool serialized = Serialize(binHash, filename);
+
+                auto printSerialized = [&]{
+                    if(serialized)
+                    {
+                        printf("Saved state to %s\n", filename.c_str());
+                    }
+                    else
+                    {
+                        printf("Failed to serialize state.\n");
+                    }
+                };
+
+                bx = Pop();
+                printf("jump to %x. Either stop (0x0) or restart (0x100)\n", bx);
+                printSerialized();
+                
+                // Undo redirection
+                fflush(stdout);
+                fflush(stderr);
+                freopen("/dev/stdout", "a", stdout);
+                freopen("/dev/stderr", "a", stderr);
+                printSerialized();
+            }
             return EXIT;
         break;
 
@@ -2923,6 +3122,76 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         }
         break;
 
+        case 0xeb4a: // PRMSAV - save parm stack image at addr
+        {
+            bx = Pop();
+            Write16(bx, regsp); // mov [bx], sp
+            bx += 2; // inc bx, inc bx
+            uint16_t si = Read16(0x078C); // mov si, [078C]
+            si -= 0x03E8; // sub si, 03E8
+            uint16_t di = bx; // mov di, bx
+            uint16_t cx = 0x03E8; // mov cx, 03E8
+            while (cx--) // repz
+            {
+                Write8(di++, Read8(si++)); // movsb
+            }
+        }
+        break;
+        case 0xeb72: // PRMLOD - load parm stack image from addr
+        {
+            bx = Pop(); // pop bx
+            regsp = Read16(bx); // mov sp,[bx]
+            bx += 2; // inc bx, inc bx
+            uint16_t si = bx; // mov si, bx
+            uint16_t di = Read16(0x078C); // mov di, [078C]
+            di -= 0x03E8; // sub di, 03E8
+            uint16_t cx = 0x03E8; // mov cx, 03E8
+            while (cx--) // repz
+            {
+                Write8(di++, Read8(si++)); // movsb
+            }
+            regsp += Read16(0xDE72); // add    sp,[DE72] // WDE72
+        }
+        break;
+        case 0xebaa: // RETSAV - save return stack image at addr
+        {
+            bx = Pop(); // pop bx
+            Write16(bx, regbp); // mov [bx], bp
+            bx += 2; // inc bx, inc bx
+            uint16_t si = Read16(0x078E); // mov si, [078E]
+            si -= 0x00DC; // sub si, 00DC
+            uint16_t di = bx; // mov di, bx
+            uint16_t cx = 0x00DC; // mov cx, 00DC
+            while (cx--) // repz
+            {
+                Write8(di++, Read8(si++)); // movsb
+            }
+        }
+        break;
+        case 0xebd2: // RETJMP - load return stack image from addr
+        {
+            bx = Pop(); // pop bx
+            regbp = Read16(bx); // mov bp,[bx]
+            bx += 2; // inc bx, inc bx
+            uint16_t si = bx; // mov si, bx
+            uint16_t di = Read16(0x078E); // mov di, [078E]
+            di -= 0x00DC; // sub di, 00DC
+            uint16_t cx = 0x00DC; // mov cx, 00DC
+            while (cx--) // repz
+            {
+                Write8(di++, Read8(si++)); // movsb
+            }
+            regbp += Read16(0xDE6E); // add bp,[DE6E]
+            regsi = Read16(regbp); // mov si,[bp+00]
+            regbp += 2; // inc bp, inc bp
+        }
+        break;        
+        case 0x937b: // SETCOLOR
+        {
+            uint8_t c = Read8(0x55F2);
+            printf("SETCOLOR %d\n", c);
+        }
+        break;
         case 0x992d: // "?INVIS"
         {
           unsigned short ax = 0;
@@ -3000,7 +3269,7 @@ void SaveSTARFLT()
     fclose(fp);
 }
 
-void LoadSTARFLT()
+void LoadSTARFLT(std::string hash)
 {
     FILE *fp;
     int ret;
@@ -3014,23 +3283,53 @@ void LoadSTARFLT()
     ret = fread(&mem[0x100], FILESTAR0SIZE, 1, fp);
     fclose(fp);
 
-    fp = fopen(FILESTARA, "rb");
-    if (fp == NULL)
+    if(hash.length() == 0)
     {
-        fprintf(stderr, "Cannot open file %s\n", FILESTARA);
-        exit(1);
-    }
-    ret = fread(STARA, 256000, 1, fp);
-    fclose(fp);
+        fp = fopen(FILESTARA, "rb");
+        if (fp == NULL)
+        {
+            fprintf(stderr, "Cannot open file %s\n", FILESTARA);
+            exit(1);
+        }
+        ret = fread(STARA, 256000, 1, fp);
+        fclose(fp);
 
-    fp = fopen(FILESTARB, "rb");
-    if (fp == NULL)
-    {
-        fprintf(stderr, "Cannot open file %s\n", FILESTARB);
-        exit(1);
+        fp = fopen(FILESTARB, "rb");
+        if (fp == NULL)
+        {
+            fprintf(stderr, "Cannot open file %s\n", FILESTARB);
+            exit(1);
+        }
+        ret = fread(STARB, 362496, 1, fp);
+        fclose(fp);
     }
-    ret = fread(STARB, 362496, 1, fp);
-    fclose(fp);
+    else
+    {
+        std::string prefix = "sf-" + hash;
+        std::string filename = prefix + ".zst";
+
+        DIR *dir;
+        struct dirent *ent;
+        if ((dir = opendir ("./")) != NULL) {
+            while ((ent = readdir (dir)) != NULL) {
+                std::string file = ent->d_name;
+                if (file.substr(file.find_last_of(".") + 1) != "zst") continue;
+                if (file.find(prefix) == 0) {
+                    if (!Deserialize(file)) {
+                        fprintf(stderr, "Error: Cannot deserialize file %s\n", file.c_str());
+                        exit(1);
+                    } else {
+                        printf("File %s was loade for resumption.\n", file.c_str());
+                        break;
+                    }
+                }
+            }
+            closedir (dir);
+        } else {
+            perror ("Could not open directory");
+            exit(1);
+        }
+    }
 }
 
 void EnableDebug()
@@ -3071,10 +3370,10 @@ enum RETURNCODE Step()
     return ret;
 }
 
-void InitEmulator()
+void InitEmulator(std::string hash)
 {
     regbp = 0xd4a7 + 0x100 + 0x80; // call stack
     regsp = 0xd4a7 + 0x100;  // initial parameter stack
-    LoadSTARFLT();
+    LoadSTARFLT(hash);
     memset(inputbuffer, 0, sizeof(inputbuffer));
 }

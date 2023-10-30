@@ -8,6 +8,8 @@
 #include"graphics.h"
 #include"../patch/patch.h"
 
+#include <string>
+
 void Continue()
 {
     while(1)
@@ -19,10 +21,23 @@ void Continue()
 }
 
 
-int main()
-{
+int main(int argc, char *argv[]) {
+    std::string hash;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--hash") == 0 && i + 1 < argc) {
+            hash = argv[i + 1];
+            i++; // Skip the next argument since we just processed it
+        }
+    }
+
+    if (!hash.empty()) {
+        printf("Hash: %s\n", hash.c_str());
+        // Load your hash here
+    }
+    
     InitCPU();
-    InitEmulator();
+    InitEmulator(hash);
     GraphicsInit();
 
 #ifndef SDL
