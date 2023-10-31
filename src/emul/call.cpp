@@ -2117,11 +2117,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     int color = Read16(0x55F2); // COLOR
 
+                    /*
                     // Calculate color mask
                     color_mask = (color & 1) ? 0xF0 : 0x0F;
 
                     // Apply color mask to pixel data
                     pixel_data = (pixel_data & color_mask) | ((color << 4) & ~color_mask);
+                    */
+
+                    pixel_data = color & 0xf;
 
                     // Write pixel data back to the buffer
                     GraphicsPixel(x, y, pixel_data);
@@ -2134,7 +2138,31 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 lplot(x, y);
             }
         break;
+        case 0x9017: // LXPLOT TODO
+            {
+               auto lxplot = [](int x, int y) {
+                    int offset;
+                    unsigned char color_mask, pixel_data;
 
+                    // Fetch pixel data from the buffer
+                    pixel_data = GraphicsPeek(x, y);
+
+                    int color = Read16(0x55F2); // COLOR
+
+                    // Apply color mask to pixel data
+                    pixel_data = pixel_data ^ (color & 0xf);
+
+                    // Write pixel data back to the buffer
+                    GraphicsPixel(x, y, pixel_data);
+                };
+
+                int y = Pop();
+                int x = Pop();
+
+                printf("LXPLOT (TODO) %i %i\n", x, y);
+                lxplot(x, y);
+            }
+        break;
         case 0x93B1: // "BEXTENT" Part of Bit Block Image Transfer (BLT)
             //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i\n", Read16(0x586E), Read16(0x5863), Read16(0x5887), Read16(0x5892));
             Push(Read16(0x586E)); // xblt
@@ -2219,7 +2247,438 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             GraphicsUpdate();
             //exit(1);
         break;
+        case 0x90ad: // V>DISPLAY
+        {
+            // TODO: This function reads and writes directly from
+            // paged video RAM (e.g. 0xA200 -> 0xA000)
+            uint16_t es, ds;
+            uint16_t ax, cx, di, si;
+            
+            auto COPYLIN = [&](uint16_t count){
+                /*
+                uint8_t al = 0x05;
+                uint8_t ah = 0x01;
+                uint16_t dx = 0x03CE;
 
+                OutPort(dx, al);
+                dx++;
+                uint8_t temp = ah;
+                ah = al;
+                al = temp;
+                OutPort(dx, al);
+                */
+
+                // repz movsb
+                while (count != 0) {
+                    m[(es << 4) + di] = m[(ds << 4) + si];
+                    si++;
+                    di++;
+                    count--;
+                }
+
+                /*
+                al = 0x05;
+                ah = 0x00;
+                dx = 0x03CE;
+                OutPort(dx, al);
+                dx++;
+                temp = ah;
+                ah = al;
+                al = temp;
+                OutPort(dx, al);
+                */
+            };
+
+            auto VDISPLAY = [&]{
+                cx = 0x0078;
+                di = bx;
+                di = m[(ds << 4) + di];
+                di++;
+
+                while (cx != 0) {
+                    COPYLIN(0x12);
+                    bx += 2;
+                    cx--;
+                }
+            };
+
+            bx = 6598;
+            es = Read16(0x55E6); // DBUF-SEG
+            ds = Read16(0x55D8); // HBUF-SEG
+            si = 0;
+
+            VDISPLAY();
+        }
+        break;
+        case 0x9aba: // !IB
+        {
+// ================================================
+// 0x9ab2: WORD '!IB' codep=0x9aba wordp=0x9aba
+// ================================================
+// 0x9aba: pop    ax
+// 0x9abb: pop    cx
+// 0x9abc: push   es
+// 0x9abd: mov    es,ax
+// 0x9abf: mov    bx,[5A02] // IINDEX
+// 0x9ac3: es:    
+// 0x9ac4: mov    [bx],cl
+// 0x9ac6: pop    es
+// 0x9ac7: lodsw
+// 0x9ac8: mov    bx,ax
+// 0x9aca: jmp    word ptr [bx]
+            uint16_t es = Pop();
+            uint16_t cx = Pop();
+            bx = Read16(0x5A02); // IINDEX
+            m[(es << 4) + bx] = cx & 0xff;
+        }
+        break;
+        case 0x9a9e: // !IW
+        {
+            // ================================================
+// 0x9a96: WORD '!IW' codep=0x9a9e wordp=0x9a9e
+// ================================================
+// 0x9a9e: pop    ax
+// 0x9a9f: pop    cx
+// 0x9aa0: push   es
+// 0x9aa1: mov    es,ax
+// 0x9aa3: mov    bx,[5A02] // IINDEX
+// 0x9aa7: shl    bx,1
+// 0x9aa9: es:    
+// 0x9aaa: mov    [bx],cx
+// 0x9aac: pop    es
+// 0x9aad: lodsw
+// 0x9aae: mov    bx,ax
+// 0x9ab0: jmp    word ptr [bx]
+            uint16_t es = Pop();
+            uint16_t cx = Pop();
+            bx = Read16(0x5A02); // IINDEX
+            bx <<= 1;
+            *(uint16_t*)&m[(es << 4) + bx] = cx;
+        }
+        break;
+        case 0x9d18: // ?ILOCUS
+        {
+// 0x9d18: pop    cx
+// 0x9d19: pop    word ptr [5B04] // BICON
+// 0x9d1d: pop    word ptr [5B00] // W5B00
+// 0x9d21: pop    word ptr [5AFC] // W5AFC
+// 0x9d25: pop    word ptr [5AF8] // W5AF8
+// 0x9d29: xor    ax,ax
+// 0x9d2b: push   ax
+// 0x9d2c: or     cx,cx
+// 0x9d2e: jle    9D71
+// 0x9d30: mov    bx,cx
+// 0x9d32: dec    bx
+// 0x9d33: add    bx,[5B04] // BICON
+// 0x9d37: shl    bx,1
+// 0x9d39: push   es
+// 0x9d3a: push   word ptr [59BE] // IXSEG
+// 0x9d3e: pop    es
+// 0x9d3f: es:    
+// 0x9d40: mov    dx,[bx]
+// 0x9d42: pop    es
+// 0x9d43: sub    dx,[5AF8] // W5AF8
+// 0x9d47: jns    9D4B
+// 0x9d49: neg    dx
+// 0x9d4b: cmp    dx,[5B00] // W5B00
+// 0x9d4f: jg     9D6F
+// 0x9d51: push   es
+// 0x9d52: push   word ptr [59C2] // IYSEG
+// 0x9d56: pop    es
+// 0x9d57: es:    
+// 0x9d58: mov    dx,[bx]
+// 0x9d5a: pop    es
+// 0x9d5b: sub    dx,[5AFC] // W5AFC
+// 0x9d5f: jns    9D63
+// 0x9d61: neg    dx
+// 0x9d63: cmp    dx,[5B00] // W5B00
+// 0x9d67: jg     9D6F
+// 0x9d69: pop    ax
+// 0x9d6a: shr    bx,1
+// 0x9d6c: push   bx
+// 0x9d6d: inc    ax
+// 0x9d6e: push   ax
+// 0x9d6f: loop   9D30
+// 0x9d71: lodsw
+// 0x9d72: mov    bx,ax
+// 0x9d74: jmp    word ptr [bx]
+            uint16_t cx = Pop();
+            Write16(0x5B04, Pop()); // BICON
+            Write16(0x5B00, Pop()); // W5B00
+            Write16(0x5AFC, Pop()); // W5AFC
+            Write16(0x5AF8, Pop()); // W5AF8
+            uint16_t ax = 0;
+            Push(ax);
+            if (cx > 0) {
+                do {
+                    bx = cx;
+                    bx--;
+                    bx += Read16(0x5B04); // BICON
+                    bx <<= 1;
+                    uint16_t es = Read16(0x59BE); // IXSEG
+                    int16_t dx = *(int16_t*)&m[(es << 4) + bx];
+                    dx -= (int16_t)Read16(0x5AF8); // W5AF8
+                    if (dx < 0) dx = -dx;
+                    if (dx > (int16_t)Read16(0x5B00)) continue; // W5B00
+                    es = Read16(0x59C2); // IYSEG
+                    dx = *(int16_t*)&m[(es << 4) + bx];
+                    dx -= (int16_t)Read16(0x5AFC); // W5AFC
+                    if (dx < 0) dx = -dx;
+                    if (dx > (int16_t)Read16(0x5B00)) continue; // W5B00
+                    ax = Pop();
+                    bx >>= 1;
+                    Push(bx);
+                    ax++;
+                    Push(ax);
+                    cx--;
+                } while (cx != 0);
+            }
+        }
+        break;
+        case 0x9e14: // XCHGICON
+        {
+// ================================================
+// 0x9e12: WORD 'XCHGICON' codep=0x9e14 wordp=0x9e14
+// ================================================
+// 0x9e14: pop    ax
+// 0x9e15: pop    bx
+// 0x9e16: push   es
+// 0x9e17: push   word ptr [59C6] // IDSEG
+// 0x9e1b: pop    es
+// 0x9e1c: call   49CA
+// 0x9e1f: push   word ptr [59CA] // ICSEG
+// 0x9e23: pop    es
+// 0x9e24: call   49CA
+// 0x9e27: push   word ptr [59DA] // IHSEG
+// 0x9e2b: pop    es
+// 0x9e2c: call   49CA
+// 0x9e2f: shl    ax,1
+// 0x9e31: shl    bx,1
+// 0x9e33: push   word ptr [59BE] // IXSEG
+// 0x9e37: pop    es
+// 0x9e38: call   2F36
+// 0x9e3b: push   word ptr [59C2] // IYSEG
+// 0x9e3f: pop    es
+// 0x9e40: call   2F36
+// 0x9e43: push   word ptr [59CE] // ILSEG
+// 0x9e47: pop    es
+// 0x9e48: call   2F36
+// 0x9e4b: pop    es
+// 0x9e4c: lodsw
+// 0x9e4d: mov    bx,ax
+// 0x9e4f: jmp    word ptr [bx]
+            uint16_t es, ds;
+            uint16_t ax, cx, di, si;
+
+            auto sub49CA = [&](){
+                /*
+                mov     cl, es:[bx]
+                xchg    bx, ax
+                xchg    cl, es:[bx]
+                xchg    bx, ax
+                mov     es:[bx], cl
+                */
+               uint8_t cl = m[(es << 4) + bx];
+               std::swap(bx, ax);
+               std::swap(cl, m[(es << 4) + bx]);
+               std::swap(bx, ax);
+               m[(es << 4) + bx] = cl;
+            };
+
+            auto sub2F36 = [&](){
+                /*
+                // 0x2f38: mov    cx,es:[bx]
+                // 0x2f3a: xchg   ax,bx
+                // 0x2f3d: xchg   es:[bx],cx
+                // 0x2f3f: xchg   ax,bx
+                // 0x2f42: mov    es:[bx],cx
+                */
+               cx = m[(es << 4) + bx];
+               std::swap(ax, bx);
+               std::swap(cx, *(uint16_t*)&m[(es << 4) + bx]);
+               std::swap(ax, bx);
+               m[(es << 4) + bx] = cx;
+            };
+
+            ax = Pop();
+            bx = Pop();
+
+            es = Read16(0x59C6);
+            sub49CA();
+
+            es = Read16(0x59CA);
+            sub49CA();
+
+            es = Read16(0x59DA);
+            sub49CA();
+
+            ax <<= 1;
+            bx <<= 1;
+            
+            es = Read16(0x59BE);
+            sub2F36();
+
+            es = Read16(0x59C2);
+            sub2F36();
+
+            es = Read16(0x59CE);
+            sub2F36();
+        }
+        break;
+        case 0x9eb1: // ?IID
+        {
+// ================================================
+// 0x9eaf: WORD '?IID' codep=0x9eb1 wordp=0x9eb1
+// ================================================
+// 0x9eb1: pop    cx
+// 0x9eb2: pop    word ptr [5B04] // BICON
+// 0x9eb6: pop    dx
+// 0x9eb7: pop    word ptr [48C8] // ZZZ
+// 0x9ebb: xor    ax,ax
+// 0x9ebd: push   es
+// 0x9ebe: pop    word ptr [48C6] // ZZZ
+// 0x9ec2: push   word ptr [59C6] // IDSEG
+// 0x9ec6: pop    es
+// 0x9ec7: push   ax
+// 0x9ec8: or     cx,cx
+// 0x9eca: jle    9EE8
+// 0x9ecc: mov    bx,cx
+// 0x9ece: dec    bx
+// 0x9ecf: add    bx,[5B04] // BICON
+// 0x9ed3: es:    
+// 0x9ed4: mov    al,[bx]
+// 0x9ed6: cmp    ax,dx
+// 0x9ed8: jns    9EE6
+// 0x9eda: cmp    ax,[48C8] // ZZZ
+// 0x9ede: jle    9EE6
+// 0x9ee0: pop    ax
+// 0x9ee1: push   bx
+// 0x9ee2: inc    ax
+// 0x9ee3: push   ax
+// 0x9ee4: xor    ax,ax
+// 0x9ee6: loop   9ECC
+// 0x9ee8: push   word ptr [48C6] // ZZZ
+// 0x9eec: pop    es
+            uint16_t es, ds;
+            uint16_t ax, cx, dx, di, si;
+
+            cx = Pop();
+            Write16(0x5B04, Pop()); // BICON
+            dx = Pop();
+            Write16(0x48C8, Pop()); // ZZZ
+
+            ax = 0;
+
+            // Set es to the value of IDSEG
+            es = Read16(0x59C6); // IDSEG
+
+            // Push ax onto the stack
+            Push(ax);
+
+            // If cx is less than or equal to 0, jump to 9EE8
+            if (cx <= 0) {
+                // Jump to 9EE8
+            } else {
+                // Loop until cx is 0
+                do {
+                    // Decrement bx
+                    bx = cx - 1;
+
+                    // Add the value of BICON to bx
+                    bx += Read16(0x5B04); // BICON
+
+                    // Read the value at the address pointed to by bx in es segment
+                    ax = *(uint16_t*)&m[(es << 4) + bx];
+
+                    // If ax is less than dx and ax is less than or equal to ZZZ, jump to 9EE6
+                    if (ax >= dx && ax <= Read16(0x48C8)) { // ZZZ
+                        // Jump to 9EE6
+                    } else {
+                        // Pop ax from the stack
+                        ax = Pop();
+
+                        // Push bx onto the stack
+                        Push(bx);
+
+                        // Increment ax
+                        ax++;
+
+                        // Push ax onto the stack
+                        Push(ax);
+
+                        // Set ax to 0
+                        ax = 0;
+                    }
+
+                    // Decrement cx
+                    cx--;
+                } while (cx != 0);
+            }
+        }
+        break;
+        case 0x9a6c: // @IW
+        {
+            // 0x9a6c: pop    ax
+            // 0x9a6d: push   es
+            // 0x9a6e: mov    es,ax
+            // 0x9a70: mov    bx,[5A02] // IINDEX
+            // 0x9a74: shl    bx,1
+            // 0x9a76: es:    
+            // 0x9a77: mov    ax,[bx]
+            // 0x9a79: pop    es
+            // 0x9a7a: push   ax
+            uint16_t es, ds;
+            uint16_t ax, cx, dx, di, si;
+            es = Pop();
+
+            bx = Read16(0x5A02); // IINDEX
+            bx <<= 1;
+            
+            ax = Read16Long(es, bx);
+            Push(ax);
+        }
+        break;
+        case 0x9a82: // W9A82
+        {
+            // 0x9a82: pop    ax
+            // 0x9a83: push   es
+            // 0x9a84: mov    es,ax
+            // 0x9a86: mov    bx,[5A02] // IINDEX
+            // 0x9a8a: xor    ax,ax
+            // 0x9a8c: es:    
+            // 0x9a8d: mov    al,[bx]
+            // 0x9a8f: pop    es
+            // 0x9a90: push   ax
+            uint16_t es, ds;
+            uint16_t ax, cx, dx, di, si;
+            es = Pop();
+
+            bx = Read16(0x5A02); // IINDEX
+            ax = 0;
+            
+            ax = Read8Long(es, bx);
+            Push(ax);
+        }
+        break;
+        case 0x4910: // 2^N
+        {
+            // 0x4910: pop    cx
+            // 0x4911: xor    ax,ax
+            // 0x4913: stc    
+            // 0x4914: inc    cx
+            // 0x4915: jcxz   4919
+            // 0x4917: rcl    ax,cl
+            // 0x4919: push   ax
+
+            uint16_t cx = Pop(); // pop cx
+            uint16_t ax = 0; // xor ax, ax
+            cx++; // inc cx
+            if (cx != 0) {
+                ax = 1 << (cx - 1); // rcl ax, cl
+            }
+            Push(ax); // push ax
+        }
+        break;
         case 0x9055: // LFILLPOLY TODO
         {
             printf("LFILLPOLY (TODO)\n");
