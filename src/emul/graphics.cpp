@@ -606,14 +606,14 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
                 graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = pixel;
                 if(pixel)
                 {
-                    printf("█");
+                    //printf("█");
                     hasPixel = true;
                 }
             }
 
             if(!hasPixel)
             {
-                printf("░");
+                //printf("░");
             }
             
             n++;
@@ -623,7 +623,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
                 img++;
             }
         }
-        printf("\n");
+        //printf("\n");
     }
     GraphicsUpdate();
 }

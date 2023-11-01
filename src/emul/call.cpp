@@ -21,6 +21,9 @@
 #include <vector>
 #include <iomanip>
 #include <sstream>
+#include <chrono>
+#include <cmath>
+#include <thread>
 
 #include <zstd.h>
 #include <xxhash.h>
@@ -651,6 +654,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     unsigned short i;
     enum RETURNCODE ret;
 
+    int ovidx = GetOverlayIndex(Read16(0x55a5));
+    printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
+
     // bx contains pointer to WORD
     if ((regsp < FILESTAR0SIZE+0x100) || (regsp > (0xF6F4)))
     {
@@ -677,6 +683,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     regsi = bx;
                     DefineCallStack(regbp, 1);
                 }
+            }
+        break;
+
+        case 0xb869: // CALL RULE? Used in COMM-OV?
+            {
+                printf("TODO CALL RULE?\n");
+                
+                FILE* fp = fopen("test.com", "wb");
+                fwrite(&mem[0xeb66], 1, 0x009a, fp);
+                fclose(fp);
+                
+                bx += 2;
+                regbp -= 2;
+                Write16(regbp, regsi);
+                regsi = bx;
+                DefineCallStack(regbp, 1);
             }
         break;
 
@@ -907,6 +929,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x4e00: ParameterCall(bx, 0x4e00); break; // Arrays
         case 0x744d: ParameterCall(bx, 0x744d); break; // "INST-SI" "INST-PR" "%NAME" "PHR-CNT" "TEXT-CO" "PHRASE$" ...
         //case 0x1AB5: ParameterCall(bx, 0x1AB5); break; // "FORTH MUSIC IT-VOC MISC-"
+        case 0xe211: 
+            {
+                ParameterCall(bx, 0xe211); // in COMBAT-OV
+                break; 
+            }
         case 0x7227:
         {
             //printf("Receive %s from STAR*.COM dictionary for index 0x%x: '%s'\n", FindWord(bx+2, -1), Read16(regsp), FindDirectoryName(Read16(regsp)));
@@ -919,7 +946,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
               return ERROR;
             }
 
-            printf("Load data    '%s'\n", s);
+            //printf("Load data    '%s'\n", s);
             // "FILE-NA FILE-TY FILE-ST FILE-EN FILE-#R FILE-RL FILE-SL"
             ParameterCall(bx, 0x7227);
           }
@@ -2220,7 +2247,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             int y0 = Read16(0x5863);
             int w = Read16(0x5887);
             int h = Read16(0x5892);
-            printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x\n", x0, y0, w, h, color, bltseg, bltoffs);
+            //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x\n", x0, y0, w, h, color, bltseg, bltoffs);
             GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color);
             }
             //exit(1);
@@ -2358,81 +2385,57 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x9d18: // ?ILOCUS
         {
-// 0x9d18: pop    cx
-// 0x9d19: pop    word ptr [5B04] // BICON
-// 0x9d1d: pop    word ptr [5B00] // W5B00
-// 0x9d21: pop    word ptr [5AFC] // W5AFC
-// 0x9d25: pop    word ptr [5AF8] // W5AF8
-// 0x9d29: xor    ax,ax
-// 0x9d2b: push   ax
-// 0x9d2c: or     cx,cx
-// 0x9d2e: jle    9D71
-// 0x9d30: mov    bx,cx
-// 0x9d32: dec    bx
-// 0x9d33: add    bx,[5B04] // BICON
-// 0x9d37: shl    bx,1
-// 0x9d39: push   es
-// 0x9d3a: push   word ptr [59BE] // IXSEG
-// 0x9d3e: pop    es
-// 0x9d3f: es:    
-// 0x9d40: mov    dx,[bx]
-// 0x9d42: pop    es
-// 0x9d43: sub    dx,[5AF8] // W5AF8
-// 0x9d47: jns    9D4B
-// 0x9d49: neg    dx
-// 0x9d4b: cmp    dx,[5B00] // W5B00
-// 0x9d4f: jg     9D6F
-// 0x9d51: push   es
-// 0x9d52: push   word ptr [59C2] // IYSEG
-// 0x9d56: pop    es
-// 0x9d57: es:    
-// 0x9d58: mov    dx,[bx]
-// 0x9d5a: pop    es
-// 0x9d5b: sub    dx,[5AFC] // W5AFC
-// 0x9d5f: jns    9D63
-// 0x9d61: neg    dx
-// 0x9d63: cmp    dx,[5B00] // W5B00
-// 0x9d67: jg     9D6F
-// 0x9d69: pop    ax
-// 0x9d6a: shr    bx,1
-// 0x9d6c: push   bx
-// 0x9d6d: inc    ax
-// 0x9d6e: push   ax
-// 0x9d6f: loop   9D30
-// 0x9d71: lodsw
-// 0x9d72: mov    bx,ax
-// 0x9d74: jmp    word ptr [bx]
-            uint16_t cx = Pop();
-            Write16(0x5B04, Pop()); // BICON
-            Write16(0x5B00, Pop()); // W5B00
-            Write16(0x5AFC, Pop()); // W5AFC
-            Write16(0x5AF8, Pop()); // W5AF8
-            uint16_t ax = 0;
-            Push(ax);
-            if (cx > 0) {
-                do {
-                    bx = cx;
-                    bx--;
-                    bx += Read16(0x5B04); // BICON
-                    bx <<= 1;
-                    uint16_t es = Read16(0x59BE); // IXSEG
-                    int16_t dx = *(int16_t*)&m[(es << 4) + bx];
-                    dx -= (int16_t)Read16(0x5AF8); // W5AF8
-                    if (dx < 0) dx = -dx;
-                    if (dx > (int16_t)Read16(0x5B00)) continue; // W5B00
-                    es = Read16(0x59C2); // IYSEG
-                    dx = *(int16_t*)&m[(es << 4) + bx];
-                    dx -= (int16_t)Read16(0x5AFC); // W5AFC
-                    if (dx < 0) dx = -dx;
-                    if (dx > (int16_t)Read16(0x5B00)) continue; // W5B00
-                    ax = Pop();
-                    bx >>= 1;
-                    Push(bx);
-                    ax++;
-                    Push(ax);
-                    cx--;
-                } while (cx != 0);
+            struct Icon {
+                int16_t x;
+                int16_t y;
+                uint16_t idx;
+            };
+
+            auto ILOCUS = [&](int16_t x, int16_t y, int16_t radius, std::vector<Icon>& icons) -> std::vector<uint16_t> {
+                std::vector<uint16_t> result;
+                for (const auto& icon : icons) {
+                    int xdist = icon.x - x;
+                    if (xdist < 0) xdist = -2;
+                    if (xdist <= radius) {
+                        int ydist = icon.y - y;
+                        if (ydist < 0) ydist = -2;
+                        if (ydist <= radius) {
+                            result.push_back(icon.idx);
+                        }
+                    }
+                }
+                return result;
+            };
+
+            int qty = Pop();
+            uint16_t base = Read16(Pop());
+            int16_t radius = (int16_t)Pop();
+            int16_t y = (int16_t)Pop();
+            int16_t x = (int16_t)Pop();
+
+            uint16_t IXSEG = Read16(0x59BE);
+            uint16_t IYSEG = Read16(0x59C2);
+
+            std::vector<Icon> icons{};
+            for(int i = 1; i <= qty; ++i)
+            {
+                Icon icon{};
+                uint16_t offset = ((i - 1) + base) << 1;
+                icon.x = (int16_t)Read16Long(IXSEG, offset);
+                icon.y = (int16_t)Read16Long(IYSEG, offset);
+                icon.idx = offset;
+
+                icons.push_back(icon);
             }
+
+            std::vector<uint16_t> outIdx = ILOCUS(x, y, radius, icons);
+
+            for(auto i : outIdx)
+            {
+                Push(i);
+            }
+
+            Push(outIdx.size());
         }
         break;
         case 0x9e14: // XCHGICON
@@ -2493,11 +2496,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 // 0x2f3f: xchg   ax,bx
                 // 0x2f42: mov    es:[bx],cx
                 */
-               cx = m[(es << 4) + bx];
+               cx = *(uint16_t*)&m[(es << 4) + bx];
                std::swap(ax, bx);
                std::swap(cx, *(uint16_t*)&m[(es << 4) + bx]);
                std::swap(ax, bx);
-               m[(es << 4) + bx] = cx;
+               *(uint16_t*)&m[(es << 4) + bx] = cx;
             };
 
             ax = Pop();
@@ -2679,9 +2682,70 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             Push(ax); // push ax
         }
         break;
+        case 0x9970: // WLD>SCR
+        {
+            // 0x9970: pop    ax
+            // 0x9971: sub    ax,[5B31] // BVIS
+            // 0x9975: mov    cx,[6221] // YWLD:YPIX
+            // 0x9979: imul   cx
+            // 0x997b: mov    cx,[6223] // YWLD:YPIX
+            // 0x997f: idiv   cx
+            // 0x9981: add    ax,[596B] // YLLDEST
+            // 0x9985: mov    [48C6],ax // ZZZ
+            // 0x9989: pop    ax
+            // 0x998a: sub    ax,[5B3C] // LVIS
+            // 0x998e: mov    cx,[6211] // XWLD:XPIX
+            // 0x9992: imul   cx
+            // 0x9994: mov    cx,[6213] // XWLD:XPIX
+            // 0x9998: idiv   cx
+            // 0x999a: add    ax,[595D] // XLLDEST
+            // 0x999e: push   ax
+            // 0x999f: push   word ptr [48C6] // ZZZ
+            uint16_t ax, cx;
+            ax = Pop();
+            ax -= Read16(0x5B31); // BVIS
+            cx = Read16(0x6221); // YWLD:YPIX
+            ax *= cx;
+            cx = Read16(0x6223); // YWLD:YPIX
+            ax /= cx;
+            ax += Read16(0x596B); // YLLDEST
+            Write16(0x48C6, ax); // ZZZ
+            ax = Pop();
+            ax -= Read16(0x5B3C); // LVIS
+            cx = Read16(0x6211); // XWLD:XPIX
+            ax *= cx;
+            cx = Read16(0x6213); // XWLD:XPIX
+            ax /= cx;
+            ax += Read16(0x595D); // XLLDEST
+            Push(ax);
+            Push(Read16(0x48C6)); // ZZZ
+        }
+        break;
+        case 0x99b4: // SCR>BLT
+        {
+        // 0x99b4: pop    ax
+        // 0x99b5: add    ax,0007
+        // 0x99b8: sub    ax,[5A4E] // CENTERADJUST
+        // 0x99bc: pop    cx
+        // 0x99bd: sub    cx,[5A4E] // CENTERADJUST
+        // 0x99c1: push   cx
+        // 0x99c2: push   ax
+
+            uint16_t ax, cx;
+            ax = Pop();
+            ax += 7;
+            ax -= Read16(0x5A4E); // CENTERADJUST
+
+            cx = Pop();
+            cx -= Read16(0x5A4E); // CENTERADJUST
+
+            Push(cx);
+            Push(ax);
+        }
+        break;
         case 0x9055: // LFILLPOLY TODO
         {
-            printf("LFILLPOLY (TODO)\n");
+            //printf("LFILLPOLY (TODO)\n");
             PrintCallstacktrace(bx);
             //exit(-1);
             int color = Read16(0x55F2); // COLOR
@@ -2729,6 +2793,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             bx++;
                             ax = Read16(bx);
                             Write16(0x57C2, ax); // XEND
+                            /*
                             printf("LFILLPOLY Color %d YMIN %d YMAX %d, XSTART %d, XEND %d\n",
                                 color,
                                 Read16(0x57EC),
@@ -2736,6 +2801,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 Read16(0x57B7),
                                 Read16(0x57C2)
                             );
+                            */
                             //FVLIN();
                             cx = s.top(); s.pop();
                             cx++;
@@ -2885,13 +2951,31 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
           Push(0);
           // 2 pop, 4 Push, 2 push
         break;
-
         case 0x90f9: // TODO ARC
           printf("TODO ARC\n");
         break;
 
         case 0x8D09: // "DISPLAY" wait for vertical retrace
-            //printf("wait for vertical retrace\n");
+            {
+                static auto start = std::chrono::system_clock::now();
+                auto now = std::chrono::system_clock::now();
+
+                constexpr std::chrono::nanoseconds frame_duration = std::chrono::nanoseconds(16670000); // 1/60th of a second
+
+                auto ticks = now - start;
+
+                //auto floor_ticks = std::floor(std::chrono::duration<double, std::nano>(ticks).count() / frame_duration.count());
+                auto current_time_in_vblank_fraction = std::chrono::duration<double, std::nano>(ticks).count() / frame_duration.count();
+                auto next_time_in_vblanks = std::ceil(std::chrono::duration<double, std::nano>(ticks).count() / frame_duration.count());
+
+                auto time_to_wait_in_vblanks = next_time_in_vblanks - current_time_in_vblank_fraction;
+                auto time_to_wait_in_ns = std::chrono::nanoseconds(static_cast<int64_t>(time_to_wait_in_vblanks * frame_duration.count()));
+
+                auto start_wait = std::chrono::system_clock::now();
+                while (std::chrono::system_clock::now() - start_wait < time_to_wait_in_ns) {
+                    std::this_thread::yield();
+                }
+            }
             GraphicsUpdate();
         break;
 
@@ -3845,8 +3929,6 @@ enum RETURNCODE Step()
     }
 */
     //printf("  0x%04x  %15s   %s\n", regsi, GetOverlayName(regsi, ovidx), FindWord(bx+2, ovidx));
-    //int ovidx = GetOverlayIndex(Read16(0x55a5));
-    //printf("Step 0x%04x - OV %s WORD 0x%04x %s\n", execaddr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
 
     enum RETURNCODE ret = Call(execaddr, bx);
     return ret;
