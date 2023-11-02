@@ -649,12 +649,6 @@ void POLY_WINDOW_FILL()
 
 #pragma pack(push, 1)
 
-std::vector<uint8_t> memcheck{};
-void* metarule = nullptr;
-
-std::vector<uint8_t> rulecheck{};
-void* rulerule = nullptr;
-
 struct ConditionIndex {
     uint8_t value;
 
@@ -674,30 +668,12 @@ struct Rule {
 
     enum RETURNCODE Execute(uint16_t bx, const uint16_t* conditions, uint8_t* flagCache) const
     {
-        rulerule = this;
-        rulecheck.resize(3 + conditionCount);
-        memcpy(rulecheck.data(), this, rulecheck.size());
+        // Not sure if we must evaluate all conditions anyway as
+        // a way to cache them and if that's valuable. We'll see.
+        bool result = true;
 
         for(uint8_t condIdx = 0; condIdx < conditionCount; ++condIdx)
         {
-            auto memchk = [&](){
-                if(memcmp(rulecheck.data(), rulerule, rulecheck.size()) != 0)
-                {
-                    printf("Rule no longer compares\n");
-                    memcpy(rulerule, rulecheck.data(), rulecheck.size());
-                    memcpy(metarule, memcheck.data(), memcheck.size());
-                    assert(false);
-                }
-
-                if(memcmp(memcheck.data(), metarule, memcheck.size()) != 0)
-                {
-                    printf("Meta no longer compares\n");
-                    memcpy(rulerule, rulecheck.data(), rulecheck.size());
-                    memcpy(metarule, memcheck.data(), memcheck.size());
-                    assert(false);
-                }
-            };
-
             auto executeWord = [&](uint16_t execWord) -> enum RETURNCODE
             {
                 uint16_t auxSi = regsi;
@@ -705,13 +681,11 @@ struct Rule {
                 auto word = GetWord(execWord, -1);
                 auto ret = Call(word->code, word->word - 2);
                 if (ret != OK) return ret;
-                memchk();
 
                 while(regsi != auxSi)
                 {
                     ret = Step();
                     if (ret != OK) return ret;
-                    memchk();
                 }
 
                 return OK;
@@ -720,16 +694,30 @@ struct Rule {
             auto& condition = conditionIndexes[condIdx];
 
             auto conditionWord = conditions[condition.getIndex()];
+            auto* cacheValue = &flagCache[condition.getIndex()];
 
-            auto ret = executeWord(conditionWord);
-            if (ret != OK) return ret;
- 
-            uint16_t poppedValue = Pop();
-            bool result = condition.isNegated() ? poppedValue == 0 : poppedValue != 0;
+            uint16_t poppedValue = *cacheValue;
+            if(poppedValue == 0xff)
+            {
+                auto ret = executeWord(conditionWord);
+                if (ret != OK) return ret;
+                
+                poppedValue = Pop();
+                *cacheValue = poppedValue & 0xff;
+            }
+
+            if(condition.isNegated())
+            {
+                result = result && (poppedValue == 0);
+            }
+            else
+            {
+                result = result && (poppedValue != 0);
+            }
 
             if((result) && (condIdx + 1 == conditionCount))
             {
-                ret = executeWord(forthWord);
+                auto ret = executeWord(forthWord);
                 if (ret != OK) return ret;
             }
         }
@@ -761,10 +749,6 @@ struct RuleMetadata {
 
     enum RETURNCODE Execute(uint16_t bx) const
     {
-        memcheck.resize(3 + (2 * ruleIndexMax) + (2 * conditionLimit));
-        memcpy(memcheck.data(), this, memcheck.size());
-        metarule = this;
-
         for(uint8_t ruleIdx = 0; ruleIdx < ruleCount; ++ruleIdx)
         {
             auto rule = getRuleAtIndex(ruleIdx);
@@ -778,13 +762,222 @@ struct RuleMetadata {
 
 #pragma pack(pop)
 
+struct EGAFunctions
+{
+    void S_OneHalf_0B53()
+    {
+        uint8_t* bl = &((uint8_t*)&bx)[1];
+
+        // call 0B06
+        XASP_0B06();
+
+        // mov bx,[5A65] // EX
+        bx = Read16(0x5A65);
+
+        // add bx,ax
+        bx += ax;
+
+        // cmp bx,[5745] // IRIGHT
+        if (bx <= Read16(0x5745)) {
+            // mov bx,[5745] // IRIGHT
+            bx = Read16(0x5745);
+        }
+
+        // cmp bx,[5738] // ILEFT
+        if (bx >= Read16(0x5738)) {
+            // mov bx,[5738] // ILEFT
+            bx = Read16(0x5738);
+            // dec bx
+            bx--;
+        }
+
+        // mov [48C7],bl
+        Write8(0x48C7, *bl);
+
+        // mov bx,[5A65] // EX
+        bx = Read16(0x5A65);
+
+        // sub bx,ax
+        bx -= ax;
+
+        // cmp bx,[5738] // ILEFT
+        if (bx >= Read16(0x5738)) {
+            // mov bx,[5738] // ILEFT
+            bx = Read16(0x5738);
+        }
+
+        // cmp bx,[5745] // IRIGHT
+        if (bx <= Read16(0x5745)) {
+            // mov bl,[48C7]
+            *bl = Read8(0x48C7);
+            // inc bx
+            bx++;
+        }
+
+        // mov [48C6],bl // ZZZ
+        Write8(0x48C6, *bl);
+
+        // mov cx,[5A6E] // EY
+        cx = Read16(0x5A6E);
+
+        // add cx,dx
+        cx += dx;
+
+        // cmp cx,[575F] // IABOVE
+        if (cx <= Read16(0x575F)) {
+            // cmp cx,[5752] // IBELOW
+            if (cx >= Read16(0x5752)) {
+                // mov bx,cx
+                bx = cx;
+                // shl bx,1
+                bx <<= 1;
+                // add bx,[57D9] // SCAN
+                bx += Read16(0x57D9);
+                // push word ptr [48C6] // ZZZ
+                Push(Read16(0x48C6));
+                // pop word ptr [bx]
+                Write16(bx, Pop());
+            }
+        }
+
+        // mov cx,[5A6E] // EY
+        cx = Read16(0x5A6E);
+
+        // sub cx,dx
+        cx -= dx;
+
+        // cmp cx,[5752] // IBELOW
+        if (cx >= Read16(0x5752)) {
+            // cmp cx,[575F] // IABOVE
+            if (cx <= Read16(0x575F)) {
+                // mov bx,cx
+                bx = cx;
+                // shl bx,1
+                bx <<= 1;
+                // add bx,[57D9] // SCAN
+                bx += Read16(0x57D9);
+                // push word ptr [48C6] // ZZZ
+                Push(Read16(0x48C6));
+                // pop word ptr [bx]
+                Write16(bx, Pop());
+            }
+        }
+    }
+
+    void SCANELLIP_0BE7()
+    {
+        ax = Pop();
+        Push(ax);
+        S_OneHalf_0B53();
+        ax = Pop();
+        dx = ax;
+        S_OneHalf_0B53();
+    }
+
+    void XASP_0B06()
+    {
+        uint16_t square = Read16(0x5A86); // XNUMER
+        uint16_t xdenom = Read16(0x5A93); // XDENOM
+        int32_t temp = (int32_t)square * (int32_t)square; // imul dx
+        ax = (uint16_t)(temp / xdenom); // idiv cx
+    }
+
+    void EEXTENT()
+    {
+        //Write16(0x6A89, Pop()); // LRTRN
+        //Write16(0x6A8B, Pop()); // LRTRN
+        ax = Read16(0x5A79); // ERAD
+        dx = ax;
+        XASP_0B06();
+        cx = Read16(0x5A65); // EX
+        cx -= ax;
+        Push(cx);
+        cx = Read16(0x5A6E); // EY
+        cx -= dx;
+        Push(cx);
+        cx = Read16(0x5A65); // EX
+        cx += ax;
+        Push(cx);
+        cx = Read16(0x5A6E); // EY
+        cx += dx;
+        Push(cx);
+        //Push(Read16(0x6A8B)); // LRTRN
+        //Push(Read16(0x6A89)); // LRTRN
+    }
+
+    void W0C5A()
+    {
+        uint16_t callAddr = Read16Long(cs, 0x0C5A);
+        switch(callAddr)
+        {
+            case 0xbe7: // ({SCANELLIP} )
+                SCANELLIP_0BE7();
+                break;
+            default:
+                printf("ARC? Call addr 0x%x\n", callAddr);
+                //assert(false);
+                break;
+        }
+    }
+
+    void ARC()
+    {
+        printf("TODO ARC\n");
+        ax = Read16(0x5AA0); // <ARC1>
+        Write16Long(cs, 0x0C5A, ax); // W0C5A
+        ax = Read16(0x5A79); // ERAD
+        dx = ax;
+        ax <<= 1;
+        cx = 0x0003;
+        cx -= ax;
+        ax = 0;
+        if (ax >= dx) {
+            goto label0CBE;
+        }
+        do {
+            Push(ax);
+            Push(cx);
+            Push(dx);
+            W0C5A();
+            dx = Pop();
+            cx = Pop();
+            ax = Pop();
+            if (cx >= 0) {
+                cx += 0x06;
+                uint16_t bx = ax;
+                bx <<= 2;
+                cx += bx;
+            } else {
+                cx += 0x0A;
+                uint16_t bx = ax;
+                bx -= dx;
+                bx <<= 2;
+                cx += bx;
+                dx--;
+            }
+            ax++;
+        } while (ax < dx);
+        label0CBE:
+        if (dx != ax) {
+            W0C5A();
+        }
+    }
+
+    uint16_t ax;
+    uint16_t bx;
+    uint16_t cx;
+    uint16_t dx;
+};
+
+EGAFunctions ega{};
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
     enum RETURNCODE ret;
 
-    int ovidx = GetOverlayIndex(Read16(0x55a5));
-    printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
+    //int ovidx = GetOverlayIndex(Read16(0x55a5));
+    //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
 
     // bx contains pointer to WORD
     if ((regsp < FILESTAR0SIZE+0x100) || (regsp > (0xF6F4)))
@@ -815,7 +1008,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             }
         break;
 
-        case 0xb869: // CALL RULE? Used in COMM-OV?
+        case 0xb869: // call rule
             {
                 uint16_t nextInstr = bx + 2;
                 auto meta = (const RuleMetadata*)&mem[nextInstr];
@@ -3066,15 +3259,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x90c3: // TODO EEXTENT
-          printf("TODO EEXTENT\n");
-          Push(0);
-          Push(0);
-          Push(0);
-          Push(0);
-          // 2 pop, 4 Push, 2 push
+        {
+            ega.EEXTENT();
+        }
         break;
         case 0x90f9: // TODO ARC
-          printf("TODO ARC\n");
+        {
+            ega.ARC();
+        }
         break;
 
         case 0x8D09: // "DISPLAY" wait for vertical retrace
