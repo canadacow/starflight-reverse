@@ -4,7 +4,7 @@
 
 typedef struct { int ov; unsigned short code, word; char immediate; unsigned char flags; const char* name; } WORD;
 
-WORD dictionary[]=
+static WORD dictionary[]=
 {
   { .ov = -1, .code = 0x0138, .word = 0x0138, .immediate=0, .flags=0x80, .name = "(!SET)" },
   { .ov = -1, .code = 0x0160, .word = 0x0160, .immediate=0, .flags=0x80, .name = "(!OLD)" },

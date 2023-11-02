@@ -647,7 +647,136 @@ void POLY_WINDOW_FILL()
     }
 }
 
+#pragma pack(push, 1)
 
+std::vector<uint8_t> memcheck{};
+void* metarule = nullptr;
+
+std::vector<uint8_t> rulecheck{};
+void* rulerule = nullptr;
+
+struct ConditionIndex {
+    uint8_t value;
+
+    bool isNegated() const {
+        return (value & 0x80) == 0;
+    }
+
+    uint8_t getIndex() const {
+        return value & 0x7F;
+    }
+};
+
+struct Rule {
+    uint8_t conditionCount;
+    uint16_t forthWord;
+    ConditionIndex conditionIndexes[1]; // Use as a flexible array member
+
+    enum RETURNCODE Execute(uint16_t bx, const uint16_t* conditions, uint8_t* flagCache) const
+    {
+        rulerule = this;
+        rulecheck.resize(3 + conditionCount);
+        memcpy(rulecheck.data(), this, rulecheck.size());
+
+        for(uint8_t condIdx = 0; condIdx < conditionCount; ++condIdx)
+        {
+            auto memchk = [&](){
+                if(memcmp(rulecheck.data(), rulerule, rulecheck.size()) != 0)
+                {
+                    printf("Rule no longer compares\n");
+                    memcpy(rulerule, rulecheck.data(), rulecheck.size());
+                    memcpy(metarule, memcheck.data(), memcheck.size());
+                    assert(false);
+                }
+
+                if(memcmp(memcheck.data(), metarule, memcheck.size()) != 0)
+                {
+                    printf("Meta no longer compares\n");
+                    memcpy(rulerule, rulecheck.data(), rulecheck.size());
+                    memcpy(metarule, memcheck.data(), memcheck.size());
+                    assert(false);
+                }
+            };
+
+            auto executeWord = [&](uint16_t execWord) -> enum RETURNCODE
+            {
+                uint16_t auxSi = regsi;
+
+                auto word = GetWord(execWord, -1);
+                auto ret = Call(word->code, word->word - 2);
+                if (ret != OK) return ret;
+                memchk();
+
+                while(regsi != auxSi)
+                {
+                    ret = Step();
+                    if (ret != OK) return ret;
+                    memchk();
+                }
+
+                return OK;
+            };
+
+            auto& condition = conditionIndexes[condIdx];
+
+            auto conditionWord = conditions[condition.getIndex()];
+
+            auto ret = executeWord(conditionWord);
+            if (ret != OK) return ret;
+ 
+            uint16_t poppedValue = Pop();
+            bool result = condition.isNegated() ? poppedValue == 0 : poppedValue != 0;
+
+            if((result) && (condIdx + 1 == conditionCount))
+            {
+                ret = executeWord(forthWord);
+                if (ret != OK) return ret;
+            }
+        }
+
+       return OK;
+    }
+};
+
+#include <sys/mman.h>
+
+struct RuleMetadata {
+    uint8_t ruleIndexMax;       // RULEIM
+    uint8_t conditionLimit;     // CONDLIM
+    uint8_t ruleCount;          // RULECNT
+    uint16_t rulePointers[1];   // RULEARRp
+
+    const Rule* getRuleAtIndex(uint8_t idx) const {
+        uint16_t ruleAddr = rulePointers[idx];
+        return reinterpret_cast<Rule*>(&mem[ruleAddr]);
+    }
+
+    uint16_t* getConditionArray() const {
+        return (uint16_t*)((uint8_t*)&rulePointers[0] + (2 * ruleIndexMax));
+    }
+
+    uint8_t* getFlagCache() const {
+        return ((uint8_t*)&rulePointers[0] + (2 * ruleIndexMax) + (2 * conditionLimit));
+    }
+
+    enum RETURNCODE Execute(uint16_t bx) const
+    {
+        memcheck.resize(3 + (2 * ruleIndexMax) + (2 * conditionLimit));
+        memcpy(memcheck.data(), this, memcheck.size());
+        metarule = this;
+
+        for(uint8_t ruleIdx = 0; ruleIdx < ruleCount; ++ruleIdx)
+        {
+            auto rule = getRuleAtIndex(ruleIdx);
+            auto ret = rule->Execute(bx, getConditionArray(), getFlagCache());
+            if (ret != OK) return ret;
+        }
+
+        return OK;
+    }
+};
+
+#pragma pack(pop)
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
@@ -688,17 +817,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0xb869: // CALL RULE? Used in COMM-OV?
             {
-                printf("TODO CALL RULE?\n");
-                
-                FILE* fp = fopen("test.com", "wb");
-                fwrite(&mem[0xeb66], 1, 0x009a, fp);
-                fclose(fp);
-                
-                bx += 2;
-                regbp -= 2;
-                Write16(regbp, regsi);
-                regsi = bx;
-                DefineCallStack(regbp, 1);
+                uint16_t nextInstr = bx + 2;
+                auto meta = (const RuleMetadata*)&mem[nextInstr];
+                auto res = meta->Execute(nextInstr);
+                if (ret != OK) return ret;
             }
         break;
 

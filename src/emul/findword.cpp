@@ -56,6 +56,24 @@ int GetOverlayIndex(int address)
     exit(1);
 }
 
+const WORD* GetWord(int word, int ovidx)
+{
+    if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5)); // "OV#"
+
+    for(int i = 0; dictionary[i].name != NULL; i++)
+    {
+        if(dictionary[i].ov != -1 && dictionary[i].ov != ovidx)
+            continue;
+
+        if (word == dictionary[i].word)
+        {
+            return &dictionary[i];
+        }
+    }
+
+    return nullptr;
+}
+
 const char* FindWordCanFail(int word, int ovidx, bool canFail)
 {
     if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5)); // "OV#"
