@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cmath>
 #include <thread>
+#include <deque>
 
 #include <zstd.h>
 #include <xxhash.h>
@@ -40,28 +41,28 @@ unsigned short int dx = 0x0;
 
 // ------------------------------------------------
 
-unsigned short int inputbuffer[256];
+std::deque<uint16_t> inputbuffer{};
 
 void FillKeyboardBufferString(char *str)
 {
   //printf("Interpret '%s'\n", str);
     int n = strlen(str);
-    memset(inputbuffer, 0, sizeof(inputbuffer));
+    inputbuffer.clear();
     for(int i=0; i<n; i++)
     {
-        int c = str[i];
+        char c = str[i];
         if (c == 0xa) c = 0xd;
-        inputbuffer[i] = c;
+        inputbuffer.push_back(c);
     }
-    inputbuffer[n] = 0;
 }
 
 void FillKeyboardBufferKey(unsigned short c)
 {
-    memset(inputbuffer, 0, sizeof(inputbuffer));
+    inputbuffer.clear();
+
     if (c == 0xa) c = 0xd;
-    inputbuffer[0] = c;
-    inputbuffer[1] = 0;
+
+    inputbuffer.push_back(c);
 }
 
 // ------------------------------------------------
@@ -1128,6 +1129,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     POLY_WINDOW_FILL();
                 }
+                else if (nextInstr == 0x2af1)
+                {
+                    // Sleep
+                    auto sleepInMs = Pop();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleepInMs));
+                }
                 else
                 {
                     bx += 2;
@@ -1270,7 +1277,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             }
             if (strcmp(s, "(KEY)") == 0)
             {
-                if (inputbuffer[0] == 0)
+                if (inputbuffer.size() == 0)
                 {
                     regsi -= 2;
                     return INPUT;
@@ -1442,15 +1449,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             //printf("key %i\n", inputbuffer[0]);
             // 1. either low byte ascii, high byte 0
             // 2. or low byte scancode, high byte 1
-            if (inputbuffer[0] == 0)
+
+            if (inputbuffer.size() == 0)
             {
-                //regsi -= 2;
                 Push(0);
                 return INPUT;
             }
-            Push(inputbuffer[0]);
-            for(int i = 0; i < 256-1; i++)
-                inputbuffer[i] = inputbuffer[i+1];
+            Push(inputbuffer.front());
+            inputbuffer.pop_front();
+
             /*
             // 1. either low byte ascii, high byte 0
             // 2. or low byte scancode, high byte 1
@@ -1464,7 +1471,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
-            if (inputbuffer[0] != 0)
+            if (inputbuffer.size())
             {
                 Push(1);
             } else
@@ -2468,127 +2475,26 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x2a9a:  // "TIME"
         {
-            #if 0
-            auto emulate = [&]()
-            {
-                int16_t ax = 0;
-                int16_t cx;
+            PrintCallstacktrace(bx);
+            auto now = std::chrono::high_resolution_clock::now();
 
-                uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
-                uint8_t& ah = reinterpret_cast<uint8_t*>(&ax)[1];
-                uint8_t& cl = reinterpret_cast<uint8_t*>(&cx)[0];
-                uint8_t& ch = reinterpret_cast<uint8_t*>(&cx)[1];
+            // Get the time since epoch in milliseconds
+            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
-                // Get the current time
-                auto now = std::chrono::high_resolution_clock::now();
-
-                // Get the time since epoch in milliseconds
-                auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-                auto millisInTicks = (uint64_t)((double)millis / 54.9450);
-
-                // Convert the time to the PIT's frequency
-                uint16_t pit_value = static_cast<uint16_t>(millisInTicks & 0xFFFF);
-
-                // The PIT counts down, so we need to invert the value
-                pit_value = 0xFFFF - pit_value;
-
-                printf("Pit_value 0x%04x\n", pit_value);
-
-                al = pit_value & 0xff;
-                cl = al;
-
-                al = (pit_value >> 8) & 0xff;
-                ch = al;
-
-                // 0x2aaa: neg cx
-                cx = -cx;
-
-                // 0x2aac: mov al,ch
-                al = ch;
-
-                // 0x2aae: shr ax,1
-                ax >>= 1;
-
-                // 0x2ab0: or ax,ax
-                // This instruction is used to set the flags. If ax is zero, ZF is set. If the most significant bit of ax is 1, SF is set.
-
-                // 0x2ab2: rcr ax,1
-                // Rotate right through carry. The MSB of ax is filled with the original value of the Carry flag, and the LSB of ax is sent to the Carry flag.
-                bool cf = (ax & 1) != 0; // Store the LSB of ax before the operation
-                ax >>= 1;
-                if (cf) {
-                    ax |= 0x8000; // If the original LSB of ax was 1, set the MSB of ax to 1
-                }
-
-                // 0x2ab4: adc al,ah
-                // Add with carry. al is added to ah plus the Carry flag.
-                al = al + ah + (cf ? 1 : 0);
-                cx = (int16_t)Read16(0x0193);
-                if (ax < cx) {
-                    cx = ax;
-                }
-                ax = (int16_t)Read16(0x018A); // (TIME)
-                // Emulate carry flag behavior
-                uint32_t temp_ax = ax + cx;
-                cf = temp_ax > 0xFFFF; // Set carry flag if result is greater than 16 bits
-                ax = temp_ax & 0xFFFF; // Truncate result to 16 bits
-                Write16(0x018A, ax); // (TIME)
-                printf("Emulation would write 0x%04x:", ax);
-                if (ax < cx) {
-                    ax = (int16_t)Read16(0x0188); // (TIME)
-                    ax++;
-                    Write16(0x0188, ax); // (TIME)
-                    printf("0x%04x - ", ax);
-                }
-                ax = (int16_t)Read16(0x0193);
-                ax -= cx;
-                if (ax < 0) {
-                    ax = 0;
-                }
-                Write16(0x0193, ax);
-                printf(" 193 - 0x%04x\n", ax);
-                Push(0x0188);
-            };
-
-            emulate();
-            #endif
-
-
-            #if 1
-                auto now = std::chrono::high_resolution_clock::now();
-
-                // Get the time since epoch in milliseconds
-                auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-                auto millisInTicks = (uint64_t)((double)millis / 54.9450);
-                static uint64_t baseTics = millisInTicks;
-
-                uint64_t delta = millisInTicks - baseTics;
-
-                // Convert the time to the PIT's frequency
-                uint16_t pit_value = static_cast<uint16_t>(millisInTicks & 0xFFFF);
-
-                // The PIT counts down, so we need to invert the value
-                pit_value = 0xFFFF - pit_value;
-            #endif
-
-            #if 0
-            struct timeval tv;
-            gettimeofday(&tv, NULL);
-            int time_in_mill = ((tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 )*10;
-            Write16(0x18A, time_in_mill); // TIME low
-            Write16(0x188, (time_in_mill >> 16));   // TIME high
+            Write16(0x18A, (uint16_t)(millis & 0xffff)); // TIME low
+            Write16(0x188, (uint16_t)((millis >> 16) & 0xffff));   // TIME high
             /*
             static int ntime = 0;
             Write16(0x18A, ntime); // TIME low
             Write16(0x188, (ntime >> 16));   // TIME high
             ntime++;
             */
+            if(Read16(0x0193) != 0)
+            {
+                printf("We wrote 0x%04x:0x%04x - 193 - 0x%04x\n", Read16(0x018A), Read16(0x0188), Read16(0x0193));
+            }
             Write16(0x193, 0x0);
-            printf("We wrote 0x%04x:0x%04x - 193 - 0x%04x\n", Read16(0x018A), Read16(0x0188), Read16(0x0193));
             Push(0x188);
-            #endif
         }
         break;
 // ---------------------------------------------
@@ -4377,7 +4283,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x937b: // SETCOLOR
         {
             uint8_t c = Read8(0x55F2);
-            printf("SETCOLOR %d\n", c);
+            //printf("SETCOLOR %d\n", c);
         }
         break;
         case 0x992d: // "?INVIS"
@@ -4564,5 +4470,5 @@ void InitEmulator(std::string hash)
     regbp = 0xd4a7 + 0x100 + 0x80; // call stack
     regsp = 0xd4a7 + 0x100;  // initial parameter stack
     LoadSTARFLT(hash);
-    memset(inputbuffer, 0, sizeof(inputbuffer));
+    inputbuffer.clear();
 }
