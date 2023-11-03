@@ -764,114 +764,239 @@ struct RuleMetadata {
 
 struct EGAFunctions
 {
+    void TREJECT_00A5()
+    {
+        uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
+        uint8_t& bl = reinterpret_cast<uint8_t*>(&bx)[0];
+        uint8_t& bh = reinterpret_cast<uint8_t*>(&bx)[1];
+        uint8_t& dl = reinterpret_cast<uint8_t*>(&dx)[0];
+
+        Push(di);
+        Push(si);
+
+        bl = 0x0F;
+        bh = 0;
+
+        si = Read16(0x569B); // VIN
+        di = Read16(0x56B0); // OIN
+        uint16_t bp = Read16(0x5752); // IBELOW
+        cx = Read16(0x5686); // #IN
+
+        dx = 0;
+
+        do {
+            ax = Read16(si);
+            si += 2;
+
+            if (ax >= bp) {
+                dx |= 0x04;
+            }
+
+            if (ax <= Read16(0x575F)) { // IABOVE
+                dx |= 0x08;
+            }
+
+            ax = Read16(si);
+            si += 2;
+
+            if (ax >= Read16(0x5738)) { // ILEFT
+                dx |= 0x01;
+            }
+
+            if (ax <= Read16(0x5745)) { // IRIGHT
+                dx |= 0x02;
+            }
+
+            ax = dx;
+            Write8(di, al);
+            di++;
+
+            bl &= dl;
+            bh |= dl;
+
+            cx--;
+        } while (cx != 0);
+
+        ax = 0;
+        ax = bl;
+        Write16(0x56E8, ax); // TRJCT
+
+        ax = bh;
+        Write16(0x56DC, ax); // TACCPT
+
+        si = Pop();
+        di = Pop();
+    }
+
+    void WRITEDO_0246()
+    {
+        uint8_t color = Read8(0x55F2);
+
+        uint16_t x = (bx % 40) * 8;
+        uint16_t y = bx / 40;
+
+        GraphicsPixel(x, y, color);
+    }
+
+    void RLPLOT()
+    {
+        dx += Read16(0x5A6E); // EY
+        ax += Read16(0x5A65); // EX
+        Push(di);
+        Push(ax);
+        Push(dx);
+        bx = Read16(0x569B); // VIN
+        Write16(bx, dx);
+        bx += 2;
+        Write16(bx, ax);
+        bx = 1;
+        Write16(0x5686, bx); // #IN
+        TREJECT_00A5();
+        dx = Pop();
+        ax = Pop();
+        di = Pop();
+        cx = Read16(0x56DC); // TACCPT
+        if (cx != 0) {
+            return;
+        }
+        dx <<= 1;
+        dx += Read16(0x563A); // YTABL
+        Push(dx);
+        Push(ax);
+        ax &= 0x0003;
+        ax <<= 1;
+        bx = 0x92CF;
+        bx += ax;
+        dx = Read16(bx);
+        ax = Pop();
+        ax >>= 1;
+        ax >>= 1;
+        bx = Pop();
+        ax += Read16(bx);
+        bx = ax;
+        Push(es);
+        cx = Read16(0x5648); // BUF-SEG
+        es = cx;
+        WRITEDO_0246();
+        es = Pop();
+    }
+
+    void OneHalf_0B20()
+    {
+        XASP_0B06(); // Sets ax to a quotient value of two numbers in memory
+
+        Push(ax);
+        Push(dx);
+        RLPLOT(); // Function call to RLPLOT
+
+        dx = Pop();
+        ax = Pop();
+        Push(ax);
+        Push(dx);
+        ax = -ax;
+        RLPLOT(); // Function call to RLPLOT
+
+        dx = Pop();
+        ax = Pop();
+        Push(ax);
+        Push(dx);
+        ax = -ax;
+        dx = -dx;
+        RLPLOT(); // Function call to RLPLOT
+
+        dx = Pop();
+        ax = Pop();
+        Push(ax);
+        Push(dx);
+        dx = -dx;
+        RLPLOT(); // Function call to RLPLOT
+
+        dx = Pop();
+        ax = Pop();
+    }
+
     void S_OneHalf_0B53()
     {
-        uint8_t* bl = &((uint8_t*)&bx)[1];
+        uint8_t& bl = reinterpret_cast<uint8_t*>(&bx)[0];
 
         // call 0B06
         XASP_0B06();
+        
+        bx = Read16(0x5A65); // mov bx,[5A65] // EX
 
-        // mov bx,[5A65] // EX
-        bx = Read16(0x5A65);
-
-        // add bx,ax
         bx += ax;
 
-        // cmp bx,[5745] // IRIGHT
-        if (bx <= Read16(0x5745)) {
-            // mov bx,[5745] // IRIGHT
-            bx = Read16(0x5745);
+        if (bx <= Read16(0x5745)) { // cmp bx,[5745] // IRIGHT
+            bx = Read16(0x5745); // mov bx,[5745] // IRIGHT
         }
 
-        // cmp bx,[5738] // ILEFT
-        if (bx >= Read16(0x5738)) {
-            // mov bx,[5738] // ILEFT
-            bx = Read16(0x5738);
-            // dec bx
+        if (bx >= Read16(0x5738)) { // cmp bx,[5738] // ILEFT
+            bx = Read16(0x5738); // mov bx,[5738] // ILEFT
             bx--;
         }
 
-        // mov [48C7],bl
-        Write8(0x48C7, *bl);
+        Write8(0x48C7, bl); // mov [48C7],bl
+        
+        bx = Read16(0x5A65); // mov bx,[5A65] // EX
 
-        // mov bx,[5A65] // EX
-        bx = Read16(0x5A65);
-
-        // sub bx,ax
         bx -= ax;
 
-        // cmp bx,[5738] // ILEFT
-        if (bx >= Read16(0x5738)) {
-            // mov bx,[5738] // ILEFT
-            bx = Read16(0x5738);
+        if (bx >= Read16(0x5738)) { // cmp bx,[5738] // ILEFT
+            bx = Read16(0x5738); // mov bx,[5738] // ILEFT
         }
 
-        // cmp bx,[5745] // IRIGHT
-        if (bx <= Read16(0x5745)) {
-            // mov bl,[48C7]
-            *bl = Read8(0x48C7);
-            // inc bx
+        if (bx <= Read16(0x5745)) { // cmp bx,[5745] // IRIGHT
+            bl = Read8(0x48C7); // mov bl,[48C7]
             bx++;
         }
 
-        // mov [48C6],bl // ZZZ
-        Write8(0x48C6, *bl);
+        Write8(0x48C6, bl); // mov [48C6],bl // ZZZ
 
-        // mov cx,[5A6E] // EY
-        cx = Read16(0x5A6E);
+        cx = Read16(0x5A6E); // mov cx,[5A6E] // EY
 
-        // add cx,dx
         cx += dx;
 
-        // cmp cx,[575F] // IABOVE
-        if (cx <= Read16(0x575F)) {
-            // cmp cx,[5752] // IBELOW
-            if (cx >= Read16(0x5752)) {
-                // mov bx,cx
+        if (cx <= Read16(0x575F)) { // cmp cx,[575F] // IABOVE
+            if (cx >= Read16(0x5752)) { // cmp cx,[5752] // IBELOW
                 bx = cx;
-                // shl bx,1
                 bx <<= 1;
-                // add bx,[57D9] // SCAN
-                bx += Read16(0x57D9);
-                // push word ptr [48C6] // ZZZ
-                Push(Read16(0x48C6));
-                // pop word ptr [bx]
-                Write16(bx, Pop());
+                bx += Read16(0x57D9); // add bx,[57D9] // SCAN
+                Push(Read16(0x48C6)); // push word ptr [48C6] // ZZZ
+                Write16(bx, Pop()); // pop word ptr [bx]
             }
         }
 
-        // mov cx,[5A6E] // EY
-        cx = Read16(0x5A6E);
-
-        // sub cx,dx
-        cx -= dx;
-
-        // cmp cx,[5752] // IBELOW
-        if (cx >= Read16(0x5752)) {
-            // cmp cx,[575F] // IABOVE
-            if (cx <= Read16(0x575F)) {
-                // mov bx,cx
+        cx = Read16(0x5A6E); // mov cx,[5A6E] // EY
+        
+        cx -= dx; // sub cx,dx
+        
+        if (cx >= Read16(0x5752)) { // cmp cx,[5752] // IBELOW
+            if (cx <= Read16(0x575F)) { // cmp cx,[575F] // IABOVE
                 bx = cx;
-                // shl bx,1
                 bx <<= 1;
-                // add bx,[57D9] // SCAN
-                bx += Read16(0x57D9);
-                // push word ptr [48C6] // ZZZ
-                Push(Read16(0x48C6));
-                // pop word ptr [bx]
-                Write16(bx, Pop());
+                bx += Read16(0x57D9); // add bx,[57D9] // SCAN
+                Push(Read16(0x48C6)); // push word ptr [48C6] // ZZZ
+                Write16(bx, Pop()); // pop word ptr [bx]
             }
         }
     }
 
     void SCANELLIP_0BE7()
     {
-        ax = Pop();
         Push(ax);
         S_OneHalf_0B53();
         ax = Pop();
-        dx = ax;
+        std::swap(dx, ax);
         S_OneHalf_0B53();
+    }
+
+    void ELLIP_0C01()
+    {
+        Push(ax);
+        OneHalf_0B20();
+        ax = Pop();
+        std::swap(dx, ax);
+        OneHalf_0B20();
     }
 
     void XASP_0B06()
@@ -912,6 +1037,9 @@ struct EGAFunctions
         {
             case 0xbe7: // ({SCANELLIP} )
                 SCANELLIP_0BE7();
+                break;
+            case 0xc01: // ({.ELLIP} ) '
+                ELLIP_0C01();
                 break;
             default:
                 printf("ARC? Call addr 0x%x\n", callAddr);
@@ -967,6 +1095,9 @@ struct EGAFunctions
     uint16_t bx;
     uint16_t cx;
     uint16_t dx;
+    uint16_t di;
+    uint16_t si;
+    uint16_t es;
 };
 
 EGAFunctions ega{};
@@ -2337,6 +2468,112 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x2a9a:  // "TIME"
         {
+            #if 0
+            auto emulate = [&]()
+            {
+                int16_t ax = 0;
+                int16_t cx;
+
+                uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
+                uint8_t& ah = reinterpret_cast<uint8_t*>(&ax)[1];
+                uint8_t& cl = reinterpret_cast<uint8_t*>(&cx)[0];
+                uint8_t& ch = reinterpret_cast<uint8_t*>(&cx)[1];
+
+                // Get the current time
+                auto now = std::chrono::high_resolution_clock::now();
+
+                // Get the time since epoch in milliseconds
+                auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+                auto millisInTicks = (uint64_t)((double)millis / 54.9450);
+
+                // Convert the time to the PIT's frequency
+                uint16_t pit_value = static_cast<uint16_t>(millisInTicks & 0xFFFF);
+
+                // The PIT counts down, so we need to invert the value
+                pit_value = 0xFFFF - pit_value;
+
+                printf("Pit_value 0x%04x\n", pit_value);
+
+                al = pit_value & 0xff;
+                cl = al;
+
+                al = (pit_value >> 8) & 0xff;
+                ch = al;
+
+                // 0x2aaa: neg cx
+                cx = -cx;
+
+                // 0x2aac: mov al,ch
+                al = ch;
+
+                // 0x2aae: shr ax,1
+                ax >>= 1;
+
+                // 0x2ab0: or ax,ax
+                // This instruction is used to set the flags. If ax is zero, ZF is set. If the most significant bit of ax is 1, SF is set.
+
+                // 0x2ab2: rcr ax,1
+                // Rotate right through carry. The MSB of ax is filled with the original value of the Carry flag, and the LSB of ax is sent to the Carry flag.
+                bool cf = (ax & 1) != 0; // Store the LSB of ax before the operation
+                ax >>= 1;
+                if (cf) {
+                    ax |= 0x8000; // If the original LSB of ax was 1, set the MSB of ax to 1
+                }
+
+                // 0x2ab4: adc al,ah
+                // Add with carry. al is added to ah plus the Carry flag.
+                al = al + ah + (cf ? 1 : 0);
+                cx = (int16_t)Read16(0x0193);
+                if (ax < cx) {
+                    cx = ax;
+                }
+                ax = (int16_t)Read16(0x018A); // (TIME)
+                // Emulate carry flag behavior
+                uint32_t temp_ax = ax + cx;
+                cf = temp_ax > 0xFFFF; // Set carry flag if result is greater than 16 bits
+                ax = temp_ax & 0xFFFF; // Truncate result to 16 bits
+                Write16(0x018A, ax); // (TIME)
+                printf("Emulation would write 0x%04x:", ax);
+                if (ax < cx) {
+                    ax = (int16_t)Read16(0x0188); // (TIME)
+                    ax++;
+                    Write16(0x0188, ax); // (TIME)
+                    printf("0x%04x - ", ax);
+                }
+                ax = (int16_t)Read16(0x0193);
+                ax -= cx;
+                if (ax < 0) {
+                    ax = 0;
+                }
+                Write16(0x0193, ax);
+                printf(" 193 - 0x%04x\n", ax);
+                Push(0x0188);
+            };
+
+            emulate();
+            #endif
+
+
+            #if 1
+                auto now = std::chrono::high_resolution_clock::now();
+
+                // Get the time since epoch in milliseconds
+                auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+                auto millisInTicks = (uint64_t)((double)millis / 54.9450);
+                static uint64_t baseTics = millisInTicks;
+
+                uint64_t delta = millisInTicks - baseTics;
+
+                // Convert the time to the PIT's frequency
+                uint16_t pit_value = static_cast<uint16_t>(millisInTicks & 0xFFFF);
+
+                // The PIT counts down, so we need to invert the value
+                pit_value = 0xFFFF - pit_value;
+            #endif
+
+            #if 0
             struct timeval tv;
             gettimeofday(&tv, NULL);
             int time_in_mill = ((tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 )*10;
@@ -2349,7 +2586,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             ntime++;
             */
             Write16(0x193, 0x0);
+            printf("We wrote 0x%04x:0x%04x - 193 - 0x%04x\n", Read16(0x018A), Read16(0x0188), Read16(0x0193));
             Push(0x188);
+            #endif
         }
         break;
 // ---------------------------------------------
@@ -3293,8 +3532,80 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             GraphicsUpdate();
         break;
 
-        case 0x8D8B:
-            printf("set video mode monitor=%i ?ega=%i\n", Read16(0x584A), Read16(0x5DA3));
+        case 0x8D8B: // >LORES
+            {
+                printf("set video mode monitor=%i ?ega=%i\n", Read16(0x584A), Read16(0x5DA3));
+
+                uint16_t ax, cx, dx, di, si;
+                uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
+                uint8_t& ah = reinterpret_cast<uint8_t*>(&ax)[1];
+                uint8_t& bl = reinterpret_cast<uint8_t*>(&bx)[0];
+                uint8_t& bh = reinterpret_cast<uint8_t*>(&bx)[1];
+
+                auto Outport = [&](uint16_t port, uint8_t val) {
+                    printf("Output 0x%x, 0x%x\n", port, val);
+                };
+
+                auto Sub8CEB = [&]() {
+                    ax = 0x8D;
+                    printf("Set video mode %d\n", al & 0xf);
+                    dx = 0x03CE;
+                    al = 1;
+                    ah = 0x0F;
+                    Outport(dx, al); // EGA: graph 1 and 2 addr reg: enable set/reset
+                    dx++;
+                    Outport(dx, ah); // EGA port: graphics controller data register
+                };
+
+                auto SET6845 = [&]() {
+                    cx = 0x0E;
+                    ah = 0;
+                    for (int i = 0; i < cx; i++) {
+                        dx = 0x03D4;
+                        al = ah;
+                        Outport(dx, al);
+                        dx++;
+                        si = Read8(0x8C5C + i);
+                        Outport(dx, si);
+                        ah++;
+                        dx--;
+                    }
+                };
+
+                di = Read16(0x584A); // MONITOR
+                if (di == 4) {
+                    // HGRAPH();
+                    printf("Hercules graphics not supported.\n");
+                    assert(false);
+                } else {
+                    ax = Read16(0x5DA3); // ?EGA
+                    if ((ax & 0x00FF) != 0) {
+                        Sub8CEB();
+                    } else {
+                        dx = 0x03D4;
+                        si = 0x8C5C;
+                        SET6845();
+                        if (Read16(0x84EC) == 1) { // ?TANDRG
+                            //Sub8D48();
+                            printf("Tandy graphics not supported.\n");
+                            assert(false);
+                        } else {
+                            bx = 0x1A27;
+                            dx = 0x03D8;
+                            if (di == 1) {
+                                bx = 0x1E27;
+                            }
+                            if (di == 2) {
+                                bx = 0x2A20;
+                            }
+                            Outport(dx, bh);
+                            dx++;
+                            Outport(dx, bl);
+                        }
+                    }
+                }
+            }
+
             // out 3ce,0x0F01 write to all four planes at once?
             GraphicsMode(1);
         break;
