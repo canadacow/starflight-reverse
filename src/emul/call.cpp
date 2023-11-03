@@ -667,7 +667,7 @@ struct Rule {
     uint16_t forthWord;
     ConditionIndex conditionIndexes[1]; // Use as a flexible array member
 
-    enum RETURNCODE Execute(uint16_t bx, const uint16_t* conditions, uint8_t* flagCache) const
+    enum RETURNCODE Execute(uint16_t bx, const uint16_t* conditions, uint8_t* flagCache, PollForInputType pollForInput) const
     {
         // Not sure if we must evaluate all conditions anyway as
         // a way to cache them and if that's valuable. We'll see.
@@ -680,12 +680,12 @@ struct Rule {
                 uint16_t auxSi = regsi;
 
                 auto word = GetWord(execWord, -1);
-                auto ret = Call(word->code, word->word - 2);
+                auto ret = Call(word->code, word->word - 2, pollForInput);
                 if (ret != OK) return ret;
 
                 while(regsi != auxSi)
                 {
-                    ret = Step();
+                    ret = Step(pollForInput);
                     if (ret != OK) return ret;
                 }
 
@@ -748,12 +748,12 @@ struct RuleMetadata {
         return ((uint8_t*)&rulePointers[0] + (2 * ruleIndexMax) + (2 * conditionLimit));
     }
 
-    enum RETURNCODE Execute(uint16_t bx) const
+    enum RETURNCODE Execute(uint16_t bx, PollForInputType pollForInput) const
     {
         for(uint8_t ruleIdx = 0; ruleIdx < ruleCount; ++ruleIdx)
         {
             auto rule = getRuleAtIndex(ruleIdx);
-            auto ret = rule->Execute(bx, getConditionArray(), getFlagCache());
+            auto ret = rule->Execute(bx, getConditionArray(), getFlagCache(), pollForInput);
             if (ret != OK) return ret;
         }
 
@@ -1103,7 +1103,7 @@ struct EGAFunctions
 
 EGAFunctions ega{};
 
-enum RETURNCODE Call(unsigned short addr, unsigned short bx)
+enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType pollForInput)
 {
     unsigned short i;
     enum RETURNCODE ret;
@@ -1150,7 +1150,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             {
                 uint16_t nextInstr = bx + 2;
                 auto meta = (const RuleMetadata*)&mem[nextInstr];
-                auto res = meta->Execute(nextInstr);
+                auto res = meta->Execute(nextInstr, pollForInput);
                 if (ret != OK) return ret;
             }
         break;
@@ -1191,21 +1191,21 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x3A39: // "@EXECUTE"
             bx = Read16(Pop()) - 2;
             //printf("jump to %x\n", bx);
-            ret = Call(Read16(bx), bx);
+            ret = Call(Read16(bx), bx, pollForInput);
             if (ret != OK) return ret;
         break;
 
         case 0x1675: // "CFAEXEC"
             bx = Pop();
             //printf("jump to %x\n", bx);
-            ret = Call(Read16(bx), bx);
+            ret = Call(Read16(bx), bx, pollForInput);
             if (ret != OK) return ret;
             break;
 
         case 0x1684: // "EXECUTE"
             bx = Pop() - 2;
             //printf("execute %s\n", FindWord(bx+2, -1));
-            ret = Call(Read16(bx), bx);
+            ret = Call(Read16(bx), bx, pollForInput);
             if (ret != OK) return ret;
         break;
 
@@ -1277,14 +1277,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             }
             if (strcmp(s, "(KEY)") == 0)
             {
+                /*
                 if (inputbuffer.size() == 0)
                 {
                     regsi -= 2;
                     return INPUT;
                 }
+                */
             }
 
-            ret = Call(Read16(bx), bx);
+            ret = Call(Read16(bx), bx, pollForInput);
             if (ret != OK) return ret;
         }
         break;
@@ -1446,15 +1448,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x25D7: // "KEY" read keyboard endless loop, executed by "0x17B7"
         {
-            //printf("key %i\n", inputbuffer[0]);
-            // 1. either low byte ascii, high byte 0
-            // 2. or low byte scancode, high byte 1
-
-            if (inputbuffer.size() == 0)
+            do
             {
-                Push(0);
-                return INPUT;
-            }
+                std::this_thread::yield();
+            } while (!pollForInput());
+
             Push(inputbuffer.front());
             inputbuffer.pop_front();
 
@@ -1471,12 +1469,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
-            if (inputbuffer.size())
+            if(pollForInput())
             {
                 Push(1);
-            } else
+            } 
+            else
             {
-                Push(GraphicsCharsInBuffer());
+                Push(0);
             }
         break;
 
@@ -4434,7 +4433,7 @@ void EnableDebug()
   debuglevel = 1;
 }
 
-enum RETURNCODE Step()
+enum RETURNCODE Step(PollForInputType pollForInput)
 {
     unsigned short ax = Read16(regsi); // si is the forth program counter
     regsi += 2;
@@ -4461,7 +4460,7 @@ enum RETURNCODE Step()
 */
     //printf("  0x%04x  %15s   %s\n", regsi, GetOverlayName(regsi, ovidx), FindWord(bx+2, ovidx));
 
-    enum RETURNCODE ret = Call(execaddr, bx);
+    enum RETURNCODE ret = Call(execaddr, bx, pollForInput);
     return ret;
 }
 

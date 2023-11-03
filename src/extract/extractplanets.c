@@ -13,9 +13,11 @@
 
 void Continue()
 {
+    PollForInputType pollForInput = []() { return false; };
+
     while(1)
     {
-       if (Step() != OK) return;
+       if (Step(pollForInput) != OK) return;
     }
 }
 

@@ -9,12 +9,14 @@
 #include"../patch/patch.h"
 
 #include <string>
+#include <thread>
+#include <semaphore>
 
-void Continue()
+void Continue(PollForInputType pollForInput)
 {
     while(1)
     {
-       enum RETURNCODE ret = Step();
+       enum RETURNCODE ret = Step(pollForInput);
        if (ret == ERROR) exit(1);
        if (ret != OK) return;
     }
@@ -40,7 +42,47 @@ int main(int argc, char *argv[]) {
     InitEmulator(hash);
     GraphicsInit();
 
+    auto pollForInput = []()-> bool {
+        // 1. either low byte ascii, high byte 0
+        // 2. or low byte scancode, high byte 1
+
+#ifdef SDL
+            auto c = GraphicsGetChar();
+            FillKeyboardBufferKey(c);
+#else
+            char input[256];
+            input[0] = 0;
+            printf("input: ");
+            fflush(stdout);
+            int n = 0;
+            int c;
+            do {
+                c = getchar();
+                input[n] = c;
+                input[n+1] = 0;
+                n++;
+            } while(c != '\n');
+            input[n+1] = 0;
+            FillKeyboardBufferString(input);
+#endif
+            return true;
+    };
+
+    
+    std::jthread jt([&]() {
+        enum RETURNCODE ret;
+        do
+        {
+            ret = Step(pollForInput);
+
+        } while (ret == OK);
+    });
+
 #ifndef SDL
+    auto interactiveInput = []()-> bool {
+        return false;
+    };
+
     //setvbuf(stdout, NULL, _IONBF, 0);
     printf("Try the following commands:\n");
     printf("'2 3 + .'\n");
@@ -56,17 +98,17 @@ int main(int argc, char *argv[]) {
     SaveSTARFLT();
     //FillKeyboardBufferString("STARTER\nMOUNTA\nLDFONTS\nMOUNTB\n?EGA ON\nSET.COLORS\nLOAD-CO\nSETDBUF\n>DISPLAY\n");
     FillKeyboardBufferString("STARTER\n");
-    Continue();
+    Continue(interactiveInput);
     //FillKeyboardBufferString("RELAXTIME ON\n");
     //Continue();
 
     FillKeyboardBufferString("MOUNTA\nLDFONTS\n");
-    Continue();
+    Continue(interactiveInput);
 
     //FillKeyboardBufferString("RELAXTIME OFF\n");
     //Continue();
     FillKeyboardBufferString("GAME-OV\nMOUNTB\n?EGA ON\nGDE\n");
-    Continue();
+    Continue(interactiveInput);
 
 #endif
 
@@ -105,35 +147,9 @@ Continue();
     Write16Long(0, 0x1C*4+2, 0xF000);
     Write16Long(0, 0x1C*4+0, 0x1280);
     */
-    enum RETURNCODE ret;
-    do
-    {
-       ret = Step();
-       if (ret == INPUT)
-       {
-            // 1. either low byte ascii, high byte 0
-            // 2. or low byte scancode, high byte 1
-#ifdef SDL
-            FillKeyboardBufferKey(GraphicsGetChar());
-#else
-            char input[256];
-            input[0] = 0;
-            printf("input: ");
-            fflush(stdout);
-            int n = 0;
-            int c;
-            do {
-                c = getchar();
-                input[n] = c;
-                input[n+1] = 0;
-                n++;
-            } while(c != '\n');
-            input[n+1] = 0;
-            FillKeyboardBufferString(input);
-#endif
-        }
 
-    } while (ret == OK || ret == INPUT);
+
+
 
     //GraphicsWait();
     GraphicsQuit();

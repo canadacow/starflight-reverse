@@ -18,9 +18,11 @@ montage vessel*.ppm -tile 6x -geometry 320x240 out.png
 
 void Continue()
 {
+    PollForInputType pollForInput = []() { return false; };
+
     while(1)
     {
-      enum RETURNCODE ret = Step();
+      enum RETURNCODE ret = Step(pollForInput);
       if (ret == ERROR) exit(1);
       if (ret != OK) return;
     }

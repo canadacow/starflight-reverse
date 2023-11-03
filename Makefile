@@ -1,6 +1,6 @@
 CC = g++
-CFLAGS = -O0 -g -Werror-implicit-function-declaration -fpermissive
-LIBS = -lxxhash -lzstd
+CFLAGS = -O0 -g -Werror-implicit-function-declaration -fpermissive -std=c++20
+LIBS = -lxxhash -lzstd -lpthread
 
 all: disasOV1 disasOV2 emulate emulatesdl extractplanets1 extractplanetsdata1 extractdata1 extractinstance1 extractinstance2 extractvessels1 emulatecomm1
 

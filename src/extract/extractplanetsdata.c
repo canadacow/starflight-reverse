@@ -14,9 +14,12 @@
 
 void Continue()
 {
+
+    PollForInputType pollForInput = []() { return false; };
+
     while(1)
     {
-      enum RETURNCODE ret = Step();
+      enum RETURNCODE ret = Step(pollForInput);
       if (ret == ERROR) exit(1);
       if (ret != OK) return;
     }
