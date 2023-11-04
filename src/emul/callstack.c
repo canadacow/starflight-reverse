@@ -54,7 +54,7 @@ void PrintCallstacktrace(int bx)
         {
             ovidx = iscallovidx[(bpbase-i)>>1];
             int word = FindClosestWord(Read16(i), ovidx);
-            char* ovname = GetOverlayName(word, ovidx);
+            const char* ovname = GetOverlayName(word, ovidx);
             printf("  0x%04x  %15s   %s\n", word, ovname, FindWord(word, ovidx));
         }
     }

@@ -9,7 +9,7 @@
 #include"../../starflt1-out/data/dictionary.h"
 #include"../../starflt1-out/data/directory.h"
 
-char* GetOverlayName(int word, int ovidx)
+const char* GetOverlayName(int word, int ovidx)
 {
     if (word < (FILESTAR0SIZE+0x100)) return "STARFLT";
     return (ovidx==-1)?"STARFLT":overlays[ovidx].name;
@@ -120,7 +120,7 @@ int FindWordByName(char* s, int n)
     return 0;
 }
 
-char *FindDirectoryName(int idx)
+const char *FindDirectoryName(int idx)
 {
     int i = 0;
     do

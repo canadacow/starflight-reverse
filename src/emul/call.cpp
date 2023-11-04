@@ -190,7 +190,7 @@ bool Deserialize(const std::string& filename)
     FILE* file = fopen(filename.c_str(), "rb");
     if (file == NULL)
     {
-        printf("Could not open file %s\n", filename);
+        printf("Could not open file %s\n", filename.c_str());
         return false;
     }
 
@@ -350,7 +350,7 @@ void HandleInterrupt()
 
         memcpy(fileTarget, dataSource, recordSizeBytes);
 
-        printf("Write %s block=%llu size=%llu\n", filename.c_str(), offset, recordSizeBytes);
+        printf("Write %s block=%zu size=%zu\n", filename.c_str(), offset, recordSizeBytes);
         ax = 0x0;
     } else
     if ((interrupt == 0x21) && ((ax>>8) == 0x21))
@@ -382,12 +382,12 @@ void HandleInterrupt()
             assert(false);
         }
 
-        uint8_t* dataTarget = (const uint8_t*)&m[(disktransferaddress_segment<<4)+disktransferaddress_offset];
+        uint8_t* dataTarget = (uint8_t*)&m[(disktransferaddress_segment<<4)+disktransferaddress_offset];
         size_t recordSizeBytes = fcb->recordSize;
 
         memcpy(dataTarget, fileSource, recordSizeBytes);
 
-        printf("Read %s block=%llu size=%llu\n", filename.c_str(), offset, recordSizeBytes);
+        printf("Read %s block=%zu size=%zu\n", filename.c_str(), offset, recordSizeBytes);
 
         ax = 0x0;
     } else
@@ -1235,7 +1235,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             bx = Read16(bx+regdi);
             bx -= 2;
 
-            char *s = FindWord(bx+2, -1);
+            const char *s = FindWord(bx+2, -1);
             //printf("Execute %s\n", s);
             if (strcmp(s, "(TYPE)") == 0)
             {
@@ -1394,7 +1394,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             //printf("Receive %s from STAR*.COM dictionary for index 0x%x: '%s'\n", FindWord(bx+2, -1), Read16(regsp), FindDirectoryName(Read16(regsp)));
             //PrintCallstacktrace(bx);
             //printf("slen of =%i regsp=%i\n", Read16(regsp), regsp);
-            char *s = FindDirectoryName(Read16(regsp));
+            const char *s = FindDirectoryName(Read16(regsp));
             if (s == NULL)
             {
               PrintCallstacktrace(bx);
@@ -1409,7 +1409,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x73ea: // load data
         {
-          char *s = FindDirectoryName(Read16(0x548f)); // FILE#
+          const char *s = FindDirectoryName(Read16(0x548f)); // FILE#
           if (s == NULL)
           {
             PrintCallstacktrace(bx);
