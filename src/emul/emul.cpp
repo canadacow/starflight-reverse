@@ -42,32 +42,16 @@ int main(int argc, char *argv[]) {
     InitEmulator(hash);
     GraphicsInit();
 
-    auto pollForInput = []()-> bool {
-        // 1. either low byte ascii, high byte 0
-        // 2. or low byte scancode, high byte 1
+    auto pollForInput = [](uint16_t* key)-> bool {
+        if(key == nullptr)
+        {
+            return GraphicsHasKey();
+        }
 
-#ifdef SDL
-            auto c = GraphicsGetChar();
-            FillKeyboardBufferKey(c);
-#else
-            char input[256];
-            input[0] = 0;
-            printf("input: ");
-            fflush(stdout);
-            int n = 0;
-            int c;
-            do {
-                c = getchar();
-                input[n] = c;
-                input[n+1] = 0;
-                n++;
-            } while(c != '\n');
-            input[n+1] = 0;
-            FillKeyboardBufferString(input);
-#endif
-            return true;
+        *key = GraphicsGetKey();
+
+        return true;
     };
-
     
     std::jthread jt([&]() {
         enum RETURNCODE ret;
@@ -78,8 +62,10 @@ int main(int argc, char *argv[]) {
         } while (ret == OK);
     });
 
-#ifndef SDL
-    auto interactiveInput = []()-> bool {
+#ifdef SDL
+    jt.join();
+#else
+    auto interactiveInput = [](uint16_t* key)-> bool {
         return false;
     };
 

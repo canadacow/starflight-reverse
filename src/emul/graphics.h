@@ -11,6 +11,9 @@
     void GraphicsWait();
     void GraphicsQuit();
 
+    bool GraphicsHasKey();
+    uint16_t GraphicsGetKey();
+
     void GraphicsMode(int mode); // 0 = text, 1 = ega graphics
     void GraphicsClear(int color);
     void GraphicsText(char *s, int n);
@@ -21,8 +24,6 @@
     void GraphicsPixel(int x, int y, int color);
     void GraphicsPixelDirect(int x, int y, uint32_t color);
     void GraphicsBLT(int x1, int y1, int w, int h, char* image, int color);
-    unsigned short GraphicsGetChar();
-    int GraphicsCharsInBuffer();
     void GraphicsSave(char *filename);
 
     uint8_t GraphicsPeek(int x, int y);

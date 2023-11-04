@@ -13,7 +13,7 @@ montage vessel*.ppm -tile 6x -geometry 320x240 out.png
 
 void Continue()
 {
-    PollForInputType pollForInput = []() { return false; };
+    PollForInputType pollForInput = [](uint16_t* key) { return false; };
 
     while(1)
     {

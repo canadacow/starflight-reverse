@@ -17,6 +17,16 @@ static SDL_Texture* textTexture = NULL;
 #include <vector>
 #include <assert.h>
 #include <algorithm>
+#include <deque>
+#include <memory>
+
+#ifndef SDL
+#ifdef __linux__
+#include <termios.h>  
+#include <unistd.h>   
+#include <fcntl.h>    
+#endif
+#endif
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -321,6 +331,113 @@ static uint8_t vgafont8[256*8] =
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
+class DOSKeyboard {
+public:
+    // Destructive read equivalent to Int 16 ah = 0
+    virtual bool checkForKeyStroke() = 0;
+    // Destructive read equivalent to Int 16 ah = 0
+    virtual unsigned short getKeyStroke() = 0;
+
+    virtual ~DOSKeyboard() = default;
+};
+
+class CLIKeyboard : public DOSKeyboard {
+private:
+    std::deque<uint16_t> queuedString{};
+
+public:
+    CLIKeyboard() = default;
+
+    virtual ~CLIKeyboard() = default;
+
+    bool checkForKeyStroke() override {
+        return true;
+    }
+
+    unsigned short getKeyStroke() override {
+        if(queuedString.empty())
+        {
+            printf("input: ");
+            fflush(stdout);
+            int c;
+            do {
+                c = getchar();
+                queuedString.push_back(c);
+            } while(c != '\n');
+        }
+
+        auto ret = queuedString.front();
+        queuedString.pop_front();
+
+        return ret;
+    }
+};
+
+#ifdef SDL
+class SDLKeyboard : public DOSKeyboard {
+private:
+    std::deque<SDL_Event> eventQueue{};
+
+public:
+    SDLKeyboard() {}
+
+    static unsigned short GetKey(int sym)
+    {
+        if (sym == SDLK_LEFT)
+        {
+            return 331;
+        }
+        if (sym == SDLK_RIGHT)
+        {
+            return 333;
+        }
+        if (sym == SDLK_UP)
+        {
+            return 328;
+        }
+        if (sym == SDLK_DOWN)
+        {
+            return 336;
+        }
+        return sym;
+    }
+
+    void update() {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+                case SDL_KEYDOWN:
+                    eventQueue.push_back(event);
+                    break;
+                case SDL_QUIT:
+                    GraphicsQuit();
+                    exit(0);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    // Non-destructive read equivalent to Int 16 ah = 1
+    bool checkForKeyStroke() override {
+        update();
+        return !eventQueue.empty();
+    }
+
+    // Destructive read equivalent to Int 16 ah = 0
+    unsigned short getKeyStroke() override {
+        while(!checkForKeyStroke()) {}
+
+        SDL_Event event = eventQueue.front();
+        eventQueue.pop_front();
+        return GetKey(event.key.keysym.sym);
+    }
+};
+#endif
+
+static std::unique_ptr<DOSKeyboard> keyboard{};
+
 static int GraphicsInitThread(void *ptr)
 {
 #ifdef SDL
@@ -358,6 +475,10 @@ static int GraphicsInitThread(void *ptr)
         SDL_Quit();
         return 0;
     }
+
+    keyboard = std::make_unique<SDLKeyboard>();
+#else
+    keyboard = std::make_unique<CLIKeyboard>();
 #endif
     graphicsPixels = std::vector<uint32_t>();
     graphicsPixels.resize(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT);
@@ -380,10 +501,9 @@ void GraphicsInit()
     FILE* file;
     file = freopen("stdout", "w", stdout); // redirects stdout
     file = freopen("stderr", "w", stderr); // redirects stderr
-    GraphicsInitThread(NULL);
-#else
-    GraphicsInitThread(NULL);
 #endif
+
+    GraphicsInitThread(NULL);
 }
 
 void GraphicsUpdate()
@@ -771,95 +891,16 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
 
 int keyinbuffer = -1;
 
-#ifdef SDL
-unsigned short GetKey(int sym)
-{
-    if (sym == SDLK_LEFT)
-    {
-        return 331;
-    }
-    if (sym == SDLK_RIGHT)
-    {
-        return 333;
-    }
-    if (sym == SDLK_UP)
-    {
-        return 328;
-    }
-    if (sym == SDLK_DOWN)
-    {
-        return 336;
-    }
-    return sym;
-}
-#endif
 
-unsigned short GraphicsGetChar()
-{
-#ifdef SDL
-    if (keyinbuffer > 0)
-    {
-        int temp = keyinbuffer;
-        keyinbuffer = -1;
-        return temp;
-    }
-    GraphicsSetCursor(0, 0);
-    GraphicsText("Wait", 4);
-    SDL_Event event;
-    while(1)
-    {
-        SDL_WaitEvent(&event);
-        switch (event.type)
-        {
-            case SDL_QUIT:
-                GraphicsQuit();
-                exit(1);
-            case SDL_KEYDOWN:
-                return GetKey(event.key.keysym.sym);
-        }
-    }
 
-#else
-    return getchar();
-#endif
+bool GraphicsHasKey()
+{
+    return keyboard->checkForKeyStroke();
 }
 
-int GraphicsCharsInBuffer()
+uint16_t GraphicsGetKey()
 {
-    //printf("keyboard check buffer\n");
-    #ifdef SDL
-        char dummy[256];
-        GraphicsSetCursor(0, 0);
-        sprintf(dummy, "Check %i", rand());
-        GraphicsText(dummy, strlen(dummy));
-
-        SDL_Event event;
-        SDL_WaitEventTimeout(&event, 1);
-        switch (event.type)
-        {
-            case SDL_QUIT:
-                GraphicsQuit();
-                exit(1);
-            case SDL_KEYDOWN:
-                keyinbuffer = GetKey(event.key.keysym.sym);
-                sprintf(dummy, "  (%i)", event.key.keysym.sym);
-                GraphicsText(dummy, strlen(dummy));
-                return 1;
-        }
-        return 0;
-    /*
-        SDL_Event events[5];
-        GraphicsSetCursor(0, 0);
-
-        SDL_PumpEvents();
-        int x = SDL_PeepEvents(events, 5, SDL_PEEKEVENT, SDL_KEYDOWN, SDL_KEYDOWN);
-        sprintf(dummy, "Check %i %i", x, rand());
-        GraphicsText(dummy, strlen(dummy));
-    return SDL_PeepEvents(events, 5, SDL_PEEKEVENT, SDL_KEYDOWN, SDL_KEYDOWN);
-    */
-    #else
-    return 0;
-    #endif
+    return keyboard->getKeyStroke();
 }
 
 void GraphicsSave(char *filename)

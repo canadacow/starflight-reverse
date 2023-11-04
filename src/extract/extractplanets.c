@@ -13,7 +13,7 @@
 
 void Continue()
 {
-    PollForInputType pollForInput = []() { return false; };
+    PollForInputType pollForInput = [](uint16_t* key) { return false; };
 
     while(1)
     {

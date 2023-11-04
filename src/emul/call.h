@@ -4,7 +4,7 @@
 #include <string>
 #include <functional>
 
-using PollForInputType = std::function<bool()>;
+using PollForInputType = std::function<bool(uint16_t* key)>;
 
 enum RETURNCODE {OK, ERROR, EXIT, INPUT};
 
@@ -15,7 +15,7 @@ void SaveSTARFLT();
 void EnableDebug();
 void PrintCStack();
 
-void FillKeyboardBufferString(char *str);
+void FillKeyboardBufferString(const char *str);
 void FillKeyboardBufferKey(unsigned short key);
 
 #endif

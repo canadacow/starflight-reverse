@@ -43,7 +43,7 @@ unsigned short int dx = 0x0;
 
 std::deque<uint16_t> inputbuffer{};
 
-void FillKeyboardBufferString(char *str)
+void FillKeyboardBufferString(const char *str)
 {
   //printf("Interpret '%s'\n", str);
     int n = strlen(str);
@@ -1448,13 +1448,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x25D7: // "KEY" read keyboard endless loop, executed by "0x17B7"
         {
-            do
-            {
-                std::this_thread::yield();
-            } while (!pollForInput());
-
-            Push(inputbuffer.front());
-            inputbuffer.pop_front();
+            uint16_t key{};
+            pollForInput(&key);
+            Push(key);
 
             /*
             // 1. either low byte ascii, high byte 0
@@ -1469,7 +1465,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         break;
 
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
-            if(pollForInput())
+            if(pollForInput(nullptr))
             {
                 Push(1);
             } 
@@ -4341,7 +4337,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             printf("unknown opcode 0x%04x at si = 0x%04x\n", addr, regsi);
             PrintCallstacktrace(bx);
             fflush(stdout);
-            GraphicsGetChar();
             return ERROR;
         break;
     }
