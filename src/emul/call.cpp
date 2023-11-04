@@ -2470,7 +2470,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x2a9a:  // "TIME"
         {
-            PrintCallstacktrace(bx);
+            //PrintCallstacktrace(bx);
             auto now = std::chrono::high_resolution_clock::now();
 
             // Get the time since epoch in milliseconds
@@ -2695,15 +2695,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x902b: // "{BLT}" plot a bit pattern given parameters
             {
-            int color = Read16(0x55F2); // COLOR
-            int bltseg = Read16(0x58aa); // BLTSEG
-            int bltoffs = Read16(0x589d);  // ABLT
-            int x0 = Read16(0x586E);
-            int y0 = Read16(0x5863);
-            int w = Read16(0x5887);
-            int h = Read16(0x5892);
-            //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x\n", x0, y0, w, h, color, bltseg, bltoffs);
-            GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color);
+                int color = Read16(0x55F2); // COLOR
+                int bltseg = Read16(0x58aa); // BLTSEG
+                int bltoffs = Read16(0x589d);  // ABLT
+                int x0 = Read16(0x586E);
+                int y0 = Read16(0x5863);
+                int w = Read16(0x5887);
+                int h = Read16(0x5892);
+
+                int bufseg = Read16(0x5648);
+                int xormode = Read16(0x587C);
+
+                printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
+                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode);
             }
             //exit(1);
         break;

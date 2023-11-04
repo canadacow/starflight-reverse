@@ -407,7 +407,10 @@ public:
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_KEYDOWN:
-                    eventQueue.push_back(event);
+                    if(eventQueue.size() < 4)
+                    {
+                        eventQueue.push_back(event);
+                    }
                     break;
                 case SDL_QUIT:
                     GraphicsQuit();
@@ -844,7 +847,7 @@ void GraphicsPixel(int x, int y, int color)
     graphicsPixels[y * GRAPHICS_MODE_WIDTH + x] = colortable[color&0xF];
 }
 
-void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
+void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormode)
 {
     short int *img = (short int*)image;
     int n = 0;
@@ -853,7 +856,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
         for(int x=x1; x<x1+w; x++)
         {
             int x0 = x;
-            int y0 = 199 - y;
+            int y0 = y;
             if(x0 < 0 || x0 >= GRAPHICS_MODE_WIDTH || y0 < 0 || y0 >= GRAPHICS_MODE_HEIGHT)
             {
                 continue;
@@ -863,13 +866,21 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
 
             if ((*img) & (1<<(15-n)))
             {
-                auto pixel = colortable[color&0xF];
-                graphicsPixels[y0 * GRAPHICS_MODE_WIDTH + x0] = pixel;
-                if(pixel)
-                {
-                    //printf("█");
-                    hasPixel = true;
+                if(xormode) {
+                    auto src = GraphicsPeek(x0, y0);
+                    auto xored = src ^ (color&0xF);
+                    GraphicsPixel(x0, y0, xored);
                 }
+                else
+                {
+                    GraphicsPixel(x0, y0, color);
+                }
+
+                //if(pixel)
+                //{
+                //    //printf("█");
+                //    hasPixel = true;
+                //}
             }
 
             if(!hasPixel)
@@ -888,10 +899,6 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color)
     }
     GraphicsUpdate();
 }
-
-int keyinbuffer = -1;
-
-
 
 bool GraphicsHasKey()
 {
