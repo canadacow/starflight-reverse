@@ -19,6 +19,9 @@ static SDL_Texture* textTexture = NULL;
 #include <algorithm>
 #include <deque>
 #include <memory>
+#include <chrono>
+#include <thread>
+#include <semaphore>
 
 #ifndef SDL
 #ifdef __linux__
@@ -51,6 +54,9 @@ SFGraphicsMode graphicsMode = Text;
 uint32_t graphicsDisplayOffset = 0x0000 * 4;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
+
+std::jthread graphicsThread{};
+std::binary_semaphore stopSemaphore{0};
 
 int cursorx = 0;
 int cursory = 0;
@@ -424,6 +430,7 @@ public:
                     break;
             }
         }
+        std::this_thread::yield();
     }
 
     // Non-destructive read equivalent to Int 16 ah = 1
@@ -562,6 +569,13 @@ void GraphicsWait()
 void GraphicsQuit()
 {
 #ifdef SDL
+    if(graphicsThread.joinable())
+    {
+        stopSemaphore.release();
+
+        graphicsThread.join();
+    }
+
     SDL_DestroyTexture(graphicsTexture);
     SDL_DestroyTexture(textTexture);
     SDL_DestroyRenderer(renderer);
@@ -750,14 +764,30 @@ void GraphicsText(char *s, int n)
     {
         GraphicsChar(s[i]);
     }
-    GraphicsUpdate();
+    //GraphicsUpdate();
 }
 
 // 0 = text, 1 = ega graphics
 void GraphicsMode(int mode)
 {
+    if(graphicsThread.joinable())
+    {
+        stopSemaphore.release();
+
+        graphicsThread.join();
+    }
+
     graphicsMode = (SFGraphicsMode)mode;
     GraphicsClear(0);
+
+    graphicsThread = std::jthread([]{
+        while(!stopSemaphore.try_acquire()) {
+            GraphicsUpdate();
+
+            constexpr std::chrono::nanoseconds frame_duration = std::chrono::nanoseconds(16670000); // 1/60th of a second
+            std::this_thread::sleep_for(frame_duration);
+        }
+    });
 }
 
 void GraphicsClear(int color)
@@ -777,7 +807,7 @@ void GraphicsClear(int color)
             p = pixel;
         }
     }
-    GraphicsUpdate();
+    //GraphicsUpdate();
 }
 
 uint8_t GraphicsPeek(int x, int y, uint32_t offset)
@@ -836,7 +866,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
         x += dx;
         y += dy;
     }
-    GraphicsUpdate();
+    //GraphicsUpdate();
 }
 
 void GraphicsPixel(int x, int y, int color, uint32_t offset)
@@ -894,7 +924,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormo
         }
         //printf("\n");
     }
-    GraphicsUpdate();
+    //GraphicsUpdate();
 }
 
 bool GraphicsHasKey()

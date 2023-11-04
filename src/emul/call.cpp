@@ -1265,7 +1265,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 printf("%c", Read16(regsp));
                 // TODO otherwise
                 GraphicsChar(Read16(regsp));
-                GraphicsUpdate();
+                //GraphicsUpdate();
                 //printf("(EMIT) %i\n", Read16(regsp));
             }
             if (strcmp(s, "(WORD)") == 0) // scans input stream for char and copies
@@ -2769,7 +2769,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 }
                 */
             }
-            GraphicsUpdate();
+            //GraphicsUpdate();
             //exit(1);
         break;
         case 0x90ad: // V>DISPLAY
@@ -3473,7 +3473,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     std::this_thread::yield();
                 }
             }
-            GraphicsUpdate();
+            //GraphicsUpdate();
         break;
 
         case 0x8D8B: // >LORES
@@ -3665,7 +3665,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     }
                 }
             }
-            GraphicsUpdate();
+            //GraphicsUpdate();
         }
         break;
 
