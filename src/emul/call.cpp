@@ -2575,10 +2575,27 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n", 
                     srcSeg, srcOffset, destSeg, destOffset);
                 
+                #if 0
                 // 0x2000 bytes are always copied, source to dest.
                 // I have yet to see this not align to page boundaries
                 assert(srcOffset == 0);
                 assert(destOffset == 0);
+
+                uint32_t srcOff = ((srcSeg << 4) - 0xa0000) * 4;
+                uint32_t destOff = ((destSeg << 4) - 0xa0000) * 4;
+
+                for(int y = 0; y < 199; ++y)
+                {
+                    for(int x = 0; x < 159; ++x)
+                    {
+                        auto c = GraphicsPeek(x, y, srcOff);
+                        if(x % 1)
+                            c = 15;
+
+                        GraphicsPixel(x, y, c, destOff);
+                    }
+                }
+                #endif
             }
         break;
 

@@ -33,6 +33,9 @@ static SDL_Texture* textTexture = NULL;
 
 #define GRAPHICS_MODE_WIDTH 160
 #define GRAPHICS_MODE_HEIGHT 200
+#define GRAPHICS_PAGE_COUNT 2
+#define GRAPHICS_MEMORY_ALLOC 65536
+static_assert(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * GRAPHICS_PAGE_COUNT < GRAPHICS_MEMORY_ALLOC);
 
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1440
@@ -45,7 +48,7 @@ enum SFGraphicsMode
 
 SFGraphicsMode graphicsMode = Text;
 
-uint32_t graphicsDisplayOffset = 0;
+uint32_t graphicsDisplayOffset = 0x0000 * 4;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
 
@@ -485,7 +488,7 @@ static int GraphicsInitThread(void *ptr)
     keyboard = std::make_unique<CLIKeyboard>();
 #endif
     graphicsPixels = std::vector<uint32_t>();
-    graphicsPixels.resize(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT);
+    graphicsPixels.resize(GRAPHICS_MEMORY_ALLOC);
 
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
@@ -838,14 +841,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
 
 void GraphicsPixel(int x, int y, int color, uint32_t offset)
 {
-    y = 199 - y;
-
-    if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
-    {
-        return;
-    }
-
-    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset] = colortable[color&0xF];
+    GraphicsPixelDirect(x, y, colortable[color&0xF], offset);
 }
 
 void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormode)
