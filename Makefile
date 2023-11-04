@@ -1,8 +1,9 @@
 CC = g++
-CFLAGS = -O0 -g -fpermissive -std=c++20
+CFLAGS = -O0 -g -std=c++20
 LIBS = -lxxhash -lzstd -lpthread
 
-all: disasOV1 disasOV2 emulate emulatesdl extractplanets1 extractplanetsdata1 extractdata1 extractinstance1 extractinstance2 extractvessels1 emulatecomm1
+# all: disasOV1 disasOV2 emulate emulatesdl extractplanets1 extractplanetsdata1 extractdata1 extractinstance1 extractinstance2 extractvessels1 emulatecomm1
+all: emulatesdl
 
 disasmX86.o: src/disasmX86/debugger.c
 	$(CC) $(CFLAGS) -c src/disasmX86/debugger.c -o disasmX86.o
