@@ -45,6 +45,7 @@ enum SFGraphicsMode
 
 SFGraphicsMode graphicsMode = Text;
 
+uint32_t graphicsDisplayOffset = 0;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
 
@@ -521,7 +522,7 @@ void GraphicsUpdate()
     {
         currentTexture = graphicsTexture;
         stride = GRAPHICS_MODE_WIDTH;
-        data = graphicsPixels.data();
+        data = graphicsPixels.data() + graphicsDisplayOffset;
     }
     else if (graphicsMode == SFGraphicsMode::Text)
     {
@@ -776,16 +777,16 @@ void GraphicsClear(int color)
     GraphicsUpdate();
 }
 
-uint8_t GraphicsPeek(int x, int y)
+uint8_t GraphicsPeek(int x, int y, uint32_t offset)
 {
-    auto pixel = GraphicsPeekDirect(x, y);
+    auto pixel = GraphicsPeekDirect(x, y, offset);
 
     auto it = std::find(std::begin(colortable), std::end(colortable), pixel);
     assert(it != std::end(colortable));
     return std::distance(std::begin(colortable), it);
 }
 
-uint32_t GraphicsPeekDirect(int x, int y)
+uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
 {
     y = 199 - y;
 
@@ -794,10 +795,10 @@ uint32_t GraphicsPeekDirect(int x, int y)
         return 0;
     }
 
-    return graphicsPixels[y * GRAPHICS_MODE_WIDTH + x];
+    return graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset];
 }
 
-void GraphicsPixelDirect(int x, int y, uint32_t color)
+void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset)
 {
     y = 199 - y;
 
@@ -806,7 +807,7 @@ void GraphicsPixelDirect(int x, int y, uint32_t color)
         return;
     }
 
-    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x] = color;
+    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset] = color;
 }
 
 void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
@@ -835,7 +836,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
     GraphicsUpdate();
 }
 
-void GraphicsPixel(int x, int y, int color)
+void GraphicsPixel(int x, int y, int color, uint32_t offset)
 {
     y = 199 - y;
 
@@ -844,7 +845,7 @@ void GraphicsPixel(int x, int y, int color)
         return;
     }
 
-    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x] = colortable[color&0xF];
+    graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset] = colortable[color&0xF];
 }
 
 void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormode)
@@ -867,13 +868,13 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormo
             if ((*img) & (1<<(15-n)))
             {
                 if(xormode) {
-                    auto src = GraphicsPeek(x0, y0);
+                    auto src = GraphicsPeek(x0, y0, 0);
                     auto xored = src ^ (color&0xF);
-                    GraphicsPixel(x0, y0, xored);
+                    GraphicsPixel(x0, y0, xored, 0);
                 }
                 else
                 {
-                    GraphicsPixel(x0, y0, color);
+                    GraphicsPixel(x0, y0, color, 0);
                 }
 
                 //if(pixel)

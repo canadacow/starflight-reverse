@@ -643,7 +643,7 @@ void POLY_WINDOW_FILL()
     {
         for(uint16_t x = x0; x <= x1; ++x)
         {
-            GraphicsPixel(x, y, color);
+            GraphicsPixel(x, y, color, 0);
         }
     }
 }
@@ -836,7 +836,7 @@ struct EGAFunctions
         uint16_t x = (bx % 40) * 8;
         uint16_t y = bx / 40;
 
-        GraphicsPixel(x, y, color);
+        GraphicsPixel(x, y, color, 0);
     }
 
     void RLPLOT()
@@ -2552,12 +2552,34 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 // 0x97f0: mov    [55FF],ax // DCOLOR
 
         case 0x8E4F:  // TODO Move entire display to/from seg
-            printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n",
-                Read16(regsp+2), Read16(regsp+0), Read16(regsp+6), Read16(regsp+4));
-            Pop();
-            Pop();
-            Pop();
-            Pop();
+            {
+                /*
+                // 0x8e4f: pop    bx
+                // 0x8e50: pop    dx
+                // 0x8e51: pop    cx
+                // 0x8e52: pop    ax
+                // 0x8e53: push   ds
+                // 0x8e54: push   si
+                // 0x8e55: push   es
+                // 0x8e56: push   di
+                // 0x8e57: mov    di,bx
+                // 0x8e59: mov    es,dx
+                // 0x8e5b: mov    si,cx
+                // 0x8e5d: mov    ds,ax
+                */
+                auto destOffset = Pop();
+                auto destSeg = Pop();
+                auto srcOffset = Pop();
+                auto srcSeg = Pop();
+                
+                printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n", 
+                    srcSeg, srcOffset, destSeg, destOffset);
+                
+                // 0x2000 bytes are always copied, source to dest.
+                // I have yet to see this not align to page boundaries
+                assert(srcOffset == 0);
+                assert(destOffset == 0);
+            }
         break;
 
         case 0x9367: // "PLOT" TODO
@@ -2566,7 +2588,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             //printf("(plot) %i %i seg=0x%04x color=%i\n",
             //    Read16(regsp+2), Read16(regsp+0), Read16(0x5648), Read16(0x55F2));
             int color = Read16(0x55F2);
-            GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color);
+            GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, 0);
             dx = Pop();
             unsigned short ax = Pop();
             /*
@@ -2595,7 +2617,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     unsigned char color_mask, pixel_data;
 
                     // Fetch pixel data from the buffer
-                    pixel_data = GraphicsPeek(x, y);
+                    pixel_data = GraphicsPeek(x, y, 0);
 
                     int color = Read16(0x55F2); // COLOR
 
@@ -2610,7 +2632,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     pixel_data = color & 0xf;
 
                     // Write pixel data back to the buffer
-                    GraphicsPixel(x, y, pixel_data);
+                    GraphicsPixel(x, y, pixel_data, 0);
                 };
 
                 int y = Pop();
@@ -2627,7 +2649,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     unsigned char color_mask, pixel_data;
 
                     // Fetch pixel data from the buffer
-                    pixel_data = GraphicsPeek(x, y);
+                    pixel_data = GraphicsPeek(x, y, 0);
 
                     int color = Read16(0x55F2); // COLOR
 
@@ -2635,7 +2657,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     pixel_data = pixel_data ^ (color & 0xf);
 
                     // Write pixel data back to the buffer
-                    GraphicsPixel(x, y, pixel_data);
+                    GraphicsPixel(x, y, pixel_data, 0);
                 };
 
                 int y = Pop();
@@ -3289,8 +3311,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                         auto tmpTx = tx;
                         for(int j = 0; j < bytesPerRow; ++j)
                         {
-                            auto pixel = GraphicsPeekDirect(tmpFx, fy);
-                            GraphicsPixelDirect(tmpTx, ty, pixel);
+                            auto pixel = GraphicsPeekDirect(tmpFx, fy, 0);
+                            GraphicsPixelDirect(tmpTx, ty, pixel, 0);
                             ++tmpTx;
                             ++tmpFx;
                         }
@@ -3618,7 +3640,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 if (al == 0) continue;
                 for(int j=0; j<al; j++)
                 {
-                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color);
+                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color, 0);
                     if ((++xofs) >= WBLT)
                     {
                         xofs = 0;
@@ -4131,7 +4153,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             {
                 uint16_t y = Pop();
                 uint16_t x = Pop();
-                uint8_t c = GraphicsPeek(x, y);
+                uint8_t c = GraphicsPeek(x, y, 0);
                 //printf("L@PIXEL (TODO) x=%d, y=%d c=%d", x, y, c);
                 Push(c);
             }
