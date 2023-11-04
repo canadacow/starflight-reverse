@@ -1,5 +1,6 @@
 #include"cpu.h"
 #include<string.h>
+#include <assert.h>
 
 unsigned char m[1024*1024];
 unsigned char *mem;
@@ -9,7 +10,10 @@ unsigned short int regsi = 0x129; // current vocabulary address (the forth pc po
 
 unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
 {
-    return ((unsigned long)segment << 4) + offset;
+    unsigned long addr = ((unsigned long)segment << 4) + offset;
+    assert(addr < 0xA0000 || addr >= 0xAFFFF);
+
+    return addr;
 }
 
 void Write8(unsigned short offset, unsigned char x)
@@ -19,7 +23,9 @@ void Write8(unsigned short offset, unsigned char x)
 
 void Write8Long(unsigned short s, unsigned short o, unsigned char x)
 {
-    m[((unsigned int)s<<4) + o] = x;
+    unsigned long addr = ComputeAddress(s, o);
+
+    m[addr] = x;
 }
 
 void Write16(unsigned short offset, unsigned short x)
@@ -30,8 +36,10 @@ void Write16(unsigned short offset, unsigned short x)
 
 void Write16Long(unsigned short s, unsigned short o, unsigned short x)
 {
-    m[((unsigned int)s<<4)+o+0] = x&0xFF;
-    m[((unsigned int)s<<4)+o+1] = x>>8;
+    unsigned long addr = ComputeAddress(s, o);
+ 
+    m[addr+0] = x&0xFF;
+    m[addr+1] = x>>8;
 }
 
 unsigned char Read8(unsigned short offset)
@@ -41,7 +49,8 @@ unsigned char Read8(unsigned short offset)
 
 unsigned char Read8Long(unsigned short s, unsigned short o)
 {
-    int addr = (s<<4) + o;
+    unsigned long addr = ComputeAddress(s, o);
+
     return m[addr];
 }
 
@@ -52,7 +61,8 @@ unsigned short Read16(unsigned short offset)
 
 unsigned short Read16Long(unsigned short s, unsigned short o)
 {
-    int addr = (s<<4) + o;
+    unsigned long addr = ComputeAddress(s, o);
+
     return m[addr + 0] | (m[addr + 1]<<8);
 }
 
