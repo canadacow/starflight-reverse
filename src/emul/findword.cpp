@@ -35,30 +35,39 @@ int FindClosestWord(int si, int ovidx)
 }
 
 // ugly code to get our own overlay index from the address in the star file
-int GetOverlayIndex(int address)
+int GetOverlayIndex(int address, const char** overlayName)
 {
-    if (address == 0) return -1;
-    //printf("Find overlay for address 0x%04x\n", address);
-    int i = 0;
-    do
+    if (address == 0) 
+    {
+        return -1;
+    }
+
+    for(int i = 0; dir[i].name != NULL; i++)
     {
         if ((address<<4) == dir[i].start)
         {
             int idx = dir[i].idx;
-            int j = 0;
-            do
+            for(int j = 0; overlays[j].name != NULL; j++)
             {
-                if (overlays[j].id == idx) return j;
-            } while(overlays[++j].name != NULL);
+                if (overlays[j].id == idx) 
+                {
+                    if(overlayName != nullptr)
+                    {
+                        *overlayName = overlays[j].name;
+                    }
+                    return j;
+                }
+            }
         }
-    } while(dir[++i].name != NULL);
+    }
+
     fprintf(stderr, "Error: Cannot find index for address 0x%04x\n", address);
     exit(1);
 }
 
 const WORD* GetWord(int word, int ovidx)
 {
-    if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5)); // "OV#"
+    if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
 
     for(int i = 0; dictionary[i].name != NULL; i++)
     {
@@ -76,7 +85,7 @@ const WORD* GetWord(int word, int ovidx)
 
 const char* FindWordCanFail(int word, int ovidx, bool canFail)
 {
-    if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5)); // "OV#"
+    if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
 
     int i = 0;
     do
@@ -103,7 +112,7 @@ const char* FindWord(int word, int ovidx)
 int FindWordByName(char* s, int n)
 {
     if (n == 0) return 0;
-    int ovidx = GetOverlayIndex(Read16(0x55a5)); // "OV#"
+    int ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
 
     char temp[256];
     for(int i=0; i<n; i++)

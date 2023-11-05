@@ -32,13 +32,13 @@ void DefineCallStack(int bp, int value)
     if (bpbase-bp > 0)
     {
         iscall[(bpbase-bp)>>1] = value;
-        if (value) iscallovidx[(bpbase-bp)>>1] = GetOverlayIndex(Read16(0x55a5));
+        if (value) iscallovidx[(bpbase-bp)>>1] = GetOverlayIndex(Read16(0x55a5), NULL);
     }
 }
 
 void PrintCallstacktrace(int bx)
 {
-    int ovidx = GetOverlayIndex(Read16(0x55a5));
+    int ovidx = GetOverlayIndex(Read16(0x55a5), NULL);
     SetBPBase(regbp);
     printf("========================================\n");
     printf("              Callstack\n");

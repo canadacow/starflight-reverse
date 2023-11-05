@@ -720,6 +720,12 @@ void FILL_CIRCLE()
     FILL_ELLIPSE();
 }
 
+void STP()
+{
+    // Always pass secure check
+    Write16(0x5fd1, 0);
+}
+
 #pragma pack(push, 1)
 
 struct ConditionIndex {
@@ -1180,7 +1186,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
     unsigned short i;
     enum RETURNCODE ret;
 
-    //int ovidx = GetOverlayIndex(Read16(0x55a5));
+    const char* baseOverlay = "";
+    const char* overlayName = baseOverlay;
+
+    int ovidx = GetOverlayIndex(Read16(0x55a5), &overlayName);
     //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
 
     // bx contains pointer to WORD
@@ -1221,6 +1230,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 else if (nextInstr == 0x96ca)
                 {
                     FILL_CIRCLE();
+                }
+                else if (nextInstr == 0xf4bf && (std::string(overlayName) == "STP-OV"))
+                {
+                    STP();
                 }
                 else if (nextInstr == 0x2af1)
                 {
@@ -4567,7 +4580,7 @@ enum RETURNCODE Step(PollForInputType pollForInput)
 
     if (debuglevel)
     {
-      int ovidx = GetOverlayIndex(Read16(0x55a5));
+      int ovidx = GetOverlayIndex(Read16(0x55a5), nullptr);
       printf("si=0x%04x exec=0x%04x word=0x%04x sp=0x%04x ov=%2i", regsi-2, execaddr, bx+2, regsp, ovidx);
       printf(" %s\n", FindWord(bx+2, -1));
     }
