@@ -2575,27 +2575,20 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n", 
                     srcSeg, srcOffset, destSeg, destOffset);
                 
-                #if 0
                 // 0x2000 bytes are always copied, source to dest.
                 // I have yet to see this not align to page boundaries
                 assert(srcOffset == 0);
                 assert(destOffset == 0);
 
-                uint32_t srcOff = ((srcSeg << 4) - 0xa0000) * 4;
-                uint32_t destOff = ((destSeg << 4) - 0xa0000) * 4;
-
-                for(int y = 0; y < 199; ++y)
+                for(int y = 0; y < 200; ++y)
                 {
-                    for(int x = 0; x < 159; ++x)
+                    for(int x = 0; x < 160; ++x)
                     {
-                        auto c = GraphicsPeek(x, y, srcOff);
-                        if(x % 1)
-                            c = 15;
+                        auto c = GraphicsPeek(x, y, srcSeg);
 
-                        GraphicsPixel(x, y, c, destOff);
+                        GraphicsPixel(x, y, c, destSeg);
                     }
                 }
-                #endif
             }
         break;
 
@@ -2605,7 +2598,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             //printf("(plot) %i %i seg=0x%04x color=%i\n",
             //    Read16(regsp+2), Read16(regsp+0), Read16(0x5648), Read16(0x55F2));
             int color = Read16(0x55F2);
-            GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, 0);
+            GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, Read16(0x5648));
             dx = Pop();
             unsigned short ax = Pop();
             /*
@@ -2746,7 +2739,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 int xormode = Read16(0x587C);
 
                 printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
-                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode);
+                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode, bufseg);
             }
             //exit(1);
         break;
@@ -3420,7 +3413,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         {
             int color = Read16(0x55F2); // COLOR
             printf("bfill (TODO) color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
-            GraphicsClear(color);
+            GraphicsClear(color, Read16(0x5648));
         }
         break;
 
@@ -3443,7 +3436,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             int y1 = Pop();
             int x1 = Pop();
             //printf("lline %i %i %i %i\n", x1, y1, x2, y2);
-            GraphicsLine(x1, y1, x2, y2, Read16(0x55F2), Read16(0x587C));
+            GraphicsLine(x1, y1, x2, y2, Read16(0x55F2), Read16(0x587C), Read16(0x5648));
         }
         break;
 
@@ -3677,7 +3670,41 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0xec7d: // "|EGA" in PORTMENU-OV
         {
-            cx = Pop();
+            uint16_t cx = Pop();
+
+            uint16_t ax = Read16(0x55E6); // DBUF-SEG
+            uint16_t dx = Read16(0x55D8); // HBUF-SEG
+            bx = Read16(0xEBFC); // WEBFC
+
+            bx += 3;
+            bx <<= 1;
+            bx += Read16(0x563A); // YTABL
+
+            uint16_t si = Read16(bx);
+            uint16_t di = si;
+
+            if (cx & 0x0001) {
+                std::swap(ax, dx);
+            }
+
+            uint16_t destSeg = ax;
+            uint16_t srcSeg = dx;
+            cx = 0x02D0;
+
+            // Compute x and y coordinates from si/di address in latched EGA 320x200x16 memory
+            int x = si % 40;
+            int y = 199 - (si / 40);
+
+            assert(x == 0);
+            for(int i = 0; i < 18; ++i)
+            {
+                for (int j = 0; j < 160; ++j)
+                {
+                    auto c = GraphicsPeek(x + j, y - i, srcSeg);
+                    GraphicsPixel(x + j, y - i, c, destSeg);
+                }
+            }
+
             //printf("|EGA %i\n", cx);
             //exit(1);
         }

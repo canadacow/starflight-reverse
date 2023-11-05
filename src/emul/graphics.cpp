@@ -51,7 +51,7 @@ enum SFGraphicsMode
 
 SFGraphicsMode graphicsMode = Text;
 
-uint32_t graphicsDisplayOffset = 0x0000 * 4;
+uint32_t graphicsDisplayOffset = 100 * 160;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
 
@@ -500,7 +500,8 @@ static int GraphicsInitThread(void *ptr)
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
-    GraphicsClear(0);
+    GraphicsClear(0, 0xa000);
+    GraphicsClear(0, 0xa200);
     return 0;
 }
 
@@ -778,7 +779,8 @@ void GraphicsMode(int mode)
     }
 
     graphicsMode = (SFGraphicsMode)mode;
-    GraphicsClear(0);
+    GraphicsClear(0, 0xa000);
+    GraphicsClear(0, 0xa200);
 
     graphicsThread = std::jthread([]{
         while(!stopSemaphore.try_acquire()) {
@@ -790,24 +792,15 @@ void GraphicsMode(int mode)
     });
 }
 
-void GraphicsClear(int color)
+void GraphicsClear(int color, uint32_t offset)
 {
-    uint32_t pixel = colortable[color&0xF]; 
-    if(graphicsMode == Graphics)
-    {   
-        for(auto& p : graphicsPixels)
-        {
-            p = pixel;
-        }
-    }
-    else
+    for(int y = 0; y < 200; ++y)
     {
-        for(auto& p : textPixels)
+        for(int x =0; x < 160; ++x)
         {
-            p = pixel;
+            GraphicsPixel(x, y, color, offset);
         }
     }
-    //GraphicsUpdate();
 }
 
 uint8_t GraphicsPeek(int x, int y, uint32_t offset)
@@ -821,6 +814,16 @@ uint8_t GraphicsPeek(int x, int y, uint32_t offset)
 
 uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
 {
+    if(offset == 0)
+    {
+        assert(false);
+        offset = 0xa000;
+    }
+
+    offset <<= 4; // Convert to linear addres
+    offset -= 0xa0000; // Subtract from EGA page
+    offset *= 4; // Convert to our SDL memory linear address
+
     y = 199 - y;
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
@@ -834,6 +837,16 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
 
 void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset)
 {
+    if(offset == 0)
+    {
+        assert(false);
+        offset = 0xa000;
+    }
+
+    offset <<= 4; // Convert to linear addres
+    offset -= 0xa0000; // Subtract from EGA page
+    offset *= 4; // Conver to our SDL memory linear address
+
     y = 199 - y;
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
@@ -844,10 +857,8 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset)
     graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset] = color;
 }
 
-void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
+void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset)
 {
-    y1 = 199 - y1;
-    y2 = 199 - y2;
     float x = x1;
     float y = y1;
     float dx = (x2 - x1);
@@ -859,11 +870,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode)
     dy /= n;
     for(int i=0; i<=n; i++)
     {
-        if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
-        {
-            continue;
-        }
-        graphicsPixels[(uint32_t)y* GRAPHICS_MODE_WIDTH + (uint32_t)x] = colortable[color&0xF];
+        GraphicsPixel(x, y, color, offset);
         x += dx;
         y += dy;
     }
@@ -875,7 +882,7 @@ void GraphicsPixel(int x, int y, int color, uint32_t offset)
     GraphicsPixelDirect(x, y, colortable[color&0xF], offset);
 }
 
-void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormode)
+void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormode, uint32_t offset)
 {
     short int *img = (short int*)image;
     int n = 0;
@@ -895,13 +902,13 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormo
             if ((*img) & (1<<(15-n)))
             {
                 if(xormode) {
-                    auto src = GraphicsPeek(x0, y0, 0);
+                    auto src = GraphicsPeek(x0, y0, offset);
                     auto xored = src ^ (color&0xF);
-                    GraphicsPixel(x0, y0, xored, 0);
+                    GraphicsPixel(x0, y0, xored, offset);
                 }
                 else
                 {
-                    GraphicsPixel(x0, y0, color, 0);
+                    GraphicsPixel(x0, y0, color, offset);
                 }
 
                 //if(pixel)
