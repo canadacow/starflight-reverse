@@ -2,8 +2,11 @@
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_render.h>
 static SDL_Window *window = NULL;
+static SDL_Window *offscreenWindow = NULL;
 static SDL_Renderer *renderer  = NULL;
+static SDL_Renderer *offscreenRenderer  = NULL;
 static SDL_Texture* graphicsTexture = NULL;
+static SDL_Texture* offscreenTexture = NULL;
 static SDL_Texture* textTexture = NULL;
 #endif
 
@@ -42,6 +45,9 @@ static_assert(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * GRAPHICS_PAGE_COUNT <
 
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1440
+
+#define OFFSCREEN_WINDOW_WIDTH 960
+#define OFFSCREEN_WINDOW_HEIGHT 720
 
 enum SFGraphicsMode
 {
@@ -422,6 +428,23 @@ public:
                         eventQueue.push_back(event);
                     }
                     break;
+                case SDL_WINDOWEVENT:
+                    {
+                        if(event.window.event == SDL_WINDOWEVENT_CLOSE)
+                        {
+                            if(SDL_GetWindowFromID(event.window.windowID) == window)
+                            {
+                                GraphicsQuit();
+                                exit(0);
+                            }
+                            if(SDL_GetWindowFromID(event.window.windowID) == offscreenWindow)
+                            {
+                                SDL_DestroyWindow(offscreenWindow);
+                                offscreenWindow = nullptr;
+                            }
+                        }
+                    }
+                    break;
                 case SDL_QUIT:
                     GraphicsQuit();
                     exit(0);
@@ -455,8 +478,17 @@ static std::unique_ptr<DOSKeyboard> keyboard{};
 static int GraphicsInitThread(void *ptr)
 {
 #ifdef SDL
-    window = SDL_CreateWindow("Hello World!", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+
+    window = SDL_CreateWindow("Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL)
+    {
+        printf("SDL_CreateWindow Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }  
+
+    offscreenWindow = SDL_CreateWindow("Off Screen Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, OFFSCREEN_WINDOW_WIDTH, OFFSCREEN_WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+    if (offscreenWindow == NULL)
     {
         printf("SDL_CreateWindow Error: %s", SDL_GetError());
         SDL_Quit();
@@ -473,8 +505,26 @@ static int GraphicsInitThread(void *ptr)
 
     SDL_RenderSetScale(renderer, (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH, (float)WINDOW_HEIGHT / (float)GRAPHICS_MODE_HEIGHT);
 
+    offscreenRenderer = SDL_CreateRenderer(offscreenWindow, -1, 0);
+    if (offscreenRenderer == NULL)
+    {
+        printf("SDL_CreateRenderer Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    SDL_RenderSetScale(offscreenRenderer, (float)OFFSCREEN_WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH, (float)OFFSCREEN_WINDOW_HEIGHT / (float)GRAPHICS_MODE_HEIGHT);
+
     graphicsTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
     if (graphicsTexture == NULL)
+    {
+        printf("SDL_CreateTexture Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    offscreenTexture = SDL_CreateTexture(offscreenRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
+    if (offscreenTexture == NULL)
     {
         printf("SDL_CreateTexture Error: %s", SDL_GetError());
         SDL_Quit();
@@ -545,6 +595,16 @@ void GraphicsUpdate()
     SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
     SDL_RenderPresent(renderer);
     SDL_PumpEvents();
+
+    if(graphicsMode == SFGraphicsMode::Graphics)
+    {
+        data = (uint8_t*)graphicsPixels.data() + 0x20000;
+
+        SDL_UpdateTexture(offscreenTexture, NULL, data, stride * sizeof(uint32_t));
+        SDL_RenderClear(offscreenRenderer);
+        SDL_RenderCopy(offscreenRenderer, offscreenTexture, NULL, NULL);
+        SDL_RenderPresent(offscreenRenderer);
+    }
 #endif
 }
 
@@ -575,9 +635,12 @@ void GraphicsQuit()
         graphicsThread.join();
     }
 
+    SDL_DestroyTexture(offscreenTexture);
     SDL_DestroyTexture(graphicsTexture);
     SDL_DestroyTexture(textTexture);
+    SDL_DestroyRenderer(offscreenRenderer);
     SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(offscreenWindow);
     SDL_DestroyWindow(window);
 #endif
 }
