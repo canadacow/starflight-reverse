@@ -639,13 +639,79 @@ void POLY_WINDOW_FILL()
         y1 = temp;
     }
 
+    auto seg = Read16(0x5648);
+
     for(uint16_t y = y0; y <= y1; ++y)
     {
         for(uint16_t x = x0; x <= x1; ++x)
         {
-            GraphicsPixel(x, y, color, Read16(0x5648));
+            GraphicsPixel(x, y, color, seg);
         }
     }
+}
+
+void DrawELLIPSE()
+{
+    // .ELLIPSE ( x y radius xnumer xdenom -- \ plot a clipped ellp) 
+    auto xdenom = Pop();
+    auto xnumer = Pop();
+    auto radius = Pop();
+    auto y = Pop();
+    auto x = Pop();
+    printf("DrawELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
+
+    auto seg = Read16(0x5648);
+    auto color = Read16(0x55F2);
+
+    for(int i = -radius; i <= radius; i++)
+    {
+        for(int j = -radius; j <= radius; j++)
+        {
+            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) == (radius*radius) * (xdenom*xdenom))
+            {
+                GraphicsPixel(x + i, y + j, color, seg);
+            }
+        }
+    }
+}
+
+void DrawCIRCLE()
+{
+    Push(9);
+    Push(15);
+    DrawELLIPSE();
+}
+
+void FILL_ELLIPSE()
+{
+    // : FILLELLIP ( x y radius xnumer xdenom -- plot a clipped, )     
+    auto xdenom = Pop();
+    auto xnumer = Pop();
+    auto radius = Pop();
+    auto y = Pop();
+    auto x = Pop();
+    printf("FILL_ELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
+
+    auto seg = Read16(0x5648);
+    auto color = Read16(0x55F2);
+
+    for(int i = -radius; i <= radius; i++)
+    {
+        for(int j = -radius; j <= radius; j++)
+        {
+            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) <= (radius*radius) * (xdenom*xdenom))
+            {
+                GraphicsPixel(x + i, y + j, color, seg);
+            }
+        }
+    }
+}
+
+void FILL_CIRCLE()
+{
+    Push(9);
+    Push(15);
+    FILL_ELLIPSE();
 }
 
 #pragma pack(push, 1)
@@ -1124,10 +1190,31 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x224c: // call
             {
+                //        .ELLIPSE  codep:0x224c wordp:0x9632 size:0x0020 C-string:'DrawELLIPSE'
+                //         .CIRCLE  codep:0x224c wordp:0x965e size:0x000a C-string:'DrawCIRCLE'
+                //       FILLELLIP  codep:0x224c wordp:0x9674 size:0x004a C-string:'FILLELLIP'
+                //        FILLCIRC  codep:0x224c wordp:0x96ca size:0x000a C-string:'FILLCIRC'
+
                 uint16_t nextInstr = bx + 2;
                 if(nextInstr == 0xa0f0)
                 {
                     POLY_WINDOW_FILL();
+                }
+                else if (nextInstr == 0x9632)
+                {
+                    DrawELLIPSE();
+                }
+                else if (nextInstr == 0x965e)
+                {
+                    DrawCIRCLE();
+                }
+                else if (nextInstr == 0x9674)
+                {
+                    FILL_ELLIPSE();
+                }
+                else if (nextInstr == 0x96ca)
+                {
+                    FILL_CIRCLE();
                 }
                 else if (nextInstr == 0x2af1)
                 {
@@ -2768,58 +2855,28 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         break;
         case 0x90ad: // V>DISPLAY
         {
-            uint16_t cx = 0;
-            uint16_t es = 0;
-            uint16_t ax = 0;
-            uint16_t si = 0;
-            uint16_t di = 0;
-            uint16_t localDs = 0;
-            uint16_t bp = 0;
+            uint16_t sourceSegment = Read16(0x55D8); // HBUF-SEG
+            uint16_t destinationSegment = Read16(0x55E6); // DBUF-SEG
+            uint16_t sourceIndex = 0;
+            uint16_t destinationIndex;
+            uint16_t loopCounter = 0x0078;
 
-            auto COPYLIN = [&](){
-                int srcX = si % 40 + 3;
-                int srcY = si / 40;
+            for (uint16_t bx = 0x6598; loopCounter > 0; bx += 0x02, loopCounter--) {
+                destinationIndex = Read16(bx);
+                destinationIndex++;
 
-                int destX = di % 40 + 3;
-                int destY = 199 - di / 40;
+                int sourceX = sourceIndex % 40 + 1;
+                int sourceY = sourceIndex / 40;
+                int destinationX = destinationIndex % 40 + 3;
+                int destinationY = 199 - destinationIndex / 40;
 
-                for (int j = 0; j < (cx * 4); ++j)
-                {
-                    auto c = GraphicsPeek(srcX + j, srcY, localDs);
-                    GraphicsPixel(destX + j, destY, c, es);
+                for (int j = 0; j < 72; ++j) {
+                    auto color = GraphicsPeek(sourceX + j, sourceY, sourceSegment);
+                    GraphicsPixel(destinationX + j, destinationY, color, destinationSegment);
                 }
 
-                si += 40;
-            };
-
-            auto vee_gt = [&]() {
-                cx = 0x0078;
-                do {
-                    bp = cx;
-                    di = Read16(bx);
-                    di++;
-                    Push(ax);
-                    localDs = ax;
-                    cx = 0x0012;
-                    COPYLIN(); 
-                    bx += 0x02;
-                    ax = Pop();
-                    cx = bp;
-                    cx--;
-                } while (cx != 0);
-            };
-
-            auto vee_gt_display = [&](){
-                // Assuming di, bp, si, ds, es are already defined and initialized
-                bx = 0x6598;
-                ax = Read16(0x55E6); // DBUF-SEG
-                es = ax;
-                ax = Read16(0x55D8); // HBUF-SEG
-                si = 0;
-                vee_gt(); // Assuming this function is already defined
-            };
-
-            vee_gt_display();
+                sourceIndex += 40;
+            }
         }
         break;
         case 0x9aba: // !IB
@@ -3278,7 +3335,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                             bx++;
                             ax = Read16(bx);
                             Write16(0x57C2, ax); // XEND
-                            /*
                             printf("LFILLPOLY Color %d YMIN %d YMAX %d, XSTART %d, XEND %d\n",
                                 color,
                                 Read16(0x57EC),
@@ -3286,7 +3342,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                                 Read16(0x57B7),
                                 Read16(0x57C2)
                             );
-                            */
                             //FVLIN();
                             cx = s.top(); s.pop();
                             cx++;
