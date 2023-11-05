@@ -500,8 +500,6 @@ static int GraphicsInitThread(void *ptr)
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
-    GraphicsClear(0, 0xa000);
-    GraphicsClear(0, 0xa200);
     return 0;
 }
 
@@ -779,8 +777,9 @@ void GraphicsMode(int mode)
     }
 
     graphicsMode = (SFGraphicsMode)mode;
-    GraphicsClear(0, 0xa000);
-    GraphicsClear(0, 0xa200);
+
+    std::fill(graphicsPixels.begin(), graphicsPixels.end(), 0);
+    std::fill(textPixels.begin(), textPixels.end(), 0);
 
     graphicsThread = std::jthread([]{
         while(!stopSemaphore.try_acquire()) {
