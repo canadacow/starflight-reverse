@@ -662,12 +662,15 @@ void DrawELLIPSE()
 
     auto seg = Read16(0x5648);
     auto color = Read16(0x55F2);
+    
+    // Adjusting for non-square pixels in 160x200 resolution
+    float aspect_ratio = 160.0f / 200.0f;
 
     for(int i = -radius; i <= radius; i++)
     {
         for(int j = -radius; j <= radius; j++)
         {
-            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) == (radius*radius) * (xdenom*xdenom))
+            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) * aspect_ratio * aspect_ratio == (radius*radius) * (xdenom*xdenom))
             {
                 GraphicsPixel(x + i, y + j, color, seg);
             }
@@ -695,11 +698,14 @@ void FILL_ELLIPSE()
     auto seg = Read16(0x5648);
     auto color = Read16(0x55F2);
 
+    // Adjusting for non-square pixels in 160x200 resolution
+    float aspect_ratio = 160.0f / 200.0f;
+
     for(int i = -radius; i <= radius; i++)
     {
         for(int j = -radius; j <= radius; j++)
         {
-            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) <= (radius*radius) * (xdenom*xdenom))
+            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) * aspect_ratio * aspect_ratio <= (radius*radius) * (xdenom*xdenom))
             {
                 GraphicsPixel(x + i, y + j, color, seg);
             }
