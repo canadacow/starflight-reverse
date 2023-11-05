@@ -51,7 +51,7 @@ enum SFGraphicsMode
 
 SFGraphicsMode graphicsMode = Text;
 
-uint32_t graphicsDisplayOffset = 100 * 160;
+uint32_t graphicsDisplayOffset = 0;// 100 * 160;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
 

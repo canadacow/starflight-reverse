@@ -643,7 +643,7 @@ void POLY_WINDOW_FILL()
     {
         for(uint16_t x = x0; x <= x1; ++x)
         {
-            GraphicsPixel(x, y, color, 0);
+            GraphicsPixel(x, y, color, Read16(0x5648));
         }
     }
 }
@@ -2627,7 +2627,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     unsigned char color_mask, pixel_data;
 
                     // Fetch pixel data from the buffer
-                    pixel_data = GraphicsPeek(x, y, 0);
+                    pixel_data = GraphicsPeek(x, y, Read16(0x5648));
 
                     int color = Read16(0x55F2); // COLOR
 
@@ -2642,7 +2642,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     pixel_data = color & 0xf;
 
                     // Write pixel data back to the buffer
-                    GraphicsPixel(x, y, pixel_data, 0);
+                    GraphicsPixel(x, y, pixel_data, Read16(0x5648));
                 };
 
                 int y = Pop();
@@ -2659,7 +2659,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     unsigned char color_mask, pixel_data;
 
                     // Fetch pixel data from the buffer
-                    pixel_data = GraphicsPeek(x, y, 0);
+                    pixel_data = GraphicsPeek(x, y, Read16(0x5648));
 
                     int color = Read16(0x55F2); // COLOR
 
@@ -2667,7 +2667,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     pixel_data = pixel_data ^ (color & 0xf);
 
                     // Write pixel data back to the buffer
-                    GraphicsPixel(x, y, pixel_data, 0);
+                    GraphicsPixel(x, y, pixel_data, Read16(0x5648));
                 };
 
                 int y = Pop();
@@ -3319,9 +3319,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
                 auto bufseg = Read16(0x5648); // BUF-SEG
 
-                // This segment may vary. Want to catch it here.
-                assert(bufseg == 0xa000);
-
                 // At one point I had a purist interpretation here. I couldn't get it work
                 // and the flipped coordinate system was just confusing me and the AI.
                 // It's complicated because this is a in-graphics-memory move that should
@@ -3336,7 +3333,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 {
                     for(int x = 0; x < width; ++x)
                     {
-                        pixelData[pd++] = GraphicsPeekDirect(x + fulx, fuly - y, 0);
+                        pixelData[pd++] = GraphicsPeekDirect(x + fulx, fuly - y, bufseg);
                     }
                 }
 
@@ -3345,7 +3342,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 {
                     for(int x = 0; x < width; ++x)
                     {
-                        GraphicsPixelDirect(x + tulx, tuly - y, pixelData[pd++], 0);
+                        GraphicsPixelDirect(x + tulx, tuly - y, pixelData[pd++], bufseg);
                     }
                 }
             }
@@ -3646,6 +3643,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             int offset = Pop();
             int segment = Pop();
             int temp2 = Read16Long(segment, offset); // size of this color segment - 6
+            uint32_t bufseg = Read16(0x5648);
 
             //printf("color=%i xblt=%i yblt=%i wblt=%i 0x%04x:0x%04x 0x%04x temp2=%i\n", color, XBLT, YBLT, WBLT, segment, offset, regsp, temp2);
             int xofs = 0;
@@ -3656,7 +3654,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 if (al == 0) continue;
                 for(int j=0; j<al; j++)
                 {
-                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color, 0);
+                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color, bufseg);
                     if ((++xofs) >= WBLT)
                     {
                         xofs = 0;
