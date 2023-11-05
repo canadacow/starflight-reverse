@@ -489,7 +489,7 @@ SDL_AudioSpec spec = {
 	.freq = FREQUENCY, 
 	.format = AUDIO_S16SYS, // Signed 16 bit integer format
 	.channels = 1,
-	.samples = 4096, // The size of each "chunk"
+	.samples = 512, // The size of each "chunk"
 	.callback = play_buffer, // user-defined function that provides the audio data
 	.userdata = NULL // an argument to the callback function (we dont need any)
 };

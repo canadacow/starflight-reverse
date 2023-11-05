@@ -3686,8 +3686,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 std::swap(ax, dx);
             }
 
-            uint16_t destSeg = ax;
-            uint16_t srcSeg = dx;
+            uint16_t destSeg = dx;
+            uint16_t srcSeg = ax;
             cx = 0x02D0;
 
             // Compute x and y coordinates from si/di address in latched EGA 320x200x16 memory
@@ -3699,8 +3699,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             {
                 for (int j = 0; j < 160; ++j)
                 {
-                    auto c = GraphicsPeek(x + j, y - i, srcSeg);
-                    GraphicsPixel(x + j, y - i, c, destSeg);
+                    auto c = GraphicsPeek(x + j, y - i, destSeg);
+                    if(destSeg == 0xa200)
+                    {
+                        GraphicsPixel(x + j, y - i, c, srcSeg);
+                    }
+                    
                 }
             }
 
@@ -4202,7 +4206,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             {
                 uint16_t y = Pop();
                 uint16_t x = Pop();
-                uint8_t c = GraphicsPeek(x, y, 0);
+                uint8_t c = GraphicsPeek(x, y, Read16(0x5648));
                 //printf("L@PIXEL (TODO) x=%d, y=%d c=%d", x, y, c);
                 Push(c);
             }
