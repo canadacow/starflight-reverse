@@ -2768,67 +2768,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         break;
         case 0x90ad: // V>DISPLAY
         {
-            #if 0
-            // TODO: This function reads and writes directly from
-            // paged video RAM (e.g. 0xA200 -> 0xA000)
-            uint16_t es, ds;
-            uint16_t ax, cx, di, si;
-            
-            auto COPYLIN = [&](uint16_t count){
-                /*
-                uint8_t al = 0x05;
-                uint8_t ah = 0x01;
-                uint16_t dx = 0x03CE;
-
-                OutPort(dx, al);
-                dx++;
-                uint8_t temp = ah;
-                ah = al;
-                al = temp;
-                OutPort(dx, al);
-                */
-
-                // repz movsb
-                while (count != 0) {
-                    m[(es << 4) + di] = m[(ds << 4) + si];
-                    si++;
-                    di++;
-                    count--;
-                }
-
-                /*
-                al = 0x05;
-                ah = 0x00;
-                dx = 0x03CE;
-                OutPort(dx, al);
-                dx++;
-                temp = ah;
-                ah = al;
-                al = temp;
-                OutPort(dx, al);
-                */
-            };
-
-            auto VDISPLAY = [&]{
-                cx = 0x0078;
-                di = bx;
-                di = m[(ds << 4) + di];
-                di++;
-
-                while (cx != 0) {
-                    COPYLIN(0x12);
-                    bx += 2;
-                    cx--;
-                }
-            };
-
-            bx = 6598;
-            es = Read16(0x55E6); // DBUF-SEG
-            ds = Read16(0x55D8); // HBUF-SEG
-            si = 0;
-
-            VDISPLAY();
-            #endif
             uint16_t cx = 0;
             uint16_t es = 0;
             uint16_t ax = 0;
@@ -2838,17 +2777,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t bp = 0;
 
             auto COPYLIN = [&](){
-                int srcX = si % 40;
-                int srcY = 199 - (si / 40);
+                int srcX = si % 40 + 3;
+                int srcY = si / 40;
 
-                int destX = di % 40;
-                int destY = 199 - (di / 40);
+                int destX = di % 40 + 3;
+                int destY = 199 - di / 40;
 
                 for (int j = 0; j < (cx * 4); ++j)
                 {
                     auto c = GraphicsPeek(srcX + j, srcY, localDs);
                     GraphicsPixel(destX + j, destY, c, es);
                 }
+
+                si += 40;
             };
 
             auto vee_gt = [&]() {
