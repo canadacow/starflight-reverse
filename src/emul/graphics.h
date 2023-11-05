@@ -26,6 +26,10 @@
     void GraphicsBLT(int x1, int y1, int w, int h, char* image, int color, int xormode, uint32_t offset);
     void GraphicsSave(char *filename);
 
+    void BeepOn();
+    void BeepTone(uint16_t pitFreq);
+    void BeepOff();
+
     uint8_t GraphicsPeek(int x, int y, uint32_t offset);
     uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset);
 

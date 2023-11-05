@@ -2497,20 +2497,21 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x2638: 
             {
-                //printf("Beep\n");
+                BeepOn();
                 break; // BEEPON_2  
             }
             
         case 0x2653: 
             {
-                //printf("Beep off\n");
+                BeepOff();
                 break; // "BEEPOFF"
             }
         
         case 0x2618: 
             {
-                printf("Tone\n");
-                Pop(); break; // "TONE"
+                auto freq = Pop(); 
+                BeepTone(freq);
+                break; 
             }
 
         // --- graphics ---

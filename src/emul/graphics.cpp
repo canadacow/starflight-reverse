@@ -1,6 +1,7 @@
 #ifdef SDL
-#include<SDL2/SDL.h>
-#include<SDL2/SDL_render.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_render.h>
+#include <atomic>
 static SDL_Window *window = NULL;
 static SDL_Window *offscreenWindow = NULL;
 static SDL_Renderer *renderer  = NULL;
@@ -8,14 +9,21 @@ static SDL_Renderer *offscreenRenderer  = NULL;
 static SDL_Texture* graphicsTexture = NULL;
 static SDL_Texture* offscreenTexture = NULL;
 static SDL_Texture* textTexture = NULL;
+
+static SDL_AudioDeviceID audioDevice = 0;
+
+#define FREQUENCY 48000 // Samples per second
+
+static double toneInHz = 440.0;
+
 #endif
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<stdint.h>
-#include<math.h>
-#include"graphics.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <math.h>
+#include "graphics.h"
 
 #include <vector>
 #include <assert.h>
@@ -475,9 +483,64 @@ public:
 
 static std::unique_ptr<DOSKeyboard> keyboard{};
 
+void play_buffer(void*, unsigned char*, int);
+
+SDL_AudioSpec spec = {
+	.freq = FREQUENCY, 
+	.format = AUDIO_S16SYS, // Signed 16 bit integer format
+	.channels = 1,
+	.samples = 4096, // The size of each "chunk"
+	.callback = play_buffer, // user-defined function that provides the audio data
+	.userdata = NULL // an argument to the callback function (we dont need any)
+};
+
+// Generate a sine wave
+double tone(double hz, unsigned long time) {
+	return sin(time * hz * M_PI * 2 / FREQUENCY);
+}
+
+// Generate a sawtooth wave
+double saw(double hz, unsigned long time) {
+	return fmod(time*hz/FREQUENCY, 1)*2-1;
+}
+
+// Generate a square wave
+double square(double hz, unsigned long time) {
+	double sine = tone(hz, time);
+	return sine > 0.0 ? 1.0 : -1.0;
+}
+
+// This is the function that gets automatically called every time the audio device needs more data
+void play_buffer(void* userdata, unsigned char* stream, int len) {
+	SDL_memset(stream, spec.silence, len);
+
+    static unsigned long time = 0;
+    Sint16 *stream16 = (Sint16*)stream;
+    for(int i = 0; i < len/2; i++, time++) {
+        stream16[i] = (Sint16)(square(toneInHz, time) * 32767);
+    }
+}
+
+void BeepOn()
+{
+    SDL_PauseAudioDevice(audioDevice, 0);
+}
+
+void BeepTone(uint16_t pitFreq)
+{
+    toneInHz = 1193182.0 / pitFreq;
+}
+
+void BeepOff()
+{
+    SDL_PauseAudioDevice(audioDevice, 1);
+}
+
 static int GraphicsInitThread(void *ptr)
 {
 #ifdef SDL
+
+    audioDevice = SDL_OpenAudioDevice(NULL, 0, &spec, NULL, 0);
 
     window = SDL_CreateWindow("Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL)
@@ -556,7 +619,7 @@ static int GraphicsInitThread(void *ptr)
 void GraphicsInit()
 {
 #ifdef SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0)
     {
         printf("SDL_Init Error: %s\n", SDL_GetError());
         return;
