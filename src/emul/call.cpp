@@ -659,22 +659,48 @@ void DrawELLIPSE()
     auto y = Pop();
     auto x = Pop();
     printf("DrawELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
+    fflush(stdout);
 
     auto seg = Read16(0x5648);
     auto color = Read16(0x55F2);
-    
-    // Adjusting for non-square pixels in 160x200 resolution
-    float aspect_ratio = 160.0f / 200.0f;
 
-    for(int i = -radius; i <= radius; i++)
+    // Use fixed-point arithmetic for scaleX
+    int scaleX = (xnumer * 1000) / xdenom;
+    int scaleY = 1000;  // scale factor
+
+    int a2 = radius * radius;
+    int b2 = ((radius * scaleX) / 1000) * ((radius * scaleX) / 1000);
+    int fa2 = 4 * a2, fb2 = 4 * b2;
+    int x1, y1, sigma;
+
+    // First half
+    for (x1 = 0, y1 = radius, sigma = 2 * b2 + a2 * (1 - 2 * radius); b2 * x1 <= a2 * y1; x1++)
     {
-        for(int j = -radius; j <= radius; j++)
+        GraphicsPixel(x + x1, y + y1, color, seg);
+        GraphicsPixel(x - x1, y + y1, color, seg);
+        GraphicsPixel(x + x1, y - y1, color, seg);
+        GraphicsPixel(x - x1, y - y1, color, seg);
+        if (sigma >= 0)
         {
-            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) * aspect_ratio * aspect_ratio == (radius*radius) * (xdenom*xdenom))
-            {
-                GraphicsPixel(x + i, y + j, color, seg);
-            }
+            sigma += fa2 * (1 - y1);
+            y1--;
         }
+        sigma += b2 * ((4 * x1) + 6);
+    }
+
+    // Second half
+    for (x1 = radius, y1 = 0, sigma = 2 * a2 + b2 * (1 - 2 * radius); a2 * y1 <= b2 * x1; y1++)
+    {
+        GraphicsPixel(x + x1, y + y1, color, seg);
+        GraphicsPixel(x - x1, y + y1, color, seg);
+        GraphicsPixel(x + x1, y - y1, color, seg);
+        GraphicsPixel(x - x1, y - y1, color, seg);
+        if (sigma >= 0)
+        {
+            sigma += fb2 * (1 - x1);
+            x1--;
+        }
+        sigma += a2 * ((4 * y1) + 6);
     }
 }
 
@@ -683,6 +709,74 @@ void DrawCIRCLE()
     Push(9);
     Push(15);
     DrawELLIPSE();
+}
+
+
+void FILL_ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int color, int seg)
+{
+    int XRadiusSq = XRadius * XRadius;
+    int YRadiusSq = YRadius * YRadius;
+    int twoXRadiusSq = 2 * XRadiusSq;
+    int twoYRadiusSq = 2 * YRadiusSq;
+    int x = XRadius;
+    int y = 0;
+    int xChange = YRadiusSq * (1 - 2 * XRadius);
+    int yChange = XRadiusSq;
+    int ellipseError = 0;
+    int stoppingX = twoYRadiusSq * XRadius;
+    int stoppingY = 0;
+
+    while (stoppingX >= stoppingY)
+    {
+        for (int i = x_center - x; i <= x_center + x; i++)
+        {
+            GraphicsPixel(i, y_center + y, color, seg);
+            GraphicsPixel(i, y_center - y, color, seg);
+        }
+
+        y++;
+        stoppingY += twoXRadiusSq;
+        ellipseError += yChange;
+        yChange += twoXRadiusSq;
+
+        if ((2 * ellipseError + xChange) > 0)
+        {
+            x--;
+            stoppingX -= twoYRadiusSq;
+            ellipseError += xChange;
+            xChange += twoYRadiusSq;
+        }
+    }
+
+    x = 0;
+    y = YRadius;
+    xChange = YRadiusSq;
+    yChange = XRadiusSq * (1 - 2 * YRadius);
+    ellipseError = 0;
+    stoppingX = 0;
+    stoppingY = twoXRadiusSq * YRadius;
+
+    while (stoppingX <= stoppingY)
+    {
+        for (int i = x_center - x; i <= x_center + x; i++)
+        {
+            GraphicsPixel(i, y_center + y, color, seg);
+            GraphicsPixel(i, y_center - y, color, seg);
+        }
+
+        x++;
+        stoppingX += twoYRadiusSq;
+        ellipseError += xChange;
+        xChange += twoYRadiusSq;
+
+        if ((2 * ellipseError + yChange) > 0)
+        {
+            y--;
+            stoppingY -= twoXRadiusSq;
+            ellipseError += yChange;
+            yChange += twoXRadiusSq;
+        }
+    }
 }
 
 void FILL_ELLIPSE()
@@ -694,23 +788,12 @@ void FILL_ELLIPSE()
     auto y = Pop();
     auto x = Pop();
     printf("FILL_ELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
+    fflush(stdout);
 
     auto seg = Read16(0x5648);
     auto color = Read16(0x55F2);
 
-    // Adjusting for non-square pixels in 160x200 resolution
-    float aspect_ratio = 160.0f / 200.0f;
-
-    for(int i = -radius; i <= radius; i++)
-    {
-        for(int j = -radius; j <= radius; j++)
-        {
-            if((i*i) * (xdenom*xdenom) + (j*j) * (xnumer*xnumer) * aspect_ratio * aspect_ratio <= (radius*radius) * (xdenom*xdenom))
-            {
-                GraphicsPixel(x + i, y + j, color, seg);
-            }
-        }
-    }
+    FILL_ELLIPSE_INTEGER(x, y, (radius * xnumer) / xdenom, radius, color, seg);
 }
 
 void FILL_CIRCLE()
@@ -2030,7 +2113,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
           {
             printf("Integer divide by zero\n");
             PrintCallstacktrace(bx);
-            exit(1);
+            assert(false);
           }
             bx = Pop();
             dx = Pop();
@@ -2049,7 +2132,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             {
               printf("Integer divide by zero\n");
               PrintCallstacktrace(bx);
-              exit(1);
+              assert(false);
             }
             Push(dividend/divisor);
         }
