@@ -2768,6 +2768,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         break;
         case 0x90ad: // V>DISPLAY
         {
+            #if 0
             // TODO: This function reads and writes directly from
             // paged video RAM (e.g. 0xA200 -> 0xA000)
             uint16_t es, ds;
@@ -2827,6 +2828,57 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             si = 0;
 
             VDISPLAY();
+            #endif
+            uint16_t cx = 0;
+            uint16_t es = 0;
+            uint16_t ax = 0;
+            uint16_t si = 0;
+            uint16_t di = 0;
+            uint16_t localDs = 0;
+            uint16_t bp = 0;
+
+            auto COPYLIN = [&](){
+                int srcX = si % 40;
+                int srcY = 199 - (si / 40);
+
+                int destX = di % 40;
+                int destY = 199 - (di / 40);
+
+                for (int j = 0; j < (cx * 4); ++j)
+                {
+                    auto c = GraphicsPeek(srcX + j, srcY, localDs);
+                    GraphicsPixel(destX + j, destY, c, es);
+                }
+            };
+
+            auto vee_gt = [&]() {
+                cx = 0x0078;
+                do {
+                    bp = cx;
+                    di = Read16(bx);
+                    di++;
+                    Push(ax);
+                    localDs = ax;
+                    cx = 0x0012;
+                    COPYLIN(); 
+                    bx += 0x02;
+                    ax = Pop();
+                    cx = bp;
+                    cx--;
+                } while (cx != 0);
+            };
+
+            auto vee_gt_display = [&](){
+                // Assuming di, bp, si, ds, es are already defined and initialized
+                bx = 0x6598;
+                ax = Read16(0x55E6); // DBUF-SEG
+                es = ax;
+                ax = Read16(0x55D8); // HBUF-SEG
+                si = 0;
+                vee_gt(); // Assuming this function is already defined
+            };
+
+            vee_gt_display();
         }
         break;
         case 0x9aba: // !IB
@@ -3699,12 +3751,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             {
                 for (int j = 0; j < 160; ++j)
                 {
-                    auto c = GraphicsPeek(x + j, y - i, destSeg);
-                    if(destSeg == 0xa200)
-                    {
-                        GraphicsPixel(x + j, y - i, c, srcSeg);
-                    }
-                    
+                    auto c = GraphicsPeek(x + j, y - i, srcSeg);
+                    GraphicsPixel(x + j, y - i, c, destSeg);
                 }
             }
 
