@@ -825,7 +825,8 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
     {
-        return 0;
+        assert(false);
+        return colortable[4];
     }
 
     return graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset];

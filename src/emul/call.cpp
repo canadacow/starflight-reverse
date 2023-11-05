@@ -3314,42 +3314,48 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 
         case 0x906b: // 'LCOPYBLK' TODO
             {
-                auto lcopyblk = [](int fulx, int fuly, int flrx, int flry, int tulx, int tuly) {
-                    int fx = fulx;
-                    int fy = fuly;
-                    int tx = tulx;
-                    int ty = tuly;
-                    int dy = (tuly > fuly) ? -1 : 1;
-                    int bytesPerRow = abs(flrx - fulx) + 1;
-                    int numRows = abs(flry - fuly) + 1;
-
-                    for (int i = 0; i < numRows; i++) {
-                        auto tmpFx = fx;
-                        auto tmpTx = tx;
-                        for(int j = 0; j < bytesPerRow; ++j)
-                        {
-                            auto pixel = GraphicsPeekDirect(tmpFx, fy, 0);
-                            GraphicsPixelDirect(tmpTx, ty, pixel, 0);
-                            ++tmpTx;
-                            ++tmpFx;
-                        }
-
-                        fy += dy;
-                        ty += dy;
-                    }
-                };
-
                 uint16_t tuly = Pop();
                 uint16_t tulx = Pop();
                 uint16_t flry = Pop();
                 uint16_t flrx = Pop();
                 uint16_t fuly = Pop();
                 uint16_t fulx = Pop();
-                printf("LCOPYBLK fulx: %i, fuly: %i, flrx: %i, flry: %i, tulx: %i, tuly: %i\n", fulx, fuly, flrx, flry, tulx, tuly);
 
-                lcopyblk(fulx, fuly, flrx, flry, tulx, tuly);
+                int width = (flrx - fulx);
+                int height = (fuly - flry) + 1;
+
+                auto bufseg = Read16(0x5648); // BUF-SEG
+
+                // This segment may vary. Want to catch it here.
+                assert(bufseg == 0xa000);
+
+                // At one point I had a purist interpretation here. I couldn't get it work
+                // and the flipped coordinate system was just confusing me and the AI.
+                // It's complicated because this is a in-graphics-memory move that should
+                // preserve overlapping areas. Ain't no one got time for that and I
+                // just allocate a temporary vector and copy the region there and
+                // back, making everyone's life easier.
+                std::vector<uint32_t> pixelData;
+                pixelData.resize(width * height);
+
+                uint32_t pd = 0;
+                for(int y = 0; y < height; ++y)
+                {
+                    for(int x = 0; x < width; ++x)
+                    {
+                        pixelData[pd++] = GraphicsPeekDirect(x + fulx, fuly - y, 0);
+                    }
+                }
+
+                pd = 0;
+                for(int y = 0; y < height; ++y)
+                {
+                    for(int x = 0; x < width; ++x)
+                    {
+                        GraphicsPixelDirect(x + tulx, tuly - y, pixelData[pd++], 0);
+                    }
+                }
             }
-            //exit(1);
         break;
 
         case 0x6C86: // "C>EGA" // TODO???
