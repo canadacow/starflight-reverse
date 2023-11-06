@@ -1,6 +1,9 @@
-#include"cpu.h"
-#include<string.h>
+#include "cpu.h"
+#include <string.h>
 #include <assert.h>
+
+#include <stdio.h>
+#include "../emul/callstack.h"
 
 unsigned char m[1024*1024];
 unsigned char *mem;
@@ -8,11 +11,21 @@ unsigned short regsp;
 unsigned short regbp;
 unsigned short int regsi = 0x129; // current vocabulary address (the forth pc pointer)
 
+unsigned short regbx;
+
 unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
 {
     unsigned long addr = ((unsigned long)segment << 4) + offset;
-    assert(addr < 0xA0000 || addr >= 0xAFFFF);
 
+    // Nebula detection code (to see if the ship is actually in the nebula)
+    // reads directly from video memory
+
+    if(addr >= 0xA0000 && addr <= 0xAFFFF)
+    {
+        printf("Access to video memory from program itself.\n");
+        PrintCallstacktrace(regbx);
+        assert(0);
+    }
     return addr;
 }
 
@@ -30,6 +43,14 @@ void Write8Long(unsigned short s, unsigned short o, unsigned char x)
 
 void Write16(unsigned short offset, unsigned short x)
 {
+    if(offset == 0xd9dc)
+    {
+        printf("--- Write to 0x%x with %x\n", offset, x);
+        PrintCallstacktrace(regbx);
+        printf("--- End Write to 0x%x with %x\n", offset, x);
+        fflush(stdout);
+    }
+
     mem[offset+0] = (x>>0)&0xFF;
     mem[offset+1] = (x>>8)&0xFF;
 }
@@ -56,7 +77,18 @@ unsigned char Read8Long(unsigned short s, unsigned short o)
 
 unsigned short Read16(unsigned short offset)
 {
-    return mem[offset+0] | (mem[offset+1]<<8);
+    unsigned short val = mem[offset+0] | (mem[offset+1]<<8);
+
+    if(offset == 0xd9dc)
+    {
+        printf("--- Read from 0x%x has %x\n", offset, val);
+        PrintCallstacktrace(regbx);
+        printf("--- End read from 0x%x has %x\n", offset, val);
+        fflush(stdout);        
+    }
+
+
+    return val;
 }
 
 unsigned short Read16Long(unsigned short s, unsigned short o)

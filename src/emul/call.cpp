@@ -1264,10 +1264,14 @@ struct EGAFunctions
 
 EGAFunctions ega{};
 
+extern unsigned short regbx;
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType pollForInput)
 {
     unsigned short i;
     enum RETURNCODE ret;
+
+    regbx = bx;
 
     const char* baseOverlay = "";
     const char* overlayName = baseOverlay;
@@ -1294,6 +1298,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 //        FILLCIRC  codep:0x224c wordp:0x96ca size:0x000a C-string:'FILLCIRC'
 
                 uint16_t nextInstr = bx + 2;
+                if(nextInstr == 0xe21a)
+                {
+                    // FIXME: Remove this after debugging
+                    auto idx = Pop();
+                    Push(idx);
+                    printf("Called _n_CPARMS with %d\n", idx);
+                }
+
                 if(nextInstr == 0xa0f0)
                 {
                     POLY_WINDOW_FILL();
@@ -1317,6 +1329,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 else if (nextInstr == 0xf4bf && (std::string(overlayName) == "STP-OV"))
                 {
                     STP();
+                }
+                else if (nextInstr == 0xe85e && (std::string(overlayName) == "HYPER-OV"))
+                {
+                    // The IsIN_dash_NEB test actually checks video memory to see if the ship is actually
+                    // within rendered nebula. This is why it broke for EGA because it probably
+                    // doesn't test for the right color.
+
+                    // 0xe85c: WORD '?IN-NEB' codep=0x224c wordp=0xe85e params=0 returns=1
+                    Push(0);
                 }
                 else if (nextInstr == 0x2af1)
                 {
@@ -3020,7 +3041,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t BICON = Pop();
             int16_t RLOCUS = (int16_t)Pop();
             int16_t YLOCUS = (int16_t)Pop();
-            int16_t XLOCUS = (int16_t) Pop();
+            int16_t XLOCUS = (int16_t)Pop();
 
             uint16_t IXSEG = Read16(0x59BE);
             uint16_t IYSEG = Read16(0x59C2);
@@ -3028,10 +3049,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t ax = 0;
             Push(ax);
 
-            //printf("?ILOCUS %d %d %d bicon %u cx %u\n", 
-            //    XLOCUS, YLOCUS, RLOCUS, BICON, cx);
+            printf("?ILOCUS %d %d %d bicon %u cx %u\n", 
+                XLOCUS, YLOCUS, RLOCUS, BICON, cx);
 
-            if (cx > 0) {
+            if (cx > 0 && RLOCUS > 3) {
                 do {
                     uint16_t bx = cx - 1;
                     bx += BICON;
@@ -3040,7 +3061,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     int16_t iconX = (int16_t)Read16Long(IXSEG, bx);
                     int16_t iconY = (int16_t)Read16Long(IYSEG, bx);
 
-                    //printf("   icon %d, %d - ", iconX, iconY);
+                    printf("   icon %d, %d - ", iconX, iconY);
 
                     iconX -= XLOCUS;
                     iconY -= YLOCUS;
@@ -3053,7 +3074,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     }
 
                     if ((iconX > RLOCUS) || (iconY > RLOCUS)) {
-                        //printf("rejected.\n");
+                        printf("rejected.\n");
                         continue;
                     }
                    
@@ -3062,7 +3083,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     Push(bx);
                     ax++;
 
-                    //printf("accepted. Address is %u, total count now is %d\n", bx, ax);
+                    printf("accepted. Address is %u, total count now is %d\n", bx, ax);
 
                     Push(ax);
 
