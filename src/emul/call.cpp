@@ -2111,6 +2111,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         {
           if (Read16(regsp) == 0)
           {
+            auto radiusValue = Read16(0xd9dc);
+
             printf("Integer divide by zero\n");
             PrintCallstacktrace(bx);
             assert(false);
@@ -2741,29 +2743,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 // 0x97ee: mov    al,[bx]
 // 0x97f0: mov    [55FF],ax // DCOLOR
 
-        case 0x8E4F:  // TODO Move entire display to/from seg
+        case 0x8E4F:  // Move display
             {
-                /*
-                // 0x8e4f: pop    bx
-                // 0x8e50: pop    dx
-                // 0x8e51: pop    cx
-                // 0x8e52: pop    ax
-                // 0x8e53: push   ds
-                // 0x8e54: push   si
-                // 0x8e55: push   es
-                // 0x8e56: push   di
-                // 0x8e57: mov    di,bx
-                // 0x8e59: mov    es,dx
-                // 0x8e5b: mov    si,cx
-                // 0x8e5d: mov    ds,ax
-                */
                 auto destOffset = Pop();
                 auto destSeg = Pop();
                 auto srcOffset = Pop();
                 auto srcSeg = Pop();
                 
-                printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n", 
-                    srcSeg, srcOffset, destSeg, destOffset);
+                printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n",  srcSeg, srcOffset, destSeg, destOffset);
                 
                 // 0x2000 bytes are always copied, source to dest.
                 // I have yet to see this not align to page boundaries
@@ -2928,7 +2915,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 int bufseg = Read16(0x5648);
                 int xormode = Read16(0x587C);
 
-                printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
+                //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
                 GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode, bufseg);
             }
             //exit(1);
@@ -3000,7 +2987,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t es = Pop();
             uint16_t cx = Pop();
             bx = Read16(0x5A02); // IINDEX
-            m[(es << 4) + bx] = cx & 0xff;
+            Write8Long(es, bx, cx);
         }
         break;
         case 0x9a9e: // !IW
@@ -3024,62 +3011,40 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t cx = Pop();
             bx = Read16(0x5A02); // IINDEX
             bx <<= 1;
-            *(uint16_t*)&m[(es << 4) + bx] = cx;
+            Write16Long(es, bx, cx);
         }
         break;
         case 0x9d18: // ?ILOCUS
         {
-            struct Icon {
-                int16_t x;
-                int16_t y;
-                uint16_t idx;
-            };
-
-            auto ILOCUS = [&](int16_t x, int16_t y, int16_t radius, std::vector<Icon>& icons) -> std::vector<uint16_t> {
-                std::vector<uint16_t> result;
-                for (const auto& icon : icons) {
-                    int xdist = icon.x - x;
-                    if (xdist < 0) xdist = -2;
-                    if (xdist <= radius) {
-                        int ydist = icon.y - y;
-                        if (ydist < 0) ydist = -2;
-                        if (ydist <= radius) {
-                            result.push_back(icon.idx);
-                        }
-                    }
-                }
-                return result;
-            };
-
-            int qty = Pop();
-            uint16_t base = Read16(Pop());
-            int16_t radius = (int16_t)Pop();
-            int16_t y = (int16_t)Pop();
-            int16_t x = (int16_t)Pop();
+            uint16_t qty = Pop();
+            uint16_t base = Pop();
+            uint16_t radius = Pop();
+            uint16_t y = Pop();
+            uint16_t x = Pop();
+            uint16_t count = 0;
 
             uint16_t IXSEG = Read16(0x59BE);
             uint16_t IYSEG = Read16(0x59C2);
 
-            std::vector<Icon> icons{};
-            for(int i = 1; i <= qty; ++i)
-            {
-                Icon icon{};
-                uint16_t offset = ((i - 1) + base) << 1;
-                icon.x = (int16_t)Read16Long(IXSEG, offset);
-                icon.y = (int16_t)Read16Long(IYSEG, offset);
-                icon.idx = offset;
-
-                icons.push_back(icon);
+            if (qty > 0) {
+                for (uint16_t i = 0; i < qty; i++) {
+                    uint16_t offset_addr = (base + i) << 1;
+                    uint16_t xwld = Read16Long(IXSEG, offset_addr);
+                    int16_t xdist = x - 2;
+                    if (xdist < 0) xdist = -2;
+                    if (radius - xdist > 0) {
+                        uint16_t ywld = Read16Long(IYSEG, offset_addr);
+                        int16_t ydist = y - 2;
+                        if (ydist < 0) ydist = -2;
+                        if (radius - ydist > 0) {
+                            Push(offset_addr >> 1);
+                            count++;
+                        }
+                    }
+                }
             }
+            Push(count);
 
-            std::vector<uint16_t> outIdx = ILOCUS(x, y, radius, icons);
-
-            for(auto i : outIdx)
-            {
-                Push(i);
-            }
-
-            Push(outIdx.size());
         }
         break;
         case 0x9e14: // XCHGICON
@@ -3125,11 +3090,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 xchg    bx, ax
                 mov     es:[bx], cl
                 */
-               uint8_t cl = m[(es << 4) + bx];
+               uint8_t cl = Read8Long(es, bx);
                std::swap(bx, ax);
-               std::swap(cl, m[(es << 4) + bx]);
+               uint8_t temp = Read8Long(es, bx);
+               Write8Long(es, bx, cl);
+               cl = temp;
                std::swap(bx, ax);
-               m[(es << 4) + bx] = cl;
+               Write8Long(es, bx, cl);
             };
 
             auto sub2F36 = [&](){
@@ -3140,11 +3107,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                 // 0x2f3f: xchg   ax,bx
                 // 0x2f42: mov    es:[bx],cx
                 */
-               cx = *(uint16_t*)&m[(es << 4) + bx];
+               cx = Read16Long(es, bx);
                std::swap(ax, bx);
-               std::swap(cx, *(uint16_t*)&m[(es << 4) + bx]);
+               uint16_t temp = Read16Long(es, bx);
+               Write16Long(es, bx, cx);
+               cx = temp;
                std::swap(ax, bx);
-               *(uint16_t*)&m[(es << 4) + bx] = cx;
+               Write16Long(es, bx, cx);
             };
 
             ax = Pop();
@@ -3208,6 +3177,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
 // 0x9eec: pop    es
             uint16_t es, ds;
             uint16_t ax, cx, dx, di, si;
+            uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
 
             cx = Pop();
             Write16(0x5B04, Pop()); // BICON
@@ -3235,7 +3205,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     bx += Read16(0x5B04); // BICON
 
                     // Read the value at the address pointed to by bx in es segment
-                    ax = *(uint16_t*)&m[(es << 4) + bx];
+                    al = Read8Long(es, bx);
 
                     // If ax is less than dx and ax is less than or equal to ZZZ, jump to 9EE6
                     if (ax >= dx && ax <= Read16(0x48C8)) { // ZZZ
@@ -3389,74 +3359,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         break;
         case 0x9055: // LFILLPOLY TODO
         {
-            //printf("LFILLPOLY (TODO)\n");
+            // Should be replaced entirely by circle and ellipse commands.
+            printf("LFILLPOLY (TODO)\n");
             PrintCallstacktrace(bx);
-            //exit(-1);
-            int color = Read16(0x55F2); // COLOR
-
-            /* 
-            #define XSTART (*((uint16_t*)&memory[0x57B7]))
-#define XEND (*((uint16_t*)&memory[0x57C2]))
-#define YMIN (*((uint16_t*)&memory[0x57EC]))
-#define YMAX (*((uint16_t*)&memory[0x57F7]))
-#define SCAN (*((uint16_t*)&memory[0x57D9]))
-#define YLINE (*((uint16_t*)&memory[0x57CE]))
-#define IRIGHT (*((uint16_t*)&memory[0x5745]))
-#define BUF_SEG (*((uint16_t*)&memory[0x5648]))
-#define YTABL (*((uint16_t*)&memory[0x563A]))
-            */
-
-            {
-                    std::stack<uint16_t> s;
-                    bx = Read16(0x57EC); // YMIN;
-                    bx += Read16(0x57F7); // YMAX;
-                    bx++;
-                    bx >>= 1;
-                    bx <<= 1;
-                    bx += Read16(0x57D9); //SCAN;
-                    uint16_t ax = 0;
-                    uint16_t cx = 0;
-                    ax = Read16(bx);
-                    bx++;
-                    cx = Read16(bx);
-                    if (cx >= ax) {
-                        // Enabling all color planes for drawing operations on the EGA.
-                        uint16_t ymax = Read16(0x57F7); // YMAX
-                        ++ymax;
-                        Write16(0x57F7, ymax); // YMAX++;
-                        cx = Read16(0x57EC); //YMIN;
-                        do {
-                            s.push(cx);
-                            Write16(0x57CE, cx); // YLINE
-                            cx <<= 1;
-                            bx = Read16(0x57D9); //SCAN;
-                            bx += cx;
-                            ax = 0;
-                            ax = Read16(bx);
-                            Write16(0x57B7, ax); // XSTART
-                            bx++;
-                            ax = Read16(bx);
-                            Write16(0x57C2, ax); // XEND
-                            printf("LFILLPOLY Color %d YMIN %d YMAX %d, XSTART %d, XEND %d\n",
-                                color,
-                                Read16(0x57EC),
-                                Read16(0x57F7),
-                                Read16(0x57B7),
-                                Read16(0x57C2)
-                            );
-                            //FVLIN();
-                            cx = s.top(); s.pop();
-                            cx++;
-                        } while (cx != Read16(0x57F7)); //YMAX
-
-                        --ymax;
-                        Write16(0x57F7, ymax); // YMAX--;
-                    }
-            }
+            assert(false);
         }
         break;
 
-        case 0x906b: // 'LCOPYBLK' TODO
+        case 0x906b: // 'LCOPYBLK'
             {
                 uint16_t tuly = Pop();
                 uint16_t tulx = Pop();
@@ -3591,11 +3501,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         case 0x90c3: // TODO EEXTENT
         {
             ega.EEXTENT();
+            // Should be replaced by actual circle and ellipse functions
+            assert(false);
         }
         break;
         case 0x90f9: // TODO ARC
         {
             ega.ARC();
+            // Should be replaced by actual circle and ellipse functions
+            assert(false);
         }
         break;
 
@@ -4307,7 +4221,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t ax = 0;
             uint16_t si = 0x4FDC;
             for (cx = 0x0010; cx > 0; --cx) {
-                ax = Read8(si++) & 0x000F;
+                ax = Read8(si--) & 0x000F;
                 if (ax == dx) {
                     ax = cx;
                     break;
