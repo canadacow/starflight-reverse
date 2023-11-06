@@ -3016,35 +3016,58 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         break;
         case 0x9d18: // ?ILOCUS
         {
-            uint16_t qty = Pop();
-            uint16_t base = Pop();
-            uint16_t radius = Pop();
-            uint16_t y = Pop();
-            uint16_t x = Pop();
-            uint16_t count = 0;
+            uint16_t cx = Pop();
+            uint16_t BICON = Pop();
+            int16_t RLOCUS = (int16_t)Pop();
+            int16_t YLOCUS = (int16_t)Pop();
+            int16_t XLOCUS = (int16_t) Pop();
 
             uint16_t IXSEG = Read16(0x59BE);
             uint16_t IYSEG = Read16(0x59C2);
 
-            if (qty > 0) {
-                for (uint16_t i = 0; i < qty; i++) {
-                    uint16_t offset_addr = (base + i) << 1;
-                    uint16_t xwld = Read16Long(IXSEG, offset_addr);
-                    int16_t xdist = x - 2;
-                    if (xdist < 0) xdist = -2;
-                    if (radius - xdist > 0) {
-                        uint16_t ywld = Read16Long(IYSEG, offset_addr);
-                        int16_t ydist = y - 2;
-                        if (ydist < 0) ydist = -2;
-                        if (radius - ydist > 0) {
-                            Push(offset_addr >> 1);
-                            count++;
-                        }
-                    }
-                }
-            }
-            Push(count);
+            uint16_t ax = 0;
+            Push(ax);
 
+            //printf("?ILOCUS %d %d %d bicon %u cx %u\n", 
+            //    XLOCUS, YLOCUS, RLOCUS, BICON, cx);
+
+            if (cx > 0) {
+                do {
+                    uint16_t bx = cx - 1;
+                    bx += BICON;
+                    bx <<= 1;
+
+                    int16_t iconX = (int16_t)Read16Long(IXSEG, bx);
+                    int16_t iconY = (int16_t)Read16Long(IYSEG, bx);
+
+                    //printf("   icon %d, %d - ", iconX, iconY);
+
+                    iconX -= XLOCUS;
+                    iconY -= YLOCUS;
+
+                    if (iconX < 0) {
+                        iconX = -iconX;
+                    }
+                    if (iconY < 0) {
+                        iconY = -iconY;
+                    }
+
+                    if ((iconX > RLOCUS) || (iconY > RLOCUS)) {
+                        //printf("rejected.\n");
+                        continue;
+                    }
+                   
+                    ax = Pop();
+                    bx >>= 1;
+                    Push(bx);
+                    ax++;
+
+                    //printf("accepted. Address is %u, total count now is %d\n", bx, ax);
+
+                    Push(ax);
+
+                } while (--cx > 0);
+            }
         }
         break;
         case 0x9e14: // XCHGICON
