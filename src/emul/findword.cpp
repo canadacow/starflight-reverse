@@ -2,6 +2,9 @@
 #include<stdlib.h>
 #include<string.h>
 
+#include <string>
+#include <algorithm>
+
 #include"../cpu/cpu.h"
 #include"callstack.h"
 #include"../disasOV/global.h"
@@ -83,7 +86,7 @@ const WORD* GetWord(int word, int ovidx)
     return nullptr;
 }
 
-const char* FindWordCanFail(int word, int ovidx, bool canFail)
+const char* FindWordCanFail(int word, int ovidx, int canFail)
 {
     if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
 
@@ -95,7 +98,7 @@ const char* FindWordCanFail(int word, int ovidx, bool canFail)
     } while(dictionary[++i].name != NULL);
     if (word == 0x0) return "";
 
-    if(!canFail)
+    if(canFail == 0)
     {
         fprintf(stderr, "Error: Cannot find word 0x%04x\n", word);
         exit(1);
@@ -106,7 +109,7 @@ const char* FindWordCanFail(int word, int ovidx, bool canFail)
 
 const char* FindWord(int word, int ovidx)
 {
-    return FindWordCanFail(word, ovidx, false);
+    return FindWordCanFail(word, ovidx, 0);
 }
 
 int FindWordByName(char* s, int n)
@@ -114,18 +117,15 @@ int FindWordByName(char* s, int n)
     if (n == 0) return 0;
     int ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
 
-    char temp[256];
-    for(int i=0; i<n; i++)
-        temp[i] = s[i];
-    temp[n] = 0;
+    std::string temp(s, n);
 
     int i = 0;
     do
     {
         if ((dictionary[i].ov != ovidx) && (dictionary[i].ov != -1)) continue;
-        if (strcasecmp(dictionary[i].name, temp) == 0) return dictionary[i].word;
+        if (std::equal(temp.begin(), temp.end(), dictionary[i].name, [](char a, char b) { return tolower(a) == tolower(b); })) return dictionary[i].word;
     } while(dictionary[++i].name != NULL);
-    //fprintf(stderr, "Error: Cannot find string %s\n", s);
+    //fprintf(stderr, "Error: Cannot find string %s\n", s.c_str());
     return 0;
 }
 

@@ -51,11 +51,15 @@ static double toneInHz = 440.0;
 #define GRAPHICS_MEMORY_ALLOC 65536
 static_assert(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * GRAPHICS_PAGE_COUNT < GRAPHICS_MEMORY_ALLOC);
 
-#define WINDOW_WIDTH 1920
-#define WINDOW_HEIGHT 1440
+static uint32_t WINDOW_WIDTH = 1920;
+static uint32_t WINDOW_HEIGHT = 1440;
 
-#define OFFSCREEN_WINDOW_WIDTH 960
-#define OFFSCREEN_WINDOW_HEIGHT 720
+static uint32_t OFFSCREEN_WINDOW_WIDTH = 960;
+static uint32_t OFFSCREEN_WINDOW_HEIGHT = 720;
+
+#define TARGET_RESOLUTION_WIDTH 3840
+#define TARGET_RESOLUTION_HEIGHT 2160
+
 
 enum SFGraphicsMode
 {
@@ -426,15 +430,16 @@ public:
         return sym;
     }
 
-    void update() {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
+    void update(bool blocking) {
+
+        auto handleEvent = [&](SDL_Event event) -> bool {
             switch (event.type) {
                 case SDL_KEYDOWN:
                     if(eventQueue.size() < 4)
                     {
                         eventQueue.push_back(event);
                     }
+                    return true;
                     break;
                 case SDL_WINDOWEVENT:
                     {
@@ -460,19 +465,52 @@ public:
                 default:
                     break;
             }
+
+            return false;
+        };
+
+        if(blocking)
+        {
+            SDL_Event event;
+            for(;;)
+            {
+                if(SDL_WaitEvent(&event))
+                {
+                    bool key = handleEvent(event);
+                    if(key)
+                        break;
+                }
+                else
+                {
+                    break;
+                }
+                std::this_thread::yield();
+            }
+            
         }
-        std::this_thread::yield();
+        else
+        {
+            SDL_Event event;
+            if(SDL_PollEvent(&event))
+            {
+                handleEvent(event);
+            }
+            std::this_thread::yield();
+        }
     }
 
     // Non-destructive read equivalent to Int 16 ah = 1
     bool checkForKeyStroke() override {
-        update();
+        update(false);
         return !eventQueue.empty();
     }
 
     // Destructive read equivalent to Int 16 ah = 0
     unsigned short getKeyStroke() override {
-        while(!checkForKeyStroke()) {}
+        if (eventQueue.empty())
+        {
+            update(true);
+        }
 
         SDL_Event event = eventQueue.front();
         eventQueue.pop_front();
@@ -539,6 +577,21 @@ void BeepOff()
 static int GraphicsInitThread(void *ptr)
 {
 #ifdef SDL
+
+    SDL_DisplayMode dm;
+    if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
+    {
+        SDL_Log("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
+    }
+    else
+    {
+        SDL_Log("Desktop display mode: %dx%dpx @ %dhz", dm.w, dm.h, dm.refresh_rate);
+    }
+
+    WINDOW_WIDTH = (WINDOW_WIDTH * dm.w) / TARGET_RESOLUTION_WIDTH;
+    WINDOW_HEIGHT = (WINDOW_HEIGHT * dm.h) / TARGET_RESOLUTION_HEIGHT;
+    OFFSCREEN_WINDOW_WIDTH = (OFFSCREEN_WINDOW_WIDTH * dm.w) / TARGET_RESOLUTION_WIDTH;
+    OFFSCREEN_WINDOW_HEIGHT = (OFFSCREEN_WINDOW_HEIGHT * dm.h) / TARGET_RESOLUTION_HEIGHT;
 
     audioDevice = SDL_OpenAudioDevice(NULL, 0, &spec, NULL, 0);
 

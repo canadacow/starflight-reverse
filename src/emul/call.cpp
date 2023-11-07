@@ -2,9 +2,6 @@
 #include<stdlib.h>
 #include<string.h>
 
-#include<time.h>
-#include<sys/time.h>
-
 #include"call.h"
 #include"../cpu/cpu.h"
 #include"fract.h"
@@ -15,7 +12,7 @@
 
 #include <stack>
 #include <assert.h>
-#include <dirent.h>
+#include <filesystem>
 #include <string>
 #include <algorithm>
 #include <vector>
@@ -887,8 +884,6 @@ struct Rule {
        return OK;
     }
 };
-
-#include <sys/mman.h>
 
 struct RuleMetadata {
     uint8_t ruleIndexMax;       // RULEIM
@@ -4582,26 +4577,18 @@ void LoadSTARFLT(std::string hash)
         std::string prefix = "sf-" + hash;
         std::string filename = prefix + ".zst";
 
-        DIR *dir;
-        struct dirent *ent;
-        if ((dir = opendir ("./")) != NULL) {
-            while ((ent = readdir (dir)) != NULL) {
-                std::string file = ent->d_name;
-                if (file.substr(file.find_last_of(".") + 1) != "zst") continue;
-                if (file.find(prefix) == 0) {
-                    if (!Deserialize(file)) {
-                        fprintf(stderr, "Error: Cannot deserialize file %s\n", file.c_str());
-                        exit(1);
-                    } else {
-                        printf("File %s was loade for resumption.\n", file.c_str());
-                        break;
-                    }
+        for (const auto & entry : std::filesystem::directory_iterator("./")) {
+            std::string file = entry.path().filename().string();
+            if (file.substr(file.find_last_of(".") + 1) != "zst") continue;
+            if (file.find(prefix) == 0) {
+                if (!Deserialize(file)) {
+                    fprintf(stderr, "Error: Cannot deserialize file %s\n", file.c_str());
+                    exit(1);
+                } else {
+                    printf("File %s was loaded for resumption.\n", file.c_str());
+                    break;
                 }
             }
-            closedir (dir);
-        } else {
-            perror ("Could not open directory");
-            exit(1);
         }
     }
 }
