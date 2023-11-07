@@ -603,18 +603,18 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }  
 
-    offscreenWindow = SDL_CreateWindow("Off Screen Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, OFFSCREEN_WINDOW_WIDTH, OFFSCREEN_WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
-    if (offscreenWindow == NULL)
-    {
-        printf("SDL_CreateWindow Error: %s", SDL_GetError());
-        SDL_Quit();
-        return 0;
-    }
-
     renderer = SDL_CreateRenderer(window, -1, 0);
     if (renderer == NULL)
     {
         printf("SDL_CreateRenderer Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    offscreenWindow = SDL_CreateWindow("Off Screen Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, OFFSCREEN_WINDOW_WIDTH, OFFSCREEN_WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+    if (offscreenWindow == NULL)
+    {
+        printf("SDL_CreateWindow Error: %s", SDL_GetError());
         SDL_Quit();
         return 0;
     }

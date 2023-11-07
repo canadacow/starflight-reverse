@@ -1261,6 +1261,8 @@ EGAFunctions ega{};
 
 extern unsigned short regbx;
 
+uint16_t nparmsStackSi = 0;
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType pollForInput)
 {
     unsigned short i;
@@ -1299,6 +1301,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
                     auto idx = Pop();
                     Push(idx);
                     printf("Called _n_CPARMS with %d\n", idx);
+
+                    nparmsStackSi = regsi;
                 }
 
                 if(nextInstr == 0xa0f0)
@@ -1363,6 +1367,25 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         case 0x1692: // "EXIT"
             regsi = Read16(regbp);
             regbp += 2;
+
+            if(nparmsStackSi != 0 && nparmsStackSi == regsi)
+            {   
+                // i ivar xid# radius
+                uint16_t radius = Pop();
+                uint16_t xid_n = Pop();
+                uint16_t ivar = Pop();
+                uint16_t i = Pop();
+                printf("Return from _n_CPARMS i %u, ivar %u, xid_n %u radius %u\n",
+                    i,
+                    ivar,
+                    xid_n,
+                    radius);
+
+                Push(i);
+                Push(ivar);
+                Push(xid_n);
+                Push(radius);
+            }
         break;
 
         // --- branching ---
@@ -3041,13 +3064,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
             uint16_t IXSEG = Read16(0x59BE);
             uint16_t IYSEG = Read16(0x59C2);
 
-            uint16_t ax = 0;
-            Push(ax);
-
             printf("?ILOCUS %d %d %d bicon %u cx %u\n", 
                 XLOCUS, YLOCUS, RLOCUS, BICON, cx);
 
-            if (cx > 0 && RLOCUS > 3) {
+            uint16_t ax = 0;
+            Push(ax);                
+
+            if (cx > 0) {
                 do {
                     uint16_t bx = cx - 1;
                     bx += BICON;
@@ -4510,7 +4533,137 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx, PollForInputType po
         case 0xe770: FRACT_FILLARRAY(); break;
         case 0xe537: FRACT_StoreHeight(); break;
         case 0xe75e: FRACT_FRACTALIZE(); break;
+        case 0xead1:
+            {
+                // 0xead1: mov    [EACD],sp // WEACD
+                Write16(0xEACD, regsp);
+            }
+            break;
 
+            // ================================================
+// 0xeada: WORD 'WEADC' codep=0xeadc wordp=0xeadc
+// ================================================
+// 0xeadc: add    sp,0E
+// 0xeadf: mov    [EACD],sp // WEACD
+// 0xeae3: lodsw
+// 0xeae4: mov    bx,ax
+// 0xeae6: jmp    word ptr [bx]
+
+// ================================================
+// 0xeae8: WORD 'WEAEA' codep=0xeaea wordp=0xeaea
+// ================================================
+// 0xeaea: pop    bx
+// 0xeaeb: add    bx,[EACD] // WEACD
+// 0xeaef: push   word ptr [bx]
+// 0xeaf1: lodsw
+// 0xeaf2: mov    bx,ax
+// 0xeaf4: jmp    word ptr [bx]
+
+// ================================================
+// 0xeaf6: WORD 'WEAF8' codep=0xeaf8 wordp=0xeaf8
+// ================================================
+// 0xeaf8: pop    bx
+// 0xeaf9: add    bx,[EACD] // WEACD
+// 0xeafd: pop    word ptr [bx]
+// 0xeaff: lodsw
+// 0xeb00: mov    bx,ax
+// 0xeb02: jmp    word ptr [bx]
+        case 0xeadc:
+            {
+                regsp += 0xe;
+                Write16(0xEACD, regsp);
+            }
+            break;
+        case 0xeaea:
+            {
+                bx = Pop();
+                bx += Read16(0xEACD);
+                Push(Read16(bx));
+            }
+            break;
+        case 0xeaf8:
+            {
+                bx = Pop();
+                bx += Read16(0xEACD);
+                auto val = Pop();
+                Write16(bx, val);
+            }
+            break;
+// ================================================
+// 0xed32: WORD '+TMP' codep=0xed34 wordp=0xed34
+// ================================================
+// 0xed34: mov    [ED30],sp // [TMP]
+// 0xed38: pop    ax
+// 0xed39: shl    ax,1
+// 0xed3b: sub    sp,ax
+// 0xed3d: lodsw
+// 0xed3e: mov    bx,ax
+// 0xed40: jmp    word ptr [bx]
+        case 0xed34:
+            {
+                Write16(0xED30, regsp);
+                auto val = Pop();
+                val <<= 1;
+                regsp -= val;
+            }
+            break;
+// ================================================
+// 0xed42: WORD '-TMP' codep=0xed44 wordp=0xed44
+// ================================================
+// 0xed44: pop    ax
+// 0xed45: shl    ax,1
+// 0xed47: add    sp,ax
+// 0xed49: lodsw
+// 0xed4a: mov    bx,ax
+// 0xed4c: jmp    word ptr [bx]
+        case 0xed44:
+            {
+                auto val = Pop();
+                val <<= 1;
+                regsp += val;
+            }
+            break;
+// ================================================
+// 0xed4e: WORD '@TMP' codep=0xed50 wordp=0xed50
+// ================================================
+// 0xed50: pop    bx
+// 0xed51: shl    bx,1
+// 0xed53: neg    bx
+// 0xed55: add    bx,[ED30] // [TMP]
+// 0xed59: push   word ptr [bx]
+// 0xed5b: lodsw
+// 0xed5c: mov    bx,ax
+// 0xed5e: jmp    word ptr [bx]
+        case 0xed50:
+            {
+                auto val = Pop();
+                val <<= 1;
+                val = -val;
+                val += Read16(0xED30);
+                Push(Read16(val));
+            }
+            break;
+// ================================================
+// 0xed60: WORD '!TMP' codep=0xed62 wordp=0xed62
+// ================================================
+// 0xed62: pop    bx
+// 0xed63: shl    bx,1
+// 0xed65: neg    bx
+// 0xed67: add    bx,[ED30] // [TMP]
+// 0xed6b: pop    ax
+// 0xed6c: mov    [bx],ax
+// 0xed6e: lodsw
+// 0xed6f: mov    bx,ax
+// 0xed71: jmp    word ptr [bx]
+        case 0xed62:
+            {
+                auto val = Pop();
+                val <<= 1;
+                val = -val;
+                val += Read16(0xED30);
+                Write16(val, Pop());
+            }
+            break;
         default:
             printf("unknown opcode 0x%04x at si = 0x%04x\n", addr, regsi);
             PrintCallstacktrace(bx);

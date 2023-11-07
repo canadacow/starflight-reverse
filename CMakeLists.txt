@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
     CACHE STRING "Vcpkg toolchain file")
-set(VCPKG_TARGET_TRIPLET "x64-windows" CACHE STRING "Vcpkg Target Triplet to use")
+if(WIN32)
+    set(VCPKG_TARGET_TRIPLET "x64-windows" CACHE STRING "Vcpkg Target Triplet to use")
+else()
+    set(VCPKG_TARGET_TRIPLET "x64-linux" CACHE STRING "Vcpkg Target Triplet to use")
+endif()
 
 project(Starflight)
 
@@ -18,7 +22,6 @@ set_source_files_properties(
     src/emul/callstack.c 
     src/disasOV/global.c 
     src/emul/fract.c
-    src/emul/findword.cpp 
     PROPERTIES LANGUAGE CXX
 )
 
