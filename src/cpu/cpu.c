@@ -43,14 +43,6 @@ void Write8Long(unsigned short s, unsigned short o, unsigned char x)
 
 void Write16(unsigned short offset, unsigned short x)
 {
-    if(offset == 0xd9dc)
-    {
-        printf("--- Write to 0x%x with %x\n", offset, x);
-        PrintCallstacktrace(regbx);
-        printf("--- End Write to 0x%x with %x\n", offset, x);
-        fflush(stdout);
-    }
-
     mem[offset+0] = (x>>0)&0xFF;
     mem[offset+1] = (x>>8)&0xFF;
 }
@@ -78,15 +70,6 @@ unsigned char Read8Long(unsigned short s, unsigned short o)
 unsigned short Read16(unsigned short offset)
 {
     unsigned short val = mem[offset+0] | (mem[offset+1]<<8);
-
-    if(offset == 0xd9dc)
-    {
-        printf("--- Read from 0x%x has %x\n", offset, val);
-        PrintCallstacktrace(regbx);
-        printf("--- End read from 0x%x has %x\n", offset, val);
-        fflush(stdout);        
-    }
-
 
     return val;
 }

@@ -1618,7 +1618,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 break; // "(2C:) NULL 0. VANEWSP IROOT .... *EOL"
             }
         case 0x4a96: ParameterCall(bx, 0x4a96); break; // "CASE:"
-        case 0x4a4f: ParameterCall(bx, 0x4a4f); break; // "CASE"
+        case 0x4a4f: // "CASE"
+            {
+                ParameterCall(bx, 0x4a4f); 
+                break; 
+            }
         case 0xeca2: ParameterCall(bx, 0xeca2); break; // in PL-SET Overlay
         case 0xe114: ParameterCall(bx, 0xe114); break; // in LP Overlay
         case 0xe2cf: ParameterCall(bx, 0xe2cf); break; // in LP Overlay
@@ -2172,10 +2176,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             unsigned int dividend = ax | ((unsigned int)dx<<16);
             if (divisor == 0)
             {
+                // XXX FIXME FIXME - The ORBRADIUS valus is configured to zero
+                // It seems this gets set and then division happens later
+                // this could be demonstrative of another bug in the system,
+                // or just geniue programmer oversight.
                 printf("Integer divide by zero\n");
                 PrintCallstacktrace(bx);
-                assert(false);
+                //assert(false);
+                divisor = 1;
             }
+
             Push(dividend % divisor);
             Push(dividend / divisor);
         }
@@ -2281,13 +2291,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             bx = Pop(); // pointer to case struct
             unsigned short ax = Pop(); // switch(ax)....
-            //printf("case at 0x%04x: %i\n", bx, ax);
             cx = Read16(bx); // number of case entries
             bx += 2;
             dx = Read16(bx); // default word
             bx += 2;
+            //printf("case at 0x%04x: %i - number of cases %d, default val %d\n", bx, ax, cx, dx);
             for(int i=0; i<cx; i++)
             {
+                //printf("    case number %d - val %d, returns %d ret deref ptr %d;\n", i, Read16(bx), Read16(bx+2), Read16(Read16(bx+2)));
                 if (Read16(bx) == ax)
                 {
                     dx = Read16(bx+2);
@@ -2295,6 +2306,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
                 bx += 4;
             }
+            //printf("end case returning %d deref %d;\n", dx, Read16(dx));
             Push(dx);
         }
         break;
