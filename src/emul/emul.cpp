@@ -12,17 +12,6 @@
 #include <thread>
 #include <semaphore>
 
-void Continue(PollForInputType pollForInput)
-{
-    while(1)
-    {
-       enum RETURNCODE ret = Step(pollForInput);
-       if (ret == ERROR) exit(1);
-       if (ret != OK) return;
-    }
-}
-
-
 int main(int argc, char *argv[]) {
     std::string hash;
 
@@ -37,21 +26,10 @@ int main(int argc, char *argv[]) {
     InitEmulator(hash);
     GraphicsInit();
 
-    auto pollForInput = [](uint16_t* key)-> bool {
-        if(key == nullptr)
-        {
-            return GraphicsHasKey();
-        }
-
-        *key = GraphicsGetKey();
-
-        return true;
-    };
-    
     enum RETURNCODE ret;
     do
     {
-        ret = Step(pollForInput);
+        ret = Step();
 
     } while (ret == OK);
 
