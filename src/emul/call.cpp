@@ -1270,20 +1270,58 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
     regbx = bx;
 
-    {
-        static int16_t shX = 0;
-        static int16_t shY = 0;
+    auto divideByZero = [&](int16_t& quotient, int16_t& remainder){
+        // 0x01C4:                 pop     ax
+        // 0x01C5:                 inc     ax
+        // 0x01C6:                 push    ax
+        // 0x01C7:                 sub     ax, ax
+        // 0x01C9:                 sub     dx, dx
+        // 0x01CB:                 iret
+        // 0x01CC: ; ---------------------------------------------------------------------------
+        // 0x01CC:                 xor     bx, bx
+        // 0x01CE:                 div     bx
+        // 0x01D0:                 retn
+        // 0x01d1: ; ---------------------------------------------------------------------------
+        // 0x01d1: pop    ax
+        // 0x01d2: mov    cx,ax
+        // 0x01d4: sub    ax,01D0
+        // 0x01d8: jnz    01E0
+        // 0x01da: mov    ax,01C7
+        // 0x01dd: jmp    01E4
+        // 0x01e0: mov    ax,01C4
+        // 0x01e3: inc    cx
+        // 0x01e4: mov    dx,ds
+        // 0x01e6: xor    bx,bx
+        // 0x01e8: mov    ds,bx
+        // 0x01ea: mov    [bx],ax
+        // 0x01ec: mov    ds,dx
+        // 0x01ee: push   cx
+        // 0x01ef: iret
+        // 0x01fa: mov    ax,ds
+        // 0x01fc: xor    bx,bx
+        // 0x01fe: mov    ds,bx
+        // 0x0200: mov    word ptr [bx],01D1
+        // 0x0204: add    bx,0002
+        // 0x0208: mov    [bx],ax
+        // 0x020a: mov    ds,ax
+        // 0x020c: call   01CC
+        // 0x020f: lodsw
+        // 0x0210: mov    bx,ax
+        // 0x0212: jmp    word ptr [bx]
+        
+        printf("Integer divide by zero\n");
 
-        auto shipX = (int16_t)Read16(0x51c4);
-        auto shipY = (int16_t)Read16(0x51c6);
-
-        if((shX != shipX || shY != shipY))
+        if(false)
         {
-            printf("shipX %d, shipY %d", shipX, shipY);
-            shX = shipX;
-            shY = shipY;
+            // This code is exhibited in the divide by zero handler. Not sure of its purpose.
+            auto val = Pop();
+            ++val;
+            Push(val);
         }
-    }
+
+        quotient = 0;
+        remainder = 0;
+    };
 
     const char* baseOverlay = "";
     const char* overlayName = baseOverlay;
@@ -2174,20 +2212,25 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             dx = Pop();
             unsigned short ax = Pop();
             unsigned int dividend = ax | ((unsigned int)dx<<16);
+
+            int16_t quotient = 0;
+            int16_t remainder = 0;
             if (divisor == 0)
             {
                 // XXX FIXME FIXME - The ORBRADIUS valus is configured to zero
                 // It seems this gets set and then division happens later
                 // this could be demonstrative of another bug in the system,
                 // or just geniue programmer oversight.
-                printf("Integer divide by zero\n");
-                PrintCallstacktrace(bx);
-                //assert(false);
-                divisor = 1;
+                divideByZero(quotient, remainder);
+            }
+            else
+            {
+                quotient =  dividend / divisor;
+                remainder = dividend % divisor;
             }
 
-            Push(dividend % divisor);
-            Push(dividend / divisor);
+            Push(remainder);
+            Push(quotient);
         }
         break;
 
@@ -2195,13 +2238,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             signed short divisor = Pop();
             signed short dividend = Pop();
+
+            int16_t quotient = 0;
+            int16_t remainder = 0;
+
             if (divisor == 0)
             {
-              printf("Integer divide by zero\n");
-              PrintCallstacktrace(bx);
-              assert(false);
+                divideByZero(quotient, remainder);
             }
-            Push(dividend/divisor);
+            else
+            {
+                quotient =  dividend / divisor;
+            }
+            Push(quotient);
         }
         break;
 
@@ -2209,14 +2258,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             signed short divisor = Pop(); // bx
             signed short dividend = Pop();
+
+            int16_t quotient = 0;
+            int16_t remainder = 0;
+
             if (divisor == 0)
             {
-              printf("Integer divide by zero\n");
-              PrintCallstacktrace(bx);
-              exit(1);
+                divideByZero(quotient, remainder);
             }
-            Push(dividend%divisor);
-            Push(dividend/divisor);
+            else 
+            {
+                quotient =  dividend / divisor;
+                remainder = dividend % divisor;
+            }
+
+            Push(remainder);
+            Push(quotient);
         }
         break;
 
@@ -2545,6 +2602,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         }
 
         case 0x1FA: // overwrite interrupt 0 to and div 0?
+            printf("Divide by zero interrupt.");
+            //PrintCallstacktrace(bx);
             /*Push(0x20F);Push(0x7246);Push(0x1FE);Push(0x1CF);Pop();Pop();Pop();Pop(); */
         break;
 
