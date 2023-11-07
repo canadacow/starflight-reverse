@@ -461,12 +461,7 @@ void XCHG(unsigned short *a, unsigned short *b)
 void ParameterCall(unsigned short bx, unsigned short addr)
 {
     // call word 0x1649;
-    printf("Parametercall addr=%04x, si=%04x bx=%04x content=0x%04x\n", addr, regsi, bx+2, Read16(bx+2));
-
-    if(bx + 2 == 0x51c4)
-    {
-        printf("hehre\n");
-    }
+    //printf("Parametercall addr=%04x, si=%04x bx=%04x content=0x%04x\n", addr, regsi, bx+2, Read16(bx+2));
 
     regbp -= 2;
     Write16(regbp, regsi);
@@ -2171,20 +2166,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x11ED: // "U/MOD"
         {
-          if (Read16(regsp) == 0)
-          {
-            auto radiusValue = Read16(0xd9dc);
-
-            printf("Integer divide by zero\n");
-            PrintCallstacktrace(bx);
-            assert(false);
-          }
-            bx = Pop();
+            signed short divisor = Pop();
             dx = Pop();
             unsigned short ax = Pop();
             unsigned int dividend = ax | ((unsigned int)dx<<16);
-            Push(dividend % bx);
-            Push(dividend / bx);
+            if (divisor == 0)
+            {
+                printf("Integer divide by zero\n");
+                PrintCallstacktrace(bx);
+                assert(false);
+            }
+            Push(dividend % divisor);
+            Push(dividend / divisor);
         }
         break;
 
@@ -3086,6 +3079,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
             uint16_t IXSEG = Read16(0x59BE);
             uint16_t IYSEG = Read16(0x59C2);
+            uint16_t ILSEG = Read16(0x59CE);
+            uint16_t IHSEG = Read16(0x59DA);
+            uint16_t IDSEG = Read16(0x59C6);
+            uint16_t ICSEG = Read16(0x59CA);
 
             printf("?ILOCUS %d %d %d bicon %u cx %u\n", 
                 XLOCUS, YLOCUS, RLOCUS, BICON, cx);
@@ -3102,7 +3099,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     int16_t iconX = (int16_t)Read16Long(IXSEG, bx);
                     int16_t iconY = (int16_t)Read16Long(IYSEG, bx);
 
-                    printf("   icon %d, %d - ", iconX, iconY);
+                    int16_t iconL = (int16_t)Read16Long(ILSEG, bx);
+                    int16_t iconH = (int16_t)Read16Long(IHSEG, bx);
+
+                    int16_t iconD = (int16_t)Read16Long(IDSEG, bx);
+                    int16_t iconC = (int16_t)Read16Long(ICSEG, bx);
+
+                    printf("   icon %d, %d - addr 0x%04x:0x%04x %d %d ", 
+                        iconX, iconY,
+                        iconH, iconL,
+                        iconD, iconC);
 
                     iconX -= XLOCUS;
                     iconY -= YLOCUS;
@@ -3293,7 +3299,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     al = Read8Long(es, bx);
 
                     // If ax is less than dx and ax is less than or equal to ZZZ, jump to 9EE6
-                    if (ax >= dx && ax <= Read16(0x48C8)) { // ZZZ
+                    if (ax <= Read16(0x48C8) || ax >= dx) { // ZZZ
                         // Jump to 9EE6
                     } else {
                         // Pop ax from the stack
@@ -3340,7 +3346,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             Push(ax);
         }
         break;
-        case 0x9a82: // W9A82
+        case 0x9a82: // @IH
         {
             // 0x9a82: pop    ax
             // 0x9a83: push   es
