@@ -3524,7 +3524,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             // Should be replaced entirely by circle and ellipse commands.
             printf("LFILLPOLY (TODO)\n");
             PrintCallstacktrace(bx);
-            assert(false);
+            //assert(false);
         }
         break;
 
@@ -4762,6 +4762,686 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 val = -val;
                 val += Read16(0xED30);
                 Write16(val, Pop());
+            }
+            break;
+// 0xee65: mov    cx,es
+// 0xee67: mov    dx,[5DA3] // ?EGA
+// 0xee6b: and    dx,01
+// 0xee6e: jnz    EE76
+// 0xee70: mov    dx,[55D8] // HBUF-SEG
+// 0xee74: jmp    EE7A
+// 0xee76: mov    dx,[52B3] // XBUF-SE
+// 0xee7a: mov    es,dx
+// 0xee7c: xor    ax,ax
+// 0xee7e: pop    bx
+// 0xee7f: es:    
+// 0xee80: mov    al,[bx]
+// 0xee82: inc    bx
+// 0xee83: es:    
+// 0xee84: push   word ptr [bx]
+// 0xee86: add    bx,02
+// 0xee89: es:    
+// 0xee8a: push   word ptr [bx]
+// 0xee8c: push   ax
+// 0xee8d: mov    es,cx       
+        case 0xee65:
+            {
+                auto dx = Read16(0x5DA3); // ?EGA
+                dx &= 0x01;
+                if (dx != 0)
+                {
+                    dx = Read16(0x52B3); // XBUF-SE
+                }
+                else
+                {
+                    dx = Read16(0x55D8); // HBUF-SEG
+                }
+                uint16_t es = dx;
+                uint16_t ax = 0;
+                uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
+
+                bx = Pop();
+                al = Read8Long(es, bx);
+                bx++;
+                Push(Read16Long(es, bx));
+                bx += 2;
+                Push(Read16Long(es, bx));
+                Push(ax);
+            }
+            break;
+// 0xeee5: xor    ax,ax
+// 0xeee7: push   ax
+// 0xeee8: mov    ax,0004
+// 0xeeeb: mov    ah,al
+// 0xeeed: push   ax
+// 0xeeee: mov    ax,[ED81] // WED81
+// 0xeef2: push   ax
+        case 0xeee5:
+            {
+                Push(0);
+                Push(0x0404);
+                Push(Read16(0xED81));
+            }  
+            break;
+// 0xee98: mov    dx,[52A2] // POLYSEG
+// 0xee9c: mov    es,dx
+// 0xee9e: mov    bx,[ED7D] // FADDR
+// 0xeea2: pop    ax
+// 0xeea3: es:    
+// 0xeea4: mov    [bx],al
+// 0xeea6: add    bx,03
+// 0xeea9: es:    
+// 0xeeaa: pop    word ptr [bx]
+// 0xeeac: sub    bx,02
+// 0xeeaf: es:    
+// 0xeeb0: pop    word ptr [bx]
+// 0xeeb2: add    bx,04
+// 0xeeb5: mov    [ED7D],bx // FADDR
+        case 0xee96:
+            {
+                uint16_t dx = Read16(0x52A2); // POLYSEG
+                uint16_t es = dx;
+                bx = Read16(0xED7D); // FADDR
+                uint16_t ax = Pop();
+                Write8Long(es, bx, ax & 0xff);
+                bx += 3;
+                Write16Long(es, bx, Pop());
+                bx -= 2;
+                Write16Long(es, bx, Pop());
+                bx += 4;
+                Write16(0xED7D, bx); // FADDR
+            }   
+            break;   
+// 0xeecc: xor    ax,ax
+// 0xeece: pop    ax
+// 0xeecf: push   ax
+// 0xeed0: cmp    ax,[ED81] // WED81
+// 0xeed4: jnz    EEDB
+// 0xeed6: mov    ax,0001
+// 0xeed9: jmp    EEDD
+// 0xeedb: xor    ax,ax
+// 0xeedd: push   ax
+        case 0xeecc:
+            {
+                uint16_t ax = 0;
+                ax = Pop();
+                Push(ax);
+                if(ax != Read16(0xED81)) // WED81
+                {
+                    ax = 1;
+                }
+                else
+                {
+                    ax = 0;
+                }
+                Push(ax);
+            }
+            break;       
+// 0xeec2: add    sp,06
+        case 0xeec2:
+            {
+                regsp += 6;
+            }
+            break;
+// 0xdf13: pop    dx
+// 0xdf14: pop    cx
+// 0xdf15: pop    ax
+// 0xdf16: imul   cl
+// 0xdf18: idiv   dl
+// 0xdf1a: cbw    
+// 0xdf1b: push   ax
+        case 0xdf13:
+            {
+                uint16_t dx = Pop();
+                uint16_t cx = Pop();
+                uint16_t ax = Pop();
+
+                int16_t quotient = 0;
+                int16_t remainder = 0;
+
+                uint16_t dividend = (ax * (cx & 0xFF));
+                uint16_t divisor = dx & 0xff;
+
+                if(divisor == 0)
+                {
+                    divideByZero(quotient, remainder);
+                }
+                else
+                {
+                    quotient = dividend / divisor;
+                }
+
+                Push(quotient);
+            }   
+            break;
+// 0xe1b6: push   di
+// 0xe1b7: push   bp
+// 0xe1b8: push   si
+// 0xe1b9: mov    si,DCC2
+// 0xe1bc: mov    cx,0003
+// 0xe1bf: mov    dh,[si]
+// 0xe1c1: add    si,02
+// 0xe1c4: mov    dl,[si]
+// 0xe1c6: add    si,02
+// 0xe1c9: mov    bh,[si]
+// 0xe1cb: add    si,02
+// 0xe1ce: mov    ax,[si]
+// 0xe1d0: mov    [DC0C],ax // WDC0C
+// 0xe1d4: add    si,02
+// 0xe1d7: push   si
+// 0xe1d8: push   cx
+// 0xe1d9: sub    cx,03
+// 0xe1dc: neg    cx
+// 0xe1de: shl    cx,1
+// 0xe1e0: add    cx,[56A6] // VOUT
+// 0xe1e4: mov    di,cx
+// 0xe1e6: mov    si,[5DDE] // VIN'
+// 0xe1ea: push   es
+// 0xe1eb: mov    cx,[5DD3] // 3DSEG
+// 0xe1ef: mov    es,cx
+// 0xe1f1: mov    cx,[5686] // #IN
+// 0xe1f5: mov    bp,[DC0C] // WDC0C
+// 0xe1f9: es:    
+// 0xe1fa: mov    al,[si]
+// 0xe1fc: inc    si
+// 0xe1fd: imul   dh
+// 0xe1ff: add    bp,ax
+// 0xe201: es:    
+// 0xe202: mov    al,[si]
+// 0xe204: inc    si
+// 0xe205: imul   dl
+// 0xe207: add    bp,ax
+// 0xe209: es:    
+// 0xe20a: mov    al,[si]
+// 0xe20c: inc    si
+// 0xe20d: imul   bh
+// 0xe20f: add    bp,ax
+// 0xe211: es:    
+// 0xe212: mov    [di],bp
+// 0xe214: add    di,06
+// 0xe217: loop   E1F5
+// 0xe219: pop    es
+// 0xe21a: pop    cx
+// 0xe21b: pop    si
+// 0xe21c: loop   E1BF
+// 0xe21e: pop    si
+// 0xe21f: pop    bp
+// 0xe220: pop    di
+        case 0xe1b6:
+            {
+                uint16_t di, si, cx, es;
+                int16_t bp;
+                int16_t ax;
+                int8_t& al = reinterpret_cast<int8_t*>(&ax)[0];
+                int8_t& bl = reinterpret_cast<int8_t*>(&bx)[0];
+                int8_t& bh = reinterpret_cast<int8_t*>(&bx)[1];
+                int8_t& dl = reinterpret_cast<int8_t*>(&dx)[0];
+                int8_t& dh = reinterpret_cast<int8_t*>(&dx)[1];
+
+                si = Read16(0xDCC2);
+                cx = 0x0003;
+                dh = Read8(si);
+                si += 2;
+                dl = Read8(si);
+                si += 2;
+                bh = Read8(si);
+                si += 2;
+                ax = Read16(si);
+                Write16(0xDC0C, ax); // WDC0C
+                si += 2;
+
+                do {
+                    Push(si);
+                    Push(cx);
+                    cx -= 3;
+                    cx = -cx;
+                    cx <<= 1;
+                    cx += Read16(0x56A6); // VOUT
+                    di = cx;
+                    si = Read16(0x5DDE); // VIN'
+                    cx = Read16(0x5DD3); // 3DSEG
+                    es = cx;
+                    cx = Read16(0x5686); // #IN
+                    bp = (int16_t)Read16(0xDC0C); // WDC0C
+
+                    do {
+                        al = Read8Long(es, si);
+                        si++;
+                        ax = al * dh;
+                        bp += ax;
+                        al = Read8Long(es, si);
+                        si++;
+                        ax = al * dl;
+                        bp += ax;
+                        al = Read8Long(es, si);
+                        si++;
+                        ax = al * bh;
+                        bp += ax;
+                        Write16Long(es, di, bp);
+                        di += 6;
+                        cx--;
+                    } while (cx != 0);
+
+                    cx = Pop();
+                    si = Pop();
+                    cx--;
+                } while (cx != 0);
+            }
+            break;
+        case 0xe228:
+            {
+                // FIXME FIXME XXX Divide by zeros happen almost immediately in this function. Normal?
+                uint16_t di = Read16(0x56A6); // VOUT
+                di += 4;
+                int16_t si = (int16_t)Read16(0x5DEC); // YSCREEN
+                uint16_t es = Read16(0x5DD3); // 3DSEG
+                int16_t bp = (int16_t)Read16(0xDC14); // WDC14
+                cx = Read16(0x5686); // #IN
+
+                do {
+                    int16_t bxs = (int16_t)Read16Long(es, di);
+                    di -= 2;
+                    int16_t ax = (int16_t)Read16Long(es, di);
+                    ax *= bp;
+                    if(bxs == 0)
+                    {
+                        ax = 0;
+                    }
+                    else
+                    {
+                        ax /= bxs;
+                    }
+                    ax += si;
+                    Write16Long(es, di, ax);
+                    di -= 2;
+                    ax = (int16_t)Read16Long(es, di);
+                    ax *= (int16_t)Read16(0xDC10); // WDC10
+                    if(bxs == 0)
+                    {
+                        ax = 0;
+                    }
+                    else
+                    {
+                        ax /= bxs;
+                    }
+                    ax += Read16(0x5DFA); // XSCREEN
+                    Write16Long(es, di, ax);
+                    di += 10;
+                    cx--;
+                } while (cx != 0);
+            }
+            break;
+// 0xdf02: mov    [DC20],sp // WDC20            
+        case 0xdf02:
+            {
+                Write16(0xDC20, regsp);
+            }
+            break;
+        case 0xdd2c:
+            {
+
+                uint16_t ax, cx, dx;
+                // seg000:DD20                 shl     bx, 1
+                // seg000:DD22                 add     bx, 0DD14h
+                // seg000:DD26                 mov     ax, [bx]
+                // seg000:DD28                 jmp     ax
+
+                auto DD20 = [&](){
+                    bx <<= 1;
+                    bx += 0xDD14;
+                    uint16_t addr = Read16(bx);
+                    printf("Jump to address cs:0x%x\n", addr);
+                };
+
+                Write16(0xDC24, Pop()); // pop word ptr [DC24]
+                Write16(0xDC28, Pop()); // pop word ptr [DC28]
+                bx = Read16(0xDC20); // mov bx,[DC20]
+                bx += 0xE; // add bx,0E
+                cx = Read16(bx); // mov cx,[bx]
+                bx -= 0x4; // sub bx,04
+                dx = Read16(bx); // mov dx,[bx]
+                bx = Read16(0xDC28); // mov bx,[DC28]
+                DD20(); // call DD20
+                Push(ax); // push ax
+                bx = Read16(0xDC20); // mov bx,[DC20]
+                bx += 0x2; // add bx,02
+                cx = Read16(bx); // mov cx,[bx]
+                bx += 0x4; // add bx,04
+                dx = Read16(bx); // mov dx,[bx]
+                bx = Read16(0xDC28); // mov bx,[DC28]
+                DD20(); // call DD20
+                dx = ax; // mov dx,ax
+                cx = Pop(); // pop cx
+                bx = Read16(0xDC24); // mov bx,[DC24]
+                DD20(); // call DD20
+                Push(ax); // push ax
+                bx = Read16(0xDC20); // mov bx,[DC20]
+                dx = Read16(bx); // mov dx,[bx]
+                bx += 0xC; // add bx,0C
+                cx = Read16(bx); // mov cx,[bx]
+                bx = Read16(0xDC24); // mov bx,[DC24]
+                DD20(); // call DD20
+                Push(ax); // push ax
+                bx = Read16(0xDC20); // mov bx,[DC20]
+                bx += 0x4; // add bx,04
+                dx = Read16(bx); // mov dx,[bx]
+                bx += 0x4; // add bx,04
+                cx = Read16(bx); // mov cx,[bx]
+                bx = Read16(0xDC24); // mov bx,[DC24]
+                DD20(); // call DD20
+                dx = ax; // mov dx,ax
+                cx = Pop(); // pop cx
+                bx = Read16(0xDC28); // mov bx,[DC28]
+                DD20(); // call DD20
+                Push(ax); // push ax
+            }
+            break;
+// 0xe48c: mov    cx,0004
+// 0xe48f: mov    bx,DC38
+// 0xe492: add    bx,0E
+// 0xe495: pop    ax
+// 0xe496: pop    dx
+// 0xe497: mov    [bx],dx
+// 0xe499: sub    bx,02
+// 0xe49c: mov    [bx],ax
+// 0xe49e: sub    bx,02
+// 0xe4a1: loop   E495            
+        case 0xe48c:
+            {
+                uint16_t cx = 0x0004; // mov    cx,0004
+                bx = 0xDC38; // mov    bx,DC38
+                bx += 0x0E; // add    bx,0E
+                for(int i = 0; i < cx; i++) {
+                    uint16_t ax = Pop(); // pop    ax
+                    uint16_t dx = Pop(); // pop    dx
+                    Write16(bx, dx); // mov    [bx],dx
+                    bx -= 0x02; // sub    bx,02
+                    Write16(bx, ax); // mov    [bx],ax
+                    bx -= 0x02; // sub    bx,02
+                }
+            }
+            break;
+        case 0xe4aa:
+            {
+                // 0xe4aa: add    sp,10
+                regsp += 0x10;
+            }
+            break;
+        case 0x9841: // BUFFERXY
+            {
+                uint16_t cx = Pop(); // pop    cx
+                uint8_t& cl = reinterpret_cast<uint8_t*>(&cx)[0];
+                uint16_t ax = Pop(); // pop    ax
+                uint16_t dx = Pop(); // pop    dx
+                bx = Pop(); // pop    bx
+
+                dx -= Read16(0x4E53); // sub    dx,[4E53] // YLL
+                dx++; // inc    dx
+
+                if(cx != 0) // or     cx,cx
+                {           // jz     9850
+                    dx <<= cl; // shl    dx,cl
+                }
+
+                dx += Read16(0x596B); // add    dx,[596B] // YLLDEST
+                dx--; // dec    dx
+
+                bx -= Read16(0x4E49); // sub    bx,[4E49] // XLL
+                cx = ax; // mov    cx,ax
+
+                if(cx != 0) // or     cx,cx
+                {           // jz     9861
+                    bx <<= cl; // shl    bx,cl
+                }
+
+                bx += Read16(0x595D); // add    bx,[595D] // XLLDEST
+
+                Push(bx); // push   bx
+                Push(dx); // push   dx
+            }
+            break;
+        case 0x9097: // SQLPLOT
+            {
+                int16_t y = Pop();
+                int16_t x = Pop();
+
+                auto seg = Read16(0x5648);
+                auto color = Read16(0x55F2);
+
+                GraphicsPixel(x, y, color, seg);
+                GraphicsPixel(x, y - 1, color, seg);
+            }
+            break;
+// 0xf0c1: pop    cx
+// 0xf0c2: push   ds
+// 0xf0c3: push   es
+// 0xf0c4: push   di
+// 0xf0c5: push   si
+// 0xf0c6: mov    ax,[55E6] // DBUF-SEG
+// 0xf0ca: mov    dx,[55D8] // HBUF-SEG
+// 0xf0ce: mov    bx,00C5
+// 0xf0d1: shl    bx,1
+// 0xf0d3: add    bx,[563A] // YTABL
+// 0xf0d7: mov    si,[bx]
+// 0xf0d9: mov    di,si
+// 0xf0db: test   cx,0001
+// 0xf0df: jnz    F0E2
+// 0xf0e1: xchg   ax,dx
+// 0xf0e2: mov    es,ax
+// 0xf0e4: mov    ds,dx
+// 0xf0e6: mov    cx,0A28
+// 0xf0e9: call   8E32
+// 0xf0ec: pop    si
+// 0xf0ed: pop    di
+// 0xf0ee: pop    es
+// 0xf0ef: pop    ds            
+        case 0xf0c1: // |EGA
+            {
+                
+                uint16_t ax;
+                uint16_t cx;
+                uint16_t ds;
+                uint16_t es;
+                uint16_t si;
+                uint16_t di;
+
+                auto COPYLIN = [&]() {
+                    int x = si % 40;
+                    int y = 199 - (si / 40);
+                    for(int i = 0; i < 65; ++i)
+                    {
+                        for (int j = 0; j < 160; ++j)
+                        {
+                            auto c = GraphicsPeek(x + j, y - i, ds);
+                            GraphicsPixel(x + j, y - i, c, es);
+                        }
+                    }
+                };
+
+
+                cx = Pop(); // pop    cx
+                ax = Read16(0x55E6); // mov    ax,[55E6] // DBUF-SEG
+                dx = Read16(0x55D8); // mov    dx,[55D8] // HBUF-SEG
+                bx = 0x00C5; // mov    bx,00C5
+                bx <<= 1; // shl    bx,1
+                bx += Read16(0x563A); // add    bx,[563A] // YTABL
+                si = Read16(bx); // mov    si,[bx]
+                di = si; // mov    di,si
+                if(cx & 0x0001) // test   cx,0001
+                {               // jnz    F0E2
+                    std::swap(ax, dx); // xchg   ax,dx
+                }
+                es = ax; // mov    es,ax
+                ds = dx; // mov    ds,dx
+                cx = 0x0A28; // mov    cx,0A28
+                COPYLIN(); // call   8E32
+            }
+            break;
+        case 0xe16b:
+            {
+                uint16_t cx = Read16(0x5DD3); // 3DSEG
+                uint16_t es = cx;
+                uint16_t si = Read16(0x569B); // VIN
+                uint16_t di = Read16(0x5DDE); // VIN'
+                cx = Read16(0x5686); // #IN
+                uint16_t dx;
+                uint8_t& dl = reinterpret_cast<uint8_t*>(&dx)[0];
+                uint8_t& dh = reinterpret_cast<uint8_t*>(&dx)[1];
+                dl = Read8(0xDBD4); // WDBD4
+                dh = Read8(0xDBD8); // WDBD8
+                uint16_t bx;
+                uint8_t& bl = reinterpret_cast<uint8_t*>(&bx)[0];
+                bl = Read8(0xDBDC); // WDBDC
+
+                for(int i = 0; i < cx; i++) {
+                    uint8_t al = Read8Long(es, si);
+                    al -= dl;
+                    Write8Long(es, di, al);
+                    si++;
+                    di++;
+                    al = Read8Long(es, si);
+                    al -= dh;
+                    Write8Long(es, di, al);
+                    si++;
+                    di++;
+                    al = Read8Long(es, si);
+                    al -= bl;
+                    Write8Long(es, di, al);
+                    si++;
+                    di++;
+                }
+            }
+            break;            
+        case 0x1047:
+            {
+                // 0x1047: pop    ax
+                // 0x1048: shl    ax,1
+                // 0x104a: shl    ax,1
+                // 0x104c: push   ax
+                uint16_t ax = Pop();
+                ax <<= 2;
+                Push(ax);
+            }
+            break;
+        case 0x9081:
+            {
+                uint16_t width = Pop();
+                uint16_t len = Pop();
+                uint16_t yul = Pop();
+                uint16_t xul = Pop();
+                printf("TILEFILL xul %u yul %u len %u width %u\n",
+                    xul, yul,
+                    len, width);
+
+                Push(len);
+                Push(width);
+            }
+        case 0xefd9:
+            {
+                // 0xefd9: pop    ax
+                // 0xefda: add    ax,0003
+                // 0xefdd: mov    [5863],ax // YBLT
+                // 0xefe1: pop    ax
+                // 0xefe2: add    ax,0006
+                // 0xefe5: mov    [586E],ax // XBLT
+                // 0xefe9: mov    word ptr [5892],0004 // WBLT
+                // 0xefef: mov    word ptr [5887],0006 // LBLT
+                // 0xeff5: mov    word ptr [589D],EFCB // ABLT
+                // 0xeffb: push   ds
+                // 0xeffc: pop    word ptr [58AA] // BLTSEG
+                uint16_t ax = Pop();
+                ax += 3;
+                Write16(0x5863, ax);
+                ax = Pop();
+                ax += 6;
+                Write16(0x586E, ax);
+                Write16(0x5892, 0x4);
+                Write16(0x5887, 0x6);
+                Write16(0x589D, 0xEFCB);
+                Write16(0x58AA, ds);
+            }
+            break;
+        case 0xe8f3:
+            {
+                // 0xe8f3: pop    ax
+                // 0xe8f4: add    ax,0003
+                // 0xe8f7: mov    [5863],ax // YBLT
+                // 0xe8fb: pop    ax
+                // 0xe8fc: add    ax,0006
+                // 0xe8ff: mov    [586E],ax // XBLT
+                // 0xe903: mov    word ptr [5892],0004 // WBLT
+                // 0xe909: mov    word ptr [5887],0006 // LBLT
+                // 0xe90f: mov    word ptr [589D],E8E5 // ABLT
+                // 0xe915: push   ds
+                // 0xe916: pop    word ptr [58AA] // BLTSEG
+                uint16_t ax = Pop();
+                ax += 3;
+                Write16(0x5863, ax);
+                ax = Pop();
+                ax += 6;
+                Write16(0x586E, ax);
+                Write16(0x5892, 0x4);
+                Write16(0x5887, 0x6);
+                Write16(0x589D, 0xE8E5);
+                Write16(0x58AA, ds);
+            }
+            break;
+        case 0x48dc:
+            {
+                // 0x48dc: mov    bx,di
+                // 0x48de: pop    cx
+                // 0x48df: mov    ax,es
+                // 0x48e1: mov    dx,ds
+                // 0x48e3: pop    di
+                // 0x48e4: pop    es
+                // 0x48e5: mov    [48C6],si // ZZZ
+                // 0x48e9: pop    si
+                // 0x48ea: pop    ds
+                // 0x48eb: or     cx,cx
+                // 0x48ed: jz     48F9
+                // 0x48ef: std    
+                // 0x48f0: add    di,cx
+                // 0x48f2: dec    di
+                // 0x48f3: add    si,cx
+                // 0x48f5: dec    si
+                // 0x48f6: repz   
+                // 0x48f7: movsb
+                // 0x48f8: cld    
+                // 0x48f9: mov    es,ax
+                // 0x48fb: mov    ds,dx
+                // 0x48fd: mov    si,[48C6] // ZZZ
+                // 0x4901: mov    di,bx
+
+                uint16_t cx, di, si, es, ds;
+
+                cx = Pop(); // pop    cx
+                di = Pop(); // pop    di
+                es = Pop(); // pop    es
+                si = Pop(); // pop    si
+                ds = Pop(); // pop    ds
+
+                if (cx != 0) // or     cx,cx
+                {           // jz     48F9
+                    // std    
+                    di += cx; // add    di,cx
+                    di--; // dec    di
+                    si += cx; // add    si,cx
+                    si--; // dec    si
+
+                    // repz   
+                    // movsb
+                    for (int i = 0; i < cx; i++) {
+                        uint8_t val = Read8Long(ds, si - i);
+                        Write8Long(es, di - i, val);
+                    }
+
+                    // cld    
+                }
+            }
+            break;
+        case 0x8783:
+            {
+                // CLIPPER();
             }
             break;
         default:
