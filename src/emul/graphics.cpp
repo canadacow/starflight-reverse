@@ -1006,7 +1006,7 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
     {
-        assert(false);
+        printf("Read out of bounds of graphics ram.\n");
         return colortable[4];
     }
 

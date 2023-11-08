@@ -439,7 +439,7 @@ void HandleInterrupt()
     } else
     {
         fprintf(stderr, "unknown interrupt request\n");
-        exit(1);
+        assert(false);
     }
     Write16(0x16b4, flags); //flags
     Write16(0x16b6, ax);
@@ -906,12 +906,17 @@ struct RuleMetadata {
 
     enum RETURNCODE Execute(uint16_t bx) const
     {
+
+        auto entryStack = regsp;
+
         for(uint8_t ruleIdx = 0; ruleIdx < ruleCount; ++ruleIdx)
         {
             auto rule = getRuleAtIndex(ruleIdx);
             auto ret = rule->Execute(bx, getConditionArray(), getFlagCache());
             if (ret != OK) return ret;
         }
+
+        assert(regsp == entryStack);
 
         return OK;
     }
@@ -1332,8 +1337,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     // bx contains pointer to WORD
     if ((regsp < FILESTAR0SIZE+0x100) || (regsp > (0xF6F4)))
     {
-        fprintf(stderr, "Error: stack pointer in invalid area: sp=0x%04x\n", regsp);
+        printf("Error: stack pointer in invalid area: sp=0x%04x\n", regsp);
         PrintCallstacktrace(bx);
+        assert(false);
         return ERROR;
     }
     switch(addr)
@@ -1414,6 +1420,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto meta = (const RuleMetadata*)&mem[nextInstr];
                 auto res = meta->Execute(nextInstr);
                 if (ret != OK) return ret;
+                Push(0); // Not sure why
             }
         break;
 
