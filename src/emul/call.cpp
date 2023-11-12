@@ -5313,8 +5313,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xf0ef: pop    ds            
         case 0xf0c1: // |EGA
             {
-                PrintCallstacktrace(bx);
-
                 uint16_t ax;
                 uint16_t cx;
                 uint16_t ds;
