@@ -1650,7 +1650,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x0EC8: regbp = Read16(regdi+2); break; // RP!
 
         case 0x83f8: // all overlays
-            printf("Load overlay '%s'\n", FindWord(bx+2, -1));
+            //printf("Load overlay '%s'\n", FindWord(bx+2, -1));
             ParameterCall(bx, 0x83f8);
             break;
         case 0x5275: ParameterCall(bx, 0x5275); break; // "OVT" "IARRAYS"
@@ -5397,9 +5397,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     xul, yul,
                     len, width);
 
-                Push(len);
-                Push(width);
+                yul -= 7;
+
+                uint16_t COLOR, TILE_PTR, BUF_SEG;
+                TILE_PTR = Read16(0x58CD);
+                BUF_SEG = Read16(0x5648);
+                COLOR = Read16(TILE_PTR);
+
+                for(uint16_t y = 0; y < len; ++y)
+                {
+                    for(uint16_t x = 0; x < width; ++x)
+                    {
+                        GraphicsPixel(xul + x, yul + y, COLOR & 0xff, BUF_SEG);
+                    }
+                }
             }
+            break;
         case 0xefd9:
             {
                 // 0xefd9: pop    ax
