@@ -15,7 +15,7 @@
     uint16_t GraphicsGetKey();
 
     void GraphicsMode(int mode); // 0 = text, 1 = ega graphics
-    void GraphicsClear(int color, uint32_t offset);
+    void GraphicsClear(int color, uint32_t offset, int byteCount);
     void GraphicsText(char *s, int n);
     void GraphicsCarriageReturn();
     void GraphicsSetCursor(int x, int y);
@@ -25,6 +25,8 @@
     void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset);
     void GraphicsBLT(int x1, int y1, int w, int h, char* image, int color, int xormode, uint32_t offset);
     void GraphicsSave(char *filename);
+
+    void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_t di, uint16_t count);
 
     void BeepOn();
     void BeepTone(uint16_t pitFreq);

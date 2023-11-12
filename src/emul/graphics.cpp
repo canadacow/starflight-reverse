@@ -970,14 +970,45 @@ void GraphicsMode(int mode)
     });
 }
 
-void GraphicsClear(int color, uint32_t offset)
+void GraphicsClear(int color, uint32_t offset, int byteCount)
 {
-    for(int y = 0; y < 200; ++y)
+    uint32_t dest = (uint32_t)offset;
+
+    dest <<= 4; // Convert to linear addres
+    dest -= 0xa0000; // Subtract from EGA page
+    dest *= 4; // Convert to our SDL memory linear address
+
+    uint32_t destOffset = 0;
+
+    auto c = colortable[color&0xF];
+
+    byteCount = 0x2000;
+
+    for(uint32_t i = 0; i < byteCount * 4; ++i)
     {
-        for(int x =0; x < 160; ++x)
-        {
-            GraphicsPixel(x, y, color, offset);
-        }
+        graphicsPixels[dest + destOffset + i] = c;
+    }
+}
+
+void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_t di, uint16_t count)
+{
+    uint32_t src = (uint32_t)sourceSeg;
+    uint32_t dest = (uint32_t)destSeg;
+
+    src <<= 4; // Convert to linear addres
+    src -= 0xa0000; // Subtract from EGA page
+    src *= 4; // Convert to our SDL memory linear address
+
+    dest <<= 4; // Convert to linear addres
+    dest -= 0xa0000; // Subtract from EGA page
+    dest *= 4; // Convert to our SDL memory linear address
+
+    uint32_t srcOffset = (uint32_t)si * 4;
+    uint32_t destOffset = (uint32_t)di * 4;
+
+    for(uint32_t i = 0; i < count * 4; ++i)
+    {
+        graphicsPixels[dest + destOffset + i] = graphicsPixels[src + srcOffset + i];
     }
 }
 

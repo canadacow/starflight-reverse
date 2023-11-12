@@ -2884,21 +2884,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto srcSeg = Pop();
                 
                 printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n",  srcSeg, srcOffset, destSeg, destOffset);
-                
-                // 0x2000 bytes are always copied, source to dest.
-                // I have yet to see this not align to page boundaries
+
                 assert(srcOffset == 0);
                 assert(destOffset == 0);
 
-                for(int y = 0; y < 200; ++y)
-                {
-                    for(int x = 0; x < 160; ++x)
-                    {
-                        auto c = GraphicsPeek(x, y, srcSeg);
-
-                        GraphicsPixel(x, y, c, destSeg);
-                    }
-                }
+                GraphicsCopyLine(srcSeg, destSeg, srcOffset, destOffset, 0x2000);
             }
         break;
 
@@ -3062,7 +3052,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 printf("scanpoly (TODO) 0x%04x %i\n", VIN, nIN);
                 for(int i=0; i<nIN; i++)
                 {
-                    //printf("%i %i\n", Read16(VIN + i*4 + 0), Read16(VIN + i*4 + 2));
+                    printf("%i %i\n", (int16_t)Read16(VIN + i*4 + 0), (int16_t)Read16(VIN + i*4 + 2));
                 }
                 /*
                 for(int i=44; i<114; i++)
@@ -3530,8 +3520,30 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             // Should be replaced entirely by circle and ellipse commands.
             printf("LFILLPOLY (TODO)\n");
-            PrintCallstacktrace(bx);
+            // PrintCallstacktrace(bx);
             //assert(false);
+
+            #if 0
+            auto YMIN = Read16(0x5738);
+            auto YMAX = Read16(0x5745);
+            auto SCAN = Read16(0x57D9);
+
+            auto bufseg = Read16(0x5648); // BUF-SEG
+            uint8_t color = Read8(0x55F2);
+
+            auto delta = YMAX - YMIN;
+
+            for(uint16_t i = 0; i <= delta; ++i)
+            {
+                auto y = YMIN + i;
+                auto xl = Read8(SCAN + (i * 2));
+                auto xr = Read8(SCAN + (i * 2) + 1);
+                for(uint16_t x = xl; x <= xr; ++x)
+                {
+                    GraphicsPixel(x, y, color, bufseg);
+                }
+            }
+            #endif
         }
         break;
 
@@ -3640,7 +3652,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             int color = Read16(0x55F2); // COLOR
             printf("bfill (TODO) color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
-            GraphicsClear(color, Read16(0x5648));
+            GraphicsClear(color, Read16(0x5648), Read16(0x5656));
         }
         break;
 
@@ -5086,8 +5098,43 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xdd2c:
             {
-
+                printf("Unfinished 0xdd2c\n");
                 uint16_t ax, cx, dx;
+
+                // seg000:DCE4                 mov     ax, cx
+                // seg000:DCE6                 retn
+                // seg000:DCE7 ; ---------------------------------------------------------------------------
+                // seg000:DCE7                 sub     [di], bx
+                // seg000:DCE9                 mov     ax, dx
+                // seg000:DCEB                 add     ax, cx
+                // seg000:DCED                 inc     ax
+                // seg000:DCEE                 sar     ax, 1
+                // seg000:DCF0                 add     ax, cx
+                // seg000:DCF2                 inc     ax
+                // seg000:DCF3                 sar     ax, 1
+                // seg000:DCF5                 retn
+                // seg000:DCF6 ; ---------------------------------------------------------------------------
+                // seg000:DCF6                 sub     [di], bx
+                // seg000:DCF8                 mov     ax, dx
+                // seg000:DCFA                 add     ax, cx
+                // seg000:DCFC                 inc     ax
+                // seg000:DCFD                 sar     ax, 1
+                // seg000:DCFF                 retn
+                // seg000:DD00 ; ---------------------------------------------------------------------------
+                // seg000:DD00                 sub     [di], bx
+                // seg000:DD02                 mov     ax, dx
+                // seg000:DD04                 add     ax, cx
+                // seg000:DD06                 inc     ax
+                // seg000:DD07                 sar     ax, 1
+                // seg000:DD09                 add     ax, dx
+                // seg000:DD0B                 inc     ax
+                // seg000:DD0C                 sar     ax, 1
+                // seg000:DD0E                 retn
+                // seg000:DD0F ; ---------------------------------------------------------------------------
+                // seg000:DD0F                 sub     [di], bx
+                // seg000:DD11                 mov     ax, dx
+                // seg000:DD13                 retn
+
                 // seg000:DD20                 shl     bx, 1
                 // seg000:DD22                 add     bx, 0DD14h
                 // seg000:DD26                 mov     ax, [bx]
@@ -5098,6 +5145,28 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     bx += 0xDD14;
                     uint16_t addr = Read16(bx);
                     printf("Jump to address cs:0x%x\n", addr);
+                    switch(addr)
+                    {
+                        case 0xDCE4:
+                            // mov ax, cx
+                            ax = cx;
+                            break;
+                        case 0xDCE7:
+                            assert(false);
+                            break;
+                        case 0xDCF6:
+                            assert(false);
+                            break;
+                        case 0xDD00:
+                            assert(false);
+                            break;
+                        case 0xDD0F:
+                            assert(false);
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
                 };
 
                 Write16(0xDC24, Pop()); // pop word ptr [DC24]
@@ -5207,7 +5276,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 Push(dx); // push   dx
             }
             break;
-        case 0x9097: // SQLPLOT
+        case 0x9097: // SQLPLOT - square plot, used for the fracal maps
             {
                 int16_t y = Pop();
                 int16_t x = Pop();
@@ -5244,27 +5313,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xf0ef: pop    ds            
         case 0xf0c1: // |EGA
             {
-                
+                PrintCallstacktrace(bx);
+
                 uint16_t ax;
                 uint16_t cx;
                 uint16_t ds;
                 uint16_t es;
                 uint16_t si;
                 uint16_t di;
-
-                auto COPYLIN = [&]() {
-                    int x = si % 40;
-                    int y = 199 - (si / 40);
-                    for(int i = 0; i < 65; ++i)
-                    {
-                        for (int j = 0; j < 160; ++j)
-                        {
-                            auto c = GraphicsPeek(x + j, y - i, ds);
-                            GraphicsPixel(x + j, y - i, c, es);
-                        }
-                    }
-                };
-
 
                 cx = Pop(); // pop    cx
                 ax = Read16(0x55E6); // mov    ax,[55E6] // DBUF-SEG
@@ -5281,7 +5337,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 es = ax; // mov    es,ax
                 ds = dx; // mov    ds,dx
                 cx = 0x0A28; // mov    cx,0A28
-                COPYLIN(); // call   8E32
+                
+                GraphicsCopyLine(es, ds, si, di, cx);
             }
             break;
         case 0xe16b:
