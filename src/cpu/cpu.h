@@ -1,6 +1,10 @@
 #ifndef CPU_H
 #define CPU_H
 
+#include <stdint.h>
+
+constexpr uint16_t StarflightBaseSegment = 0x192;
+
 extern unsigned char *mem;
 extern unsigned char m[1024*1024];
 extern unsigned short regsp;

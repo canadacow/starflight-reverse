@@ -31,7 +31,7 @@ unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
 
 void Write8(unsigned short offset, unsigned char x)
 {
-    mem[offset] = x;
+    Write8Long(StarflightBaseSegment, offset, x);
 }
 
 void Write8Long(unsigned short s, unsigned short o, unsigned char x)
@@ -43,16 +43,14 @@ void Write8Long(unsigned short s, unsigned short o, unsigned char x)
 
 void Write16(unsigned short offset, unsigned short x)
 {
-    mem[offset+0] = (x>>0)&0xFF;
-    mem[offset+1] = (x>>8)&0xFF;
+    Write8(offset, (x>>0)&0xFF);
+    Write8(offset+1, (x>>8)&0xFF);
 }
 
 void Write16Long(unsigned short s, unsigned short o, unsigned short x)
 {
-    unsigned long addr = ComputeAddress(s, o);
- 
-    m[addr+0] = x&0xFF;
-    m[addr+1] = x>>8;
+    Write8Long(s, o, x&0xFF);
+    Write8Long(s, o +1, x>>8);
 }
 
 unsigned char Read8(unsigned short offset)
@@ -97,7 +95,7 @@ unsigned short Pop()
 void InitCPU()
 {
     memset(m, 0, 1024*1024);
-    mem = &m[0x192 << 4];
+    mem = &m[StarflightBaseSegment << 4];
 }
 
 

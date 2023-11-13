@@ -18,7 +18,7 @@ find_package(Zstd CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
 
 set_source_files_properties(
-    src/cpu/cpu.c 
+    src/cpu/cpu.cpp 
     src/emul/callstack.c 
     src/disasOV/global.c 
     src/emul/fract.c
@@ -28,7 +28,7 @@ set_source_files_properties(
 add_executable(emulatesdl 
     src/emul/emul.cpp 
     src/emul/call.cpp 
-    src/cpu/cpu.c 
+    src/cpu/cpu.cpp
     src/emul/findword.cpp 
     src/emul/callstack.c 
     src/disasOV/global.c 

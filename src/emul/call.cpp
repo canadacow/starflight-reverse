@@ -28,8 +28,8 @@
 
 unsigned int debuglevel = 0;
 
-const unsigned short cs = 0x192;
-const unsigned short ds = 0x192;
+const unsigned short cs = StarflightBaseSegment;
+const unsigned short ds = StarflightBaseSegment;
 
 unsigned short int regdi = REGDI; // points to word "OPERATOR"
 unsigned short int cx = 0x0;
@@ -3057,7 +3057,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 printf("scanpoly (TODO) 0x%04x %i\n", VIN, nIN);
                 for(int i=0; i<nIN; i++)
                 {
-                    printf("%i %i\n", (int16_t)Read16(VIN + i*4 + 0), (int16_t)Read16(VIN + i*4 + 2));
+                    printf("    %i %i\n", (int16_t)Read16(VIN + i*4 + 0), (int16_t)Read16(VIN + i*4 + 2));
                 }
                 /*
                 for(int i=44; i<114; i++)
@@ -4044,7 +4044,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             //printf("cmove: copy 0x%04x to 0x%04x size=%i\n", src, dst, cx);
             for(i=0; i<cx; i++)
             {
-                mem[dst+i] = mem[src+i];
+                Write8(dst + i, Read8(src + i));
             }
         }
         break;
@@ -5015,6 +5015,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 Write16(0xDC0C, ax); // WDC0C
                 si += 2;
 
+                //printf("Vertex %d, %d, %d, %d\n", dh, dl, bh, ax);
+
                 do {
                     Push(si);
                     Push(cx);
@@ -5031,18 +5033,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     do {
                         al = Read8Long(es, si);
+                        //printf("  %d ", al);
                         si++;
-                        ax = al * dh;
+                        ax = (int16_t)al * (int16_t)dh;
                         bp += ax;
                         al = Read8Long(es, si);
+                        //printf("  %d ", al);
                         si++;
-                        ax = al * dl;
+                        ax = (int16_t)al * (int16_t)dl;
                         bp += ax;
                         al = Read8Long(es, si);
+                        //printf("  %d\n", al);
                         si++;
-                        ax = al * bh;
+                        ax = (int16_t)al * (int16_t)bh;
                         bp += ax;
                         Write16Long(es, di, bp);
+                        //printf("  wrote %d\n", bp);
                         di += 6;
                         cx--;
                     } while (cx != 0);
@@ -5104,7 +5110,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xdd2c:
             {
-                printf("Unfinished 0xdd2c\n");
+                printf("Unfinished 0xdd2c?\n");
                 uint16_t ax, cx, dx;
 
                 // seg000:DCE4                 mov     ax, cx
@@ -5150,7 +5156,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     bx <<= 1;
                     bx += 0xDD14;
                     uint16_t addr = Read16(bx);
-                    printf("Jump to address cs:0x%x\n", addr);
                     switch(addr)
                     {
                         case 0xDCE4:
@@ -5158,15 +5163,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             ax = cx;
                             break;
                         case 0xDCE7:
+                            printf("Jump to address cs:0x%x\n", addr);
                             assert(false);
                             break;
                         case 0xDCF6:
+                            printf("Jump to address cs:0x%x\n", addr);
                             assert(false);
                             break;
                         case 0xDD00:
+                            printf("Jump to address cs:0x%x\n", addr);
                             assert(false);
                             break;
                         case 0xDD0F:
+                            printf("Jump to address cs:0x%x\n", addr);
                             assert(false);
                             break;
                         default:
