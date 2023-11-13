@@ -5,6 +5,8 @@
 #include <string>
 #include <algorithm>
 
+#include <unordered_map>
+
 #include"../cpu/cpu.h"
 #include"callstack.h"
 #include"../disasOV/global.h"
@@ -40,9 +42,28 @@ int FindClosestWord(int si, int ovidx)
 // ugly code to get our own overlay index from the address in the star file
 int GetOverlayIndex(int address, const char** overlayName)
 {
-    if (address == 0) 
+    struct OverlayData
     {
-        return -1;
+        std::string name;
+        int index;
+    };
+
+    static std::unordered_map<int, OverlayData> overlapMap;
+
+    if(overlapMap.empty())
+    {
+        overlapMap[0] = {"", -1};
+    }
+
+    auto it = overlapMap.find(address);
+
+    if(it != overlapMap.end())
+    {
+        if(overlayName != nullptr)
+        {
+            *overlayName = it->second.name.c_str();
+        }
+        return it->second.index;
     }
 
     for(int i = 0; dir[i].name != NULL; i++)
@@ -54,11 +75,17 @@ int GetOverlayIndex(int address, const char** overlayName)
             {
                 if (overlays[j].id == idx) 
                 {
+                    OverlayData od{};
+                    od.index = j;
+                    od.name = std::string(overlays[j].name);
+                    auto itNew = overlapMap.emplace(address, od);
+
                     if(overlayName != nullptr)
                     {
-                        *overlayName = overlays[j].name;
+                        *overlayName = itNew.first->second.name.c_str();
                     }
-                    return j;
+
+                    return od.index;
                 }
             }
         }

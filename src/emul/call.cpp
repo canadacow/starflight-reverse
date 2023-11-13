@@ -1364,7 +1364,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     nparmsStackSi = regsi;
                 }
 
-                if(nextInstr == 0xa0f0)
+                if(nextInstr == 0xe7ec)
+                {
+                    // -ENDURIUM
+                    // Do nothing as this prevents expending fuel
+                }
+                else if(nextInstr == 0xa0f0)
                 {
                     POLY_WINDOW_FILL();
                 }
@@ -4803,7 +4808,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xee8a: push   word ptr [bx]
 // 0xee8c: push   ax
 // 0xee8d: mov    es,cx       
-        case 0xee65:
+        case 0xee65: // PUSH-POLY
             {
                 auto dx = Read16(0x5DA3); // ?EGA
                 dx &= 0x01;
@@ -4988,7 +4993,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xe220: pop    di
         case 0xe1b6:
             {
-                uint16_t di, si, cx, es;
+                uint16_t di, si, es;
+                int16_t cx;
                 int16_t bp;
                 int16_t ax;
                 int8_t& al = reinterpret_cast<int8_t*>(&ax)[0];
@@ -4997,7 +5003,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int8_t& dl = reinterpret_cast<int8_t*>(&dx)[0];
                 int8_t& dh = reinterpret_cast<int8_t*>(&dx)[1];
 
-                si = Read16(0xDCC2);
+                si = 0xDCC2;
                 cx = 0x0003;
                 dh = Read8(si);
                 si += 2;
@@ -5391,9 +5397,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 uint16_t len = Pop();
                 uint16_t yul = Pop();
                 uint16_t xul = Pop();
+                #if 0
                 printf("TILEFILL xul %u yul %u len %u width %u\n",
                     xul, yul,
                     len, width);
+                #endif
 
                 yul -= 7;
 

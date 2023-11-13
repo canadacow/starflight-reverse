@@ -427,6 +427,39 @@ public:
         {
             return 336;
         }
+        if (sym == SDLK_KP_8)
+        {
+            return 328;
+        }
+        if (sym == SDLK_KP_2)
+        {
+            return 336;
+        }
+        if (sym == SDLK_KP_4)
+        {
+            return 331;
+        }
+        if (sym == SDLK_KP_6)
+        {
+            return 333;
+        }
+        if (sym == SDLK_KP_7)
+        {
+            return 327;
+        }
+        if (sym == SDLK_KP_9)
+        {
+            return 329;
+        }
+        if (sym == SDLK_KP_1)
+        {
+            return 335;
+        }
+        if (sym == SDLK_KP_3)
+        {
+            return 337;
+        }
+
         return sym;
     }
 
