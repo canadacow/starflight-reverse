@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw
 import numpy as np
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import distance_transform_edt, zoom
 
 font_table = {
     ' ': 0x0000, '!': 0x4904, '"': 0xB400, '#': 0xFFFF,
@@ -20,23 +20,28 @@ font_table = {
     'X': 0xB55A, 'Y': 0xB7A4, 'Z': 0xE54E
 }
 
-def draw_char(draw, c, start_x, start_y):
+def draw_char(c):
     bitmap = font_table[c]
+    img = np.full((7, 5), 255)  # Increased size for border and initialized to 255
     n = 0
-    for y in range(5):
-        for x in range(3):
-            color = 0 if bitmap & (1 << (15-n)) else 255
-            draw.point((start_x + x, start_y + y), fill=color)
+    for y in range(1, 6):  # Adjusted range for border
+        for x in range(1, 4):  # Adjusted range for border
+            img[y, x] = 0 if bitmap & (1 << (15-n)) else 255
             n += 1
+    return img
 
-img = Image.new('L', (14*4, 6*5), color=255)
-draw = ImageDraw.Draw(img)
+def draw_string(s):
+    # Convert the string to uppercase
+    s = s.upper()
+    # Draw each character and concatenate
+    imgs = [draw_char(c) for c in s]
+    return np.concatenate(imgs, axis=1)
 
-for i, c in enumerate(font_table.keys()):
-    draw_char(draw, c, (i%14)*4, (i//14)*6)
+# Draw the string
+img = draw_string('Hello World')
 
 # Convert the image to a binary array
-binary_img = np.array(img) < 128
+binary_img = img < 128
 
 # Compute the distance transform
 dist_transform = distance_transform_edt(binary_img)
@@ -44,7 +49,17 @@ dist_transform = distance_transform_edt(binary_img)
 # Normalize the distance transform to the range [0, 255]
 dist_transform = (dist_transform / dist_transform.max()) * 255
 
-# Convert the distance transform back to an image
-sdf_img = Image.fromarray(dist_transform.astype(np.uint8))
+# Scale up the distance transform
+scale_factor = 20
+large_sdf = zoom(dist_transform, scale_factor)
 
-sdf_img.save('font_sdf.png')
+# Threshold the SDF to create a binary image
+large_img = large_sdf > 128
+
+# Convert the binary image back to an 8-bit grayscale image
+large_img = Image.fromarray(large_img.astype(np.uint8) * 255)
+
+# Save the original character image, the SDF, and the final output
+Image.fromarray(img.astype(np.uint8)).save('original_string.png')
+Image.fromarray(dist_transform.astype(np.uint8)).save('sdf_string.png')
+large_img.save('large_string.png')
