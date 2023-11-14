@@ -27,4 +27,7 @@ unsigned short Pop();
 
 void InitCPU();
 
+// Actual 8086 emulator, exposed in 8086emu.cpp
+void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t regSp, uint8_t* systemMemory);
+
 #endif

@@ -3052,12 +3052,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x8891: // SCANPOLY TODO
             //fprintf(stderr, "SCANPOLY TODO\n");
             {
+                Run8086(cs, 0x8891, 0x8990, regsp, m);
+                #if 0
+                auto bufseg = Read16(0x5648); // BUF-SEG
+                uint8_t color = Read8(0x55F2);
+
+
                 int VIN = Read16(0x569B);
                 int nIN = Read16(0x5686);
                 printf("scanpoly (TODO) 0x%04x %i\n", VIN, nIN);
                 for(int i=0; i<nIN; i++)
                 {
-                    printf("    %i %i\n", (int16_t)Read16(VIN + i*4 + 0), (int16_t)Read16(VIN + i*4 + 2));
+                    int16_t x = (int16_t)Read16(VIN + i*4 + 0);
+                    int16_t y = (int16_t)Read16(VIN + i*4 + 2);
+
+                    printf("    %i %i\n", x, y);
+                    GraphicsPixel(x, y, color, bufseg);
                 }
                 /*
                 for(int i=44; i<114; i++)
@@ -3066,6 +3076,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsPixel(i, j, 0xF);
                 }
                 */
+               #endif
             }
             //GraphicsUpdate();
             //exit(1);

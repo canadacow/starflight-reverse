@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw
 import numpy as np
-from scipy.ndimage import distance_transform_edt, zoom
+from scipy.ndimage import distance_transform_edt, zoom, distance_transform_cdt
 
 font_table = {
     ' ': 0x0000, '!': 0x4904, '"': 0xB400, '#': 0xFFFF,
@@ -22,11 +22,13 @@ font_table = {
 
 def draw_char(c):
     bitmap = font_table[c]
-    img = np.full((7, 5), 255)  # Increased size for border and initialized to 255
+    img = np.full((8, 7), 255)  # Adjusted size for border and doubled horizontal pixels
     n = 0
-    for y in range(1, 6):  # Adjusted range for border
-        for x in range(1, 4):  # Adjusted range for border
-            img[y, x] = 0 if bitmap & (1 << (15-n)) else 255
+    for y in range(1, 6):  # Range for border
+        for x in range(1, 7, 2):  # Range for border and step for doubled horizontal pixels
+            pixel = 0 if bitmap & (1 << (15-n)) else 255
+            img[y, x] = pixel
+            img[y, x+1] = pixel  # Duplicate the pixel horizontally
             n += 1
     return img
 
@@ -35,26 +37,29 @@ def draw_string(s):
     s = s.upper()
     # Draw each character and concatenate
     imgs = [draw_char(c) for c in s]
+    # Add a column of white pixels between each character
+    imgs = [np.hstack([img, np.full((8, 1), 255)]) for img in imgs]
     return np.concatenate(imgs, axis=1)
 
 # Draw the string
-img = draw_string('Hello World')
+img = draw_string('LOG PLASTIC')
 
 # Convert the image to a binary array
 binary_img = img < 128
 
 # Compute the distance transform
-dist_transform = distance_transform_edt(binary_img)
+# dist_transform = distance_transform_edt(binary_img)
+dist_transform = distance_transform_cdt(binary_img, metric='chessboard')
 
 # Normalize the distance transform to the range [0, 255]
 dist_transform = (dist_transform / dist_transform.max()) * 255
 
 # Scale up the distance transform
-scale_factor = 20
+scale_factor = 10
 large_sdf = zoom(dist_transform, scale_factor)
 
 # Threshold the SDF to create a binary image
-large_img = large_sdf > 128
+large_img = large_sdf > 80
 
 # Convert the binary image back to an 8-bit grayscale image
 large_img = Image.fromarray(large_img.astype(np.uint8) * 255)

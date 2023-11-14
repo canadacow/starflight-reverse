@@ -1152,17 +1152,6 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormo
                 {
                     GraphicsPixel(x0, y0, color, offset);
                 }
-
-                //if(pixel)
-                //{
-                //    //printf("█");
-                //    hasPixel = true;
-                //}
-            }
-
-            if(!hasPixel)
-            {
-                //printf("░");
             }
             
             n++;
@@ -1172,9 +1161,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormo
                 img++;
             }
         }
-        //printf("\n");
     }
-    //GraphicsUpdate();
 }
 
 bool GraphicsHasKey()

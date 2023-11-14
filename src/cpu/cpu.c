@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "../emul/callstack.h"
 
-unsigned char m[1024*1024];
+unsigned char m[0x10FFF0];
 unsigned char *mem;
 unsigned short regsp;
 unsigned short regbp;

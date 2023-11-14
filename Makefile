@@ -6,8 +6,8 @@ LIBS = -lxxhash -lzstd -lpthread
 all: emulatesdl
 
 
-emulatesdl: src/emul/emul.cpp src/emul/call.cpp src/cpu/cpu.cpp src/emul/findword.cpp src/emul/callstack.c src/disasOV/global.c src/emul/graphics.cpp src/emul/fract.c
-	$(CXX) $(CFLAGS) -DSTARFLT1 -DSDL src/emul/emul.cpp src/emul/call.cpp src/emul/findword.cpp src/emul/callstack.c src/cpu/cpu.cpp src/disasOV/global.c src/emul/graphics.cpp src/emul/fract.c -o emulatesdl -lSDL2 $(LIBS)
+emulatesdl: src/emul/emul.cpp src/emul/call.cpp src/cpu/cpu.cpp src/cpu/8086emu.cpp src/emul/findword.cpp src/emul/callstack.c src/disasOV/global.c src/emul/graphics.cpp src/emul/fract.c
+	$(CXX) $(CFLAGS) -DSTARFLT1 -DSDL src/emul/emul.cpp src/emul/call.cpp src/emul/findword.cpp src/emul/callstack.c src/cpu/cpu.cpp src/cpu/8086emu.cpp src/disasOV/global.c src/emul/graphics.cpp src/emul/fract.c -o emulatesdl -lSDL2 $(LIBS)
 
 .PHONY: clean all
 

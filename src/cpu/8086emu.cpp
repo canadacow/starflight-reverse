@@ -9,6 +9,11 @@
 #include <sys/timeb.h>
 #include <memory.h>
 
+#include <stdint.h>
+#include <assert.h>
+
+#include "bios.h"
+
 #ifndef _WIN32
 #include <unistd.h>
 #include <fcntl.h>
@@ -145,10 +150,15 @@
 
 
 // Global variable definitions
-unsigned char mem[RAM_SIZE], io_ports[IO_PORT_COUNT], *opcode_stream, *regs8, i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit, raw_opcode_id, xlat_opcode_id, extra, rep_mode, seg_override_en, rep_override_en, trap_flag, int8_asap, scratch_uchar, io_hi_lo, *vid_mem_base, spkr_en, bios_table_lookup[20][256];
-unsigned short *regs16, reg_ip, seg_override, file_index, wave_counter;
-unsigned int op_source, op_dest, rm_addr, op_to_addr, op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint, inst_counter, set_flags_type, GRAPHICS_X, GRAPHICS_Y, pixel_colors[16], vmem_ctr;
-int op_result, disk[3], scratch_int;
+static uint8_t* mem;
+static uint8_t io_ports[IO_PORT_COUNT];
+static uint8_t *opcode_stream;
+static uint8_t *regs8;
+uint8_t i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit, raw_opcode_id, xlat_opcode_id, extra, rep_mode, seg_override_en, rep_override_en, trap_flag, int8_asap, scratch_uchar, io_hi_lo, *vid_mem_base, spkr_en, bios_table_lookup[20][256];
+static uint16_t *regs16;
+uint16_t reg_ip, seg_override, file_index, wave_counter;
+uint32_t op_source, op_dest, rm_addr, op_to_addr, op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint, inst_counter, set_flags_type, GRAPHICS_X, GRAPHICS_Y, pixel_colors[16], vmem_ctr;
+int32_t op_result, disk[3], scratch_int;
 time_t clock_buf;
 struct timeb ms_clock;
 
@@ -230,8 +240,9 @@ int AAA_AAS(char which_operation)
 }
 
 // Emulator entry point
-int main(int argc, char **argv)
+void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t regSp, uint8_t* systemMemory)
 {
+    mem = systemMemory;
 
 	// regs16 and reg8 point to F000:0, the start of memory-mapped registers. CS is initialised to F000
 	regs16 = (unsigned short *)(regs8 = mem + REGS_BASE);
@@ -240,28 +251,24 @@ int main(int argc, char **argv)
 	// Trap flag off
 	regs8[FLAG_TF] = 0;
 
-	// Set DL equal to the boot device: 0 for the FD, or 0x80 for the HD. Normally, boot from the FD.
-	// But, if the HD image file is prefixed with @, then boot from the HD
-	regs8[REG_DL] = ((argc > 3) && (*argv[3] == '@')) ? argv[3]++, 0x80 : 0;
-
-	// Open BIOS (file id disk[2]), floppy disk image (disk[1]), and hard disk image (disk[0]) if specified
-	for (file_index = 3; file_index;)
-		disk[--file_index] = *++argv ? open(*argv, 32898) : 0;
-
-	// Set CX:AX equal to the hard disk image size, if present
-	CAST(unsigned)regs16[REG_AX] = *disk ? lseek(*disk, 0, 2) >> 9 : 0;
-
-	// Load BIOS image into F000:0100, and set IP to 0100
-	read(disk[2], regs8 + (reg_ip = 0x100), 0xFF00);
+	// Load BIOS from the bios array into F000:0100, and set IP to 0100
+	memcpy(regs8 + (reg_ip = 0x100), bios, sizeof(bios));
 
 	// Load instruction decoding helper table
 	for (int i = 0; i < 20; i++)
 		for (int j = 0; j < 256; j++)
 			bios_table_lookup[i][j] = regs8[regs16[0x81 + i] + j];
 
+    regs16[REG_CS] = cs;
+    reg_ip = ip;
+    regs16[REG_SP] = regSp;
+
 	// Instruction execution loop. Terminates if CS:IP = 0:0
-	for (; opcode_stream = mem + 16 * regs16[REG_CS] + reg_ip, opcode_stream != mem;)
+	for (;;)
 	{
+        printf("reg_ip 0x%x\n", reg_ip);
+        opcode_stream = mem + 16 * regs16[REG_CS] + reg_ip;
+
 		// Set up variables to prepare for decoding an opcode
 		set_opcode(*opcode_stream);
 
@@ -685,7 +692,8 @@ int main(int argc, char **argv)
 		// then process the tick and check for new keystrokes
 		if (int8_asap && !seg_override_en && !rep_override_en && regs8[FLAG_IF] && !regs8[FLAG_TF])
 			pc_interrupt(0xA), int8_asap = 0, KEYBOARD_DRIVER;
-	}
 
-	return 0;
+        if(reg_ip == ipEnd)
+            break;
+	}
 }
