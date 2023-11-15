@@ -222,6 +222,19 @@ void set_opcode(unsigned char opcode)
 // Execute INT #interrupt_num on the emulated machine
 char pc_interrupt(unsigned char interrupt_num)
 {
+    if(interrupt_num == 0)
+    {
+        printf("Divide by zero interrupt in 8086 emulator\n");
+        // Divide by zero interrupt
+        regs16[REG_AX] = 0;
+        regs16[REG_DX] = 0;
+    }
+    else
+    {
+        printf("8086 emulator got %d interrupt\n", interrupt_num);
+    }
+
+    #if 0
 	set_opcode(0xCD); // Decode like INT
 
 	make_flags();
@@ -232,6 +245,9 @@ char pc_interrupt(unsigned char interrupt_num)
 	R_M_OP(reg_ip, =, mem[4 * interrupt_num]);
 
 	return regs8[FLAG_TF] = regs8[FLAG_IF] = 0;
+    #endif
+
+    return 0;
 }
 
 // AAA and AAS instructions - which_operation is +1 for AAA, and -1 for AAS
@@ -273,7 +289,7 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss,
 	{
         opcode_stream = mem + (16 * regs16[REG_CS]) + reg_ip;
 
-        disassemble(regs16[REG_CS], reg_ip, mem, 1);
+        //disassemble(regs16[REG_CS], reg_ip, mem, 1);
 
 		// Set up variables to prepare for decoding an opcode
 		set_opcode(*opcode_stream);

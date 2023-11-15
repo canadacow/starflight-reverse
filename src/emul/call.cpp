@@ -3050,37 +3050,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x8891: // SCANPOLY TODO
-            //fprintf(stderr, "SCANPOLY TODO\n");
             {
-                PrintCallstacktrace(bx);
                 Run8086(cs, 0x8891, 0x8990, ds, cs, &regsp);
-                #if 0
-                auto bufseg = Read16(0x5648); // BUF-SEG
-                uint8_t color = Read8(0x55F2);
-
-
-                int VIN = Read16(0x569B);
-                int nIN = Read16(0x5686);
-                printf("scanpoly (TODO) 0x%04x %i\n", VIN, nIN);
-                for(int i=0; i<nIN; i++)
-                {
-                    int16_t x = (int16_t)Read16(VIN + i*4 + 0);
-                    int16_t y = (int16_t)Read16(VIN + i*4 + 2);
-
-                    printf("    %i %i\n", x, y);
-                    GraphicsPixel(x, y, color, bufseg);
-                }
-                /*
-                for(int i=44; i<114; i++)
-                for(int j=192; j<199; j++)
-                {
-                    GraphicsPixel(i, j, 0xF);
-                }
-                */
-               #endif
             }
-            //GraphicsUpdate();
-            //exit(1);
         break;
         case 0x90ad: // V>DISPLAY
         {
@@ -4932,6 +4904,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xdf1b: push   ax
         case 0xdf13:
             {
+                Run8086(cs, 0xdf13, 0xdf1c, ds, cs, &regsp);
+                #if 0
                 uint16_t dx = Pop();
                 uint16_t cx = Pop();
                 uint16_t ax = Pop();
@@ -4952,131 +4926,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
 
                 Push(quotient);
+                #endif
             }   
             break;
-// 0xe1b6: push   di
-// 0xe1b7: push   bp
-// 0xe1b8: push   si
-// 0xe1b9: mov    si,DCC2
-// 0xe1bc: mov    cx,0003
-// 0xe1bf: mov    dh,[si]
-// 0xe1c1: add    si,02
-// 0xe1c4: mov    dl,[si]
-// 0xe1c6: add    si,02
-// 0xe1c9: mov    bh,[si]
-// 0xe1cb: add    si,02
-// 0xe1ce: mov    ax,[si]
-// 0xe1d0: mov    [DC0C],ax // WDC0C
-// 0xe1d4: add    si,02
-// 0xe1d7: push   si
-// 0xe1d8: push   cx
-// 0xe1d9: sub    cx,03
-// 0xe1dc: neg    cx
-// 0xe1de: shl    cx,1
-// 0xe1e0: add    cx,[56A6] // VOUT
-// 0xe1e4: mov    di,cx
-// 0xe1e6: mov    si,[5DDE] // VIN'
-// 0xe1ea: push   es
-// 0xe1eb: mov    cx,[5DD3] // 3DSEG
-// 0xe1ef: mov    es,cx
-// 0xe1f1: mov    cx,[5686] // #IN
-// 0xe1f5: mov    bp,[DC0C] // WDC0C
-// 0xe1f9: es:    
-// 0xe1fa: mov    al,[si]
-// 0xe1fc: inc    si
-// 0xe1fd: imul   dh
-// 0xe1ff: add    bp,ax
-// 0xe201: es:    
-// 0xe202: mov    al,[si]
-// 0xe204: inc    si
-// 0xe205: imul   dl
-// 0xe207: add    bp,ax
-// 0xe209: es:    
-// 0xe20a: mov    al,[si]
-// 0xe20c: inc    si
-// 0xe20d: imul   bh
-// 0xe20f: add    bp,ax
-// 0xe211: es:    
-// 0xe212: mov    [di],bp
-// 0xe214: add    di,06
-// 0xe217: loop   E1F5
-// 0xe219: pop    es
-// 0xe21a: pop    cx
-// 0xe21b: pop    si
-// 0xe21c: loop   E1BF
-// 0xe21e: pop    si
-// 0xe21f: pop    bp
-// 0xe220: pop    di
         case 0xe1b6:
             {
-                uint16_t di, si, es;
-                int16_t cx;
-                int16_t bp;
-                int16_t ax;
-                int8_t& al = reinterpret_cast<int8_t*>(&ax)[0];
-                int8_t& bl = reinterpret_cast<int8_t*>(&bx)[0];
-                int8_t& bh = reinterpret_cast<int8_t*>(&bx)[1];
-                int8_t& dl = reinterpret_cast<int8_t*>(&dx)[0];
-                int8_t& dh = reinterpret_cast<int8_t*>(&dx)[1];
-
-                si = 0xDCC2;
-                cx = 0x0003;
-                dh = Read8(si);
-                si += 2;
-                dl = Read8(si);
-                si += 2;
-                bh = Read8(si);
-                si += 2;
-                ax = Read16(si);
-                Write16(0xDC0C, ax); // WDC0C
-                si += 2;
-
-                //printf("Vertex %d, %d, %d, %d\n", dh, dl, bh, ax);
-
-                do {
-                    Push(si);
-                    Push(cx);
-                    cx -= 3;
-                    cx = -cx;
-                    cx <<= 1;
-                    cx += Read16(0x56A6); // VOUT
-                    di = cx;
-                    si = Read16(0x5DDE); // VIN'
-                    cx = Read16(0x5DD3); // 3DSEG
-                    es = cx;
-                    cx = Read16(0x5686); // #IN
-                    bp = (int16_t)Read16(0xDC0C); // WDC0C
-
-                    do {
-                        al = Read8Long(es, si);
-                        //printf("  %d ", al);
-                        si++;
-                        ax = (int16_t)al * (int16_t)dh;
-                        bp += ax;
-                        al = Read8Long(es, si);
-                        //printf("  %d ", al);
-                        si++;
-                        ax = (int16_t)al * (int16_t)dl;
-                        bp += ax;
-                        al = Read8Long(es, si);
-                        //printf("  %d\n", al);
-                        si++;
-                        ax = (int16_t)al * (int16_t)bh;
-                        bp += ax;
-                        Write16Long(es, di, bp);
-                        //printf("  wrote %d\n", bp);
-                        di += 6;
-                        cx--;
-                    } while (cx != 0);
-
-                    cx = Pop();
-                    si = Pop();
-                    cx--;
-                } while (cx != 0);
+                Run8086(cs, 0xe1b6, 0xe221, ds, cs, &regsp);
             }
             break;
         case 0xe228:
             {
+                Run8086(cs, 0xe228, 0xe273, ds, cs, &regsp);
+                #if 0
                 // FIXME FIXME XXX Divide by zeros happen almost immediately in this function. Normal?
                 uint16_t di = Read16(0x56A6); // VOUT
                 di += 4;
@@ -5116,6 +4977,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     di += 10;
                     cx--;
                 } while (cx != 0);
+                #endif
             }
             break;
 // 0xdf02: mov    [DC20],sp // WDC20            
@@ -5126,6 +4988,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xdd2c:
             {
+                Run8086(cs, 0xdd2c, 0xdd9d, ds, cs, &regsp);
+                #if 0
                 printf("Unfinished 0xdd2c?\n");
                 uint16_t ax, cx, dx;
 
@@ -5241,6 +5105,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 bx = Read16(0xDC28); // mov bx,[DC28]
                 DD20(); // call DD20
                 Push(ax); // push ax
+                #endif
             }
             break;
 // 0xe48c: mov    cx,0004
@@ -5276,6 +5141,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0x9841: // BUFFERXY
             {
+                Run8086(cs, 0x9841, 0x9867, ds, cs, &regsp);
+                #if 0
                 uint16_t cx = Pop(); // pop    cx
                 uint8_t& cl = reinterpret_cast<uint8_t*>(&cx)[0];
                 uint16_t ax = Pop(); // pop    ax
@@ -5305,6 +5172,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 Push(bx); // push   bx
                 Push(dx); // push   dx
+                #endif
             }
             break;
         case 0x9097: // SQLPLOT - square plot, used for the fracal maps
@@ -5372,6 +5240,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xe16b:
             {
+                Run8086(cs, 0xe16b, 0xe1af, ds, cs, &regsp);
+                #if 0
                 uint16_t cx = Read16(0x5DD3); // 3DSEG
                 uint16_t es = cx;
                 uint16_t si = Read16(0x569B); // VIN
@@ -5403,6 +5273,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     si++;
                     di++;
                 }
+                #endif
             }
             break;            
         case 0x1047:
@@ -5496,60 +5367,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0x48dc:
             {
-                // 0x48dc: mov    bx,di
-                // 0x48de: pop    cx
-                // 0x48df: mov    ax,es
-                // 0x48e1: mov    dx,ds
-                // 0x48e3: pop    di
-                // 0x48e4: pop    es
-                // 0x48e5: mov    [48C6],si // ZZZ
-                // 0x48e9: pop    si
-                // 0x48ea: pop    ds
-                // 0x48eb: or     cx,cx
-                // 0x48ed: jz     48F9
-                // 0x48ef: std    
-                // 0x48f0: add    di,cx
-                // 0x48f2: dec    di
-                // 0x48f3: add    si,cx
-                // 0x48f5: dec    si
-                // 0x48f6: repz   
-                // 0x48f7: movsb
-                // 0x48f8: cld    
-                // 0x48f9: mov    es,ax
-                // 0x48fb: mov    ds,dx
-                // 0x48fd: mov    si,[48C6] // ZZZ
-                // 0x4901: mov    di,bx
-
-                uint16_t cx, di, si, es, ds;
-
-                cx = Pop(); // pop    cx
-                di = Pop(); // pop    di
-                es = Pop(); // pop    es
-                si = Pop(); // pop    si
-                ds = Pop(); // pop    ds
-
-                if (cx != 0) // or     cx,cx
-                {           // jz     48F9
-                    // std    
-                    di += cx; // add    di,cx
-                    di--; // dec    di
-                    si += cx; // add    si,cx
-                    si--; // dec    si
-
-                    // repz   
-                    // movsb
-                    for (int i = 0; i < cx; i++) {
-                        uint8_t val = Read8Long(ds, si - i);
-                        Write8Long(es, di - i, val);
-                    }
-
-                    // cld    
-                }
+                Run8086(cs, 0x48dc, 0x4903, ds, cs, &regsp);
             }
             break;
-        case 0x8783:
+        case 0x8783: // CLIPPER
             {
-                // CLIPPER();
+                Run8086(cs, 0x8783, 0x87da, ds, cs, &regsp);
             }
             break;
         default:
