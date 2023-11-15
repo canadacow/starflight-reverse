@@ -615,38 +615,6 @@ void Find() // "(FIND)"
     }
 }
 
-void POLY_WINDOW_FILL()
-{
-    uint16_t color = Pop();
-    uint16_t x1 = Pop();
-    uint16_t y1 = Pop();
-    uint16_t x0 = Pop();
-    uint16_t y0 = Pop();
-
-    if(x0 > x1)
-    {
-        uint16_t temp = x0;
-        x0 = x1;
-        x1 = temp;
-    }
-    if(y0 > y1)
-    {
-        uint16_t temp = y0;
-        y0 = y1;
-        y1 = temp;
-    }
-
-    auto seg = Read16(0x5648);
-
-    for(uint16_t y = y0; y <= y1; ++y)
-    {
-        for(uint16_t x = x0; x <= x1; ++x)
-        {
-            GraphicsPixel(x, y, color, seg);
-        }
-    }
-}
-
 void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int color, int seg, bool fill)
 {
     int XRadiusSq = XRadius * XRadius;
@@ -994,10 +962,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     // -ENDURIUM
                     // Do nothing as this prevents expending fuel
-                }
-                else if(nextInstr == 0xa0f0)
-                {
-                    POLY_WINDOW_FILL();
                 }
                 else if (nextInstr == 0x9632)
                 {
@@ -2774,37 +2738,34 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             Push(ax);
         }
         break;
-        case 0x9055: // LFILLPOLY TODO
+        case 0x9055: // LFILLPOLY 
         {
-            // Should be replaced entirely by circle and ellipse commands.
-            //printf("LFILLPOLY (TODO)\n");
-            //PrintCallstacktrace(bx);
-            //assert(false);
-
-            #if 0
-            auto YMIN = Read16(0x5738);
-            auto YMAX = Read16(0x5745);
+            auto YMIN = Read16(0x57EC);
+            auto YMAX = Read16(0x57F7);
             auto SCAN = Read16(0x57D9);
 
             auto bufseg = Read16(0x5648); // BUF-SEG
             uint8_t color = Read8(0x55F2);
 
-            auto delta = YMAX - YMIN;
+            //printf("LFILLPOLY YMIN %d YMAX %d SCAN 0x%x\n", YMIN, YMAX, SCAN);
 
-            for(uint16_t i = 0; i <= delta; ++i)
+            for(uint16_t y = YMIN; y <= YMAX; ++y)
             {
-                auto y = YMIN + i;
-                auto xl = Read8(SCAN + (i * 2));
-                auto xr = Read8(SCAN + (i * 2) + 1);
-                printf("LFILLPOLY y %d, xl %d, xr %d color %d\n", y, xl, xr, color);
+                // 0x0547: mov    cx,[57EC] // YMIN
+                // 0x0550: shl    cx,1
+                // 0x0552: mov    bx,[57D9] // SCAN
+                // 0x0556: add    bx,cx
+                uint16_t rasterOffset = (y << 1) + SCAN;
 
-                //for(uint16_t x = xl; x <= xr; ++x)
-                for(uint16_t x = 0; x < 80; ++x)
+                auto xl = Read8(rasterOffset);
+                auto xr = Read8(rasterOffset + 1);
+                //printf("LFILLPOLY y %d, xl %d, xr %d color %d\n", y, xl, xr, color);
+
+                for(uint16_t x = xl; x <= xr; ++x)
                 {
-                    GraphicsPixel(x, y, 13, bufseg);
+                    GraphicsPixel(x, y, color, bufseg);
                 }
             }
-            #endif
         }
         break;
 
