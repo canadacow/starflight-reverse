@@ -653,8 +653,8 @@ void DrawELLIPSE()
     auto xdenom = Pop();
     auto xnumer = Pop();
     auto radius = Pop();
-    auto y = Pop();
-    auto x = Pop();
+    auto y = (int16_t)Pop();
+    auto x = (int16_t)Pop();
     printf("DrawELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
     fflush(stdout);
 
@@ -782,8 +782,8 @@ void FILL_ELLIPSE()
     auto xdenom = Pop();
     auto xnumer = Pop();
     auto radius = Pop();
-    auto y = Pop();
-    auto x = Pop();
+    auto y = (int16_t)Pop();
+    auto x = (int16_t)Pop();
     printf("FILL_ELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
     fflush(stdout);
 
@@ -923,346 +923,6 @@ struct RuleMetadata {
 };
 
 #pragma pack(pop)
-
-struct EGAFunctions
-{
-    void TREJECT_00A5()
-    {
-        uint8_t& al = reinterpret_cast<uint8_t*>(&ax)[0];
-        uint8_t& bl = reinterpret_cast<uint8_t*>(&bx)[0];
-        uint8_t& bh = reinterpret_cast<uint8_t*>(&bx)[1];
-        uint8_t& dl = reinterpret_cast<uint8_t*>(&dx)[0];
-
-        Push(di);
-        Push(si);
-
-        bl = 0x0F;
-        bh = 0;
-
-        si = Read16(0x569B); // VIN
-        di = Read16(0x56B0); // OIN
-        uint16_t bp = Read16(0x5752); // IBELOW
-        cx = Read16(0x5686); // #IN
-
-        dx = 0;
-
-        do {
-            ax = Read16(si);
-            si += 2;
-
-            if (ax >= bp) {
-                dx |= 0x04;
-            }
-
-            if (ax <= Read16(0x575F)) { // IABOVE
-                dx |= 0x08;
-            }
-
-            ax = Read16(si);
-            si += 2;
-
-            if (ax >= Read16(0x5738)) { // ILEFT
-                dx |= 0x01;
-            }
-
-            if (ax <= Read16(0x5745)) { // IRIGHT
-                dx |= 0x02;
-            }
-
-            ax = dx;
-            Write8(di, al);
-            di++;
-
-            bl &= dl;
-            bh |= dl;
-
-            cx--;
-        } while (cx != 0);
-
-        ax = 0;
-        ax = bl;
-        Write16(0x56E8, ax); // TRJCT
-
-        ax = bh;
-        Write16(0x56DC, ax); // TACCPT
-
-        si = Pop();
-        di = Pop();
-    }
-
-    void WRITEDO_0246()
-    {
-        uint8_t color = Read8(0x55F2);
-
-        uint16_t x = (bx % 40) * 8;
-        uint16_t y = bx / 40;
-
-        GraphicsPixel(x, y, color, 0);
-    }
-
-    void RLPLOT()
-    {
-        dx += Read16(0x5A6E); // EY
-        ax += Read16(0x5A65); // EX
-        Push(di);
-        Push(ax);
-        Push(dx);
-        bx = Read16(0x569B); // VIN
-        Write16(bx, dx);
-        bx += 2;
-        Write16(bx, ax);
-        bx = 1;
-        Write16(0x5686, bx); // #IN
-        TREJECT_00A5();
-        dx = Pop();
-        ax = Pop();
-        di = Pop();
-        cx = Read16(0x56DC); // TACCPT
-        if (cx != 0) {
-            return;
-        }
-        dx <<= 1;
-        dx += Read16(0x563A); // YTABL
-        Push(dx);
-        Push(ax);
-        ax &= 0x0003;
-        ax <<= 1;
-        bx = 0x92CF;
-        bx += ax;
-        dx = Read16(bx);
-        ax = Pop();
-        ax >>= 1;
-        ax >>= 1;
-        bx = Pop();
-        ax += Read16(bx);
-        bx = ax;
-        Push(es);
-        cx = Read16(0x5648); // BUF-SEG
-        es = cx;
-        WRITEDO_0246();
-        es = Pop();
-    }
-
-    void OneHalf_0B20()
-    {
-        XASP_0B06(); // Sets ax to a quotient value of two numbers in memory
-
-        Push(ax);
-        Push(dx);
-        RLPLOT(); // Function call to RLPLOT
-
-        dx = Pop();
-        ax = Pop();
-        Push(ax);
-        Push(dx);
-        ax = -ax;
-        RLPLOT(); // Function call to RLPLOT
-
-        dx = Pop();
-        ax = Pop();
-        Push(ax);
-        Push(dx);
-        ax = -ax;
-        dx = -dx;
-        RLPLOT(); // Function call to RLPLOT
-
-        dx = Pop();
-        ax = Pop();
-        Push(ax);
-        Push(dx);
-        dx = -dx;
-        RLPLOT(); // Function call to RLPLOT
-
-        dx = Pop();
-        ax = Pop();
-    }
-
-    void S_OneHalf_0B53()
-    {
-        uint8_t& bl = reinterpret_cast<uint8_t*>(&bx)[0];
-
-        // call 0B06
-        XASP_0B06();
-        
-        bx = Read16(0x5A65); // mov bx,[5A65] // EX
-
-        bx += ax;
-
-        if (bx <= Read16(0x5745)) { // cmp bx,[5745] // IRIGHT
-            bx = Read16(0x5745); // mov bx,[5745] // IRIGHT
-        }
-
-        if (bx >= Read16(0x5738)) { // cmp bx,[5738] // ILEFT
-            bx = Read16(0x5738); // mov bx,[5738] // ILEFT
-            bx--;
-        }
-
-        Write8(0x48C7, bl); // mov [48C7],bl
-        
-        bx = Read16(0x5A65); // mov bx,[5A65] // EX
-
-        bx -= ax;
-
-        if (bx >= Read16(0x5738)) { // cmp bx,[5738] // ILEFT
-            bx = Read16(0x5738); // mov bx,[5738] // ILEFT
-        }
-
-        if (bx <= Read16(0x5745)) { // cmp bx,[5745] // IRIGHT
-            bl = Read8(0x48C7); // mov bl,[48C7]
-            bx++;
-        }
-
-        Write8(0x48C6, bl); // mov [48C6],bl // ZZZ
-
-        cx = Read16(0x5A6E); // mov cx,[5A6E] // EY
-
-        cx += dx;
-
-        if (cx <= Read16(0x575F)) { // cmp cx,[575F] // IABOVE
-            if (cx >= Read16(0x5752)) { // cmp cx,[5752] // IBELOW
-                bx = cx;
-                bx <<= 1;
-                bx += Read16(0x57D9); // add bx,[57D9] // SCAN
-                Push(Read16(0x48C6)); // push word ptr [48C6] // ZZZ
-                Write16(bx, Pop()); // pop word ptr [bx]
-            }
-        }
-
-        cx = Read16(0x5A6E); // mov cx,[5A6E] // EY
-        
-        cx -= dx; // sub cx,dx
-        
-        if (cx >= Read16(0x5752)) { // cmp cx,[5752] // IBELOW
-            if (cx <= Read16(0x575F)) { // cmp cx,[575F] // IABOVE
-                bx = cx;
-                bx <<= 1;
-                bx += Read16(0x57D9); // add bx,[57D9] // SCAN
-                Push(Read16(0x48C6)); // push word ptr [48C6] // ZZZ
-                Write16(bx, Pop()); // pop word ptr [bx]
-            }
-        }
-    }
-
-    void SCANELLIP_0BE7()
-    {
-        Push(ax);
-        S_OneHalf_0B53();
-        ax = Pop();
-        std::swap(dx, ax);
-        S_OneHalf_0B53();
-    }
-
-    void ELLIP_0C01()
-    {
-        Push(ax);
-        OneHalf_0B20();
-        ax = Pop();
-        std::swap(dx, ax);
-        OneHalf_0B20();
-    }
-
-    void XASP_0B06()
-    {
-        uint16_t square = Read16(0x5A86); // XNUMER
-        uint16_t xdenom = Read16(0x5A93); // XDENOM
-        int32_t temp = (int32_t)square * (int32_t)square; // imul dx
-        ax = (uint16_t)(temp / xdenom); // idiv cx
-    }
-
-    void EEXTENT()
-    {
-        //Write16(0x6A89, Pop()); // LRTRN
-        //Write16(0x6A8B, Pop()); // LRTRN
-        ax = Read16(0x5A79); // ERAD
-        dx = ax;
-        XASP_0B06();
-        cx = Read16(0x5A65); // EX
-        cx -= ax;
-        Push(cx);
-        cx = Read16(0x5A6E); // EY
-        cx -= dx;
-        Push(cx);
-        cx = Read16(0x5A65); // EX
-        cx += ax;
-        Push(cx);
-        cx = Read16(0x5A6E); // EY
-        cx += dx;
-        Push(cx);
-        //Push(Read16(0x6A8B)); // LRTRN
-        //Push(Read16(0x6A89)); // LRTRN
-    }
-
-    void W0C5A()
-    {
-        uint16_t callAddr = Read16Long(cs, 0x0C5A);
-        switch(callAddr)
-        {
-            case 0xbe7: // ({SCANELLIP} )
-                SCANELLIP_0BE7();
-                break;
-            case 0xc01: // ({.ELLIP} ) '
-                ELLIP_0C01();
-                break;
-            default:
-                printf("ARC? Call addr 0x%x\n", callAddr);
-                //assert(false);
-                break;
-        }
-    }
-
-    void ARC()
-    {
-        printf("TODO ARC\n");
-        ax = Read16(0x5AA0); // <ARC1>
-        Write16Long(cs, 0x0C5A, ax); // W0C5A
-        ax = Read16(0x5A79); // ERAD
-        dx = ax;
-        ax <<= 1;
-        cx = 0x0003;
-        cx -= ax;
-        ax = 0;
-        if (ax >= dx) {
-            goto label0CBE;
-        }
-        do {
-            Push(ax);
-            Push(cx);
-            Push(dx);
-            W0C5A();
-            dx = Pop();
-            cx = Pop();
-            ax = Pop();
-            if (cx >= 0) {
-                cx += 0x06;
-                uint16_t bx = ax;
-                bx <<= 2;
-                cx += bx;
-            } else {
-                cx += 0x0A;
-                uint16_t bx = ax;
-                bx -= dx;
-                bx <<= 2;
-                cx += bx;
-                dx--;
-            }
-            ax++;
-        } while (ax < dx);
-        label0CBE:
-        if (dx != ax) {
-            W0C5A();
-        }
-    }
-
-    uint16_t ax;
-    uint16_t bx;
-    uint16_t cx;
-    uint16_t dx;
-    uint16_t di;
-    uint16_t si;
-    uint16_t es;
-};
-
-EGAFunctions ega{};
 
 extern unsigned short regbx;
 
@@ -3311,14 +2971,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x90c3: // TODO EEXTENT
         {
-            ega.EEXTENT();
             // Should be replaced by actual circle and ellipse functions
             assert(false);
         }
         break;
         case 0x90f9: // TODO ARC
         {
-            ega.ARC();
             // Should be replaced by actual circle and ellipse functions
             assert(false);
         }
@@ -3538,7 +3196,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     }
                 }
             }
-            //GraphicsUpdate();
         }
         break;
 
@@ -3578,9 +3235,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsPixel(x + j, y - i, c, destSeg);
                 }
             }
-
-            //printf("|EGA %i\n", cx);
-            //exit(1);
         }
         break;
 
@@ -4024,53 +3678,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x4892: break; // "CAPSON" Turn on caps
 
-        case 0x6cd6: // TODO E>CGA
+        case 0x6cd6: // E>CGA
         {
-            //printf("TODO E>CGA\n");
-            dx = Pop(); // COLOR
-            dx &= 0x0F;
-            uint16_t ax = 0;
-            uint16_t si = 0x4FDC;
-            for (cx = 0x0010; cx > 0; --cx) {
-                ax = Read8(si--) & 0x000F;
-                if (ax == dx) {
-                    ax = cx;
-                    break;
-                }
-            }
-            si = 0x4FBB + ax - 1;
-            ax = Read8(si++);
-            Push(ax);
+            Run8086(cs, 0x6cd6, 0x6d01, ds, cs, &regsp);
         }
-        
-        // 0x6cd6: pop    dx
-        // 0x6cd7: and    dx,0F
-        // 0x6cda: push   si
-        // 0x6cdb: xor    ax,ax
-        // 0x6cdd: push   ax
-        // 0x6cde: mov    cx,0010
-        // 0x6ce1: std
-        // 0x6ce2: mov    si,4FDC
-        // 0x6ce5: lodsb
-        // 0x6ce6: and    ax,000F
-        // 0x6ce9: cmp    ax,dx
-        // 0x6ceb: jnz    6CF4
-        // 0x6ced: pop    ax
-        // 0x6cee: mov    ax,cx
-        // 0x6cf0: push   ax
-        // 0x6cf1: mov    cx,0001
-        // 0x6cf4: loop   6CE5
-        // 0x6cf6: pop    ax
-        // 0x6cf7: mov    si,4FBB
-        // 0x6cfa: add    si,ax
-        // 0x6cfc: dec    si
-        // 0x6cfd: lodsb
-        // 0x6cfe: pop    si
-        // 0x6cff: cld
-        // 0x6d00: push   ax
-        // 0x6d01: lodsw
-        // 0x6d02: mov    bx,ax
-        // 0x6d04: jmp    word ptr [bx]
         break;
 
         case 0x910f: // TODO L@PIXEL
@@ -4355,17 +3966,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xeeb5: mov    [ED7D],bx // FADDR
         case 0xee96:
             {
-                uint16_t dx = Read16(0x52A2); // POLYSEG
-                uint16_t es = dx;
-                bx = Read16(0xED7D); // FADDR
-                uint16_t ax = Pop();
-                Write8Long(es, bx, ax & 0xff);
-                bx += 3;
-                Write16Long(es, bx, Pop());
-                bx -= 2;
-                Write16Long(es, bx, Pop());
-                bx += 4;
-                Write16(0xED7D, bx); // FADDR
+                Run8086(cs, 0xee96, 0xeebb, ds, cs, &regsp);
             }   
             break;   
 // 0xeecc: xor    ax,ax
@@ -4399,13 +4000,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 regsp += 6;
             }
             break;
-// 0xdf13: pop    dx
-// 0xdf14: pop    cx
-// 0xdf15: pop    ax
-// 0xdf16: imul   cl
-// 0xdf18: idiv   dl
-// 0xdf1a: cbw    
-// 0xdf1b: push   ax
         case 0xdf13:
             {
                 Run8086(cs, 0xdf13, 0xdf1c, ds, cs, &regsp);
@@ -4432,16 +4026,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 Run8086(cs, 0xdd2c, 0xdd9d, ds, cs, &regsp);
             }
             break;
-// 0xe48c: mov    cx,0004
-// 0xe48f: mov    bx,DC38
-// 0xe492: add    bx,0E
-// 0xe495: pop    ax
-// 0xe496: pop    dx
-// 0xe497: mov    [bx],dx
-// 0xe499: sub    bx,02
-// 0xe49c: mov    [bx],ax
-// 0xe49e: sub    bx,02
-// 0xe4a1: loop   E495            
+         
         case 0xe48c:
             {
                 Run8086(cs, 0xe48c, 0xe4a3, ds, cs, &regsp);
@@ -4470,29 +4055,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 GraphicsPixel(x, y - 1, color, seg);
             }
             break;
-// 0xf0c1: pop    cx
-// 0xf0c2: push   ds
-// 0xf0c3: push   es
-// 0xf0c4: push   di
-// 0xf0c5: push   si
-// 0xf0c6: mov    ax,[55E6] // DBUF-SEG
-// 0xf0ca: mov    dx,[55D8] // HBUF-SEG
-// 0xf0ce: mov    bx,00C5
-// 0xf0d1: shl    bx,1
-// 0xf0d3: add    bx,[563A] // YTABL
-// 0xf0d7: mov    si,[bx]
-// 0xf0d9: mov    di,si
-// 0xf0db: test   cx,0001
-// 0xf0df: jnz    F0E2
-// 0xf0e1: xchg   ax,dx
-// 0xf0e2: mov    es,ax
-// 0xf0e4: mov    ds,dx
-// 0xf0e6: mov    cx,0A28
-// 0xf0e9: call   8E32
-// 0xf0ec: pop    si
-// 0xf0ed: pop    di
-// 0xf0ee: pop    es
-// 0xf0ef: pop    ds            
         case 0xf0c1: // |EGA
             {
                 uint16_t ax;
@@ -4565,54 +4127,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
             }
             break;
-        case 0xefd9:
+        case 0xefd9: // CBLTP -- MAPS-OV
             {
-                // 0xefd9: pop    ax
-                // 0xefda: add    ax,0003
-                // 0xefdd: mov    [5863],ax // YBLT
-                // 0xefe1: pop    ax
-                // 0xefe2: add    ax,0006
-                // 0xefe5: mov    [586E],ax // XBLT
-                // 0xefe9: mov    word ptr [5892],0004 // WBLT
-                // 0xefef: mov    word ptr [5887],0006 // LBLT
-                // 0xeff5: mov    word ptr [589D],EFCB // ABLT
-                // 0xeffb: push   ds
-                // 0xeffc: pop    word ptr [58AA] // BLTSEG
-                uint16_t ax = Pop();
-                ax += 3;
-                Write16(0x5863, ax);
-                ax = Pop();
-                ax += 6;
-                Write16(0x586E, ax);
-                Write16(0x5892, 0x4);
-                Write16(0x5887, 0x6);
-                Write16(0x589D, 0xEFCB);
-                Write16(0x58AA, ds);
+                Run8086(cs, 0xefd9, 0xf000, ds, cs, &regsp);
             }
             break;
-        case 0xe8f3:
+        case 0xe8f3:// CBLTP -- MOVE-OV
             {
-                // 0xe8f3: pop    ax
-                // 0xe8f4: add    ax,0003
-                // 0xe8f7: mov    [5863],ax // YBLT
-                // 0xe8fb: pop    ax
-                // 0xe8fc: add    ax,0006
-                // 0xe8ff: mov    [586E],ax // XBLT
-                // 0xe903: mov    word ptr [5892],0004 // WBLT
-                // 0xe909: mov    word ptr [5887],0006 // LBLT
-                // 0xe90f: mov    word ptr [589D],E8E5 // ABLT
-                // 0xe915: push   ds
-                // 0xe916: pop    word ptr [58AA] // BLTSEG
-                uint16_t ax = Pop();
-                ax += 3;
-                Write16(0x5863, ax);
-                ax = Pop();
-                ax += 6;
-                Write16(0x586E, ax);
-                Write16(0x5892, 0x4);
-                Write16(0x5887, 0x6);
-                Write16(0x589D, 0xE8E5);
-                Write16(0x58AA, ds);
+                Run8086(cs, 0xe8f3, 0xe91a, ds, cs, &regsp);
             }
             break;
         case 0x48dc:
