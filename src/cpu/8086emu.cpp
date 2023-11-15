@@ -717,6 +717,13 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss,
 
         if(reg_ip == ipEnd)
         {
+            opcode_stream = mem + (16 * regs16[REG_CS]) + reg_ip;
+
+            // Assert if we're not exiting on FORTH's lodsw instruction
+            if(*opcode_stream != 0xAD)
+            {
+                assert(false);
+            }
             *regSp = regs16[REG_SP];
             break;
         }
