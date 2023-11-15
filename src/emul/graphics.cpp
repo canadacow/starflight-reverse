@@ -554,6 +554,8 @@ public:
 
 static std::unique_ptr<DOSKeyboard> keyboard{};
 
+static bool s_audioPlaying = false;
+
 void play_buffer(void*, unsigned char*, int);
 
 SDL_AudioSpec spec = {
@@ -588,13 +590,22 @@ void play_buffer(void* userdata, unsigned char* stream, int len) {
     static unsigned long time = 0;
     Sint16 *stream16 = (Sint16*)stream;
     for(int i = 0; i < len/2; i++, time++) {
-        stream16[i] = (Sint16)(square(toneInHz, time) * 32767);
+        if(s_audioPlaying)
+        {
+            stream16[i] = (Sint16)(square(toneInHz, time) * 5000);
+        }
+        else
+        {
+            stream16[i] = spec.silence;
+        }
+        
     }
 }
 
 void BeepOn()
 {
     SDL_PauseAudioDevice(audioDevice, 0);
+    s_audioPlaying = true;
 }
 
 void BeepTone(uint16_t pitFreq)
@@ -604,7 +615,7 @@ void BeepTone(uint16_t pitFreq)
 
 void BeepOff()
 {
-    SDL_PauseAudioDevice(audioDevice, 1);
+    s_audioPlaying = false;
 }
 
 static int GraphicsInitThread(void *ptr)

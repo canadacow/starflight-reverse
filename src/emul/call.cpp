@@ -856,10 +856,54 @@ struct RuleMetadata {
     }
 };
 
+union MusicPlayer {
+    uint8_t unknown[0x10];
+    struct {
+        uint8_t _padding0[0x2];
+        uint8_t isrEnabled;
+    };
+    struct {
+        uint8_t _padding1[0x5];
+        uint16_t currentSequenceAddressInMem;  // 0x5
+        uint16_t currentNoteAddressInMem;      // 0x7
+        uint8_t  repeats;                      // 0x9
+        uint8_t  tickCounter;                  // 0xA
+        uint8_t  noteOnDuration;               // 0xB
+        uint8_t  restDuration;                 // 0xC
+        uint8_t  speakerIsOff;                 // 0xD
+        uint16_t freqValue; 
+    };
+};
+
+static std::jthread s_musicThread{};
+static std::atomic<bool> s_musicThreadShouldExit{false};
+static MusicPlayer s_player;
+uint8_t frequencyLookupTable[] = {
+0xf0, 0xfd, 0xf8, 0x7e, 0x7c, 0x3f, 0xbe, 0x1f, 0xfd, 0x0f, 0xef, 0x07, 0xf7, 
+0x03, 0xfb, 0x01, 0xb1, 0xef, 0xd8, 0x77, 0xec, 0x3b, 0xf6, 0x1d, 0xfb, 0x0e, 
+0x7d, 0x07, 0xbe, 0x03, 0xdf, 0x01, 0x3d, 0xe2, 0x1e, 0x71, 0x8f, 0x38, 0x47, 
+0x1c, 0x23, 0x0e, 0x11, 0x07, 0x88, 0x03, 0xc4, 0x01, 0x89, 0xd5, 0xc4, 0x6a, 
+0x62, 0x35, 0xb1, 0x1a, 0x58, 0x0d, 0xac, 0x06, 0x56, 0x03, 0xab, 0x01, 0x8e, 
+0xc9, 0xc7, 0x64, 0x63, 0x32, 0x31, 0x19, 0x98, 0x0c, 0x4c, 0x06, 0x26, 0x03, 
+0x93, 0x01, 0x3d, 0xbe, 0x1e, 0x5f, 0x8f, 0x2f, 0xc7, 0x17, 0xe3, 0x0b, 0xf1, 
+0x05, 0xf8, 0x02, 0x7c, 0x01, 0x90, 0xb3, 0xc8, 0x59, 0xe4, 0x2c, 0x72, 0x16, 
+0x39, 0x0b, 0x9c, 0x05, 0xce, 0x02, 0x67, 0x01, 0x7c, 0xa9, 0xbe, 0x54, 0x5f, 
+0x2a, 0x2f, 0x15, 0x97, 0x0a, 0x4b, 0x05, 0xa5, 0x02, 0x52, 0x01, 0xf8, 0x9f, 
+0xfc, 0x4f, 0xfe, 0x27, 0xff, 0x13, 0xff, 0x09, 0xff, 0x04, 0x7f, 0x02, 0x3f, 
+0x01, 0xff, 0x96, 0x7f, 0x4b, 0xbf, 0x25, 0xdf, 0x12, 0x6f, 0x09, 0xb7, 0x04, 
+0x5b, 0x02, 0x2d, 0x01, 0x84, 0x8e, 0x42, 0x47, 0xa1, 0x23, 0xd0, 0x11, 0xe8, 
+0x08, 0x74, 0x04, 0x3a, 0x02, 0x1d, 0x01, 0x85, 0x86, 0x42, 0x43, 0xa1, 0x21, 
+0xd0, 0x10, 0x68, 0x08, 0x34, 0x04, 0x1a, 0x02, 0x0d, 0x01, 0xb0, 0xb6, 0xe6, 
+0x43, 0x8a, 0xc2, 0xe6, 0x42, 0x8a, 0xc6, 0xe6, 0x42, 0xe4, 0x61, 0x0c, 0x03, 
+0xe6, 0x61, 0xc3, 0xba, 0x61, 0x00, 0xec, 0x24, 0xfc, 0xee, 0xc3, 0x56, 0x57, 
+0x1e, 0x52, 0x51, 0x53, 0x50, 0x0e, 0x1f, 0x8a, 0x06, 0x02, 0x00, 0x84, 0xc0, 
+0x75, 0x03, 0xe9, 0x98, 0x00, 0x33, 0xdb, 0xfe, 0x4f, 0x0a, 0x74, 0x03, 0xe9, 
+0x8e, 0x00, 0x8a, 0x47, 0x0d, 0x84, 0xc0, 0x75, 0x13, 
+};
+
 #pragma pack(pop)
 
 extern unsigned short regbx;
-
 uint16_t nparmsStackSi = 0;
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
@@ -969,6 +1013,86 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint32_t balance = 1000000;
                     Push(balance & 0xffff);
                     Push(balance >> 16);
+                }
+                else if (nextInstr == 0xa25d)
+                {
+                    s_musicThreadShouldExit = true;
+
+                    uint16_t songOffset = 0xe580;
+                    uint8_t repeats = Read8(songOffset);
+                    uint16_t curNoteAddress = Read16(songOffset + 1);
+
+                    s_player.currentSequenceAddressInMem = songOffset;
+                    s_player.currentNoteAddressInMem = curNoteAddress;
+                    s_player.repeats = repeats;
+                    s_player.tickCounter = 1;
+                    s_player.speakerIsOff = 1;
+                    s_player.isrEnabled = 1;
+
+                    s_musicThread = std::jthread([&]{
+                        for (;;) {
+                            if(s_musicThreadShouldExit)
+                                break;
+
+                            std::this_thread::sleep_for(std::chrono::microseconds((int)(1000000.0f / 18.2f)));
+
+                            uint16_t noteAddress = s_player.currentNoteAddressInMem;
+
+                            uint8_t noteDuration = Read8(noteAddress++) & 0x7F;
+                            if (noteDuration != 0) {
+                                uint8_t restDuration = 0;
+                                if (noteDuration & 0x40) {
+                                    noteDuration &= 0x3F;
+                                    restDuration++;
+                                }
+                                s_player.noteOnDuration = noteDuration;
+                                s_player.restDuration = restDuration;
+                                uint8_t note = Read8(noteAddress++);
+                                s_player.currentNoteAddressInMem = noteAddress;
+                                if (note == 0xFF) {
+                                    s_player.tickCounter = s_player.noteOnDuration;
+                                    BeepOff();
+                                    s_player.speakerIsOff = 1;
+                                    continue;
+                                }
+                                uint8_t tickDuration = s_player.noteOnDuration - s_player.restDuration;
+                                s_player.tickCounter = tickDuration;
+                                BeepTone(frequencyLookupTable[note]);
+                                BeepOn();
+                                s_player.speakerIsOff = 0;
+                                continue;
+                            }
+                            
+                            uint16_t sequenceAddress = s_player.currentSequenceAddressInMem;
+                            --s_player.repeats;
+                            if (s_player.repeats == 0) {
+                                sequenceAddress += 3;
+                                uint8_t repeatCount = Read8(sequenceAddress);
+                                if (repeatCount == 0) {
+                                    s_player.isrEnabled = 0;
+                                    break;
+                                }
+                                s_player.currentSequenceAddressInMem = sequenceAddress;
+                                s_player.repeats = repeatCount;
+                            }
+
+                            s_player.currentNoteAddressInMem = Read16(sequenceAddress + 1);
+                            s_player.tickCounter = 1;
+                            s_player.speakerIsOff = 1;
+                            BeepOff();
+                        }
+
+                        BeepOff();
+                    });
+                }
+                else if (nextInstr == 0xa267)
+                {
+                    // Music off
+                    s_musicThreadShouldExit = true;
+                    if(s_musicThread.joinable())
+                    {
+                        s_musicThread.join();
+                    }
                 }
                 else if (nextInstr == 0x9632)
                 {
