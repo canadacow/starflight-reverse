@@ -647,69 +647,7 @@ void POLY_WINDOW_FILL()
     }
 }
 
-void DrawELLIPSE()
-{
-    // .ELLIPSE ( x y radius xnumer xdenom -- \ plot a clipped ellp) 
-    auto xdenom = Pop();
-    auto xnumer = Pop();
-    auto radius = Pop();
-    auto y = (int16_t)Pop();
-    auto x = (int16_t)Pop();
-    printf("DrawELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
-    fflush(stdout);
-
-    auto seg = Read16(0x5648);
-    auto color = Read16(0x55F2);
-
-    // Use fixed-point arithmetic for scaleX
-    int scaleX = (xnumer * 1000) / xdenom;
-    int scaleY = 1000;  // scale factor
-
-    int a2 = radius * radius;
-    int b2 = ((radius * scaleX) / 1000) * ((radius * scaleX) / 1000);
-    int fa2 = 4 * a2, fb2 = 4 * b2;
-    int x1, y1, sigma;
-
-    // First half
-    for (x1 = 0, y1 = radius, sigma = 2 * b2 + a2 * (1 - 2 * radius); b2 * x1 <= a2 * y1; x1++)
-    {
-        GraphicsPixel(x + x1, y + y1, color, seg);
-        GraphicsPixel(x - x1, y + y1, color, seg);
-        GraphicsPixel(x + x1, y - y1, color, seg);
-        GraphicsPixel(x - x1, y - y1, color, seg);
-        if (sigma >= 0)
-        {
-            sigma += fa2 * (1 - y1);
-            y1--;
-        }
-        sigma += b2 * ((4 * x1) + 6);
-    }
-
-    // Second half
-    for (x1 = radius, y1 = 0, sigma = 2 * a2 + b2 * (1 - 2 * radius); a2 * y1 <= b2 * x1; y1++)
-    {
-        GraphicsPixel(x + x1, y + y1, color, seg);
-        GraphicsPixel(x - x1, y + y1, color, seg);
-        GraphicsPixel(x + x1, y - y1, color, seg);
-        GraphicsPixel(x - x1, y - y1, color, seg);
-        if (sigma >= 0)
-        {
-            sigma += fb2 * (1 - x1);
-            x1--;
-        }
-        sigma += a2 * ((4 * y1) + 6);
-    }
-}
-
-void DrawCIRCLE()
-{
-    Push(9);
-    Push(15);
-    DrawELLIPSE();
-}
-
-
-void FILL_ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int color, int seg)
+void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int color, int seg, bool fill)
 {
     int XRadiusSq = XRadius * XRadius;
     int YRadiusSq = YRadius * YRadius;
@@ -725,10 +663,20 @@ void FILL_ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, 
 
     while (stoppingX >= stoppingY)
     {
-        for (int i = x_center - x; i <= x_center + x; i++)
+        if(fill)
         {
-            GraphicsPixel(i, y_center + y, color, seg);
-            GraphicsPixel(i, y_center - y, color, seg);
+            for (int i = x_center - x; i <= x_center + x; i++)
+            {
+                GraphicsPixel(i, y_center + y, color, seg);
+                GraphicsPixel(i, y_center - y, color, seg);
+            }
+        }
+        else
+        {
+            GraphicsPixel(x_center + x, y_center + y, color, seg);
+            GraphicsPixel(x_center - x, y_center + y, color, seg);
+            GraphicsPixel(x_center + x, y_center - y, color, seg);
+            GraphicsPixel(x_center - x, y_center - y, color, seg);
         }
 
         y++;
@@ -755,10 +703,20 @@ void FILL_ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, 
 
     while (stoppingX <= stoppingY)
     {
-        for (int i = x_center - x; i <= x_center + x; i++)
+        if(fill)
         {
-            GraphicsPixel(i, y_center + y, color, seg);
-            GraphicsPixel(i, y_center - y, color, seg);
+            for (int i = x_center - x; i <= x_center + x; i++)
+            {
+                GraphicsPixel(i, y_center + y, color, seg);
+                GraphicsPixel(i, y_center - y, color, seg);
+            }
+        }
+        else
+        {
+            GraphicsPixel(x_center + x, y_center + y, color, seg);
+            GraphicsPixel(x_center - x, y_center + y, color, seg);
+            GraphicsPixel(x_center + x, y_center - y, color, seg);
+            GraphicsPixel(x_center - x, y_center - y, color, seg);
         }
 
         x++;
@@ -776,28 +734,36 @@ void FILL_ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, 
     }
 }
 
-void FILL_ELLIPSE()
+void DrawELLIPSE(bool fill)
 {
-    // : FILLELLIP ( x y radius xnumer xdenom -- plot a clipped, )     
+    // .ELLIPSE ( x y radius xnumer xdenom -- \ plot a clipped ellp) 
     auto xdenom = Pop();
     auto xnumer = Pop();
     auto radius = Pop();
     auto y = (int16_t)Pop();
     auto x = (int16_t)Pop();
-    printf("FILL_ELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d\n", x, y, radius, xnumer, xdenom);
-    fflush(stdout);
-
     auto seg = Read16(0x5648);
     auto color = Read16(0x55F2);
 
-    FILL_ELLIPSE_INTEGER(x, y, (radius * xnumer) / xdenom, radius, color, seg);
+    //printf("DrawELLIPSE x: %d, y: %d, radius: %d, xnumer: %d, xdenom: %d color %d\n", x, y, radius, xnumer, xdenom, color);
+    //fflush(stdout);
+
+    ELLIPSE_INTEGER(x, y, (radius * xnumer) / xdenom, radius, color, seg, fill);
 }
 
-void FILL_CIRCLE()
+void DrawCIRCLE()
 {
     Push(9);
     Push(15);
-    FILL_ELLIPSE();
+    DrawELLIPSE(false);
+}
+
+
+void FillCIRCLE()
+{
+    Push(9);
+    Push(15);
+    DrawELLIPSE(true);
 }
 
 void STP()
@@ -1035,7 +1001,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
                 else if (nextInstr == 0x9632)
                 {
-                    DrawELLIPSE();
+                    DrawELLIPSE(false);
                 }
                 else if (nextInstr == 0x965e)
                 {
@@ -1043,11 +1009,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
                 else if (nextInstr == 0x9674)
                 {
-                    FILL_ELLIPSE();
+                    DrawELLIPSE(true); // FILL_ELLIPSE
                 }
                 else if (nextInstr == 0x96ca)
                 {
-                    FILL_CIRCLE();
+                    FillCIRCLE();
                 }
                 else if (nextInstr == 0xf4bf && (std::string(overlayName) == "STP-OV"))
                 {
@@ -2619,27 +2585,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x9017: // LXPLOT TODO
             {
-               auto lxplot = [](int x, int y) {
-                    int offset;
-                    unsigned char color_mask, pixel_data;
-
-                    // Fetch pixel data from the buffer
-                    pixel_data = GraphicsPeek(x, y, Read16(0x5648));
-
-                    int color = Read16(0x55F2); // COLOR
-
-                    // Apply color mask to pixel data
-                    pixel_data = pixel_data ^ (color & 0xf);
-
-                    // Write pixel data back to the buffer
-                    GraphicsPixel(x, y, pixel_data, Read16(0x5648));
-                };
-
                 int y = Pop();
                 int x = Pop();
 
-                printf("LXPLOT (TODO) %i %i\n", x, y);
-                lxplot(x, y);
+                auto pixel_data = GraphicsPeek(x, y, Read16(0x5648));
+
+                int color = Read16(0x55F2); // COLOR
+
+                pixel_data = pixel_data ^ (color & 0xf);
+
+                GraphicsPixel(x, y, pixel_data, Read16(0x5648));
             }
         break;
         case 0x93B1: // "BEXTENT" Part of Bit Block Image Transfer (BLT)
@@ -2859,11 +2814,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x9055: // LFILLPOLY TODO
         {
             // Should be replaced entirely by circle and ellipse commands.
-            printf("LFILLPOLY (TODO)\n");
+            //printf("LFILLPOLY (TODO)\n");
             //PrintCallstacktrace(bx);
             //assert(false);
 
-            #if 1
+            #if 0
             auto YMIN = Read16(0x5738);
             auto YMAX = Read16(0x5745);
             auto SCAN = Read16(0x57D9);
@@ -2880,9 +2835,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto xr = Read8(SCAN + (i * 2) + 1);
                 printf("LFILLPOLY y %d, xl %d, xr %d color %d\n", y, xl, xr, color);
 
-                for(uint16_t x = xl; x <= xr; ++x)
+                //for(uint16_t x = xl; x <= xr; ++x)
+                for(uint16_t x = 0; x < 80; ++x)
                 {
-                    GraphicsPixel(x, y, 4, bufseg);
+                    GraphicsPixel(x, y, 13, bufseg);
                 }
             }
             #endif
@@ -2941,7 +2897,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x8F8B: // "BFILL"
         {
             int color = Read16(0x55F2); // COLOR
-            printf("bfill (TODO) color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
+            //printf("bfill (TODO) color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
             GraphicsClear(color, Read16(0x5648), Read16(0x5656));
         }
         break;
