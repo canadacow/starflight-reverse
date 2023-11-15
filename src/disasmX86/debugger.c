@@ -20,6 +20,7 @@
 #include <string.h>
 #include <signal.h>
 #include <ctype.h>
+#include <stdint.h>
 
 #include "debugger.h"
 #include "cpu.h"
@@ -43,17 +44,17 @@ static char wordp[] = "word ptr ";
 static char bytep[] = "byte ptr ";
 static char blank[] = "";
 
-static char *get_byte_reg(unsigned ModRM)
+static const char *get_byte_reg(unsigned ModRM)
 {
     return byte_reg[(ModRM & 0x38) >> 3];
 }
 
-static char *get_word_reg(unsigned ModRM)
+static const char *get_word_reg(unsigned ModRM)
 {
     return word_reg[(ModRM & 0x38) >> 3];
 }
 
-static char *get_seg_reg(unsigned ModRM)
+static const char *get_seg_reg(unsigned ModRM)
 {
     return seg_reg[(ModRM & 0x38) >> 3];
 }
@@ -70,7 +71,7 @@ static unsigned get_d16(BYTE *seg, unsigned *off)
     return num;
 }
 
-static char *get_mem(unsigned ModRM, BYTE *seg, unsigned *off, char **reg, char *msg)
+static char *get_mem(unsigned ModRM, BYTE *seg, unsigned *off, const char **reg, char *msg)
 {
     static char buffer[100];
     int num;
@@ -493,7 +494,7 @@ unsigned disasm(unsigned seg, unsigned off, BYTE *memory, char *buffer)
 
 }
 
-static unsigned disassemble(unsigned seg, unsigned off, BYTE *memory, int count)
+unsigned disassemble(unsigned seg, unsigned off, uint8_t *memory, int count)
 {
     char buffer1[80];
     char buffer2[80];
@@ -516,6 +517,7 @@ static unsigned disassemble(unsigned seg, unsigned off, BYTE *memory, int count)
             printf("%-14s%s\n", buffer2,buffer1);
         } while (disasm_table[instruction_byte].flags & DF_PREFIX);
     }
+    fflush(stdout);
     return off;
 }
 

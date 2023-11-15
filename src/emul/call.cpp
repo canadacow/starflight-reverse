@@ -3052,7 +3052,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x8891: // SCANPOLY TODO
             //fprintf(stderr, "SCANPOLY TODO\n");
             {
-                Run8086(cs, 0x8891, 0x8990, regsp, m);
+                PrintCallstacktrace(bx);
+                Run8086(cs, 0x8891, 0x8990, ds, cs, &regsp);
                 #if 0
                 auto bufseg = Read16(0x5648); // BUF-SEG
                 uint8_t color = Read8(0x55F2);
@@ -3155,6 +3156,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x9d18: // ?ILOCUS
         {
+            #if 0
             uint16_t cx = Pop();
             uint16_t BICON = Pop();
             int16_t RLOCUS = (int16_t)Pop();
@@ -3220,6 +3222,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 } while (--cx > 0);
             }
+            #else
+                Run8086(cs, 0x9d18, 0x9d71, ds, cs, &regsp);
+            #endif
         }
         break;
         case 0x9e14: // XCHGICON

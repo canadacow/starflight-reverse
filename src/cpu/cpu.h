@@ -4,9 +4,10 @@
 #include <stdint.h>
 
 constexpr uint16_t StarflightBaseSegment = 0x192;
+constexpr uint32_t SystemMemorySize = 0x10FFF0;
 
 extern unsigned char *mem;
-extern unsigned char m[1024*1024];
+extern unsigned char m[SystemMemorySize];
 extern unsigned short regsp;
 extern unsigned short regbp;
 extern unsigned short regsi;
@@ -28,6 +29,8 @@ unsigned short Pop();
 void InitCPU();
 
 // Actual 8086 emulator, exposed in 8086emu.cpp
-void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t regSp, uint8_t* systemMemory);
+void Init8086(uint8_t* systemMemory);
+void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss, uint16_t *regSp);
+unsigned disassemble(unsigned seg, unsigned off, uint8_t *memory, int count);
 
 #endif

@@ -8,6 +8,7 @@
 #include <time.h>
 #include <sys/timeb.h>
 #include <memory.h>
+#include <cstdio>
 
 #include <stdint.h>
 #include <assert.h>
@@ -148,6 +149,7 @@
 #define KEYBOARD_DRIVER read(0, mem + 0x4A6, 1) && (int8_asap = (mem[0x4A6] == 0x1B), pc_interrupt(7))
 #endif
 
+unsigned disassemble(unsigned seg, unsigned off, uint8_t *memory, int count);
 
 // Global variable definitions
 static uint8_t* mem;
@@ -161,7 +163,6 @@ uint32_t op_source, op_dest, rm_addr, op_to_addr, op_from_addr, i_data0, i_data1
 int32_t op_result, disk[3], scratch_int;
 time_t clock_buf;
 struct timeb ms_clock;
-
 
 // Helper functions
 
@@ -239,35 +240,40 @@ int AAA_AAS(char which_operation)
 	return (regs16[REG_AX] += 262 * which_operation*set_AF(set_CF(((regs8[REG_AL] & 0x0F) > 9) || regs8[FLAG_AF])), regs8[REG_AL] &= 0x0F);
 }
 
-// Emulator entry point
-void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t regSp, uint8_t* systemMemory)
+void Init8086(uint8_t* systemMemory)
 {
     mem = systemMemory;
 
 	// regs16 and reg8 point to F000:0, the start of memory-mapped registers. CS is initialised to F000
 	regs16 = (unsigned short *)(regs8 = mem + REGS_BASE);
-	regs16[REG_CS] = 0xF000;
-
-	// Trap flag off
-	regs8[FLAG_TF] = 0;
 
 	// Load BIOS from the bios array into F000:0100, and set IP to 0100
-	memcpy(regs8 + (reg_ip = 0x100), bios, sizeof(bios));
+	memcpy(regs8 + 0x100, bios, sizeof(bios));
 
 	// Load instruction decoding helper table
 	for (int i = 0; i < 20; i++)
 		for (int j = 0; j < 256; j++)
 			bios_table_lookup[i][j] = regs8[regs16[0x81 + i] + j];
+}
+
+// Emulator entry point
+void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss, uint16_t *regSp)
+{
+	// Trap flag off
+	regs8[FLAG_TF] = 0;
 
     regs16[REG_CS] = cs;
     reg_ip = ip;
-    regs16[REG_SP] = regSp;
+    regs16[REG_DS] = ds;
+    regs16[REG_SS] = ss;
+    regs16[REG_SP] = *regSp;
 
 	// Instruction execution loop. Terminates if CS:IP = 0:0
 	for (;;)
 	{
-        printf("reg_ip 0x%x\n", reg_ip);
-        opcode_stream = mem + 16 * regs16[REG_CS] + reg_ip;
+        opcode_stream = mem + (16 * regs16[REG_CS]) + reg_ip;
+
+        disassemble(regs16[REG_CS], reg_ip, mem, 1);
 
 		// Set up variables to prepare for decoding an opcode
 		set_opcode(*opcode_stream);
@@ -694,6 +700,9 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t regSp, uint8_t* 
 			pc_interrupt(0xA), int8_asap = 0, KEYBOARD_DRIVER;
 
         if(reg_ip == ipEnd)
+        {
+            *regSp = regs16[REG_SP];
             break;
+        }
 	}
 }
