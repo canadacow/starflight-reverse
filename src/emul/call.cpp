@@ -963,6 +963,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     // -ENDURIUM
                     // Do nothing as this prevents expending fuel
                 }
+                else if (nextInstr == 0xeff0)
+                {
+                    // Infinite money glitch
+                    uint32_t balance = 1000000;
+                    Push(balance & 0xffff);
+                    Push(balance >> 16);
+                }
                 else if (nextInstr == 0x9632)
                 {
                     DrawELLIPSE(false);
