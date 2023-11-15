@@ -2953,7 +2953,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int y = Pop();
                 int x = Pop();
 
-                printf("LPLOT (TODO) %i %i\n", x, y);
+                //printf("LPLOT (TODO) %i %i\n", x, y);
                 lplot(x, y);
             }
         break;
@@ -2991,8 +2991,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x9390: // "?EXTENTX"
-           // text loc. of extent rel. to clipping window - result is in trjct & taccpt
-           // IMPORTANT: USES VIN & OIN AS TEMP SPACE
            {
                 Run8086(cs, 0x9390, 0x93aa, ds, cs, &regsp);
            }
@@ -3202,10 +3200,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             // Should be replaced entirely by circle and ellipse commands.
             printf("LFILLPOLY (TODO)\n");
-            // PrintCallstacktrace(bx);
+            //PrintCallstacktrace(bx);
             //assert(false);
 
-            #if 0
+            #if 1
             auto YMIN = Read16(0x5738);
             auto YMAX = Read16(0x5745);
             auto SCAN = Read16(0x57D9);
@@ -3220,9 +3218,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto y = YMIN + i;
                 auto xl = Read8(SCAN + (i * 2));
                 auto xr = Read8(SCAN + (i * 2) + 1);
+                printf("LFILLPOLY y %d, xl %d, xr %d color %d\n", y, xl, xr, color);
+
                 for(uint16_t x = xl; x <= xr; ++x)
                 {
-                    GraphicsPixel(x, y, color, bufseg);
+                    GraphicsPixel(x, y, 4, bufseg);
                 }
             }
             #endif
@@ -3272,65 +3272,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             }
         break;
 
-        case 0x6C86: // "C>EGA" // TODO???
+        case 0x6C86: // "C>EGA" 
         {
-            dx = Pop() & 0xF;
-            Push(regsi);
-            unsigned short ax = 0;
-            Push(0x0);
-            cx = 0x10;
-            // decrementing lodsb
-            regsi = 0x4FCA;
-            for(;cx>0; cx--)
-            {
-                ax = Read8(regsi) & 0xF;
-                regsi--;
-                if (ax == dx)
-                {
-                    ax = Pop();
-                    ax = cx;
-                    Push(ax);
-                    cx = 1;
-                }
-            }
-            ax = Pop();
-            regsi = 0x4FCD;
-            regsi = regsi + ax - 1;
-            ax = Read8(regsi);
-            regsi = Pop();
-            Push(ax);
+            Run8086(cs, 0x6C86, 0x6cb1, ds, cs, &regsp);
         }
-// 0x6c86: pop    dx
-// 0x6c87: and    dx,0F
-// 0x6c8a: push   si
-// 0x6c8b: xor    ax,ax
-
-// 0x6c8d: push   ax
-// 0x6c8e: mov    cx,0010
-// 0x6c91: std
-// 0x6c92: mov    si,4FCA
-
-// 0x6c95: lodsb
-// 0x6c96: and    ax,000F
-// 0x6c99: cmp    ax,dx
-// 0x6c9b: jnz    6CA4
-// 0x6c9d: pop    ax
-// 0x6c9e: mov    ax,cx
-// 0x6ca0: push   ax
-// 0x6ca1: mov    cx,0001
-// 0x6ca4: loop   6C95
-
-// 0x6ca6: pop    ax
-// 0x6ca7: mov    si,4FCD
-// 0x6caa: add    si,ax
-// 0x6cac: dec    si
-// 0x6cad: lodsb
-// 0x6cae: pop    si
-// 0x6caf: cld
-// 0x6cb0: push   ax
         break;
 
-        case 0x8F8B: // "BFILL" TODO
+        case 0x8F8B: // "BFILL"
         {
             int color = Read16(0x55F2); // COLOR
             printf("bfill (TODO) color=%i ega=%i segment=0x%04x count=0x%04x\n", Read16(0x55F2), Read16(0x5DA3), Read16(0x5648), Read16(0x5656));
