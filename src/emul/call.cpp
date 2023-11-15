@@ -2514,7 +2514,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto srcOffset = Pop();
                 auto srcSeg = Pop();
                 
-                printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n",  srcSeg, srcOffset, destSeg, destOffset);
+                //printf("move display from (TODO) 0x%04x:0x%04x to 0x%04x:0x%04x\n",  srcSeg, srcOffset, destSeg, destOffset);
 
                 assert(srcOffset == 0);
                 assert(destOffset == 0);
@@ -2523,67 +2523,30 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             }
         break;
 
-        case 0x9367: // "PLOT" TODO
-            // ignore return address from call
+        case 0x9367: // "PLOT" 
             {
-            //printf("(plot) %i %i seg=0x%04x color=%i\n",
-            //    Read16(regsp+2), Read16(regsp+0), Read16(0x5648), Read16(0x55F2));
-            int color = Read16(0x55F2);
-            GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, Read16(0x5648));
-            dx = Pop();
-            unsigned short ax = Pop();
-            /*
-            dx <<= 1;
-            dx += Read16(0x563A); // YTABL
-            Push(dx);
-            Push(ax);
-            ax = (ax&3)<<1;
-            bx = 0x92CF + ax;
-            dx = Read16(bx);
-            ax = Pop()>>2;
-            bx = Pop();
-            ax += Read16(bx);
-            bx = ax;
-            cx = Read16(0x5648); // BUF-SEG
-            unsigned short es = cx;
-            ax = dx;
-            */
+                int color = Read16(0x55F2);
+                GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, Read16(0x5648));
+                dx = Pop();
+                unsigned short ax = Pop();
             }
         break;
 
         case 0x9002: // "LPLOT" TODO
             {
-                auto lplot = [](int x, int y) {
-                    int offset;
-                    unsigned char color_mask, pixel_data;
-
-                    // Fetch pixel data from the buffer
-                    pixel_data = GraphicsPeek(x, y, Read16(0x5648));
-
-                    int color = Read16(0x55F2); // COLOR
-
-                    /*
-                    // Calculate color mask
-                    color_mask = (color & 1) ? 0xF0 : 0x0F;
-
-                    // Apply color mask to pixel data
-                    pixel_data = (pixel_data & color_mask) | ((color << 4) & ~color_mask);
-                    */
-
-                    pixel_data = color & 0xf;
-
-                    // Write pixel data back to the buffer
-                    GraphicsPixel(x, y, pixel_data, Read16(0x5648));
-                };
-
                 int y = Pop();
                 int x = Pop();
 
-                //printf("LPLOT (TODO) %i %i\n", x, y);
-                lplot(x, y);
+                int offset;
+                unsigned char color_mask, pixel_data;
+
+                int color = Read16(0x55F2); // COLOR
+
+                // Write pixel data back to the buffer
+                GraphicsPixel(x, y, color & 0xf, Read16(0x5648));
             }
         break;
-        case 0x9017: // LXPLOT TODO
+        case 0x9017: // LXPLOT 
             {
                 int y = Pop();
                 int x = Pop();
@@ -2959,7 +2922,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     std::this_thread::yield();
                 }
             }
-            //GraphicsUpdate();
         break;
 
         case 0x8D8B: // >LORES
@@ -3640,12 +3602,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         }
         break;
 
-        case 0x910f: // TODO L@PIXEL
+        case 0x910f: // L@PIXEL
             {
                 uint16_t y = Pop();
                 uint16_t x = Pop();
                 uint8_t c = GraphicsPeek(x, y, Read16(0x5648));
-                //printf("L@PIXEL (TODO) x=%d, y=%d c=%d", x, y, c);
                 Push(c);
             }
         break;
