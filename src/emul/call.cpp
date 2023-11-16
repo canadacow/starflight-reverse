@@ -971,6 +971,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
     int ovidx = GetOverlayIndex(Read16(0x55a5), &overlayName);
     //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
+    
+    //uint16_t* hullValue = (uint16_t*)&m[StarflightBaseSegment << 4 + (0x63ef + 0x11)];
+    //*hullValue = 50;
+    //Write16(0x63ef + 0x11, 50);
+    //m[0x7d20] = 50;
 
     // bx contains pointer to WORD
     if ((regsp < FILESTAR0SIZE+0x100) || (regsp > (0xF6F4)))
@@ -992,16 +997,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 //        FILLCIRC  codep:0x224c wordp:0x96ca size:0x000a C-string:'FILLCIRC'
 
                 uint16_t nextInstr = bx + 2;
-                if(nextInstr == 0xe21a)
-                {
-                    // FIXME: Remove this after debugging
-                    auto idx = Pop();
-                    Push(idx);
-                    printf("Called _n_CPARMS with %d\n", idx);
-
-                    nparmsStackSi = regsi;
-                }
-
                 if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
@@ -1153,25 +1148,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x1692: // "EXIT"
             regsi = Read16(regbp);
             regbp += 2;
-
-            if(nparmsStackSi != 0 && nparmsStackSi == regsi)
-            {   
-                // i ivar xid# radius
-                uint16_t radius = Pop();
-                uint16_t xid_n = Pop();
-                uint16_t ivar = Pop();
-                uint16_t i = Pop();
-                printf("Return from _n_CPARMS i %u, ivar %u, xid_n %u radius %u\n",
-                    i,
-                    ivar,
-                    xid_n,
-                    radius);
-
-                Push(i);
-                Push(ivar);
-                Push(xid_n);
-                Push(radius);
-            }
         break;
 
         // --- branching ---
@@ -2892,10 +2868,25 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto xr = Read8(rasterOffset + 1);
                 //printf("LFILLPOLY y %d, xl %d, xr %d color %d\n", y, xl, xr, color);
 
+                #if 1
                 for(uint16_t x = xl; x <= xr; ++x)
                 {
                     GraphicsPixel(x, y, color, bufseg);
                 }
+                #else
+                if(y == YMIN || y == YMAX)
+                {
+                    for(uint16_t x = xl; x <= xr; ++x)
+                    {
+                        GraphicsPixel(x, y, color, bufseg);
+                    }
+                }
+                else
+                {
+                    GraphicsPixel(xl, y, color, bufseg);
+                    GraphicsPixel(xr, y, color, bufseg);
+                }
+                #endif
             }
         }
         break;
