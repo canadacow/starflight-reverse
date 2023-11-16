@@ -967,9 +967,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     };
 
     const char* baseOverlay = "";
+    const char* baseWord = "";
     const char* overlayName = baseOverlay;
+    const char* wordName = baseWord;
 
     int ovidx = GetOverlayIndex(Read16(0x55a5), &overlayName);
+    wordName = FindWordCanFail(bx + 2, ovidx, true);
     //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
     
     //uint16_t* hullValue = (uint16_t*)&m[StarflightBaseSegment << 4 + (0x63ef + 0x11)];
@@ -1131,6 +1134,21 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     Write16(regbp, regsi);
                     regsi = bx;
                     DefineCallStack(regbp, 1);
+
+                    for(;;)
+                    {
+                        unsigned short ax = Read16(regsi); // si is the forth program counter
+                        regsi += 2;
+                        bx = ax;
+                        unsigned short execaddr = Read16(bx);
+
+                        auto ret = Call(execaddr, bx);
+
+                        if(ret != OK)
+                        {
+                            break;
+                        }
+                    }
                 }
             }
         break;
@@ -1148,6 +1166,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x1692: // "EXIT"
             regsi = Read16(regbp);
             regbp += 2;
+            return EXIT;
         break;
 
         // --- branching ---

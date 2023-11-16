@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     {
         ret = Step();
 
-    } while (ret == OK);
+    } while (ret == OK || ret == EXIT);
 
     //GraphicsWait();
     GraphicsQuit();
