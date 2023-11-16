@@ -113,15 +113,25 @@ const WORD* GetWord(int word, int ovidx)
     return nullptr;
 }
 
+static std::unordered_map<int, std::unordered_map<int, const char*>> s_wordDictionary{};
+
 const char* FindWordCanFail(int word, int ovidx, int canFail)
 {
     if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
+
+    auto& overlayDictionary = s_wordDictionary[ovidx];
+    auto it = overlayDictionary.find(word);
+    if (it != overlayDictionary.end()) return it->second;
 
     int i = 0;
     do
     {
         if ((dictionary[i].ov != ovidx) && (dictionary[i].ov != -1)) continue;
-        if (word == dictionary[i].word) return dictionary[i].name;
+        if (word == dictionary[i].word) 
+        {
+            overlayDictionary[word] = dictionary[i].name;
+            return dictionary[i].name;
+        }
     } while(dictionary[++i].name != NULL);
     if (word == 0x0) return "";
 

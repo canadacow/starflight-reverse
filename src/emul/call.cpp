@@ -473,6 +473,21 @@ void ParameterCall(unsigned short bx, unsigned short addr)
 
     bx += 2; // push address of variable in the overlays
     Push(bx);
+
+    for(;;)
+    {
+        unsigned short ax = Read16(regsi); // si is the forth program counter
+        regsi += 2;
+        bx = ax;
+        unsigned short execaddr = Read16(bx);
+
+        auto ret = Call(execaddr, bx);
+
+        if(ret != OK)
+        {
+            break;
+        }
+    }
 }
 
 
@@ -1158,7 +1173,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 uint16_t nextInstr = bx + 2;
                 auto meta = (const RuleMetadata*)&mem[nextInstr];
                 auto res = meta->Execute(nextInstr);
-                if (ret != OK) return ret;
+                if (res != OK) return res;
                 Push(0); // Not sure why
             }
         break;
@@ -2515,6 +2530,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x2a9a:  // "TIME"
         {
+            //std::this_thread::sleep_for(std::chrono::milliseconds(55));
+
             //PrintCallstacktrace(bx);
             auto now = std::chrono::high_resolution_clock::now();
 

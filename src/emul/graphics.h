@@ -26,6 +26,8 @@
     void GraphicsBLT(int x1, int y1, int w, int h, char* image, int color, int xormode, uint32_t offset);
     void GraphicsSave(char *filename);
 
+    void WaitForVBlank();
+
     void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_t di, uint16_t count);
 
     void BeepOn();

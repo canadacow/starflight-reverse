@@ -32,6 +32,7 @@ static double toneInHz = 440.0;
 #include <memory>
 #include <chrono>
 #include <thread>
+#include <mutex>
 #include <semaphore>
 
 #ifndef SDL
@@ -75,6 +76,7 @@ std::vector<uint32_t> textPixels;
 
 std::jthread graphicsThread{};
 std::binary_semaphore stopSemaphore{0};
+std::mutex graphicsRetrace{};
 
 int cursorx = 0;
 int cursory = 0;
@@ -1006,12 +1008,23 @@ void GraphicsMode(int mode)
 
     graphicsThread = std::jthread([]{
         while(!stopSemaphore.try_acquire()) {
-            GraphicsUpdate();
+            constexpr std::chrono::nanoseconds scanout_duration = std::chrono::nanoseconds(13340000); // 80% of 1/60th of a second
+            constexpr std::chrono::nanoseconds retrace_duration = std::chrono::nanoseconds(3330000); // 20% of 1/60th of a second
+            {
+                std::lock_guard<std::mutex> lg(graphicsRetrace);
+                GraphicsUpdate();
 
-            constexpr std::chrono::nanoseconds frame_duration = std::chrono::nanoseconds(16670000); // 1/60th of a second
-            std::this_thread::sleep_for(frame_duration);
+                std::this_thread::sleep_for(scanout_duration);
+            }
+            std::this_thread::sleep_for(retrace_duration);
         }
     });
+}
+
+void WaitForVBlank()
+{
+    graphicsRetrace.lock();
+    graphicsRetrace.unlock();
 }
 
 void GraphicsClear(int color, uint32_t offset, int byteCount)

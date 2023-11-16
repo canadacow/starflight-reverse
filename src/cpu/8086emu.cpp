@@ -18,6 +18,12 @@
 #ifndef _WIN32
 #include <unistd.h>
 #include <fcntl.h>
+#else
+#include <conio.h>
+typedef int ssize_t;
+#define read(fd, buf, count) (assert(!"read hit"), 0)
+#define write(fd, buf, count) (assert(!"write hit"), 0)
+#define lseek(fd, offset, whence) (assert(!"lseek hit"), 0)
 #endif
 
 // Emulator system constants
@@ -144,7 +150,7 @@
 
 // Keyboard driver for console. This may need changing for UNIX/non-UNIX platforms
 #ifdef _WIN32
-#define KEYBOARD_DRIVER kbhit() && (mem[0x4A6] = getch(), pc_interrupt(7))
+#define KEYBOARD_DRIVER _kbhit() && (mem[0x4A6] = getch(), pc_interrupt(7))
 #else
 #define KEYBOARD_DRIVER read(0, mem + 0x4A6, 1) && (int8_asap = (mem[0x4A6] == 0x1B), pc_interrupt(7))
 #endif

@@ -34,6 +34,7 @@ add_executable(emulatesdl
     src/disasOV/global.c 
     src/emul/graphics.cpp 
     src/emul/fract.c
+    src/cpu/8086emu.cpp
 )
 
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL)
