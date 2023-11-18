@@ -1,6 +1,8 @@
 from PIL import Image, ImageDraw
 import numpy as np
-from scipy.ndimage import distance_transform_edt, zoom, distance_transform_cdt
+from scipy.ndimage import distance_transform_edt, zoom, distance_transform_cdt, distance_transform_bf
+import hqx
+import snowy
 
 font_table = {
     ' ': 0x0000, '!': 0x4904, '"': 0xB400, '#': 0xFFFF,
@@ -42,29 +44,71 @@ def draw_string(s):
     return np.concatenate(imgs, axis=1)
 
 # Draw the string
-img = draw_string('LOG PLASTIC')
+# Create a texture atlas of all the characters in the font
+atlas = [draw_string(c) for c in font_table.keys()]
+
+# Split the string into four rows of characters
+rows = []
+for i in range(0, len(atlas), len(atlas)//4):
+    row = atlas[i:i+len(atlas)//4]
+    # Add empty characters to the final row if necessary
+    while len(row) < len(atlas)//4:
+        row.append(draw_string(' '))
+    rows.append(np.concatenate(row, axis=1))
+
+# Concatenate all the rows vertically
+img = np.concatenate(rows, axis=0)
+
+# Save the texture atlas
+Image.fromarray(img.astype(np.uint8)).save('original_string.png')
+
+pil_img = Image.fromarray(img.astype(np.uint8))
+hqx_img = pil_img # hqx.hq4x(pil_img)
+
+np_img = np.array(hqx_img.convert('L'))
 
 # Convert the image to a binary array
-binary_img = img < 128
+binary_img = np_img # < 254
 
-# Compute the distance transform
-# dist_transform = distance_transform_edt(binary_img)
-dist_transform = distance_transform_cdt(binary_img, metric='chessboard')
+binary_img = np.expand_dims(binary_img, axis=-1).astype(bool)
 
-# Normalize the distance transform to the range [0, 255]
-dist_transform = (dist_transform / dist_transform.max()) * 255
+snowy_sdf = snowy.unitize(snowy.generate_sdf(binary_img != 0.0))
+snowy.show(snowy.hstack([binary_img, snowy_sdf]))
+
+Image.fromarray(np_img.astype(np.uint8)).save('np_img.png')
+
+Image.fromarray(binary_img.astype(np.uint8)*255).save('binary_img.png')
+
+# Compute the positive distances
+dist_pos = distance_transform_edt(binary_img)
+
+# Compute the negative distances
+dist_neg = distance_transform_edt(1 - binary_img)
+
+# Combine the positive and negative distances to get the signed distance field
+sdf = dist_pos - dist_neg
+
+# Output the sdf as a png, with 1.0 coverted to uint8 value 128, scaled to -8, 8
+sdf_img = np.clip(sdf, -8, 8)
+sdf_img = ((sdf_img + 8) / 16) * 255
+sdf_img = Image.fromarray(sdf_img.astype(np.uint8))
+sdf_img.save('sdf.png')
 
 # Scale up the distance transform
-scale_factor = 10
-large_sdf = zoom(dist_transform, scale_factor)
+scale_factor = 2.5
+large_sdf = zoom(sdf, scale_factor)
 
-# Threshold the SDF to create a binary image
-large_img = large_sdf > 80
+# Truncate the SDF between 0.0 and 1.0
+# large_img = np.clip(large_sdf, -0.5, 1.0)
+large_img = np.where(large_sdf > -0.5, 1.0, 0.0)
 
 # Convert the binary image back to an 8-bit grayscale image
 large_img = Image.fromarray(large_img.astype(np.uint8) * 255)
 
 # Save the original character image, the SDF, and the final output
 Image.fromarray(img.astype(np.uint8)).save('original_string.png')
-Image.fromarray(dist_transform.astype(np.uint8)).save('sdf_string.png')
 large_img.save('large_string.png')
+   
+import os
+os.system('eog sdf.png &')
+
