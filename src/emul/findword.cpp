@@ -20,6 +20,14 @@ const char* GetOverlayName(int word, int ovidx)
     return (ovidx==-1)?"STARFLT":overlays[ovidx].name;
 }
 
+const char* GetOverlayName(int ovidx)
+{
+    if(ovidx == -1)
+        return "STARFLT";
+
+    return overlays[ovidx].name;
+}
+
 int FindClosestWord(int si, int ovidx)
 {
     int dist = 0x10000;
@@ -115,7 +123,7 @@ const WORD* GetWord(int word, int ovidx)
 
 static std::unordered_map<int, std::unordered_map<int, const char*>> s_wordDictionary{};
 
-const char* FindWordCanFail(int word, int ovidx, int canFail)
+const char* FindWordCanFail(int word, int& ovidx, int canFail)
 {
     if (ovidx == -1) ovidx = GetOverlayIndex(Read16(0x55a5), nullptr); // "OV#"
 
@@ -130,6 +138,7 @@ const char* FindWordCanFail(int word, int ovidx, int canFail)
         if (word == dictionary[i].word) 
         {
             overlayDictionary[word] = dictionary[i].name;
+            ovidx = dictionary[i].ov;
             return dictionary[i].name;
         }
     } while(dictionary[++i].name != NULL);

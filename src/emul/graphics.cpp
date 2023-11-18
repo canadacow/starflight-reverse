@@ -1094,8 +1094,7 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
 
     if(x < 0 || x >= GRAPHICS_MODE_WIDTH || y < 0 || y >= GRAPHICS_MODE_HEIGHT)
     {
-        printf("Read out of bounds of graphics ram.\n");
-        return colortable[4];
+        return colortable[0];
     }
 
     return graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset];
@@ -1158,10 +1157,7 @@ void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormo
         {
             int x0 = x;
             int y0 = y;
-            if(x0 < 0 || x0 >= GRAPHICS_MODE_WIDTH || y0 < 0 || y0 >= GRAPHICS_MODE_HEIGHT)
-            {
-                continue;
-            }
+
 
             bool hasPixel = false;
 

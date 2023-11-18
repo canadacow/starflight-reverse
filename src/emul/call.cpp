@@ -988,6 +988,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
     int ovidx = GetOverlayIndex(Read16(0x55a5), &overlayName);
     wordName = FindWordCanFail(bx + 2, ovidx, true);
+    overlayName = GetOverlayName(ovidx);
     //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
     
     //uint16_t* hullValue = (uint16_t*)&m[StarflightBaseSegment << 4 + (0x63ef + 0x11)];
@@ -1015,6 +1016,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 //        FILLCIRC  codep:0x224c wordp:0x96ca size:0x000a C-string:'FILLCIRC'
 
                 uint16_t nextInstr = bx + 2;
+
+                if(nextInstr == 0xaf81)
+                {
+                    //WaitForVBlank();
+                }
+
                 if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
