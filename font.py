@@ -73,42 +73,24 @@ binary_img = np_img # < 254
 binary_img = np.expand_dims(binary_img, axis=-1).astype(bool)
 
 snowy_sdf = snowy.unitize(snowy.generate_sdf(binary_img != 0.0))
-snowy.show(snowy.hstack([binary_img, snowy_sdf]))
 
-Image.fromarray(np_img.astype(np.uint8)).save('np_img.png')
-
-Image.fromarray(binary_img.astype(np.uint8)*255).save('binary_img.png')
-
-# Compute the positive distances
-dist_pos = distance_transform_edt(binary_img)
-
-# Compute the negative distances
-dist_neg = distance_transform_edt(1 - binary_img)
-
-# Combine the positive and negative distances to get the signed distance field
-sdf = dist_pos - dist_neg
-
-# Output the sdf as a png, with 1.0 coverted to uint8 value 128, scaled to -8, 8
-sdf_img = np.clip(sdf, -8, 8)
-sdf_img = ((sdf_img + 8) / 16) * 255
-sdf_img = Image.fromarray(sdf_img.astype(np.uint8))
-sdf_img.save('sdf.png')
+snowy_sdf = np.squeeze(snowy_sdf, axis=-1)
 
 # Scale up the distance transform
-scale_factor = 2.5
-large_sdf = zoom(sdf, scale_factor)
+scale_factor = 10
+large_sdf = zoom(snowy_sdf, scale_factor)
 
-# Truncate the SDF between 0.0 and 1.0
-# large_img = np.clip(large_sdf, -0.5, 1.0)
-large_img = np.where(large_sdf > -0.5, 1.0, 0.0)
+large_sdf = (large_sdf * 255).astype(np.uint8)
 
-# Convert the binary image back to an 8-bit grayscale image
-large_img = Image.fromarray(large_img.astype(np.uint8) * 255)
+bottomThreshold = 190
+topThreshold = 230
 
-# Save the original character image, the SDF, and the final output
-Image.fromarray(img.astype(np.uint8)).save('original_string.png')
-large_img.save('large_string.png')
-   
+large_sdf[large_sdf < bottomThreshold] = 0
+large_sdf[large_sdf > topThreshold] = 255
+
+
+Image.fromarray(large_sdf).save('large_string.png')
+
 import os
-os.system('eog sdf.png &')
+os.system('eog large_string.png &')
 
