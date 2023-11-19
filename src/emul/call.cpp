@@ -3669,91 +3669,32 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 Write16(0xEACD, regsp);
             }
             break;
-
-            // ================================================
-// 0xeada: WORD 'WEADC' codep=0xeadc wordp=0xeadc
-// ================================================
-// 0xeadc: add    sp,0E
-// 0xeadf: mov    [EACD],sp // WEACD
-// 0xeae3: lodsw
-// 0xeae4: mov    bx,ax
-// 0xeae6: jmp    word ptr [bx]
-
-// ================================================
-// 0xeae8: WORD 'WEAEA' codep=0xeaea wordp=0xeaea
-// ================================================
-// 0xeaea: pop    bx
-// 0xeaeb: add    bx,[EACD] // WEACD
-// 0xeaef: push   word ptr [bx]
-// 0xeaf1: lodsw
-// 0xeaf2: mov    bx,ax
-// 0xeaf4: jmp    word ptr [bx]
-
-// ================================================
-// 0xeaf6: WORD 'WEAF8' codep=0xeaf8 wordp=0xeaf8
-// ================================================
-// 0xeaf8: pop    bx
-// 0xeaf9: add    bx,[EACD] // WEACD
-// 0xeafd: pop    word ptr [bx]
-// 0xeaff: lodsw
-// 0xeb00: mov    bx,ax
-// 0xeb02: jmp    word ptr [bx]
-        case 0xeadc:
+        case 0xeadc: // WEADC
             {
                 Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
-        case 0xeaea:
+        case 0xeaea: // WEAEA
             {
                 Run8086(cs, addr, ds, cs, &regsp);            
             }
             break;
-        case 0xeaf8:
+        case 0xeaf8: // WEAF8
             {
                 Run8086(cs, addr, ds, cs, &regsp);            
             }
-            break;
-// ================================================
-// 0xed32: WORD '+TMP' codep=0xed34 wordp=0xed34
-// ================================================
-// 0xed34: mov    [ED30],sp // [TMP]
-// 0xed38: pop    ax
-// 0xed39: shl    ax,1
-// 0xed3b: sub    sp,ax
-// 0xed3d: lodsw
-// 0xed3e: mov    bx,ax
-// 0xed40: jmp    word ptr [bx]
+            break; // +TMP
         case 0xed34:
             {
                 Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
-// ================================================
-// 0xed42: WORD '-TMP' codep=0xed44 wordp=0xed44
-// ================================================
-// 0xed44: pop    ax
-// 0xed45: shl    ax,1
-// 0xed47: add    sp,ax
-// 0xed49: lodsw
-// 0xed4a: mov    bx,ax
-// 0xed4c: jmp    word ptr [bx]
-        case 0xed44:
+        case 0xed44: // -TMP
             {
                 Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
-// ================================================
-// 0xed4e: WORD '@TMP' codep=0xed50 wordp=0xed50
-// ================================================
-// 0xed50: pop    bx
-// 0xed51: shl    bx,1
-// 0xed53: neg    bx
-// 0xed55: add    bx,[ED30] // [TMP]
-// 0xed59: push   word ptr [bx]
-// 0xed5b: lodsw
-// 0xed5c: mov    bx,ax
-// 0xed5e: jmp    word ptr [bx]
-        case 0xed50:
+        case 0xed50: // @TMP
             {
                 Run8086(cs, addr, ds, cs, &regsp);
             }

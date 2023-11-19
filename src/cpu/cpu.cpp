@@ -40,11 +40,13 @@ void Write8Long(unsigned short s, unsigned short o, unsigned char x)
 
     m[addr] = x;
 
+    #if 0
     if(addr == 0x7d20)
     {
         printf("Hull at %d\n", m[addr]);
         fflush(stdout);
     }
+    #endif
     
     #if 0
     constexpr uint16_t hullvalue = 0x63ef + 0x11;
