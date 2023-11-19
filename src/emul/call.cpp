@@ -1871,21 +1871,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x7684: // "PRIORITIZE"
             {
-                unsigned short ax = Pop();
-                //printf("PRIORITIZE %i\n", ax);
-                if (ax == 0)
-                {
-                    Push(ax);
-                } else
-                {
-                    bx = ax - 2;
-                    LXCHG16(Read16(0x54EA), bx, ax); //  LOISEG
-                    LXCHG16(Read16(0x54F2), bx, ax); //  LOCSEC
-                    bx >>= 1;
-                    ax >>= 1;
-                    LXCHG8(Read16(0x54EE), bx, ax); // HIISEG
-                    Push(bx << 1);
-                }
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // 0x7684: pop    ax
@@ -2004,83 +1990,30 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x11ED: // "U/MOD"
         {
-            signed short divisor = Pop();
-            dx = Pop();
-            unsigned short ax = Pop();
-            unsigned int dividend = ax | ((unsigned int)dx<<16);
-
-            int16_t quotient = 0;
-            int16_t remainder = 0;
-            if (divisor == 0)
-            {
-                // XXX FIXME FIXME - The ORBRADIUS valus is configured to zero
-                // It seems this gets set and then division happens later
-                // this could be demonstrative of another bug in the system,
-                // or just geniue programmer oversight.
-                divideByZero(quotient, remainder);
-            }
-            else
-            {
-                quotient =  dividend / divisor;
-                remainder = dividend % divisor;
-            }
-
-            Push(remainder);
-            Push(quotient);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0xF4E: // "/"
         {
-            signed short divisor = Pop();
-            signed short dividend = Pop();
-
-            int16_t quotient = 0;
-            int16_t remainder = 0;
-
-            if (divisor == 0)
-            {
-                divideByZero(quotient, remainder);
-            }
-            else
-            {
-                quotient =  dividend / divisor;
-            }
-            Push(quotient);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0xF62: // "/MOD"
         {
-            signed short divisor = Pop(); // bx
-            signed short dividend = Pop();
-
-            int16_t quotient = 0;
-            int16_t remainder = 0;
-
-            if (divisor == 0)
-            {
-                divideByZero(quotient, remainder);
-            }
-            else 
-            {
-                quotient =  dividend / divisor;
-                remainder = dividend % divisor;
-            }
-
-            Push(remainder);
-            Push(quotient);
+            Run8086(cs, addr, ds, cs, &regsp);        
         }
         break;
 
         case 0x1261: // "="
         {
-            if (Pop() == Pop()) Push(1); else Push(0);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0x127a: // "0<"
-            Push((Pop()&0x8000)?1:0);
+            Run8086(cs, addr, ds, cs, &regsp);
         break;
 
         case 0x71DD: // "DOFFBLK" gets the idx from the dictionary in STARX.com
@@ -2352,23 +2285,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x1248: // "<"
         {
-            signed short int ax = Pop();
-            signed short int _dx = Pop();
-            //printf("input %x %x\n", ax, dx);
-            if (_dx < ax) Push(1); else Push(0);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0x122F: // ">"
         {
-            signed short int ax = Pop();
-            signed short int _dx = Pop();
-            if (_dx > ax) Push(1); else Push(0);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0x12a1: // "0>"
-            if (((signed short int)Pop()) > 0) Push(1); else Push(0);
+            Run8086(cs, addr, ds, cs, &regsp);
         break;
 // 0x12a1: pop    ax
 // 0x12a2: neg    ax
@@ -2381,21 +2309,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x12E1: // "U<"
         {
-            unsigned short ax = Pop();
-            dx = Pop();
-            if (dx < ax) Push(1); else Push(0);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0x11D8: // "U*"
         {
-            unsigned int ax = Pop();
-            unsigned int dx = Pop();
-            unsigned int x = ax * dx;
-            Push(x&0xFFFF);
-            Push((x>>16)&0xFFFF);
-            break;
+            Run8086(cs, addr, ds, cs, &regsp);
         }
+        break;
 
         case 0x1FA: // overwrite interrupt 0 to and div 0?
             printf("Divide by zero interrupt.");
@@ -2799,10 +2721,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0x9ac7: lodsw
 // 0x9ac8: mov    bx,ax
 // 0x9aca: jmp    word ptr [bx]
-            uint16_t es = Pop();
-            uint16_t cx = Pop();
-            bx = Read16(0x5A02); // IINDEX
-            Write8Long(es, bx, cx);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9a9e: // !IW
@@ -2822,11 +2741,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0x9aad: lodsw
 // 0x9aae: mov    bx,ax
 // 0x9ab0: jmp    word ptr [bx]
-            uint16_t es = Pop();
-            uint16_t cx = Pop();
-            bx = Read16(0x5A02); // IINDEX
-            bx <<= 1;
-            Write16Long(es, bx, cx);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9d18: // ?ILOCUS
@@ -2846,65 +2761,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x9a6c: // @IW
         {
-            // 0x9a6c: pop    ax
-            // 0x9a6d: push   es
-            // 0x9a6e: mov    es,ax
-            // 0x9a70: mov    bx,[5A02] // IINDEX
-            // 0x9a74: shl    bx,1
-            // 0x9a76: es:    
-            // 0x9a77: mov    ax,[bx]
-            // 0x9a79: pop    es
-            // 0x9a7a: push   ax
-            uint16_t es, ds;
-            uint16_t ax, cx, dx, di, si;
-            es = Pop();
-
-            bx = Read16(0x5A02); // IINDEX
-            bx <<= 1;
-            
-            ax = Read16Long(es, bx);
-            Push(ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9a82: // @IH
         {
-            // 0x9a82: pop    ax
-            // 0x9a83: push   es
-            // 0x9a84: mov    es,ax
-            // 0x9a86: mov    bx,[5A02] // IINDEX
-            // 0x9a8a: xor    ax,ax
-            // 0x9a8c: es:    
-            // 0x9a8d: mov    al,[bx]
-            // 0x9a8f: pop    es
-            // 0x9a90: push   ax
-            uint16_t es, ds;
-            uint16_t ax, cx, dx, di, si;
-            es = Pop();
-
-            bx = Read16(0x5A02); // IINDEX
-            ax = 0;
-            
-            ax = Read8Long(es, bx);
-            Push(ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x4910: // 2^N
         {
-            // 0x4910: pop    cx
-            // 0x4911: xor    ax,ax
-            // 0x4913: stc    
-            // 0x4914: inc    cx
-            // 0x4915: jcxz   4919
-            // 0x4917: rcl    ax,cl
-            // 0x4919: push   ax
-
-            uint16_t cx = Pop(); // pop cx
-            uint16_t ax = 0; // xor ax, ax
-            cx++; // inc cx
-            if (cx != 0) {
-                ax = 1 << (cx - 1); // rcl ax, cl
-            }
-            Push(ax); // push ax
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9970: // WLD>SCR
@@ -2914,24 +2781,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x99b4: // SCR>BLT
         {
-        // 0x99b4: pop    ax
-        // 0x99b5: add    ax,0007
-        // 0x99b8: sub    ax,[5A4E] // CENTERADJUST
-        // 0x99bc: pop    cx
-        // 0x99bd: sub    cx,[5A4E] // CENTERADJUST
-        // 0x99c1: push   cx
-        // 0x99c2: push   ax
-
-            uint16_t ax, cx;
-            ax = Pop();
-            ax += 7;
-            ax -= Read16(0x5A4E); // CENTERADJUST
-
-            cx = Pop();
-            cx -= Read16(0x5A4E); // CENTERADJUST
-
-            Push(cx);
-            Push(ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9055: // LFILLPOLY 
