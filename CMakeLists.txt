@@ -37,7 +37,7 @@ add_executable(emulatesdl
     src/cpu/8086emu.cpp
 )
 
-target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL)
+target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)
 
 target_link_libraries(emulatesdl PRIVATE 
         SDL2::SDL2 

@@ -34,6 +34,8 @@ static double toneInHz = 440.0;
 #include <thread>
 #include <mutex>
 #include <semaphore>
+#include <unordered_map>
+#include <array>
 
 #ifndef SDL
 #ifdef __linux__
@@ -1284,6 +1286,9 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
             assert(false);
             break;
     }
+
+    assert(false);
+    return 1;
 }
 
 void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int xormode, uint32_t offset)
