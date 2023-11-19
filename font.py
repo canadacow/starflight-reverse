@@ -63,7 +63,7 @@ img = np.concatenate(rows, axis=0)
 Image.fromarray(img.astype(np.uint8)).save('original_string.png')
 
 pil_img = Image.fromarray(img.astype(np.uint8))
-hqx_img = pil_img # hqx.hq4x(pil_img)
+hqx_img = hqx.hq4x(pil_img)
 
 np_img = np.array(hqx_img.convert('L'))
 
@@ -77,17 +77,21 @@ snowy_sdf = snowy.unitize(snowy.generate_sdf(binary_img != 0.0))
 snowy_sdf = np.squeeze(snowy_sdf, axis=-1)
 
 # Scale up the distance transform
-scale_factor = 10
+scale_factor = 2.5
 large_sdf = zoom(snowy_sdf, scale_factor)
 
 large_sdf = (large_sdf * 255).astype(np.uint8)
 
-bottomThreshold = 190
-topThreshold = 230
+Image.fromarray(large_sdf).save('raw_large_sdf.png')
+
+bottomThreshold = 195
+topThreshold = 210
 
 large_sdf[large_sdf < bottomThreshold] = 0
 large_sdf[large_sdf > topThreshold] = 255
 
+mask = (large_sdf >= bottomThreshold) & (large_sdf <= topThreshold)
+large_sdf[mask] = ((large_sdf[mask] - bottomThreshold) / (topThreshold - bottomThreshold)) * 255
 
 Image.fromarray(large_sdf).save('large_string.png')
 
