@@ -3379,69 +3379,34 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // ------------------------------------
 
         case 0x1508:  // "S->D"
-            if (Read16(regsp)&0x8000) Push(0xFFFF); else Push(0x0);
+        {
+            Run8086(cs, addr, ds, cs, &regsp);
+        }
         break;
 
         case 0x1067: // "D+"
         {
-            unsigned int ax = Pop();
-            unsigned int dx = Pop();
-            unsigned int bx = Pop();
-            unsigned int cx = Pop();
-            unsigned int l = (ax << 16) | dx;
-            unsigned int r = (bx << 16) | cx;
-            l += r;
-            Push(l&0xFFFF);
-            Push((l>>16)&0xFFFF);
-            break;
+            Run8086(cs, addr, ds, cs, &regsp);
         }
-
+        break;
         case 0x10B9: // "DNEGATE"
         {
-            unsigned int cx = Pop();
-            dx = Pop();
-            //printf("neg: 0x%x 0x%x\n", cx, dx);
-            int x = (cx << 16) | dx;
-            x = -x;
-            Push(x&0xFFFF);
-            Push((x >> 16) & 0xFFFF);
-            break;
+            Run8086(cs, addr, ds, cs, &regsp);
         }
-
+        break;
         case 0x495E: // "D16*"
         {
-            unsigned int ax = Pop();
-            dx = Pop();
-            unsigned int x = (ax << 16) | dx;
-            x = x << 4;
-            Push(x&0xFFFF);
-            Push((x>>16)&0xFFFF);
-            break;
+            Run8086(cs, addr, ds, cs, &regsp);
         }
-
+        break;
         case 0x4af3: // +BIT
         {
-            unsigned short num = Pop(); // Pop the number from the stack
-            unsigned short count = 0;
-            for (int i = 0; i < 16; i++) {
-                if (num & 1) {
-                    count++;
-                }
-                num >>= 1;
-            }
-            Push(count); // Push the result back onto the stack
-            break;
+            Run8086(cs, addr, ds, cs, &regsp);
         }
-
+        break;
         case 0x4b08: // D2*
         {
-          unsigned int ax = Pop();
-          unsigned short cx = Pop();
-
-          unsigned int x = (ax<<16)|cx;
-          x <<= 1;
-          Push(x&0xFFFF);
-          Push(x>>16);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
@@ -3504,55 +3469,34 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x2EB8: // "L!"
         {
-            bx = Pop();
-            unsigned short ds = Pop();
-            unsigned short ax = Pop();
-            Write16Long(ds, bx, ax);
-            //printf("Write16Long to 0x%04x:0x%04x = %x\n", ds, bx, ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x2EA4: // "L@"
         {
-            bx = Pop();
-            unsigned short ds = Pop();
-            //printf("Read16 to 0x%x:0x%x\n", ds, bx);
-            //unsigned short int x = m[(ds<<4)+bx] | (m[(ds<<4)+bx+1]<<8);
-            unsigned short int x = Read16Long(ds, bx);
-            Push(x);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x2EE5: // "LC!"
         {
-            bx = Pop();
-            unsigned short ds = Pop();
-            unsigned short ax = Pop();
-            Write8Long(ds, bx, ax&0xFF);
-            //printf("Write8Long to 0x%x:0x%x = %02x\n", ds, bx, ax&0xFF);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x2eCD: // "LC@"
         {
-            bx = Pop();
-            unsigned short ds = Pop();
-            unsigned short ax = Read8Long(ds, bx);
-            Push(ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0x49f0: // 'L+-@'
         {
-            bx = Pop();
-            unsigned short ds = Pop();
-            signed short int ax = (signed short int)((signed char)Read8Long(ds, bx));
-            Push(ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
         case 0x0F85:  // "+!"
         {
-            bx = Pop();
-            unsigned short ax = Pop();
-            Write16(bx, Read16(bx) + ax);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
@@ -3756,23 +3700,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xeb02: jmp    word ptr [bx]
         case 0xeadc:
             {
-                regsp += 0xe;
-                Write16(0xEACD, regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0xeaea:
             {
-                bx = Pop();
-                bx += Read16(0xEACD);
-                Push(Read16(bx));
+                Run8086(cs, addr, ds, cs, &regsp);            
             }
             break;
         case 0xeaf8:
             {
-                bx = Pop();
-                bx += Read16(0xEACD);
-                auto val = Pop();
-                Write16(bx, val);
+                Run8086(cs, addr, ds, cs, &regsp);            
             }
             break;
 // ================================================
@@ -3787,10 +3725,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xed40: jmp    word ptr [bx]
         case 0xed34:
             {
-                Write16(0xED30, regsp);
-                auto val = Pop();
-                val <<= 1;
-                regsp -= val;
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // ================================================
@@ -3804,9 +3739,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xed4c: jmp    word ptr [bx]
         case 0xed44:
             {
-                auto val = Pop();
-                val <<= 1;
-                regsp += val;
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // ================================================
@@ -3822,11 +3755,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xed5e: jmp    word ptr [bx]
         case 0xed50:
             {
-                auto val = Pop();
-                val <<= 1;
-                val = -val;
-                val += Read16(0xED30);
-                Push(Read16(val));
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // ================================================
@@ -3843,11 +3772,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xed71: jmp    word ptr [bx]
         case 0xed62:
             {
-                auto val = Pop();
-                val <<= 1;
-                val = -val;
-                val += Read16(0xED30);
-                Write16(val, Pop());
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // 0xee65: mov    cx,es
@@ -3884,9 +3809,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xeef2: push   ax
         case 0xeee5:
             {
-                Push(0);
-                Push(0x0404);
-                Push(Read16(0xED81));
+                Run8086(cs, addr, ds, cs, &regsp);
             }  
             break;
 // 0xee98: mov    dx,[52A2] // POLYSEG
@@ -3919,24 +3842,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xeedd: push   ax
         case 0xeecc:
             {
-                uint16_t ax = 0;
-                ax = Pop();
-                Push(ax);
-                if(ax != Read16(0xED81)) // WED81
-                {
-                    ax = 1;
-                }
-                else
-                {
-                    ax = 0;
-                }
-                Push(ax);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;       
 // 0xeec2: add    sp,06
         case 0xeec2:
             {
-                regsp += 6;
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0xdf13:
@@ -3957,7 +3869,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xdf02: mov    [DC20],sp // WDC20            
         case 0xdf02:
             {
-                Write16(0xDC20, regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0xdd2c:
@@ -3973,8 +3885,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xe4aa:
             {
-                // 0xe4aa: add    sp,10
-                regsp += 0x10;
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0x9841: // BUFFERXY
@@ -4029,13 +3940,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;            
         case 0x1047:
             {
-                // 0x1047: pop    ax
-                // 0x1048: shl    ax,1
-                // 0x104a: shl    ax,1
-                // 0x104c: push   ax
-                uint16_t ax = Pop();
-                ax <<= 2;
-                Push(ax);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0x9081:
