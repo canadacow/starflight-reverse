@@ -1147,9 +1147,108 @@ void GraphicsPixel(int x, int y, int color, uint32_t offset)
     GraphicsPixelDirect(x, y, colortable[color&0xF], offset);
 }
 
-void GraphicsBLT(int x1, int y1, int h, int w, char* image, int color, int xormode, uint32_t offset)
+std::unordered_map<char, int> font1_table = {
+    {' ', 0x0000}, {'!', 0x4904}, {'"', 0xB400}, {'#', 0xFFFF},
+    {'$', 0xF45E}, {'%', 0xA54A}, {'&', 0x0000}, {'\'', 0x4800},
+    {'[', 0x2922}, {']', 0x8928}, {'*', 0x1550}, {'+', 0x0BA0},
+    {',', 0x0128}, {'-', 0x0380}, {'.', 0x0004}, {'/', 0x2548},
+    {'0', 0xF6DE}, {'1', 0x4924}, {'2', 0xE7CE}, {'3', 0xE59E},
+    {'4', 0xB792}, {'5', 0xF39E}, {'6', 0xD3DE}, {'7', 0xE524},
+    {'8', 0xF7DE}, {'9', 0xF792}, {':', 0x0820}, {';', 0x0828},
+    {'<', 0x2A22}, {'=', 0x1C70}, {'>', 0x88A8}, {'?', 0xE584},
+    {'@', 0xFFCE}, {'A', 0x57DA}, {'B', 0xD75C}, {'C', 0x7246},
+    {'D', 0xD6DC}, {'E', 0xF34E}, {'F', 0xF348}, {'G', 0x7256},
+    {'H', 0xB7DA}, {'I', 0xE92E}, {'J', 0x24DE}, {'K', 0xB75A},
+    {'L', 0x924E}, {'M', 0xBFDA}, {'N', 0xBFFA}, {'O', 0x56D4},
+    {'P', 0xF7C8}, {'Q', 0xF7A6}, {'R', 0xF7EA}, {'S', 0x739C},
+    {'T', 0xE924}, {'U', 0xB6DE}, {'V', 0xB6D4}, {'W', 0xB7FA},
+    {'X', 0xB55A}, {'Y', 0xB7A4}, {'Z', 0xE54E}
+};
+
+std::unordered_map<char, std::array<uint16_t, 3>> font2_table = {
+    {' ', {0x0000, 0x0000, 0x0000}}, {'!', {0x0000, 0x0000, 0x0000}},
+    {'"', {0x0000, 0x0000, 0x0000}}, {'#', {0x0000, 0x0000, 0x0000}},
+    {'$', {0x0000, 0x0000, 0x0000}}, {'%', {0x0000, 0x0000, 0x0000}},
+    {'&', {0x0000, 0x0000, 0x0000}}, {'\'', {0x6F00, 0x0000, 0x0000}},
+    {'[', {0x0000, 0x0000, 0x0000}}, {']', {0x0000, 0x0000, 0x0000}},
+    {'*', {0x0000, 0x0000, 0x0000}}, {'+', {0x0000, 0x0000, 0x0000}},
+    {',', {0x0006, 0xF000, 0x0000}}, {'-', {0x0070, 0x0000, 0x0000}},
+    {'.', {0x0200, 0x0000, 0x0000}}, {'/', {0x0000, 0x0000, 0x0000}},
+    {'0', {0x76F7, 0xBDED, 0xC000}}, {'1', {0x6718, 0xC633, 0xC000}},
+    {'2', {0x76C6, 0x6663, 0xE000}}, {'3', {0x76C6, 0x61ED, 0xC000}},
+    {'4', {0x35AD, 0x6F98, 0xC000}}, {'5', {0xFE31, 0xE1ED, 0xC000}},
+    {'6', {0x76F1, 0xEDED, 0xC000}}, {'7', {0xFEC6, 0x6631, 0x8000}},
+    {'8', {0x76F6, 0xEDED, 0xC000}}, {'9', {0x76F6, 0xF1ED, 0xC000}},
+    {':', {0x1400, 0x0000, 0x0000}}, {';', {0x0000, 0x0000, 0x0000}},
+    {'<', {0x0000, 0x0000, 0x0000}}, {'=', {0x0000, 0x0000, 0x0000}},
+    {'>', {0x0000, 0x0000, 0x0000}}, {'?', {0x0000, 0x0000, 0x0000}},
+    {'@', {0x0000, 0x0000, 0x0000}}, {'A', {0x3673, 0x9FE7, 0x2000}},
+    {'B', {0xEDDE, 0xDDE7, 0x0000}}, {'C', {0x34CC, 0xC430, 0x0000}},
+    {'D', {0xEDDD, 0xDDE0, 0x0000}}, {'E', {0xFCCE, 0xCCF0, 0x0000}},
+    {'F', {0xFCCE, 0xCCC0, 0x0000}}, {'G', {0x3231, 0x8DA4, 0xC000}},
+    {'H', {0xCE73, 0xFCE7, 0x2000}}, {'I', {0xF666, 0x66F0, 0x0000}},
+    {'J', {0x3333, 0x3BF0, 0x0000}}, {'K', {0xDDDD, 0xEDD0, 0x0000}},
+    {'L', {0xCCCC, 0xCCF0, 0x0000}}, {'M', {0xC71E, 0xF5C7, 0x1C40}},
+    {'N', {0xCE7B, 0xBCE7, 0x3900}}, {'O', {0x3273, 0x9CE5, 0xC000}},
+    {'P', {0xFDDD, 0xFCC0, 0x0000}}, {'Q', {0x312C, 0xB2D9, 0x2340}},
+    {'R', {0xFDDD, 0xEDD0, 0x0000}}, {'S', {0x7CC6, 0x33E0, 0x0000}},
+    {'T', {0xF666, 0x6660, 0x0000}}, {'U', {0xCE73, 0x9CE7, 0xE000}},
+    {'V', {0xCE73, 0x9CE4, 0xC000}}, {'W', {0xC71C, 0x71D7, 0xF280}},
+    {'X', {0xDDD2, 0xDDD0, 0x0000}}, {'Y', {0xDDDD, 0xF660, 0x0000}},
+    {'Z', {0xF324, 0xCCF0, 0x0000}}
+};
+
+std::unordered_map<char, int> char_width_table = {
+    {' ', 4}, {'!', 4}, {'"', 4}, {'#', 4},
+    {'$', 4}, {'%', 4}, {'&', 5}, {'\'', 3},
+    {'[', 4}, {']', 4}, {'*', 4}, {'+', 4},
+    {',', 3}, {'-', 3}, {'.', 1}, {'/', 4},
+    {'0', 5}, {'1', 5}, {'2', 5}, {'3', 5},
+    {'4', 5}, {'5', 5}, {'6', 5}, {'7', 5},
+    {'8', 5}, {'9', 5}, {':', 1}, {';', 1},
+    {'<', 4}, {'=', 4}, {'>', 4}, {'?', 4},
+    {'@', 4}, {'A', 5}, {'B', 4}, {'C', 4},
+    {'D', 4}, {'E', 4}, {'F', 4}, {'G', 5},
+    {'H', 5}, {'I', 4}, {'J', 4}, {'K', 4},
+    {'L', 4}, {'M', 6}, {'N', 5}, {'O', 5},
+    {'P', 4}, {'Q', 6}, {'R', 4}, {'S', 4},
+    {'T', 4}, {'U', 5}, {'V', 5}, {'W', 6},
+    {'X', 4}, {'Y', 4}, {'Z', 4}
+};
+
+int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color, int xormode, uint32_t offset)
 {
-    short int *img = (short int*)image;
+    char c = (char)character;
+
+    switch(num)
+    {
+        case 1:
+        {
+            auto width = 3;
+            auto image = font1_table[c];
+
+            GraphicsBLT(x1, y1, 5, width, (const char*)&image, color, xormode, offset);
+
+            return width;
+        }
+        case 2:
+        {
+            auto width = char_width_table[c];
+            auto image = font2_table[c].data();
+
+            GraphicsBLT(x1, y1, 7, width, (const char*)image, color, xormode, offset);
+
+            return width;
+        }
+        default:
+            assert(false);
+            break;
+    }
+}
+
+void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int xormode, uint32_t offset)
+{
+    auto img = (const short int*)image;
     int n = 0;
     for(int y=y1; y>y1-h; y--)
     {

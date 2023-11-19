@@ -985,10 +985,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     const char* baseWord = "";
     const char* overlayName = baseOverlay;
     const char* wordName = baseWord;
+    uint16_t    wordValue = 0;
 
     int ovidx = GetOverlayIndex(Read16(0x55a5), &overlayName);
     wordName = FindWordCanFail(bx + 2, ovidx, true);
     overlayName = GetOverlayName(ovidx);
+    wordValue = bx + 2;
+
     //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
     
     //uint16_t* hullValue = (uint16_t*)&m[StarflightBaseSegment << 4 + (0x63ef + 0x11)];
@@ -1130,6 +1133,32 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     FillCIRCLE();
                 }
+                else if (nextInstr == 0x93fa || nextInstr == 0x94d0)
+                {
+                    // {1FONT} and {2FONT}
+                    uint16_t character = Pop();
+                    uint16_t useFont = 1;
+                    if(nextInstr == 0x94d0)
+                    {
+                        useFont = 2;
+                    }
+
+                    printf("{%dFONT} char '%c'\n", useFont, character);
+
+                    int color = Read16(0x55F2); // COLOR
+                    int x0 = Read16(0x586E);
+                    int y0 = Read16(0x5863);
+                    int w = Read16(0x5887);
+                    int h = Read16(0x5892);
+
+                    int bufseg = Read16(0x5648);
+                    int xormode = Read16(0x587C);
+
+                    auto width = GraphicsFONT(useFont, character, x0, y0, color, xormode, bufseg);
+
+                    x0 += width + 1;
+                    Write16(0x586E, x0);
+                }
                 else if (nextInstr == 0xf4bf && (std::string(overlayName) == "STP-OV"))
                 {
                     STP();
@@ -1258,8 +1287,21 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
               int n = Read16(regsp);
               int offset = Read16(regsp+2);
               //printf("(TYPE): ");
+
+              std::string outStr{};
+
               for(int i=0; i<n; i++)
-                  printf("%c", Read8(offset+i));
+              {
+                outStr += Read8(offset+i);
+              }
+
+              if(outStr == "CAUTION")
+              {
+                printf("\n");
+              }
+
+              printf("TYPE: %s\n", outStr.c_str());
+
               //if (Read8(offset+n-1) != '\n') printf("\n");
             }
 

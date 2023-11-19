@@ -90,8 +90,7 @@ topThreshold = 210
 large_sdf[large_sdf < bottomThreshold] = 0
 large_sdf[large_sdf > topThreshold] = 255
 
-mask = (large_sdf >= bottomThreshold) & (large_sdf <= topThreshold)
-large_sdf[mask] = ((large_sdf[mask] - bottomThreshold) / (topThreshold - bottomThreshold)) * 255
+
 
 Image.fromarray(large_sdf).save('large_string.png')
 
