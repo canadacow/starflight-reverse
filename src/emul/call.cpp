@@ -2368,136 +2368,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         */
 
         case 0x6D12: // "?UPDATE" converts addr to addr
-            // if addr is in a block buffer or instance buffer set the update flag
-            // used in CMOVE() function, when something is copied and the overlay is merged.
-            //fprintf(stderr, "?UPDATE incomplete?");
-            //exit(1);
-            // IBFR from 0x63ec to 0x64fc
-            cx = Pop();
-            //printf("?Update of 0x%04x\n", cx);
-            if (cx & 0x8000)
-            {
-              /*
-              00006D17  mov bx,[0x54a1]
-              00006D1B  mov dx,bx
-              00006D1D  add dx,byte +0x7
-
-              00006D20  cmp cx,dx
-              00006D22  jng 0x6d4b // jle
-
-              00006D24  add dx,0x401
-              00006D28  cmp dx,cx
-              00006D2A  jng 0x6d32
-              00006D2C  mov byte [bx+0x2],0xff
-              00006D30  jmp short 0x6d4b
-
-              00006D32  mov bx,[0x54a5]
-              00006D36  mov dx,bx
-              00006D38  add dx,byte +0x7
-              00006D3B  cmp cx,dx
-              00006D3D  jng 0x6d4b
-              00006D3F  add dx,0x401
-              00006D43  cmp dx,cx
-              00006D45  jng 0x6d4b
-              00006D47  mov byte [bx+0x2],0xff
-              */
-                // the if thens are wrong
-                bx = Read16(0x54a1); // 1BUFADR = 0xf7d0
-                dx = bx + 7;
-                if ((signed short)cx > (signed short)dx)
-                {
-                  dx += 0x401;
-                  if ((signed short)dx > (signed short)cx)
-                  {
-                      Write8(bx+2, 0xFF);
-                  } else
-                  {
-                      bx = Read16(0x54a5); // 2BUFADR = 0xfbe0
-                      dx = bx + 7;
-                      if ((signed short)cx > (signed short)dx) // jle
-                      {
-                          dx += 0x401;
-                          if ((signed short)dx > (signed short)cx)
-                            Write8(bx+2, 0xFF);
-                      }
-                  }
-                }
-            } else
-            {
-              /*
-              cmp cx,0x63ef
-              js 0x6d5f
-              cmp cx,0x64fd
-              jns 0x6d5f
-              mov bx,0x63ee
-              mov byte [bx],0xff
-              */
-            //x6d4d:
-              if ((cx >= 0x63ef) && (cx < 0x64fd)) {
-                Write8(0x63ee, 0xff);
-              }
-            }
-            //x6D5F:
-            Push(cx);
+        {
+            Run8086(cs, addr, ds, cs, &regsp);
+        }
         break;
 
         case 0x4c87: // (SLIPPER)
         {
-          // 0x4c87: pop    ax
-          // 0x4c88: mov    bx,ax
-          // 0x4c8a: mov    cx,[4C57] // PEAK
-          // 0x4c8e: sub    bx,cx
-          // 0x4c90: add    bx,0080
-          // 0x4c94: cmp    bh,00
-          // 0x4c97: jnz    4CB1
-
-          // 0x4c99: mov    dx,bx
-          // 0x4c9b: and    dx,0007
-          // 0x4c9f: mov    cl,03
-          // 0x4ca1: shr    bx,cl
-          // 0x4ca3: mov    cl,[bx+4C5B]
-          // 0x4ca7: mov    bx,[4C4C] // FILTER
-          // 0x4cab: xchg   dx,cx
-          // 0x4cad: shr    bx,cl
-
-          // 0x4caf: jmp    4CB3
-
-          // 0x4cb1: sub    bx,bx
-
-          // 0x4cb3: and    bx,dx
-
-          // 0x4cb5: jz     4CB8
-          // 0x4cb7: push   ax
-          // 0x4cb8: push   bx
-
-          unsigned short ax = Pop();
-          bx = ax;
-          cx = Read16(0x4c57); // pp_PEAK
-          bx -= cx;
-          bx += 0x80;
-          if ((bx&0xFF00) == 0)
-          {
-            dx = bx & 0x7;
-            bx >>= 3;
-            cx = (cx & 0xFF00) | Read8(bx+0x4C5B); // CURVE
-            bx = Read16(0x4c4c); // FILTER
-            unsigned short temp;
-            temp = dx;
-            dx = cx;
-            cx = temp;
-            bx >>= cx&0xFF;
-          } else
-          {
-            bx = 0;
-          }
-
-          bx = bx & dx;
-          if (bx != 0)
-          {
-            Push(ax);
-          }
-          Push(bx);
-          //printf("SLIPPER %i %i\n", ax, bx);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 // ---------------------------------------------
@@ -2643,11 +2521,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             }
         break;
         case 0x93B1: // "BEXTENT" Part of Bit Block Image Transfer (BLT)
-            //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i\n", Read16(0x586E), Read16(0x5863), Read16(0x5887), Read16(0x5892));
-            Push(Read16(0x586E)); // xblt
-            Push(Read16(0x5863) - Read16(0x5887) + 1); // yblt - lblt + 1
-            Push(Read16(0x586E) + Read16(0x5892) - 1); // xblt + wblt - 1
-            Push(Read16(0x5863)); // yblt
+            Run8086(cs, addr, ds, cs, &regsp);
         break;
 
         case 0x9390: // "?EXTENTX"
