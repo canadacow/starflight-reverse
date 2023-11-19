@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include <array>
+
 #include "bios.h"
 
 #ifndef _WIN32
@@ -279,7 +281,7 @@ void Init8086(uint8_t* systemMemory)
 }
 
 // Emulator entry point
-void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss, uint16_t *regSp)
+void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp)
 {
 	// Trap flag off
 	regs8[FLAG_TF] = 0;
@@ -294,6 +296,20 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss,
 	for (;;)
 	{
         opcode_stream = mem + (16 * regs16[REG_CS]) + reg_ip;
+
+		// Check to see if we're at the FORTH ending of this assembly routine.
+		// 0x22e1: lodsw
+		// 0x22e2: mov    bx,ax
+		// 0x22e4: jmp    word ptr [bx]
+		// AD 8B D8 FF 27
+
+		const std::array<uint8_t, 5> forthEnding = { 0xAD, 0x8B, 0xD8, 0xFF, 0x27 };
+
+		if(memcmp(opcode_stream, forthEnding.data(), forthEnding.size()) == 0)
+		{
+			*regSp = regs16[REG_SP];
+			break;
+		}
 
         //disassemble(regs16[REG_CS], reg_ip, mem, 1);
 
@@ -720,18 +736,5 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss,
 		// then process the tick and check for new keystrokes
 		if (int8_asap && !seg_override_en && !rep_override_en && regs8[FLAG_IF] && !regs8[FLAG_TF])
 			pc_interrupt(0xA), int8_asap = 0, KEYBOARD_DRIVER;
-
-        if(reg_ip == ipEnd)
-        {
-            opcode_stream = mem + (16 * regs16[REG_CS]) + reg_ip;
-
-            // Assert if we're not exiting on FORTH's lodsw instruction
-            if(*opcode_stream != 0xAD)
-            {
-                assert(false);
-            }
-            *regSp = regs16[REG_SP];
-            break;
-        }
 	}
 }

@@ -2730,7 +2730,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x9390: // "?EXTENTX"
            {
-                Run8086(cs, 0x9390, 0x93aa, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
            }
         break;
         case 0x902b: // "{BLT}" plot a bit pattern given parameters
@@ -2754,7 +2754,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x8891: // SCANPOLY
             {
-                Run8086(cs, 0x8891, 0x8990, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
         break;
         case 0x90ad: // V>DISPLAY
@@ -2831,17 +2831,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x9d18: // ?ILOCUS
         {
-            Run8086(cs, 0x9d18, 0x9d71, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9e14: // XCHGICON
         {
-            Run8086(cs, 0x9e14, 0x9e4c, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9eb1: // ?IID
         {
-            Run8086(cs, 0x9eb1, 0x9eed, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x9a6c: // @IW
@@ -2909,7 +2909,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x9970: // WLD>SCR
         {
-            Run8086(cs, 0x9970, 0x99a3, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
         case 0x99b4: // SCR>BLT
@@ -3025,7 +3025,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x6C86: // "C>EGA" 
         {
-            Run8086(cs, 0x6C86, 0x6cb1, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
@@ -3770,7 +3770,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x6cd6: // E>CGA
         {
-            Run8086(cs, 0x6cd6, 0x6d01, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
@@ -3785,7 +3785,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x4b17: // EASY-BITS for SQRT
         {
-            Run8086(cs, 0x4b17, 0x4b37, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
@@ -3861,7 +3861,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
         case 0x992d: // "?INVIS"
         {
-            Run8086(cs, 0x992d, 0x995f, ds, cs, &regsp);
+            Run8086(cs, addr, ds, cs, &regsp);
         }
         break;
 
@@ -4022,7 +4022,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xee8d: mov    es,cx       
         case 0xee65: // PUSH-POLY
             {
-                Run8086(cs, 0xee65, 0xee8f, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // 0xeee5: xor    ax,ax
@@ -4055,7 +4055,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 // 0xeeb5: mov    [ED7D],bx // FADDR
         case 0xee96:
             {
-                Run8086(cs, 0xee96, 0xeebb, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }   
             break;   
 // 0xeecc: xor    ax,ax
@@ -4091,17 +4091,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xdf13:
             {
-                Run8086(cs, 0xdf13, 0xdf1c, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }   
             break;
         case 0xe1b6:
             {
-                Run8086(cs, 0xe1b6, 0xe221, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0xe228:
             {
-                Run8086(cs, 0xe228, 0xe273, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
 // 0xdf02: mov    [DC20],sp // WDC20            
@@ -4112,13 +4112,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xdd2c:
             {
-                Run8086(cs, 0xdd2c, 0xdd9d, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
          
         case 0xe48c:
             {
-                Run8086(cs, 0xe48c, 0xe4a3, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0xe4aa:
@@ -4129,7 +4129,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0x9841: // BUFFERXY
             {
-                Run8086(cs, 0x9841, 0x9867, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0x9097: // SQLPLOT - square plot, used for the fracal maps
@@ -4174,7 +4174,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xe16b:
             {
-                Run8086(cs, 0xe16b, 0xe1af, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;            
         case 0x1047:
@@ -4218,22 +4218,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             break;
         case 0xefd9: // CBLTP -- MAPS-OV
             {
-                Run8086(cs, 0xefd9, 0xf000, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0xe8f3:// CBLTP -- MOVE-OV
             {
-                Run8086(cs, 0xe8f3, 0xe91a, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0x48dc:
             {
-                Run8086(cs, 0x48dc, 0x4903, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         case 0x8783: // CLIPPER
             {
-                Run8086(cs, 0x8783, 0x87da, ds, cs, &regsp);
+                Run8086(cs, addr, ds, cs, &regsp);
             }
             break;
         default:

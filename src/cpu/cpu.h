@@ -30,7 +30,7 @@ void InitCPU();
 
 // Actual 8086 emulator, exposed in 8086emu.cpp
 void Init8086(uint8_t* systemMemory);
-void Run8086(uint16_t cs, uint16_t ip, uint16_t ipEnd, uint16_t ds, uint16_t ss, uint16_t *regSp);
+void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp);
 unsigned disassemble(unsigned seg, unsigned off, uint8_t *memory, int count);
 
 #endif
