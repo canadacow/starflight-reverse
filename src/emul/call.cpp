@@ -2543,7 +2543,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int xormode = Read16(0x587C);
 
                 //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
-                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode, bufseg);
+                Rotoscope rs{};
+                rs.content = PicPixel;
+                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode, bufseg, rs);
             }
             //exit(1);
         break;
@@ -2571,8 +2573,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int destinationY = 199 - destinationIndex / 40;
 
                 for (int j = 0; j < 72; ++j) {
-                    auto color = GraphicsPeek(sourceX + j, sourceY, sourceSegment);
-                    GraphicsPixel(destinationX + j, destinationY, color, destinationSegment);
+                    Rotoscope rs;
+                    auto color = GraphicsPeek(sourceX + j, sourceY, sourceSegment, &rs);
+                    GraphicsPixel(destinationX + j, destinationY, color, destinationSegment, rs);
                 }
 
                 sourceIndex += 40;
@@ -2727,12 +2730,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 std::vector<uint32_t> pixelData;
                 pixelData.resize(width * height);
 
+                std::vector<Rotoscope> rotoData;
+                rotoData.resize(width * height);
+
                 uint32_t pd = 0;
                 for(int y = 0; y < height; ++y)
                 {
                     for(int x = 0; x < width; ++x)
                     {
-                        pixelData[pd++] = GraphicsPeekDirect(x + fulx, fuly - y, bufseg);
+                        pixelData[pd] = GraphicsPeekDirect(x + fulx, fuly - y, bufseg, &rotoData[pd]);
+
+                        ++pd;
                     }
                 }
 
@@ -2741,7 +2749,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     for(int x = 0; x < width; ++x)
                     {
-                        GraphicsPixelDirect(x + tulx, tuly - y, pixelData[pd++], bufseg);
+                        GraphicsPixelDirect(x + tulx, tuly - y, pixelData[pd], bufseg, rotoData[pd]);
+                        ++pd;
                     }
                 }
             }

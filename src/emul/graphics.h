@@ -2,7 +2,108 @@
 #define GRAPHICS_H
 
 #include <stdint.h>
+#include <assert.h>
 
+enum PixelContents
+{
+    ClearPixel = 0,
+    NavigationalPixel,
+    TextPixel,
+    LinePixel,
+    EllipsePixel,
+    BoxFillPixel,
+    PicPixel,
+};
+
+struct NavigationData
+{
+    uint8_t window_x;
+    uint8_t window_y;
+};
+
+struct TextData
+{
+    char character;
+    uint8_t fontNum;
+    uint8_t font_x;
+    uint8_t font_y;
+};
+
+struct PicData
+{
+    uint64_t picID;
+    uint8_t  pic_x;
+    uint8_t  pic_y;
+};
+
+struct LineData
+{
+    uint8_t  x0;
+    uint8_t  y0;
+    uint8_t  x1;
+    uint8_t  y1;
+    uint8_t  n;
+};
+
+struct Rotoscope
+{
+    PixelContents content;
+
+    uint8_t EGAcolor;
+
+    uint32_t argb;
+
+    union
+    {
+        NavigationData navigationData;
+        TextData textData;
+        PicData picData;
+        LineData lineData;
+    };
+
+    Rotoscope& operator=(const Rotoscope& other)
+    {
+        if (this != &other) // protect against invalid self-assignment
+        {
+            content = other.content;
+            EGAcolor = other.EGAcolor;
+            argb = other.argb;
+
+            switch(content)
+            {
+                case ClearPixel:
+                case EllipsePixel:
+                case BoxFillPixel:
+                    break;
+                case NavigationalPixel:
+                    navigationData = other.navigationData;
+                    break;
+                case TextPixel:
+                    textData = other.textData;
+                    break;
+                case PicPixel:
+                    picData = other.picData;
+                    break;
+                case LinePixel:
+                    lineData = other.lineData;
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        }
+        // by convention, always return *this
+        return *this;
+    }
+
+    Rotoscope& operator=(const PixelContents& pixel) {
+        assert(pixel == ClearPixel);
+        content = ClearPixel;
+        EGAcolor = 0;
+        argb = 0;
+        return *this;
+    }
+};
 
     extern uint32_t colortable[16];
 
@@ -21,9 +122,9 @@
     void GraphicsSetCursor(int x, int y);
     void GraphicsChar(unsigned char s);
     void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset);
-    void GraphicsPixel(int x, int y, int color, uint32_t offset);
-    void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset);
-    void GraphicsBLT(int x1, int y1, int w, int h, const char* image, int color, int xormode, uint32_t offset);
+    void GraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
+    void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
+    void GraphicsBLT(int x1, int y1, int w, int h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
     void GraphicsSave(char *filename);
 
     void WaitForVBlank();
@@ -34,8 +135,8 @@
     void BeepTone(uint16_t pitFreq);
     void BeepOff();
 
-    uint8_t GraphicsPeek(int x, int y, uint32_t offset);
-    uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset);
+    uint8_t GraphicsPeek(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
+    uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
 
     int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color, int xormode, uint32_t offset);
 

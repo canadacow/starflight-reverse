@@ -8,6 +8,7 @@ static SDL_Renderer *renderer  = NULL;
 static SDL_Renderer *offscreenRenderer  = NULL;
 static SDL_Texture* graphicsTexture = NULL;
 static SDL_Texture* offscreenTexture = NULL;
+static SDL_Texture* windowTexture = NULL;
 static SDL_Texture* textTexture = NULL;
 
 static SDL_AudioDeviceID audioDevice = 0;
@@ -65,52 +66,6 @@ static uint32_t OFFSCREEN_WINDOW_HEIGHT = 720;
 
 #define ROTOSCOPE_MODE_WIDTH  160
 #define ROTOSCOPE_MODE_HEIGHT 200
-
-enum PixelContents
-{
-    NavigationalPixel,
-    TextPixel,
-    LinePixel,
-    EllipsePixel,
-    BoxFillPixel,
-    PicPixel,
-};
-
-struct NavigationData
-{
-    uint8_t window_x;
-    uint8_t window_y;
-};
-
-struct TextData
-{
-    char character;
-    uint8_t fontNum;
-    uint8_t font_x;
-    uint8_t font_y;
-};
-
-struct PicData
-{
-    uint64_t picID;
-    uint8_t  pic_x;
-    uint8_t  pic_y;
-};
-
-struct Rotoscope
-{
-    PixelContents content;
-
-    uint8_t EGAcolor;
-
-    uint8_t r, g, b;
-
-    union
-    {
-        NavigationData navigationData;
-        TextData textData;
-    };
-};
 
 enum SFGraphicsMode
 {
@@ -716,8 +671,6 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    SDL_RenderSetScale(renderer, (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH, (float)WINDOW_HEIGHT / (float)GRAPHICS_MODE_HEIGHT);
-
     offscreenRenderer = SDL_CreateRenderer(offscreenWindow, -1, 0);
     if (offscreenRenderer == NULL)
     {
@@ -726,10 +679,16 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    SDL_RenderSetScale(offscreenRenderer, (float)OFFSCREEN_WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH, (float)OFFSCREEN_WINDOW_HEIGHT / (float)GRAPHICS_MODE_HEIGHT);
-
     graphicsTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
     if (graphicsTexture == NULL)
+    {
+        printf("SDL_CreateTexture Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    windowTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_HEIGHT);
+    if (windowTexture == NULL)
     {
         printf("SDL_CreateTexture Error: %s", SDL_GetError());
         SDL_Quit();
@@ -785,9 +744,28 @@ void GraphicsInit()
     GraphicsInitThread(NULL);
 }
 
-void DoRotoscope()
+void DoRotoscope(std::vector<uint32_t>& windowData)
 {
+    uint32_t index = 0;
+    for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
+    {
+        for(uint32_t x = 0; x < WINDOW_WIDTH; ++x)
+        {
+            // Calculate the corresponding position in the smaller texture
+            uint32_t srcX = x * GRAPHICS_MODE_WIDTH / WINDOW_WIDTH;
+            uint32_t srcY = y * GRAPHICS_MODE_HEIGHT / WINDOW_HEIGHT;
 
+            // Calculate the index in the smaller texture
+            uint32_t srcIndex = srcY * GRAPHICS_MODE_WIDTH + srcX;
+
+            // Pull the pixel from the smaller texture
+            uint32_t pixel = rotoscopePixels[srcIndex].argb;
+
+            // Place the pixel in the larger surface
+            windowData[index] = pixel;
+            ++index;
+        }
+    }
 }
 
 void GraphicsUpdate()
@@ -798,13 +776,24 @@ void GraphicsUpdate()
     const void* data = nullptr;
 
     static std::vector<uint32_t> fullRes{};
+    if(fullRes.size() == 0)
+    {
+        fullRes.resize(WINDOW_WIDTH * WINDOW_HEIGHT);
+    }
 
     // Choose the correct texture based on the current mode
     if (graphicsMode == SFGraphicsMode::Graphics)
     {
+    #if 0
         currentTexture = graphicsTexture;
         stride = GRAPHICS_MODE_WIDTH;
         data = graphicsPixels.data() + graphicsDisplayOffset;
+    #else
+        DoRotoscope(fullRes);
+        currentTexture = windowTexture;
+        stride = WINDOW_WIDTH;
+        data = fullRes.data();
+    #endif
     }
     else if (graphicsMode == SFGraphicsMode::Text)
     {
@@ -822,6 +811,8 @@ void GraphicsUpdate()
     if(graphicsMode == SFGraphicsMode::Graphics)
     {
         data = (uint8_t*)graphicsPixels.data(); // + 0x20000;
+
+        stride = GRAPHICS_MODE_WIDTH;
 
         SDL_UpdateTexture(offscreenTexture, NULL, data, stride * sizeof(uint32_t));
         SDL_RenderClear(offscreenRenderer);
@@ -1066,6 +1057,7 @@ void GraphicsMode(int mode)
 
     std::fill(graphicsPixels.begin(), graphicsPixels.end(), 0);
     std::fill(textPixels.begin(), textPixels.end(), 0);
+    std::fill(rotoscopePixels.begin(), rotoscopePixels.end(), ClearPixel);
 
     graphicsThread = std::jthread([]{
         while(!stopSemaphore.try_acquire()) {
@@ -1105,6 +1097,7 @@ void GraphicsClear(int color, uint32_t offset, int byteCount)
     for(uint32_t i = 0; i < byteCount * 4; ++i)
     {
         graphicsPixels[dest + destOffset + i] = c;
+        rotoscopePixels[dest + destOffset + i] = ClearPixel;
     }
 }
 
@@ -1127,19 +1120,20 @@ void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_
     for(uint32_t i = 0; i < count * 4; ++i)
     {
         graphicsPixels[dest + destOffset + i] = graphicsPixels[src + srcOffset + i];
+        rotoscopePixels[dest + destOffset + i] = rotoscopePixels[src + srcOffset + i];
     }
 }
 
-uint8_t GraphicsPeek(int x, int y, uint32_t offset)
+uint8_t GraphicsPeek(int x, int y, uint32_t offset, Rotoscope* pc)
 {
-    auto pixel = GraphicsPeekDirect(x, y, offset);
+    auto pixel = GraphicsPeekDirect(x, y, offset, pc);
 
     auto it = std::find(std::begin(colortable), std::end(colortable), pixel);
     assert(it != std::end(colortable));
     return std::distance(std::begin(colortable), it);
 }
 
-uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
+uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc)
 {
     if(offset == 0)
     {
@@ -1158,10 +1152,15 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset)
         return colortable[0];
     }
 
+    if(pc)
+    {
+        *pc = rotoscopePixels[y * GRAPHICS_MODE_WIDTH + x + offset];
+    }
+
     return graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset];
 }
 
-void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset)
+void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc)
 {
     if(offset == 0)
     {
@@ -1180,11 +1179,17 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset)
         return;
     }
 
+    pc.argb = color;
+    rotoscopePixels[y * GRAPHICS_MODE_WIDTH + x + offset] = pc;
+
     graphicsPixels[y * GRAPHICS_MODE_WIDTH + x + offset] = color;
 }
 
 void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset)
 {
+    Rotoscope rs{};
+    rs.content = LinePixel;
+
     float x = x1;
     float y = y1;
     float dx = (x2 - x1);
@@ -1194,18 +1199,28 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32
     if (n == 0) return;
     dx /= n;
     dy /= n;
+
+    Rotoscope rs{};
+    rs.content = LinePixel;
+    rs.lineData.x0 = x1;
+    rs.lineData.x1 = x2;
+    rs.lineData.y0 = y1;
+    rs.lineData.y1 = y2;
+
     for(int i=0; i<=n; i++)
     {
-        GraphicsPixel(x, y, color, offset);
+        rs.lineData.n = i;
+
+        GraphicsPixel(x, y, color, offset, rs);
         x += dx;
         y += dy;
     }
-    //GraphicsUpdate();
 }
 
-void GraphicsPixel(int x, int y, int color, uint32_t offset)
+void GraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc)
 {
-    GraphicsPixelDirect(x, y, colortable[color&0xF], offset);
+    pc.EGAcolor = color & 0xf;
+    GraphicsPixelDirect(x, y, colortable[color&0xF], offset, pc);
 }
 
 std::unordered_map<char, int> font1_table = {
@@ -1312,6 +1327,12 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
 {
     char c = (char)character;
 
+    Rotoscope rs{};
+
+    rs.content = TextPixel;
+    rs.textData.character = c;
+    rs.textData.fontNum = num;
+
     switch(num)
     {
         case 1:
@@ -1319,7 +1340,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
             auto width = 3;
             auto image = font1_table[c];
 
-            GraphicsBLT(x1, y1, 5, width, (const char*)&image, color, xormode, offset);
+            GraphicsBLT(x1, y1, 5, width, (const char*)&image, color, xormode, offset, rs);
 
             return width;
         }
@@ -1328,7 +1349,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
             auto width = char_width_table[c];
             auto image = font2_table[c].data();
 
-            GraphicsBLT(x1, y1, 7, width, (const char*)image, color, xormode, offset);
+            GraphicsBLT(x1, y1, 7, width, (const char*)image, color, xormode, offset, rs);
 
             return width;
         }
@@ -1337,7 +1358,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
             auto width = char_width_table[c];
             auto image = font3_table[c].data();
 
-            GraphicsBLT(x1, y1, 9, width, (const char*)image, color, xormode, offset);
+            GraphicsBLT(x1, y1, 9, width, (const char*)image, color, xormode, offset, rs);
 
             return width;            
         }
@@ -1350,7 +1371,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
     return 1;
 }
 
-void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int xormode, uint32_t offset)
+void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc)
 {
     auto img = (const short int*)image;
     int n = 0;
@@ -1361,7 +1382,6 @@ void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int
             int x0 = x;
             int y0 = y;
 
-
             bool hasPixel = false;
 
             if ((*img) & (1<<(15-n)))
@@ -1369,11 +1389,11 @@ void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int
                 if(xormode) {
                     auto src = GraphicsPeek(x0, y0, offset);
                     auto xored = src ^ (color&0xF);
-                    GraphicsPixel(x0, y0, xored, offset);
+                    GraphicsPixel(x0, y0, xored, offset, pc);
                 }
                 else
                 {
-                    GraphicsPixel(x0, y0, color, offset);
+                    GraphicsPixel(x0, y0, color, offset, pc);
                 }
             }
             
