@@ -1244,6 +1244,11 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
         return;
     }
 
+    if(pc.content == TextPixel)
+    {
+        printf("\n");
+    }
+
     pc.argb = color;
     rotoscopePixels[y * GRAPHICS_MODE_WIDTH + x + offset] = pc;
 

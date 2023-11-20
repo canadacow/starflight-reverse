@@ -72,6 +72,17 @@ struct Rotoscope
         LineData lineData;
     };
 
+    Rotoscope()
+    {
+        content = ClearPixel;
+        EGAcolor = 0;
+        argb = 0;
+        blt_x = 0;
+        blt_y = 0;
+        blt_w = 0;
+        blt_h = 0;
+    }
+
     Rotoscope& operator=(const Rotoscope& other)
     {
         if (this != &other) // protect against invalid self-assignment
@@ -81,6 +92,8 @@ struct Rotoscope
             argb = other.argb;
             blt_x = other.blt_x;
             blt_y = other.blt_y;
+            blt_w = other.blt_w;
+            blt_h = other.blt_h;
 
             switch(content)
             {
@@ -95,6 +108,8 @@ struct Rotoscope
                     navigationData = other.navigationData;
                     break;
                 case TextPixel:
+                    assert(blt_w != 0);
+                    assert(blt_h != 0);
                     textData = other.textData;
                     break;
                 case PicPixel:
