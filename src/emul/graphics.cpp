@@ -63,6 +63,54 @@ static uint32_t OFFSCREEN_WINDOW_HEIGHT = 720;
 #define TARGET_RESOLUTION_WIDTH 3840
 #define TARGET_RESOLUTION_HEIGHT 2160
 
+#define ROTOSCOPE_MODE_WIDTH  160
+#define ROTOSCOPE_MODE_HEIGHT 200
+
+enum PixelContents
+{
+    NavigationalPixel,
+    TextPixel,
+    LinePixel,
+    EllipsePixel,
+    BoxFillPixel,
+    PicPixel,
+};
+
+struct NavigationData
+{
+    uint8_t window_x;
+    uint8_t window_y;
+};
+
+struct TextData
+{
+    char character;
+    uint8_t fontNum;
+    uint8_t font_x;
+    uint8_t font_y;
+};
+
+struct PicData
+{
+    uint64_t picID;
+    uint8_t  pic_x;
+    uint8_t  pic_y;
+};
+
+struct Rotoscope
+{
+    PixelContents content;
+
+    uint8_t EGAcolor;
+
+    uint8_t r, g, b;
+
+    union
+    {
+        NavigationData navigationData;
+        TextData textData;
+    };
+};
 
 enum SFGraphicsMode
 {
@@ -73,6 +121,7 @@ enum SFGraphicsMode
 SFGraphicsMode graphicsMode = Text;
 
 uint32_t graphicsDisplayOffset = 0;// 100 * 160;
+std::vector<Rotoscope> rotoscopePixels;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
 
@@ -711,6 +760,9 @@ static int GraphicsInitThread(void *ptr)
     graphicsPixels = std::vector<uint32_t>();
     graphicsPixels.resize(GRAPHICS_MEMORY_ALLOC);
 
+    rotoscopePixels = std::vector<Rotoscope>();
+    rotoscopePixels.resize(GRAPHICS_MEMORY_ALLOC);
+
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
@@ -733,12 +785,19 @@ void GraphicsInit()
     GraphicsInitThread(NULL);
 }
 
+void DoRotoscope()
+{
+
+}
+
 void GraphicsUpdate()
 {
 #ifdef SDL
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;
     const void* data = nullptr;
+
+    static std::vector<uint32_t> fullRes{};
 
     // Choose the correct texture based on the current mode
     if (graphicsMode == SFGraphicsMode::Graphics)
@@ -762,7 +821,7 @@ void GraphicsUpdate()
 
     if(graphicsMode == SFGraphicsMode::Graphics)
     {
-        data = (uint8_t*)graphicsPixels.data() + 0x20000;
+        data = (uint8_t*)graphicsPixels.data(); // + 0x20000;
 
         SDL_UpdateTexture(offscreenTexture, NULL, data, stride * sizeof(uint32_t));
         SDL_RenderClear(offscreenRenderer);
@@ -1362,3 +1421,4 @@ void GraphicsSave(char *filename)
   }
   fclose(file);
 }
+
