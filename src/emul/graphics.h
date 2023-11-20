@@ -12,7 +12,10 @@ enum PixelContents
     LinePixel,
     EllipsePixel,
     BoxFillPixel,
+    PolyFillPixel,
     PicPixel,
+    PlotPixel,
+    TilePixel,
 };
 
 struct NavigationData
@@ -24,9 +27,11 @@ struct NavigationData
 struct TextData
 {
     char character;
+    uint8_t bgColor;
+    uint8_t xormode;
     uint8_t fontNum;
-    uint8_t font_x;
-    uint8_t font_y;
+    uint8_t fontWidth;
+    uint8_t fontHeight;
 };
 
 struct PicData
@@ -53,6 +58,12 @@ struct Rotoscope
 
     uint32_t argb;
 
+    int16_t blt_x;
+    int16_t blt_y;
+
+    int16_t blt_w;
+    int16_t blt_h;
+
     union
     {
         NavigationData navigationData;
@@ -68,12 +79,17 @@ struct Rotoscope
             content = other.content;
             EGAcolor = other.EGAcolor;
             argb = other.argb;
+            blt_x = other.blt_x;
+            blt_y = other.blt_y;
 
             switch(content)
             {
                 case ClearPixel:
                 case EllipsePixel:
                 case BoxFillPixel:
+                case PlotPixel:
+                case PolyFillPixel:
+                case TilePixel:
                     break;
                 case NavigationalPixel:
                     navigationData = other.navigationData;
@@ -97,10 +113,12 @@ struct Rotoscope
     }
 
     Rotoscope& operator=(const PixelContents& pixel) {
-        assert(pixel == ClearPixel);
-        content = ClearPixel;
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel);
+        content = pixel;
         EGAcolor = 0;
         argb = 0;
+        blt_x = 0;
+        blt_y = 0;
         return *this;
     }
 };

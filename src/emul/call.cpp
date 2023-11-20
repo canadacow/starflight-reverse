@@ -650,16 +650,16 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
         {
             for (int i = x_center - x; i <= x_center + x; i++)
             {
-                GraphicsPixel(i, y_center + y, color, seg);
-                GraphicsPixel(i, y_center - y, color, seg);
+                GraphicsPixel(i, y_center + y, color, seg, Rotoscope(EllipsePixel));
+                GraphicsPixel(i, y_center - y, color, seg, Rotoscope(EllipsePixel));
             }
         }
         else
         {
-            GraphicsPixel(x_center + x, y_center + y, color, seg);
-            GraphicsPixel(x_center - x, y_center + y, color, seg);
-            GraphicsPixel(x_center + x, y_center - y, color, seg);
-            GraphicsPixel(x_center - x, y_center - y, color, seg);
+            GraphicsPixel(x_center + x, y_center + y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center - x, y_center + y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center + x, y_center - y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center - x, y_center - y, color, seg, Rotoscope(EllipsePixel));
         }
 
         y++;
@@ -690,16 +690,16 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
         {
             for (int i = x_center - x; i <= x_center + x; i++)
             {
-                GraphicsPixel(i, y_center + y, color, seg);
-                GraphicsPixel(i, y_center - y, color, seg);
+                GraphicsPixel(i, y_center + y, color, seg, Rotoscope(EllipsePixel));
+                GraphicsPixel(i, y_center - y, color, seg, Rotoscope(EllipsePixel));
             }
         }
         else
         {
-            GraphicsPixel(x_center + x, y_center + y, color, seg);
-            GraphicsPixel(x_center - x, y_center + y, color, seg);
-            GraphicsPixel(x_center + x, y_center - y, color, seg);
-            GraphicsPixel(x_center - x, y_center - y, color, seg);
+            GraphicsPixel(x_center + x, y_center + y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center - x, y_center + y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center + x, y_center - y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center - x, y_center - y, color, seg, Rotoscope(EllipsePixel));
         }
 
         x++;
@@ -2486,7 +2486,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x9367: // "PLOT" 
             {
                 int color = Read16(0x55F2);
-                GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, Read16(0x5648));
+                GraphicsPixel(Read16(regsp+2), Read16(regsp+0), color, Read16(0x5648), Rotoscope(PlotPixel));
                 dx = Pop();
                 unsigned short ax = Pop();
             }
@@ -2503,7 +2503,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int color = Read16(0x55F2); // COLOR
 
                 // Write pixel data back to the buffer
-                GraphicsPixel(x, y, color & 0xf, Read16(0x5648));
+                GraphicsPixel(x, y, color & 0xf, Read16(0x5648), Rotoscope(PlotPixel));
             }
         break;
         case 0x9017: // LXPLOT 
@@ -2517,7 +2517,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 pixel_data = pixel_data ^ (color & 0xf);
 
-                GraphicsPixel(x, y, pixel_data, Read16(0x5648));
+                GraphicsPixel(x, y, pixel_data, Read16(0x5648), Rotoscope(PlotPixel));
             }
         break;
         case 0x93B1: // "BEXTENT" Part of Bit Block Image Transfer (BLT)
@@ -2687,7 +2687,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 #if 1
                 for(uint16_t x = xl; x <= xr; ++x)
                 {
-                    GraphicsPixel(x, y, color, bufseg);
+                    GraphicsPixel(x, y, color, bufseg, Rotoscope(PolyFillPixel));
                 }
                 #else
                 if(y == YMIN || y == YMAX)
@@ -3054,8 +3054,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             {
                 for (int j = 0; j < 160; ++j)
                 {
-                    auto c = GraphicsPeek(x + j, y - i, srcSeg);
-                    GraphicsPixel(x + j, y - i, c, destSeg);
+                    Rotoscope rs{};
+                    auto c = GraphicsPeek(x + j, y - i, srcSeg, &rs);
+                    GraphicsPixel(x + j, y - i, c, destSeg, rs);
                 }
             }
         }
@@ -3725,8 +3726,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto seg = Read16(0x5648);
                 auto color = Read16(0x55F2);
 
-                GraphicsPixel(x, y, color, seg);
-                GraphicsPixel(x, y - 1, color, seg);
+                GraphicsPixel(x, y, color, seg, Rotoscope(PlotPixel));
+                GraphicsPixel(x, y - 1, color, seg, Rotoscope(PlotPixel));
             }
             break;
         case 0xf0c1: // |EGA
@@ -3790,7 +3791,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     for(uint16_t x = 0; x < width; ++x)
                     {
-                        GraphicsPixel(xul + x, yul + y, COLOR & 0xff, BUF_SEG);
+                        GraphicsPixel(xul + x, yul + y, COLOR & 0xff, BUF_SEG, Rotoscope(TilePixel));
                     }
                 }
             }

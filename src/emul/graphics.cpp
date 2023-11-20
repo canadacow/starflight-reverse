@@ -744,8 +744,59 @@ void GraphicsInit()
     GraphicsInitThread(NULL);
 }
 
+struct TextureColor {
+    float r, g;
+};
+
+template<std::size_t WIDTH, std::size_t HEIGHT>
+struct Texture {
+    std::array<std::array<TextureColor, WIDTH>, HEIGHT> data;
+};
+
+template<std::size_t WIDTH, std::size_t HEIGHT>
+TextureColor bilinearSample(const Texture<WIDTH, HEIGHT>& texture, float u, float v) {
+    u *= WIDTH - 1;
+    v *= HEIGHT - 1;
+
+    int x = (int)u;
+    int y = (int)v;
+    float u_ratio = u - x;
+    float v_ratio = v - y;
+    float u_opposite = 1 - u_ratio;
+    float v_opposite = 1 - v_ratio;
+
+    TextureColor result;
+    result.r = (texture.data[y][x].r * u_opposite + texture.data[y][x+1].r * u_ratio) * v_opposite +
+               (texture.data[y+1][x].r * u_opposite  + texture.data[y+1][x+1].r * u_ratio) * v_ratio;
+    result.g = (texture.data[y][x].g * u_opposite + texture.data[y][x+1].g * u_ratio) * v_opposite +
+               (texture.data[y+1][x].g * u_opposite  + texture.data[y+1][x+1].g * u_ratio) * v_ratio;
+
+    return result;
+}
+
 void DoRotoscope(std::vector<uint32_t>& windowData)
 {
+    Texture<GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT> texture{};
+    for(uint32_t y = 0; y < GRAPHICS_MODE_HEIGHT; ++y)
+    {
+        for(uint32_t x = 0; x < GRAPHICS_MODE_WIDTH; ++x)
+        {
+            uint32_t srcIndex = y * GRAPHICS_MODE_WIDTH + x;
+            auto& roto = rotoscopePixels[srcIndex];
+
+            if(roto.content == TextPixel)
+            {
+                float i = (float)roto.blt_x / (float)(roto.blt_w - 1);
+                float j = (float)roto.blt_y / (float)(roto.blt_h - 1);
+                texture.data[y][x] = { i, j };
+            }
+            else
+            {
+                texture.data[y][x] = { 0.0f, 0.0f };
+            }
+        }
+    }
+
     uint32_t index = 0;
     for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
     {
@@ -758,8 +809,22 @@ void DoRotoscope(std::vector<uint32_t>& windowData)
             // Calculate the index in the smaller texture
             uint32_t srcIndex = srcY * GRAPHICS_MODE_WIDTH + srcX;
 
+            auto& roto = rotoscopePixels[srcIndex];
+
             // Pull the pixel from the smaller texture
-            uint32_t pixel = rotoscopePixels[srcIndex].argb;
+            uint32_t pixel = roto.argb;
+
+            if(roto.content == TextPixel)
+            {
+                auto sample = bilinearSample(texture, (float)x / (float)WINDOW_WIDTH, (float)y / (float)WINDOW_HEIGHT);
+
+                uint32_t r = static_cast<uint32_t>(sample.r * 255);
+                uint32_t g = static_cast<uint32_t>(sample.g * 255);
+                uint32_t b = 0;
+                uint32_t a = 255;
+
+                pixel = (a << 24) | (r << 16) | (g << 8) | b;
+            }
 
             // Place the pixel in the larger surface
             windowData[index] = pixel;
@@ -1187,9 +1252,6 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
 
 void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset)
 {
-    Rotoscope rs{};
-    rs.content = LinePixel;
-
     float x = x1;
     float y = y1;
     float dx = (x2 - x1);
@@ -1339,6 +1401,8 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
         {
             auto width = 3;
             auto image = font1_table[c];
+            rs.textData.fontWidth = width;
+            rs.textData.fontHeight = 5;
 
             GraphicsBLT(x1, y1, 5, width, (const char*)&image, color, xormode, offset, rs);
 
@@ -1348,6 +1412,8 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
         {
             auto width = char_width_table[c];
             auto image = font2_table[c].data();
+            rs.textData.fontWidth = width;
+            rs.textData.fontHeight = 7;
 
             GraphicsBLT(x1, y1, 7, width, (const char*)image, color, xormode, offset, rs);
 
@@ -1357,6 +1423,8 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
         {
             auto width = char_width_table[c];
             auto image = font3_table[c].data();
+            rs.textData.fontWidth = width;
+            rs.textData.fontHeight = 9;
 
             GraphicsBLT(x1, y1, 9, width, (const char*)image, color, xormode, offset, rs);
 
@@ -1375,19 +1443,36 @@ void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int
 {
     auto img = (const short int*)image;
     int n = 0;
+
+    uint16_t xoffset = 0;
+    uint16_t yoffset = 0;
+
+    pc.blt_w = w;
+    pc.blt_h = h;
+
     for(int y=y1; y>y1-h; y--)
     {
+        xoffset = 0;
+
         for(int x=x1; x<x1+w; x++)
         {
             int x0 = x;
             int y0 = y;
 
             bool hasPixel = false;
+            auto src = GraphicsPeek(x0, y0, offset);
+
+            pc.blt_x = xoffset;
+            pc.blt_y = yoffset;
+
+            if(pc.content == TextPixel)
+            {
+                pc.textData.bgColor = src;
+            }
 
             if ((*img) & (1<<(15-n)))
             {
                 if(xormode) {
-                    auto src = GraphicsPeek(x0, y0, offset);
                     auto xored = src ^ (color&0xF);
                     GraphicsPixel(x0, y0, xored, offset, pc);
                 }
@@ -1396,6 +1481,10 @@ void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int
                     GraphicsPixel(x0, y0, color, offset, pc);
                 }
             }
+            else
+            {
+                GraphicsPixel(x0, y0, src, offset, pc);
+            }
             
             n++;
             if (n == 16)
@@ -1403,7 +1492,11 @@ void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int
                 n = 0;
                 img++;
             }
+
+            ++xoffset;
         }
+
+        ++yoffset;
     }
 }
 
