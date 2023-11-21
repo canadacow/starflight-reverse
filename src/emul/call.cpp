@@ -2511,13 +2511,21 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int y = Pop();
                 int x = Pop();
 
-                auto pixel_data = GraphicsPeek(x, y, Read16(0x5648));
+                Rotoscope rs{};
+                auto pixel_data = GraphicsPeek(x, y, Read16(0x5648), &rs);
 
                 int color = Read16(0x55F2); // COLOR
 
                 pixel_data = pixel_data ^ (color & 0xf);
 
-                GraphicsPixel(x, y, pixel_data, Read16(0x5648), Rotoscope(PlotPixel));
+                rs.EGAcolor = color;
+                if(rs.content == TextPixel)
+                {
+                    rs.textData.bgColor ^ (color & 0xf);
+                    rs.textData.fgColor ^ (color & 0xf);
+                }
+
+                GraphicsPixel(x, y, pixel_data, Read16(0x5648), rs);
             }
         break;
         case 0x93B1: // "BEXTENT" Part of Bit Block Image Transfer (BLT)

@@ -840,8 +840,8 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     constexpr float fontSpaceWidth = 8.0f * 4.0f;
                     constexpr float fontSpaceHeight = 8.0f * 4.0f;
 
-                    constexpr float fontWidth = 7.0f * 4.0f;
-                    constexpr float fontHeight = 6.0f * 4.0f;
+                    constexpr float fontWidth = 6.0f * 4.0f;
+                    constexpr float fontHeight = 5.0f * 4.0f;
 
                     constexpr float atlasWidth = 448.0f;
                     constexpr float atlasHeight = 160.0f;
