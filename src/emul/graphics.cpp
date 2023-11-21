@@ -101,6 +101,7 @@ TextureColor bilinearSample(const Texture<WIDTH, HEIGHT, PLANES>& texture, float
 }
 
 Texture<448, 160, 1> FONT1Texture;
+Texture<840, 180, 1> FONT2Texture;
 
 enum SFGraphicsMode
 {
@@ -765,8 +766,6 @@ static int GraphicsInitThread(void *ptr)
     unsigned width, height;
 
     unsigned error = lodepng::decode(image, width, height, "FONT1_sdf.png", LCT_GREY, 8);
-
-    //if there's an error, display it
     if(error) 
     {
         printf("decoder error %d, %s\n", error, lodepng_error_text(error));
@@ -776,6 +775,21 @@ static int GraphicsInitThread(void *ptr)
     for(int i = 0; i < 448; ++i) {
         for(int j = 0; j < 160; ++j) {
             FONT1Texture.data[j][i].u[0] = (float)image[(j*448 + i)] / 255.0f;
+        }
+    }
+
+    image.clear();
+
+    error = lodepng::decode(image, width, height, "FONT2_sdf.png", LCT_GREY, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    for(int i = 0; i < 840; ++i) {
+        for(int j = 0; j < 180; ++j) {
+            FONT2Texture.data[j][i].u[0] = (float)image[(j*840 + i)] / 255.0f;
         }
     }
 
@@ -867,6 +881,39 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     {
                         pixel = colortable[roto.textData.fgColor & 0xf];
                     }
+                } else if (roto.textData.fontNum == 2)
+                {
+                    // Find the character in our atlas.
+                    constexpr float fontSpaceWidth = 15.0f * 4.0f;
+                    constexpr float fontSpaceHeight = 9.0f * 4.0f;
+
+                    float fontWidth = (float)(roto.textData.fontWidth * 2) * 4.0f;
+                    float fontHeight = (float)roto.textData.fontHeight * 4.0f;
+
+                    constexpr float atlasWidth = 840.0f;
+                    constexpr float atlasHeight = 180.0f;
+
+                    uint32_t c = roto.textData.character - 32;
+                    uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
+                    uint32_t fontRow = c / fontsPerRow;
+                    uint32_t fontCol = c % fontsPerRow;
+
+                    float u = fontCol * fontSpaceWidth / atlasWidth;
+                    float v = fontRow * fontSpaceHeight / atlasHeight;
+
+                    // We put padding in our atlas
+                    u += 4.0f / atlasWidth;
+                    v += 4.0f / atlasHeight;
+
+                    u += fontX * (fontWidth / atlasWidth);
+                    v += fontY * (fontHeight / atlasHeight);
+
+                    auto glyph = bilinearSample(FONT2Texture, u, v);
+                    pixel = colortable[roto.textData.bgColor & 0xf];
+                    if(glyph.r > 0.9f)
+                    {
+                        pixel = colortable[roto.textData.fgColor & 0xf];
+                    }
                 }
                 else
                 {
@@ -878,6 +925,13 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     pixel = (a << 24) | (r << 16) | (g << 8) | b;
                 }
             }
+            #if 1
+            else 
+            {
+                //pixel = 0xffff0000;
+                pixel = colortable[(int)roto.content];
+            }
+            #endif
 
             // Place the pixel in the larger surface
             windowData[index] = pixel;
@@ -1516,7 +1570,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
     return 1;
 }
 
-void GraphicsBLT(int x1, int y1, int h, int w, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc)
+void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc)
 {
     auto img = (const short int*)image;
     int n = 0;

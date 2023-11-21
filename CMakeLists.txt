@@ -35,6 +35,7 @@ add_executable(emulatesdl
     src/emul/graphics.cpp 
     src/emul/fract.c
     src/cpu/8086emu.cpp
+    src/util/lodepng.cpp
 )
 
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)

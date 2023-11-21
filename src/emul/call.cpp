@@ -2542,10 +2542,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int color = Read16(0x55F2); // COLOR
                 int bltseg = Read16(0x58aa); // BLTSEG
                 int bltoffs = Read16(0x589d);  // ABLT
-                int x0 = Read16(0x586E);
-                int y0 = Read16(0x5863);
-                int w = Read16(0x5887);
-                int h = Read16(0x5892);
+                int16_t x0 = (int16_t)Read16(0x586E);
+                int16_t y0 = (int16_t)Read16(0x5863);
+                int16_t w = (int16_t)Read16(0x5887);
+                int16_t h = (int16_t)Read16(0x5892);
 
                 int bufseg = Read16(0x5648);
                 int xormode = Read16(0x587C);

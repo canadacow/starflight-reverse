@@ -170,7 +170,7 @@ struct Rotoscope
     void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset);
     void GraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
     void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
-    void GraphicsBLT(int x1, int y1, int w, int h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
+    void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
     void GraphicsSave(char *filename);
 
     void WaitForVBlank();
