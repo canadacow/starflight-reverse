@@ -28,6 +28,7 @@ struct TextData
 {
     char character;
     uint8_t bgColor;
+    uint8_t fgColor;
     uint8_t xormode;
     uint8_t fontNum;
     uint8_t fontWidth;

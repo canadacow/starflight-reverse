@@ -111,6 +111,7 @@ enum SFGraphicsMode
 SFGraphicsMode graphicsMode = Text;
 
 uint32_t graphicsDisplayOffset = 0;// 100 * 160;
+std::mutex rotoscopePixelMutex;
 std::vector<Rotoscope> rotoscopePixels;
 std::vector<uint32_t> graphicsPixels;
 std::vector<uint32_t> textPixels;
@@ -797,31 +798,8 @@ void GraphicsInit()
     GraphicsInitThread(NULL);
 }
 
-void DoRotoscope(std::vector<uint32_t>& windowData)
+void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels)
 {
-    Texture<GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT, 2> texture{};
-    for(uint32_t y = 0; y < GRAPHICS_MODE_HEIGHT; ++y)
-    {
-        for(uint32_t x = 0; x < GRAPHICS_MODE_WIDTH; ++x)
-        {
-            uint32_t srcIndex = y * GRAPHICS_MODE_WIDTH + x;
-            auto& roto = rotoscopePixels[srcIndex];
-
-            if(roto.content == TextPixel)
-            {
-                float i, j;
-                i = (float)(roto.blt_x + 1) / (float)roto.blt_w;
-                j = (float)(roto.blt_y + 1) / (float)roto.blt_h;
-
-                texture.data[y][x] = { i, j };
-            }
-            else
-            {
-                texture.data[y][x] = { 0.0f, 0.0f };
-            }
-        }
-    }
-
     uint32_t index = 0;
     for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
     {
@@ -834,47 +812,66 @@ void DoRotoscope(std::vector<uint32_t>& windowData)
             // Calculate the index in the smaller texture
             uint32_t srcIndex = srcY * GRAPHICS_MODE_WIDTH + srcX;
 
-            auto& roto = rotoscopePixels[srcIndex];
+            auto& roto = rotoPixels[srcIndex];
 
             // Pull the pixel from the smaller texture
             uint32_t pixel = roto.argb;
 
             if(roto.content == TextPixel)
             {
-                float xcoord = ((float)x - 1.0f) / (float)WINDOW_WIDTH;
-                float ycoord = ((float)y - 1.0f) / (float)WINDOW_HEIGHT;
-                auto sample = bilinearSample(texture, xcoord, ycoord);
+                float fontX = (float)roto.blt_x / (float)roto.blt_w;
+                float fontY = (float)roto.blt_y / (float)roto.blt_h;
+                
+                float xcoord = (float)x / (float)WINDOW_WIDTH;
+                float ycoord = (float)y / (float)WINDOW_HEIGHT;
+
+                float subPixelXOffset = (xcoord * GRAPHICS_MODE_WIDTH) - srcX;
+                float subPixelYOffset = (ycoord * GRAPHICS_MODE_HEIGHT) - srcY;
+
+                subPixelXOffset /= (float)roto.textData.fontWidth;
+                subPixelYOffset /= (float)roto.textData.fontHeight;
+
+                fontX += subPixelXOffset;
+                fontY += subPixelYOffset;
 
                 if(roto.textData.fontNum == 1)
                 {
                     // Find the character in our atlas.
-                    constexpr float fontWidth = 8.0f * 4.0f;
-                    constexpr float fontHeight = 7.0f * 4.0f;
+                    constexpr float fontSpaceWidth = 8.0f * 4.0f;
+                    constexpr float fontSpaceHeight = 8.0f * 4.0f;
+
+                    constexpr float fontWidth = 7.0f * 4.0f;
+                    constexpr float fontHeight = 6.0f * 4.0f;
+
                     constexpr float atlasWidth = 448.0f;
                     constexpr float atlasHeight = 160.0f;
 
                     uint32_t c = roto.textData.character - 32;
-                    uint32_t fontsPerRow = 448 / (int)fontWidth;
+                    uint32_t fontsPerRow = 448 / (int)fontSpaceWidth;
                     uint32_t fontRow = c / fontsPerRow;
                     uint32_t fontCol = c % fontsPerRow;
 
-                    float u = fontCol * fontWidth / atlasWidth;
-                    float v = fontRow * fontHeight / atlasHeight;
+                    float u = fontCol * fontSpaceWidth / atlasWidth;
+                    float v = fontRow * fontSpaceHeight / atlasHeight;
 
-                    u += sample.r * (fontWidth / atlasWidth);
-                    v += sample.g * (fontHeight / atlasHeight);
+                    // We put padding in our atlas
+                    u += 4.0f / atlasWidth;
+                    v += 4.0f / atlasHeight;
+
+                    u += fontX * (fontWidth / atlasWidth);
+                    v += fontY * (fontHeight / atlasHeight);
 
                     auto glyph = bilinearSample(FONT1Texture, u, v);
                     pixel = colortable[roto.textData.bgColor & 0xf];
-                    //if(glyph.r > 0.7f)
-                    //{
-                    //  pixel = colortable[roto.EGAcolor & 0xf];
-                    //}
+                    if(glyph.r > 0.8f)
+                    {
+                        pixel = colortable[roto.textData.fgColor & 0xf];
+                    }
                 }
                 else
                 {
-                    uint32_t r = static_cast<uint32_t>(sample.r * 255);
-                    uint32_t g = static_cast<uint32_t>(sample.g * 255);
+                    uint32_t r = static_cast<uint32_t>(fontX * 255);
+                    uint32_t g = static_cast<uint32_t>(fontY * 255);
                     uint32_t b = 0;
                     uint32_t a = 255;
 
@@ -897,9 +894,12 @@ void GraphicsUpdate()
     const void* data = nullptr;
 
     static std::vector<uint32_t> fullRes{};
+    static std::vector<Rotoscope> backbuffer{};
+
     if(fullRes.size() == 0)
     {
         fullRes.resize(WINDOW_WIDTH * WINDOW_HEIGHT);
+        backbuffer.resize(GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT);
     }
 
     // Choose the correct texture based on the current mode
@@ -910,7 +910,16 @@ void GraphicsUpdate()
         stride = GRAPHICS_MODE_WIDTH;
         data = graphicsPixels.data() + graphicsDisplayOffset;
     #else
-        DoRotoscope(fullRes);
+        {
+            std::lock_guard<std::mutex> lg(rotoscopePixelMutex);
+
+            for(int i = 0; i < GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT; ++i)
+            {
+                backbuffer[i] = rotoscopePixels[i];
+            }
+        }
+
+        DoRotoscope(fullRes, backbuffer);
         currentTexture = windowTexture;
         stride = WINDOW_WIDTH;
         data = fullRes.data();
@@ -1203,6 +1212,7 @@ void WaitForVBlank()
 
 void GraphicsClear(int color, uint32_t offset, int byteCount)
 {
+    std::lock_guard<std::mutex> lg(rotoscopePixelMutex);
     uint32_t dest = (uint32_t)offset;
 
     dest <<= 4; // Convert to linear addres
@@ -1224,6 +1234,8 @@ void GraphicsClear(int color, uint32_t offset, int byteCount)
 
 void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_t di, uint16_t count)
 {
+    std::lock_guard<std::mutex> lg(rotoscopePixelMutex);
+
     uint32_t src = (uint32_t)sourceSeg;
     uint32_t dest = (uint32_t)destSeg;
 
@@ -1283,6 +1295,8 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc)
 
 void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc)
 {
+    std::lock_guard<std::mutex> lg(rotoscopePixelMutex);
+
     if(offset == 0)
     {
         assert(false);
@@ -1455,6 +1469,8 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
     rs.content = TextPixel;
     rs.textData.character = c;
     rs.textData.fontNum = num;
+    rs.textData.fgColor = color;
+    rs.textData.xormode = xormode;
 
     switch(num)
     {
