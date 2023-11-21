@@ -25,6 +25,7 @@ static double toneInHz = 440.0;
 #include <stdint.h>
 #include <math.h>
 #include "graphics.h"
+#include "../util/lodepng.h"
 
 #include <vector>
 #include <assert.h>
@@ -66,6 +67,40 @@ static uint32_t OFFSCREEN_WINDOW_HEIGHT = 720;
 
 #define ROTOSCOPE_MODE_WIDTH  160
 #define ROTOSCOPE_MODE_HEIGHT 200
+
+union TextureColor {
+    struct {
+        float r, g, b, a;
+    };
+    float u[4];
+};
+
+template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
+struct Texture {
+    std::array<std::array<TextureColor, WIDTH>, HEIGHT> data;
+};
+
+template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
+TextureColor bilinearSample(const Texture<WIDTH, HEIGHT, PLANES>& texture, float u, float v) {
+    u *= WIDTH - 1;
+    v *= HEIGHT - 1;
+
+    int x = (int)u;
+    int y = (int)v;
+    float u_ratio = u - x;
+    float v_ratio = v - y;
+    float u_opposite = 1 - u_ratio;
+    float v_opposite = 1 - v_ratio;
+
+    TextureColor result;
+    for (std::size_t plane = 0; plane < PLANES; ++plane) {
+        result.u[plane] = (texture.data[y][x].u[plane] * u_opposite + texture.data[y][x+1].u[plane] * u_ratio) * v_opposite +
+                          (texture.data[y+1][x].u[plane] * u_opposite  + texture.data[y+1][x+1].u[plane] * u_ratio) * v_ratio;
+    }
+    return result;
+}
+
+Texture<448, 160, 1> FONT1Texture;
 
 enum SFGraphicsMode
 {
@@ -725,6 +760,24 @@ static int GraphicsInitThread(void *ptr)
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
+    std::vector<uint8_t> image;
+    unsigned width, height;
+
+    unsigned error = lodepng::decode(image, width, height, "FONT1_sdf.png", LCT_GREY, 8);
+
+    //if there's an error, display it
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    for(int i = 0; i < 448; ++i) {
+        for(int j = 0; j < 160; ++j) {
+            FONT1Texture.data[j][i].u[0] = (float)image[(j*448 + i)] / 255.0f;
+        }
+    }
+
     return 0;
 }
 
@@ -744,39 +797,9 @@ void GraphicsInit()
     GraphicsInitThread(NULL);
 }
 
-struct TextureColor {
-    float r, g;
-};
-
-template<std::size_t WIDTH, std::size_t HEIGHT>
-struct Texture {
-    std::array<std::array<TextureColor, WIDTH>, HEIGHT> data;
-};
-
-template<std::size_t WIDTH, std::size_t HEIGHT>
-TextureColor bilinearSample(const Texture<WIDTH, HEIGHT>& texture, float u, float v) {
-    u *= WIDTH - 1;
-    v *= HEIGHT - 1;
-
-    int x = (int)u;
-    int y = (int)v;
-    float u_ratio = u - x;
-    float v_ratio = v - y;
-    float u_opposite = 1 - u_ratio;
-    float v_opposite = 1 - v_ratio;
-
-    TextureColor result;
-    result.r = (texture.data[y][x].r * u_opposite + texture.data[y][x+1].r * u_ratio) * v_opposite +
-               (texture.data[y+1][x].r * u_opposite  + texture.data[y+1][x+1].r * u_ratio) * v_ratio;
-    result.g = (texture.data[y][x].g * u_opposite + texture.data[y][x+1].g * u_ratio) * v_opposite +
-               (texture.data[y+1][x].g * u_opposite  + texture.data[y+1][x+1].g * u_ratio) * v_ratio;
-
-    return result;
-}
-
 void DoRotoscope(std::vector<uint32_t>& windowData)
 {
-    Texture<GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT> texture{};
+    Texture<GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT, 2> texture{};
     for(uint32_t y = 0; y < GRAPHICS_MODE_HEIGHT; ++y)
     {
         for(uint32_t x = 0; x < GRAPHICS_MODE_WIDTH; ++x)
@@ -786,8 +809,10 @@ void DoRotoscope(std::vector<uint32_t>& windowData)
 
             if(roto.content == TextPixel)
             {
-                float i = (float)roto.blt_x / (float)(roto.blt_w - 1);
-                float j = (float)roto.blt_y / (float)(roto.blt_h - 1);
+                float i, j;
+                i = (float)(roto.blt_x + 1) / (float)roto.blt_w;
+                j = (float)(roto.blt_y + 1) / (float)roto.blt_h;
+
                 texture.data[y][x] = { i, j };
             }
             else
@@ -816,14 +841,45 @@ void DoRotoscope(std::vector<uint32_t>& windowData)
 
             if(roto.content == TextPixel)
             {
-                auto sample = bilinearSample(texture, (float)x / (float)WINDOW_WIDTH, (float)y / (float)WINDOW_HEIGHT);
+                float xcoord = ((float)x - 1.0f) / (float)WINDOW_WIDTH;
+                float ycoord = ((float)y - 1.0f) / (float)WINDOW_HEIGHT;
+                auto sample = bilinearSample(texture, xcoord, ycoord);
 
-                uint32_t r = static_cast<uint32_t>(sample.r * 255);
-                uint32_t g = static_cast<uint32_t>(sample.g * 255);
-                uint32_t b = 0;
-                uint32_t a = 255;
+                if(roto.textData.fontNum == 1)
+                {
+                    // Find the character in our atlas.
+                    constexpr float fontWidth = 8.0f * 4.0f;
+                    constexpr float fontHeight = 7.0f * 4.0f;
+                    constexpr float atlasWidth = 448.0f;
+                    constexpr float atlasHeight = 160.0f;
 
-                pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                    uint32_t c = roto.textData.character - 32;
+                    uint32_t fontsPerRow = 448 / (int)fontWidth;
+                    uint32_t fontRow = c / fontsPerRow;
+                    uint32_t fontCol = c % fontsPerRow;
+
+                    float u = fontCol * fontWidth / atlasWidth;
+                    float v = fontRow * fontHeight / atlasHeight;
+
+                    u += sample.r * (fontWidth / atlasWidth);
+                    v += sample.g * (fontHeight / atlasHeight);
+
+                    auto glyph = bilinearSample(FONT1Texture, u, v);
+                    pixel = colortable[roto.textData.bgColor & 0xf];
+                    //if(glyph.r > 0.7f)
+                    //{
+                    //  pixel = colortable[roto.EGAcolor & 0xf];
+                    //}
+                }
+                else
+                {
+                    uint32_t r = static_cast<uint32_t>(sample.r * 255);
+                    uint32_t g = static_cast<uint32_t>(sample.g * 255);
+                    uint32_t b = 0;
+                    uint32_t a = 255;
+
+                    pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                }
             }
 
             // Place the pixel in the larger surface

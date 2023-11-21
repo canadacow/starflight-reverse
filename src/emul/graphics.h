@@ -83,6 +83,18 @@ struct Rotoscope
         blt_h = 0;
     }
 
+    Rotoscope(PixelContents pixel)
+    {
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel);
+        content = pixel;
+        EGAcolor = 0;
+        argb = 0;
+        blt_x = 0;
+        blt_y = 0;
+        blt_w = 0;
+        blt_h = 0;
+    }
+
     Rotoscope& operator=(const Rotoscope& other)
     {
         if (this != &other) // protect against invalid self-assignment
