@@ -891,8 +891,6 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     constexpr float fontSpaceWidth = 15.0f * 4.0f;
                     constexpr float fontSpaceHeight = 9.0f * 4.0f;
 
-                    float fontWidth = (float)(roto.textData.fontWidth * 2) * 4.0f;
-                    float fontHeight = (float)roto.textData.fontHeight * 4.0f;
 
                     constexpr float atlasWidth = 840.0f;
                     constexpr float atlasHeight = 180.0f;
@@ -905,12 +903,8 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     float u = fontCol * fontSpaceWidth / atlasWidth;
                     float v = fontRow * fontSpaceHeight / atlasHeight;
 
-                    // We put padding in our atlas
-                    u += 4.0f / atlasWidth;
-                    v += 4.0f / atlasHeight;
-
-                    u += fontX * (fontWidth / atlasWidth);
-                    v += fontY * (fontHeight / atlasHeight);
+                    u += fontX * (fontSpaceWidth / atlasWidth);
+                    v += fontY * (fontSpaceHeight / atlasHeight);
 
                     auto glyph = bilinearSample(FONT2Texture, u, v);
                     pixel = colortable[roto.textData.bgColor & 0xf];
