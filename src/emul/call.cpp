@@ -1133,7 +1133,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     FillCIRCLE();
                 }
-                else if (nextInstr == 0x93fa || nextInstr == 0x94d0 /* || nextInstr == 0x953f */)
+                else if (nextInstr == 0x93fa || nextInstr == 0x94d0 || nextInstr == 0x953f )
                 {
                     // {1FONT} and {2FONT}
                     uint16_t character = Pop();
