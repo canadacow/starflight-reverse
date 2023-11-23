@@ -23,7 +23,7 @@ font_table = {
 }
 
 # Load the TTF file
-font = ImageFont.truetype('HEXCO.ttf', 40)  # Adjust the size as needed
+font = ImageFont.truetype('phorfeir.ttf', 42)  # Adjust the size as needed
 
 def draw_char(c):
     # Create a blank image
@@ -34,8 +34,8 @@ def draw_char(c):
     w, h = draw.textsize(c, font=font)
     
     # Calculate the starting point to center the glyph
-    start_x = (img.width - w) / 2
-    start_y = (img.height - h) / 2
+    start_x = -1 #(img.width - w) / 2
+    start_y = -4 # (img.height - h) / 2
     
     # Draw the character
     draw.text((start_x, start_y), c, font=font, fill=0, align='center')

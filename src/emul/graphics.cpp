@@ -884,13 +884,14 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
 
                     auto glyph = bilinearSample(FONT1Texture, u, v);
                     pixel = colortable[roto.textData.bgColor & 0xf];
-                    if(glyph.r > 0.85f)
+                    if(glyph.r > 0.80f)
                     {
                         pixel = colortable[roto.textData.fgColor & 0xf];
                     }
+                    #if 0
                     else
                     {
-                        #if 0
+                        #if 1
                         uint32_t r = static_cast<uint32_t>(fontX * 255);
                         uint32_t g = static_cast<uint32_t>(fontY * 255);
                         uint32_t b = 0;
@@ -899,14 +900,15 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                         pixel = (a << 24) | (r << 16) | (g << 8) | b;
                         #endif
                     }
+                    #endif
                 } else if (roto.textData.fontNum == 2)
                 {
                     // Find the character in our atlas.
                     constexpr float fontSpaceWidth = 15.0f * 4.0f;
-                    constexpr float fontSpaceHeight = 9.0f * 4.0f;
+                    constexpr float fontSpaceHeight = 11.0f * 4.0f;
 
                     constexpr float atlasWidth = 840.0f;
-                    constexpr float atlasHeight = 180.0f;
+                    constexpr float atlasHeight = 220.0f;
 
                     uint32_t c = roto.textData.character - 32;
                     uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
@@ -919,7 +921,7 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     u += fontX * (fontSpaceWidth / atlasWidth);
                     v += fontY * (fontSpaceHeight / atlasHeight);
 
-                    auto glyph = bilinearSample(FONT2Texture, u, v);
+                    auto glyph = bilinearSample(FONT3Texture, u, v);
                     pixel = colortable[roto.textData.bgColor & 0xf];
                     if(glyph.r > 0.9f)
                     {
