@@ -854,9 +854,6 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     constexpr float fontSpaceWidth = 8.0f * 4.0f;
                     constexpr float fontSpaceHeight = 8.0f * 4.0f;
 
-                    constexpr float fontWidth = 6.0f * 4.0f;
-                    constexpr float fontHeight = 5.0f * 4.0f;
-
                     constexpr float atlasWidth = 448.0f;
                     constexpr float atlasHeight = 160.0f;
 
@@ -868,18 +865,25 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     float u = fontCol * fontSpaceWidth / atlasWidth;
                     float v = fontRow * fontSpaceHeight / atlasHeight;
 
-                    // We put padding in our atlas
-                    u += 4.0f / atlasWidth;
-                    v += 4.0f / atlasHeight;
-
-                    u += fontX * (fontWidth / atlasWidth);
-                    v += fontY * (fontHeight / atlasHeight);
+                    u += fontX * (fontSpaceWidth / atlasWidth);
+                    v += fontY * (fontSpaceHeight / atlasHeight);
 
                     auto glyph = bilinearSample(FONT1Texture, u, v);
                     pixel = colortable[roto.textData.bgColor & 0xf];
-                    if(glyph.r > 0.8f)
+                    if(glyph.r > 0.85f)
                     {
                         pixel = colortable[roto.textData.fgColor & 0xf];
+                    }
+                    else
+                    {
+                        #if 0
+                        uint32_t r = static_cast<uint32_t>(fontX * 255);
+                        uint32_t g = static_cast<uint32_t>(fontY * 255);
+                        uint32_t b = 0;
+                        uint32_t a = 255;
+
+                        pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                        #endif
                     }
                 } else if (roto.textData.fontNum == 2)
                 {
@@ -915,6 +919,7 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                         pixel = colortable[roto.textData.fgColor & 0xf];
                     }
                 }
+                #if 0
                 else
                 {
                     uint32_t r = static_cast<uint32_t>(fontX * 255);
@@ -924,8 +929,9 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
 
                     pixel = (a << 24) | (r << 16) | (g << 8) | b;
                 }
+                #endif
             }
-            #if 1
+            #if 0
             else 
             {
                 //pixel = 0xffff0000;
@@ -973,6 +979,31 @@ void GraphicsUpdate()
             }
         }
 
+#if 0
+        static int frameCount = 0;
+        std::string filename = "frame_" + std::to_string(frameCount++) + ".png";
+        std::vector<unsigned char> png;
+        unsigned width = GRAPHICS_MODE_WIDTH, height = GRAPHICS_MODE_HEIGHT;
+        std::vector<unsigned char> image;
+        image.resize(width * height * 4);
+        for(unsigned y = 0; y < height; y++)
+        {
+            for(unsigned x = 0; x < width; x++)
+            {
+                uint32_t pixel = graphicsPixels[y * width + x];
+                image[4 * width * y + 4 * x + 0] = (pixel >> 16) & 0xFF; // R
+                image[4 * width * y + 4 * x + 1] = (pixel >> 8) & 0xFF; // G
+                image[4 * width * y + 4 * x + 2] = pixel & 0xFF; // B
+                image[4 * width * y + 4 * x + 3] = 255; // A
+            }
+        }
+        unsigned error = lodepng::encode(filename, image, width, height);
+        if(error)
+        {
+            printf("encoder error %u: %s\n", error, lodepng_error_text(error));
+        }     
+#endif    
+
         DoRotoscope(fullRes, backbuffer);
         currentTexture = windowTexture;
         stride = WINDOW_WIDTH;
@@ -994,7 +1025,7 @@ void GraphicsUpdate()
 
     if(graphicsMode == SFGraphicsMode::Graphics)
     {
-        data = (uint8_t*)graphicsPixels.data(); // + 0x20000;
+        data = (uint8_t*)graphicsPixels.data() + 0x20000;
 
         stride = GRAPHICS_MODE_WIDTH;
 
