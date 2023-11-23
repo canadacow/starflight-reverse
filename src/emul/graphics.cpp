@@ -1667,8 +1667,10 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
             int x0 = x;
             int y0 = y;
 
+
+            Rotoscope srcPc{};
             bool hasPixel = false;
-            auto src = GraphicsPeek(x0, y0, offset);
+            auto src = GraphicsPeek(x0, y0, offset, &srcPc);
 
             pc.blt_x = xoffset;
             pc.blt_y = yoffset;
@@ -1682,7 +1684,17 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
             {
                 if(xormode) {
                     auto xored = src ^ (color&0xF);
-                    GraphicsPixel(x0, y0, xored, offset, pc);
+
+                    if(srcPc.content == TextPixel)
+                    {
+                        srcPc.textData.bgColor = srcPc.textData.bgColor ^ (color & 0xf);
+                        srcPc.textData.fgColor = srcPc.textData.fgColor ^ (color & 0xf);
+                        GraphicsPixel(x0, y0, xored, offset, srcPc);
+                    }
+                    else
+                    {
+                        GraphicsPixel(x0, y0, xored, offset, pc);
+                    }
                 }
                 else
                 {
