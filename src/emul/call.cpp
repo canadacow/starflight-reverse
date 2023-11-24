@@ -921,6 +921,11 @@ uint8_t frequencyLookupTable[] = {
 extern unsigned short regbx;
 uint16_t nparmsStackSi = 0;
 
+void ForthCall(uint16_t word)
+{
+    Call(0x224c, word - 0x2);
+}
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
@@ -1036,6 +1041,48 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint32_t balance = 1000000;
                     Push(balance & 0xffff);
                     Push(balance >> 16);
+                }
+                else if (nextInstr == 0xe60c)
+                {
+                    // CSCR>EGA
+                    uint16_t ds = Read16(0x52b3);
+                    uint16_t fileNum = Pop();
+                    uint16_t di = 0;
+
+                    Push(ds);
+                    Push(fileNum);
+
+                    ForthCall(0x7339); // FILE<
+                    ForthCall(0x8bfb); // >HIDDEN
+                    ForthCall(0x8fc1); // DARK
+
+                    for(int y = 0; y < 200; ++y)
+                    {
+                        for (int x = 0; x < 80; ++x)
+                        {
+                            uint8_t colors = Read8Long(ds, di);
+
+                            uint8_t firstCGA = (colors >> 4) & 0xf;
+                            uint8_t secondCGA = colors & 0xf;
+
+                            Push(firstCGA);
+                            Run8086(cs, 0x6C86, ds, cs, &regsp); // C>EGA
+                            uint8_t firstColor = Pop();
+
+                            Push(secondCGA);
+                            Run8086(cs, 0x6C86, ds, cs, &regsp); // C>EGA
+                            uint8_t secondColor = Pop();
+
+                            GraphicsPixel(x * 2, y, firstColor, Read16(0x5648), PlotPixel);
+                            GraphicsPixel(x * 2 + 1, y, secondColor, Read16(0x5648), PlotPixel);
+
+                            ++di;
+                        }
+                    }
+
+                    ForthCall(0x8f15); // SCR-RES
+                    ForthCall(0x8bd1); // >DISPLAY
+
                 }
                 else if (nextInstr == 0xa25d)
                 {
