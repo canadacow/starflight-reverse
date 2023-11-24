@@ -829,6 +829,8 @@ void GraphicsInit()
 void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels)
 {
     uint32_t index = 0;
+    const float polygonWidth = (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH;
+
     for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
     {
         for(uint32_t x = 0; x < WINDOW_WIDTH; ++x)
@@ -851,18 +853,16 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
             // Pull the pixel from the smaller texture
             uint32_t pixel = roto.argb;
 
-            constexpr float polygonWidth = 3.0f;
-
             if(roto.content == LinePixel)
             {
                 // Calculate the line's endpoints
-                float lineX1 = (float)roto.lineData.x0 / (float)GRAPHICS_MODE_WIDTH;
-                float lineY1 = (float)roto.lineData.y0 / (float)GRAPHICS_MODE_HEIGHT;
-                float lineX2 = (float)(roto.lineData.x1 + 1) / (float)GRAPHICS_MODE_WIDTH;
-                float lineY2 = (float)(roto.lineData.y1 + 1) / (float)GRAPHICS_MODE_HEIGHT;
+                float lineX1 = ((float)roto.lineData.x0 + 0.10f)  / (float)GRAPHICS_MODE_WIDTH;
+                float lineY1 = ((float)roto.lineData.y0 + 0.10f) / (float)GRAPHICS_MODE_HEIGHT;
+                float lineX2 = ((float)roto.lineData.x1 + 0.90f) / (float)GRAPHICS_MODE_WIDTH;
+                float lineY2 = ((float)roto.lineData.y1 + 0.90f) / (float)GRAPHICS_MODE_HEIGHT;
 
                 float a = polygonWidth;
-                float one_px = 1.0f;
+                float one_px = 1.0f / WINDOW_WIDTH;
                 std::pair<float, float> p1 = {lineX1, lineY1};
                 std::pair<float, float> p2 = {lineX2, lineY2};
                 std::pair<float, float> uv = {xcoord, ycoord};
@@ -874,14 +874,12 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
 
                 float r = 1.0f - floor(1.0f - (a * one_px) + distance(std::make_pair(mix(p1.first, p2.first, std::clamp(duv / d, 0.0f, 1.0f)), mix(p1.second, p2.second, std::clamp(duv / d, 0.0f, 1.0f))), uv));
 
-                if (r > 0.9f)
+                if (r > 0.0f)
                 {
-                    //pixel = roto.lineData.fgColor;
                     pixel = colortable[roto.lineData.fgColor & 0xf];
                 }
                 else
                 {
-                    //pixel = roto.lineData.bgColor;
                     pixel = colortable[roto.lineData.bgColor & 0xf];
                 }
             } 
