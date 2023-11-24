@@ -827,6 +827,184 @@ void GraphicsInit()
     GraphicsInitThread(NULL);
 }
 
+template<typename T>
+struct vec2 {
+    union {
+        struct {
+            T x;
+            T y;
+        };
+        struct {
+            T u;
+            T v;
+        };
+    };
+};
+
+uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth)
+{
+    uint32_t pixel = 0;
+
+    float lineX1 = ((float)roto.lineData.x0 + 0.10f)  / (float)GRAPHICS_MODE_WIDTH;
+    float lineY1 = ((float)roto.lineData.y0 + 0.10f) / (float)GRAPHICS_MODE_HEIGHT;
+    float lineX2 = ((float)roto.lineData.x1 + 0.90f) / (float)GRAPHICS_MODE_WIDTH;
+    float lineY2 = ((float)roto.lineData.y1 + 0.90f) / (float)GRAPHICS_MODE_HEIGHT;
+
+    float a = polygonWidth;
+    float one_px = 1.0f / WINDOW_WIDTH;
+    vec2<float> p1 = {lineX1, lineY1};
+    vec2<float> p2 = {lineX2, lineY2};
+    auto mix = [](float a, float b, float t) { return a * (1 - t) + b * t; };
+    auto distance = [](vec2<float> a, vec2<float> b) { return sqrt(pow(b.x - a.x, 2) + pow(b.y - a.y, 2)); };
+
+    float d = distance(p1, p2);
+    float duv = distance(p1, uv);
+
+    float r = 1.0f - floor(1.0f - (a * one_px) + distance(vec2<float>{mix(p1.x, p2.x, std::clamp(duv / d, 0.0f, 1.0f)), mix(p1.y, p2.y, std::clamp(duv / d, 0.0f, 1.0f))}, uv));
+
+    if (r > 0.0f)
+    {
+        pixel = colortable[roto.lineData.fgColor & 0xf];
+    }
+    else
+    {
+        pixel = colortable[roto.lineData.bgColor & 0xf];
+    }
+
+    return pixel;
+}
+
+uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
+{
+    uint32_t pixel = 0;
+
+    float fontX = (float)roto.blt_x / (float)roto.blt_w;
+    float fontY = (float)roto.blt_y / (float)roto.blt_h;
+    
+    subUv.u /= (float)roto.textData.fontWidth;
+    subUv.v /= (float)roto.textData.fontHeight;
+
+    fontX += subUv.u;
+    fontY += subUv.v;
+
+    if(roto.textData.fontNum == 1)
+    {
+        // Find the character in our atlas.
+        constexpr float fontSpaceWidth = 8.0f * 4.0f;
+        constexpr float fontSpaceHeight = 8.0f * 4.0f;
+
+        constexpr float atlasWidth = 448.0f;
+        constexpr float atlasHeight = 160.0f;
+
+        uint32_t c = roto.textData.character - 32;
+        uint32_t fontsPerRow = 448 / (int)fontSpaceWidth;
+        uint32_t fontRow = c / fontsPerRow;
+        uint32_t fontCol = c % fontsPerRow;
+
+        float u = fontCol * fontSpaceWidth / atlasWidth;
+        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+        u += fontX * (fontSpaceWidth / atlasWidth);
+        v += fontY * (fontSpaceHeight / atlasHeight);
+
+        auto glyph = bilinearSample(FONT1Texture, u, v);
+        pixel = colortable[roto.textData.bgColor & 0xf];
+        if(glyph.r > 0.80f)
+        {
+            pixel = colortable[roto.textData.fgColor & 0xf];
+        }
+        #if 0
+        else
+        {
+            #if 1
+            uint32_t r = static_cast<uint32_t>(fontX * 255);
+            uint32_t g = static_cast<uint32_t>(fontY * 255);
+            uint32_t b = 0;
+            uint32_t a = 255;
+
+            pixel = (a << 24) | (r << 16) | (g << 8) | b;
+            #endif
+        }
+        #endif
+    } else if (roto.textData.fontNum == 2)
+    {
+        // Find the character in our atlas.
+        constexpr float fontSpaceWidth = 15.0f * 4.0f;
+        constexpr float fontSpaceHeight = 11.0f * 4.0f;
+
+        constexpr float atlasWidth = 840.0f;
+        constexpr float atlasHeight = 220.0f;
+
+        uint32_t c = roto.textData.character - 32;
+        uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
+        uint32_t fontRow = c / fontsPerRow;
+        uint32_t fontCol = c % fontsPerRow;
+
+        float u = fontCol * fontSpaceWidth / atlasWidth;
+        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+        u += fontX * (fontSpaceWidth / atlasWidth);
+        v += fontY * (fontSpaceHeight / atlasHeight);
+
+        auto glyph = bilinearSample(FONT3Texture, u, v);
+        pixel = colortable[roto.textData.bgColor & 0xf];
+        if(glyph.r > 0.9f)
+        {
+            pixel = colortable[roto.textData.fgColor & 0xf];
+        }
+    } else if (roto.textData.fontNum == 3)
+    {
+                            // Find the character in our atlas.
+        constexpr float fontSpaceWidth = 15.0f * 4.0f;
+        constexpr float fontSpaceHeight = 11.0f * 4.0f;
+
+        constexpr float atlasWidth = 840.0f;
+        constexpr float atlasHeight = 220.0f;
+
+        uint32_t c = roto.textData.character - 32;
+        uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
+        uint32_t fontRow = c / fontsPerRow;
+        uint32_t fontCol = c % fontsPerRow;
+
+        float u = fontCol * fontSpaceWidth / atlasWidth;
+        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+        u += fontX * (fontSpaceWidth / atlasWidth);
+        v += fontY * (fontSpaceHeight / atlasHeight);
+
+        auto glyph = bilinearSample(FONT3Texture, u, v);
+        pixel = colortable[roto.textData.bgColor & 0xf];
+        if(glyph.r > 0.9f)
+        {
+            pixel = colortable[roto.textData.fgColor & 0xf];
+        }
+        #if 0
+        else
+        {
+            uint32_t r = static_cast<uint32_t>(fontX * 255);
+            uint32_t g = static_cast<uint32_t>(fontY * 255);
+            uint32_t b = 0;
+            uint32_t a = 255;
+
+            pixel = (a << 24) | (r << 16) | (g << 8) | b;
+        }
+        #endif
+    }
+    #if 0
+    else
+    {
+        uint32_t r = static_cast<uint32_t>(fontX * 255);
+        uint32_t g = static_cast<uint32_t>(fontY * 255);
+        uint32_t b = 0;
+        uint32_t a = 255;
+
+        pixel = (a << 24) | (r << 16) | (g << 8) | b;
+    }
+    #endif
+
+    return pixel;
+}
+
 void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels)
 {
     uint32_t index = 0;
@@ -847,179 +1025,30 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
 
             float xcoord = (float)x / (float)WINDOW_WIDTH;
             float ycoord = (float)y / (float)WINDOW_HEIGHT;
+            vec2<float> uv = {xcoord, ycoord};
 
             float subPixelXOffset = (xcoord * GRAPHICS_MODE_WIDTH) - srcX;
             float subPixelYOffset = (ycoord * GRAPHICS_MODE_HEIGHT) - srcY;
+            vec2<float> subUv = {subPixelXOffset, subPixelYOffset};
 
             // Pull the pixel from the smaller texture
             uint32_t pixel = roto.argb;
 
             if(s_useRotoscope)
             {
-                //if(roto.content == LinePixel)
-                if(false)
+                switch(roto.content)
                 {
-                    // Calculate the line's endpoints
-                    float lineX1 = ((float)roto.lineData.x0 + 0.10f)  / (float)GRAPHICS_MODE_WIDTH;
-                    float lineY1 = ((float)roto.lineData.y0 + 0.10f) / (float)GRAPHICS_MODE_HEIGHT;
-                    float lineX2 = ((float)roto.lineData.x1 + 0.90f) / (float)GRAPHICS_MODE_WIDTH;
-                    float lineY2 = ((float)roto.lineData.y1 + 0.90f) / (float)GRAPHICS_MODE_HEIGHT;
-
-                    float a = polygonWidth;
-                    float one_px = 1.0f / WINDOW_WIDTH;
-                    std::pair<float, float> p1 = {lineX1, lineY1};
-                    std::pair<float, float> p2 = {lineX2, lineY2};
-                    std::pair<float, float> uv = {xcoord, ycoord};
-                    auto mix = [](float a, float b, float t) { return a * (1 - t) + b * t; };
-                    auto distance = [](std::pair<float, float> a, std::pair<float, float> b) { return sqrt(pow(b.first - a.first, 2) + pow(b.second - a.second, 2)); };
-
-                    float d = distance(p1, p2);
-                    float duv = distance(p1, uv);
-
-                    float r = 1.0f - floor(1.0f - (a * one_px) + distance(std::make_pair(mix(p1.first, p2.first, std::clamp(duv / d, 0.0f, 1.0f)), mix(p1.second, p2.second, std::clamp(duv / d, 0.0f, 1.0f))), uv));
-
-                    if (r > 0.0f)
-                    {
-                        pixel = colortable[roto.lineData.fgColor & 0xf];
-                    }
-                    else
-                    {
-                        pixel = colortable[roto.lineData.bgColor & 0xf];
-                    }
-                } 
-                else if(roto.content == TextPixel)
-                {
-                    float fontX = (float)roto.blt_x / (float)roto.blt_w;
-                    float fontY = (float)roto.blt_y / (float)roto.blt_h;
-                    
-                    subPixelXOffset /= (float)roto.textData.fontWidth;
-                    subPixelYOffset /= (float)roto.textData.fontHeight;
-
-                    fontX += subPixelXOffset;
-                    fontY += subPixelYOffset;
-
-                    if(roto.textData.fontNum == 1)
-                    {
-                        // Find the character in our atlas.
-                        constexpr float fontSpaceWidth = 8.0f * 4.0f;
-                        constexpr float fontSpaceHeight = 8.0f * 4.0f;
-
-                        constexpr float atlasWidth = 448.0f;
-                        constexpr float atlasHeight = 160.0f;
-
-                        uint32_t c = roto.textData.character - 32;
-                        uint32_t fontsPerRow = 448 / (int)fontSpaceWidth;
-                        uint32_t fontRow = c / fontsPerRow;
-                        uint32_t fontCol = c % fontsPerRow;
-
-                        float u = fontCol * fontSpaceWidth / atlasWidth;
-                        float v = fontRow * fontSpaceHeight / atlasHeight;
-
-                        u += fontX * (fontSpaceWidth / atlasWidth);
-                        v += fontY * (fontSpaceHeight / atlasHeight);
-
-                        auto glyph = bilinearSample(FONT1Texture, u, v);
-                        pixel = colortable[roto.textData.bgColor & 0xf];
-                        if(glyph.r > 0.80f)
-                        {
-                            pixel = colortable[roto.textData.fgColor & 0xf];
-                        }
-                        #if 0
-                        else
-                        {
-                            #if 1
-                            uint32_t r = static_cast<uint32_t>(fontX * 255);
-                            uint32_t g = static_cast<uint32_t>(fontY * 255);
-                            uint32_t b = 0;
-                            uint32_t a = 255;
-
-                            pixel = (a << 24) | (r << 16) | (g << 8) | b;
-                            #endif
-                        }
-                        #endif
-                    } else if (roto.textData.fontNum == 2)
-                    {
-                        // Find the character in our atlas.
-                        constexpr float fontSpaceWidth = 15.0f * 4.0f;
-                        constexpr float fontSpaceHeight = 11.0f * 4.0f;
-
-                        constexpr float atlasWidth = 840.0f;
-                        constexpr float atlasHeight = 220.0f;
-
-                        uint32_t c = roto.textData.character - 32;
-                        uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
-                        uint32_t fontRow = c / fontsPerRow;
-                        uint32_t fontCol = c % fontsPerRow;
-
-                        float u = fontCol * fontSpaceWidth / atlasWidth;
-                        float v = fontRow * fontSpaceHeight / atlasHeight;
-
-                        u += fontX * (fontSpaceWidth / atlasWidth);
-                        v += fontY * (fontSpaceHeight / atlasHeight);
-
-                        auto glyph = bilinearSample(FONT3Texture, u, v);
-                        pixel = colortable[roto.textData.bgColor & 0xf];
-                        if(glyph.r > 0.9f)
-                        {
-                            pixel = colortable[roto.textData.fgColor & 0xf];
-                        }
-                    } else if (roto.textData.fontNum == 3)
-                    {
-                                            // Find the character in our atlas.
-                        constexpr float fontSpaceWidth = 15.0f * 4.0f;
-                        constexpr float fontSpaceHeight = 11.0f * 4.0f;
-
-                        constexpr float atlasWidth = 840.0f;
-                        constexpr float atlasHeight = 220.0f;
-
-                        uint32_t c = roto.textData.character - 32;
-                        uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
-                        uint32_t fontRow = c / fontsPerRow;
-                        uint32_t fontCol = c % fontsPerRow;
-
-                        float u = fontCol * fontSpaceWidth / atlasWidth;
-                        float v = fontRow * fontSpaceHeight / atlasHeight;
-
-                        u += fontX * (fontSpaceWidth / atlasWidth);
-                        v += fontY * (fontSpaceHeight / atlasHeight);
-
-                        auto glyph = bilinearSample(FONT3Texture, u, v);
-                        pixel = colortable[roto.textData.bgColor & 0xf];
-                        if(glyph.r > 0.9f)
-                        {
-                            pixel = colortable[roto.textData.fgColor & 0xf];
-                        }
-                        #if 0
-                        else
-                        {
-                            uint32_t r = static_cast<uint32_t>(fontX * 255);
-                            uint32_t g = static_cast<uint32_t>(fontY * 255);
-                            uint32_t b = 0;
-                            uint32_t a = 255;
-
-                            pixel = (a << 24) | (r << 16) | (g << 8) | b;
-                        }
-                        #endif
-                    }
-                    #if 0
-                    else
-                    {
-                        uint32_t r = static_cast<uint32_t>(fontX * 255);
-                        uint32_t g = static_cast<uint32_t>(fontY * 255);
-                        uint32_t b = 0;
-                        uint32_t a = 255;
-
-                        pixel = (a << 24) | (r << 16) | (g << 8) | b;
-                    }
-                    #endif
+                    case LinePixel:
+                        //pixel = DrawLinePixel(roto, uv, polygonWidth);
+                        break;
+                    case TextPixel:
+                        pixel = DrawFontPixel(roto, uv, subUv);    
+                        break;
+                    default:
+                        //pixel = 0xffff0000;
+                        //pixel = colortable[(int)roto.content];
+                        break;
                 }
-                #if 0
-                else 
-                {
-                    //pixel = 0xffff0000;
-                    pixel = colortable[(int)roto.content];
-                }
-                #endif
             }
 
             // Place the pixel in the larger surface

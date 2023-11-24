@@ -1,5 +1,5 @@
 CC = g++
-CFLAGS = -O0 -g -std=c++20
+CFLAGS = -O2 -g -std=c++20
 LIBS = -lxxhash -lzstd -lpthread
 
 HEADERS = src/emul/call.h \
