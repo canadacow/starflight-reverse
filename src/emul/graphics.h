@@ -44,11 +44,14 @@ struct PicData
 
 struct LineData
 {
-    uint8_t  x0;
-    uint8_t  y0;
-    uint8_t  x1;
-    uint8_t  y1;
-    uint8_t  n;
+    uint8_t x0;
+    uint8_t y0;
+    uint8_t x1;
+    uint8_t y1;
+    uint8_t n;
+    uint8_t total;
+    uint8_t bgColor;
+    uint8_t fgColor;
 };
 
 struct Rotoscope

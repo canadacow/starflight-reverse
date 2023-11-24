@@ -842,20 +842,54 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
 
             auto& roto = rotoPixels[srcIndex];
 
+            float xcoord = (float)x / (float)WINDOW_WIDTH;
+            float ycoord = (float)y / (float)WINDOW_HEIGHT;
+
+            float subPixelXOffset = (xcoord * GRAPHICS_MODE_WIDTH) - srcX;
+            float subPixelYOffset = (ycoord * GRAPHICS_MODE_HEIGHT) - srcY;
+
             // Pull the pixel from the smaller texture
             uint32_t pixel = roto.argb;
 
-            if(roto.content == TextPixel)
+            constexpr float polygonWidth = 3.0f;
+
+            if(roto.content == LinePixel)
+            {
+                // Calculate the line's endpoints
+                float lineX1 = (float)roto.lineData.x0 / (float)GRAPHICS_MODE_WIDTH;
+                float lineY1 = (float)roto.lineData.y0 / (float)GRAPHICS_MODE_HEIGHT;
+                float lineX2 = (float)(roto.lineData.x1 + 1) / (float)GRAPHICS_MODE_WIDTH;
+                float lineY2 = (float)(roto.lineData.y1 + 1) / (float)GRAPHICS_MODE_HEIGHT;
+
+                float a = polygonWidth;
+                float one_px = 1.0f;
+                std::pair<float, float> p1 = {lineX1, lineY1};
+                std::pair<float, float> p2 = {lineX2, lineY2};
+                std::pair<float, float> uv = {xcoord, ycoord};
+                auto mix = [](float a, float b, float t) { return a * (1 - t) + b * t; };
+                auto distance = [](std::pair<float, float> a, std::pair<float, float> b) { return sqrt(pow(b.first - a.first, 2) + pow(b.second - a.second, 2)); };
+
+                float d = distance(p1, p2);
+                float duv = distance(p1, uv);
+
+                float r = 1.0f - floor(1.0f - (a * one_px) + distance(std::make_pair(mix(p1.first, p2.first, std::clamp(duv / d, 0.0f, 1.0f)), mix(p1.second, p2.second, std::clamp(duv / d, 0.0f, 1.0f))), uv));
+
+                if (r > 0.9f)
+                {
+                    //pixel = roto.lineData.fgColor;
+                    pixel = colortable[roto.lineData.fgColor & 0xf];
+                }
+                else
+                {
+                    //pixel = roto.lineData.bgColor;
+                    pixel = colortable[roto.lineData.bgColor & 0xf];
+                }
+            } 
+            else if(roto.content == TextPixel)
             {
                 float fontX = (float)roto.blt_x / (float)roto.blt_w;
                 float fontY = (float)roto.blt_y / (float)roto.blt_h;
                 
-                float xcoord = (float)x / (float)WINDOW_WIDTH;
-                float ycoord = (float)y / (float)WINDOW_HEIGHT;
-
-                float subPixelXOffset = (xcoord * GRAPHICS_MODE_WIDTH) - srcX;
-                float subPixelYOffset = (ycoord * GRAPHICS_MODE_HEIGHT) - srcY;
-
                 subPixelXOffset /= (float)roto.textData.fontWidth;
                 subPixelYOffset /= (float)roto.textData.fontHeight;
 
@@ -1472,13 +1506,16 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32
     rs.content = LinePixel;
     rs.lineData.x0 = x1;
     rs.lineData.x1 = x2;
-    rs.lineData.y0 = y1;
-    rs.lineData.y1 = y2;
+    rs.lineData.y0 = 199 - y1;
+    rs.lineData.y1 = 199 - y2;
+    rs.lineData.total = n;
+    rs.lineData.fgColor = color;
 
     for(int i=0; i<=n; i++)
     {
         rs.lineData.n = i;
 
+        rs.lineData.bgColor = GraphicsPeek(x, y, offset);
         GraphicsPixel(x, y, color, offset, rs);
         x += dx;
         y += dy;
