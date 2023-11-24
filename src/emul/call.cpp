@@ -1049,7 +1049,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
                 else if (nextInstr == 0xe60c)
                 {
-                    // CSCR>EGA
+                      // CSCR>EGA
                     uint16_t ds = Read16(0x52b3);
                     uint16_t fileNum = Pop();
                     uint16_t di = 0;
@@ -1066,6 +1066,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     Rotoscope rs = SplashPixel;
                     rs.blt_w = 160;
                     rs.blt_h = 200;
+                    rs.splashData.seg = ds;
+                    rs.splashData.fileNum = fileNum;
+
+                    constexpr CGAToEGAMap map;
 
                     for(int y = 0; y < 200; ++y)
                     {
@@ -1078,13 +1082,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             uint8_t firstCGA = (colors >> 4) & 0xf;
                             uint8_t secondCGA = colors & 0xf;
 
-                            Push(firstCGA);
-                            ASMCall(0x6C86); // C>EGA
-                            uint8_t firstColor = Pop();
+                            //Push(firstCGA);
+                            //ASMCall(0x6C86); // C>EGA
+                            //uint8_t firstColor = Pop();
+                            uint8_t firstColor = map.getCGAToEGA(firstCGA);                            
 
-                            Push(secondCGA);
-                            ASMCall(0x6C86); // C>EGA
-                            uint8_t secondColor = Pop();
+                            //Push(secondCGA);
+                            //ASMCall(0x6C86); // C>EGA
+                            //uint8_t secondColor = Pop();
+                            uint8_t secondColor = map.getCGAToEGA(secondCGA);
 
                             rs.blt_x = x * 2;
                             GraphicsPixel(rs.blt_x, y, firstColor, Read16(0x5648), rs);

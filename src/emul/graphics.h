@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include <array>
+#include <utility>
+
 enum PixelContents
 {
     ClearPixel = 0,
@@ -165,40 +168,66 @@ struct Rotoscope
     }
 };
 
-    extern uint32_t colortable[16];
+class CGAToEGAMap {
+public:
+    constexpr CGAToEGAMap() : CGAToEGA{}, EGAToCGA{} {
+        for (const auto& pair : map) {
+            CGAToEGA[pair.first] = pair.second;
+            EGAToCGA[pair.second] = pair.first;
+        }
+    }
 
-    void GraphicsInit();
-    void GraphicsUpdate();
-    void GraphicsWait();
-    void GraphicsQuit();
+    constexpr int getCGAToEGA(int key) const {
+        return CGAToEGA[key];
+    }
 
-    bool GraphicsHasKey();
-    uint16_t GraphicsGetKey();
+    constexpr int getEGAToCGA(int value) const {
+        return EGAToCGA[value];
+    }
 
-    void GraphicsMode(int mode); // 0 = text, 1 = ega graphics
-    void GraphicsClear(int color, uint32_t offset, int byteCount);
-    void GraphicsText(char *s, int n);
-    void GraphicsCarriageReturn();
-    void GraphicsSetCursor(int x, int y);
-    void GraphicsChar(unsigned char s);
-    void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset);
-    void GraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
-    void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
-    void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
-    void GraphicsSave(char *filename);
+private:
+    static constexpr std::array<std::pair<int, int>, 16> map = {{
+        {0, 0}, {1, 2}, {2, 1}, {3, 9}, {4, 4}, {5, 8}, {6, 5}, {7, 11},
+        {8, 6}, {9, 10}, {10, 7}, {11, 3}, {12, 6}, {13, 14}, {14, 12}, {15, 15}
+    }};
 
-    void WaitForVBlank();
+    std::array<int, 16> CGAToEGA;
+    std::array<int, 16> EGAToCGA;
+};
 
-    void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_t di, uint16_t count);
+extern uint32_t colortable[16];
 
-    void BeepOn();
-    void BeepTone(uint16_t pitFreq);
-    void BeepOff();
+void GraphicsInit();
+void GraphicsUpdate();
+void GraphicsWait();
+void GraphicsQuit();
 
-    uint8_t GraphicsPeek(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
-    uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
+bool GraphicsHasKey();
+uint16_t GraphicsGetKey();
 
-    int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color, int xormode, uint32_t offset);
+void GraphicsMode(int mode); // 0 = text, 1 = ega graphics
+void GraphicsClear(int color, uint32_t offset, int byteCount);
+void GraphicsText(char *s, int n);
+void GraphicsCarriageReturn();
+void GraphicsSetCursor(int x, int y);
+void GraphicsChar(unsigned char s);
+void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32_t offset);
+void GraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
+void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
+void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
+void GraphicsSave(char *filename);
 
+void WaitForVBlank();
+
+void GraphicsCopyLine(uint16_t sourceSeg, uint16_t destSeg, uint16_t si, uint16_t di, uint16_t count);
+
+void BeepOn();
+void BeepTone(uint16_t pitFreq);
+void BeepOff();
+
+uint8_t GraphicsPeek(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
+uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
+
+int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color, int xormode, uint32_t offset);
 
 #endif

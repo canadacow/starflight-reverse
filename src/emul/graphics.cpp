@@ -20,7 +20,7 @@
 #include <semaphore>
 #include <unordered_map>
 #include <array>
-
+#include <utility>
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -72,6 +72,14 @@ union TextureColor {
     float u[4];
 };
 
+uint32_t TextureColorToARGB(const TextureColor& color) {
+    uint32_t a = static_cast<uint32_t>(color.a * 255.0f);
+    uint32_t r = static_cast<uint32_t>(color.r * 255.0f);
+    uint32_t g = static_cast<uint32_t>(color.g * 255.0f);
+    uint32_t b = static_cast<uint32_t>(color.b * 255.0f);
+    return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
 template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
 struct Texture {
     std::array<std::array<TextureColor, WIDTH>, HEIGHT> data;
@@ -99,11 +107,11 @@ TextureColor bilinearSample(const Texture<WIDTH, HEIGHT, PLANES>& texture, float
 
 template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
 void fillTexture(Texture<WIDTH, HEIGHT, PLANES>& texture, const std::vector<uint8_t>& image) {
-    static_assert(PLANES == 1, "multiplane fillTexture is unimplemented.");
-
     for(int i = 0; i < WIDTH; ++i) {
         for(int j = 0; j < HEIGHT; ++j) {
-            texture.data[j][i].u[0] = static_cast<float>(image[j * WIDTH + i]) / 255.0f;
+            for(int k = 0; k < PLANES; ++k) {
+                texture.data[j][i].u[k] = static_cast<float>(image[(j * WIDTH + i) * PLANES + k]) / 255.0f;
+            }
         }
     }
 }
@@ -1005,6 +1013,57 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     return pixel;
 }
 
+uint32_t DrawSplashPixel(const Rotoscope& roto, vec2<float> uv)
+{
+    static Texture<1536, 1152, 4> LOGO1Texture;
+    static Texture<1536, 1152, 4> LOGO2Texture;
+    static bool loaded = false;
+
+    uint32_t pixel = 0;
+
+    if(!loaded)
+    {
+        loaded = true;
+        std::vector<uint8_t> image;
+        unsigned width, height;
+
+        unsigned error = lodepng::decode(image, width, height, "logo_1.png", LCT_RGBA, 8);
+        if(error) 
+        {
+            printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+            exit(-1);
+        }
+
+        fillTexture(LOGO1Texture, image);
+        image.clear();
+
+        error = lodepng::decode(image, width, height, "logo_2.png", LCT_RGBA, 8);
+        if(error) 
+        {
+            printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+            exit(-1);
+        }
+
+        fillTexture(LOGO2Texture, image);
+        image.clear();
+    }
+
+    switch(roto.splashData.fileNum)
+    {
+        case 0x008d: // First splash
+            pixel = TextureColorToARGB(bilinearSample(LOGO1Texture, uv.u, uv.v));
+            break;
+        case 0x0036: // Second splash
+            pixel = TextureColorToARGB(bilinearSample(LOGO2Texture, uv.u, uv.v));
+            break;
+        default:
+            assert(false);
+            break;
+    }
+
+    return pixel;
+}
+
 void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels)
 {
     uint32_t index = 0;
@@ -1043,6 +1102,9 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                         break;
                     case TextPixel:
                         pixel = DrawFontPixel(roto, uv, subUv);    
+                        break;
+                    case SplashPixel:
+                        pixel = DrawSplashPixel(roto, uv);
                         break;
                     default:
                         //pixel = 0xffff0000;
