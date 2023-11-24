@@ -926,6 +926,11 @@ void ForthCall(uint16_t word)
     Call(0x224c, word - 0x2);
 }
 
+void ASMCall(uint16_t word)
+{
+    Call(word, word);
+}
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
@@ -1049,6 +1054,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint16_t fileNum = Pop();
                     uint16_t di = 0;
 
+                    //fileNum = 0x008c;
+
                     Push(ds);
                     Push(fileNum);
 
@@ -1056,25 +1063,33 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     ForthCall(0x8bfb); // >HIDDEN
                     ForthCall(0x8fc1); // DARK
 
+                    Rotoscope rs = SplashPixel;
+                    rs.blt_w = 160;
+                    rs.blt_h = 200;
+
                     for(int y = 0; y < 200; ++y)
                     {
                         for (int x = 0; x < 80; ++x)
                         {
+                            rs.blt_y = 199 - y;
+
                             uint8_t colors = Read8Long(ds, di);
 
                             uint8_t firstCGA = (colors >> 4) & 0xf;
                             uint8_t secondCGA = colors & 0xf;
 
                             Push(firstCGA);
-                            Run8086(cs, 0x6C86, ds, cs, &regsp); // C>EGA
+                            ASMCall(0x6C86); // C>EGA
                             uint8_t firstColor = Pop();
 
                             Push(secondCGA);
-                            Run8086(cs, 0x6C86, ds, cs, &regsp); // C>EGA
+                            ASMCall(0x6C86); // C>EGA
                             uint8_t secondColor = Pop();
 
-                            GraphicsPixel(x * 2, y, firstColor, Read16(0x5648), PlotPixel);
-                            GraphicsPixel(x * 2 + 1, y, secondColor, Read16(0x5648), PlotPixel);
+                            rs.blt_x = x * 2;
+                            GraphicsPixel(rs.blt_x, y, firstColor, Read16(0x5648), rs);
+                            rs.blt_x = x * 2 + 1;
+                            GraphicsPixel(rs.blt_x, y, secondColor, Read16(0x5648), rs);
 
                             ++di;
                         }

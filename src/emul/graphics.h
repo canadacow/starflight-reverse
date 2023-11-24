@@ -16,6 +16,7 @@ enum PixelContents
     PicPixel,
     PlotPixel,
     TilePixel,
+    SplashPixel,
 };
 
 struct NavigationData
@@ -54,6 +55,12 @@ struct LineData
     uint8_t fgColor;
 };
 
+struct SplashData
+{
+    uint16_t seg;
+    uint16_t fileNum;
+};
+
 struct Rotoscope
 {
     PixelContents content;
@@ -74,6 +81,7 @@ struct Rotoscope
         TextData textData;
         PicData picData;
         LineData lineData;
+        SplashData splashData;
     };
 
     Rotoscope()
@@ -89,7 +97,7 @@ struct Rotoscope
 
     Rotoscope(PixelContents pixel)
     {
-        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel);
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || SplashPixel);
         content = pixel;
         EGAcolor = 0;
         argb = 0;
@@ -133,6 +141,9 @@ struct Rotoscope
                     break;
                 case LinePixel:
                     lineData = other.lineData;
+                    break;
+                case SplashPixel:
+                    splashData = other.splashData;
                     break;
                 default:
                     assert(false);
