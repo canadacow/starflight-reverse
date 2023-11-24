@@ -853,7 +853,8 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
             // Pull the pixel from the smaller texture
             uint32_t pixel = roto.argb;
 
-            if(roto.content == LinePixel)
+            //if(roto.content == LinePixel)
+            if(false)
             {
                 // Calculate the line's endpoints
                 float lineX1 = ((float)roto.lineData.x0 + 0.10f)  / (float)GRAPHICS_MODE_WIDTH;
