@@ -1,24 +1,6 @@
-#ifdef SDL
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
 #include <atomic>
-static SDL_Window *window = NULL;
-static SDL_Window *offscreenWindow = NULL;
-static SDL_Renderer *renderer  = NULL;
-static SDL_Renderer *offscreenRenderer  = NULL;
-static SDL_Texture* graphicsTexture = NULL;
-static SDL_Texture* offscreenTexture = NULL;
-static SDL_Texture* windowTexture = NULL;
-static SDL_Texture* textTexture = NULL;
-
-static SDL_AudioDeviceID audioDevice = 0;
-
-#define FREQUENCY 48000 // Samples per second
-
-static double toneInHz = 440.0;
-
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,13 +21,6 @@ static double toneInHz = 440.0;
 #include <unordered_map>
 #include <array>
 
-#ifndef SDL
-#ifdef __linux__
-#include <termios.h>  
-#include <unistd.h>   
-#include <fcntl.h>    
-#endif
-#endif
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -67,6 +42,28 @@ static uint32_t OFFSCREEN_WINDOW_HEIGHT = 720;
 
 #define ROTOSCOPE_MODE_WIDTH  160
 #define ROTOSCOPE_MODE_HEIGHT 200
+
+static SDL_Window *window = NULL;
+static SDL_Renderer *renderer  = NULL;
+static SDL_Texture* graphicsTexture = NULL;
+static SDL_Texture* windowTexture = NULL;
+static SDL_Texture* textTexture = NULL;
+
+//#define ENABLE_OFFSCREEN_VIDEO_RENDERER 1
+
+#if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
+static SDL_Renderer *offscreenRenderer  = NULL;
+static SDL_Texture* offscreenTexture = NULL;
+static SDL_Window *offscreenWindow = NULL;
+#endif
+
+static SDL_AudioDeviceID audioDevice = 0;
+
+#define FREQUENCY 48000 // Samples per second
+
+static double toneInHz = 440.0;
+
+static std::atomic<bool> s_useRotoscope = true;
 
 union TextureColor {
     struct {
@@ -458,7 +455,6 @@ public:
     }
 };
 
-#ifdef SDL
 class SDLKeyboard : public DOSKeyboard {
 private:
     std::deque<SDL_Event> eventQueue{};
@@ -525,7 +521,11 @@ public:
         auto handleEvent = [&](SDL_Event event) -> bool {
             switch (event.type) {
                 case SDL_KEYDOWN:
-                    if(eventQueue.size() < 4)
+                    if (event.key.keysym.sym == '`')
+                    {
+                        s_useRotoscope = !s_useRotoscope;
+                    }
+                    else if(eventQueue.size() < 4)
                     {
                         eventQueue.push_back(event);
                     }
@@ -540,11 +540,13 @@ public:
                                 GraphicsQuit();
                                 exit(0);
                             }
+                            #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
                             if(SDL_GetWindowFromID(event.window.windowID) == offscreenWindow)
                             {
                                 SDL_DestroyWindow(offscreenWindow);
                                 offscreenWindow = nullptr;
                             }
+                            #endif
                         }
                     }
                     break;
@@ -607,7 +609,6 @@ public:
         return GetKey(event.key.keysym.sym);
     }
 };
-#endif
 
 static std::unique_ptr<DOSKeyboard> keyboard{};
 
@@ -677,8 +678,6 @@ void BeepOff()
 
 static int GraphicsInitThread(void *ptr)
 {
-#ifdef SDL
-
     SDL_DisplayMode dm;
     if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
     {
@@ -712,22 +711,6 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    offscreenWindow = SDL_CreateWindow("Off Screen Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, OFFSCREEN_WINDOW_WIDTH, OFFSCREEN_WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
-    if (offscreenWindow == NULL)
-    {
-        printf("SDL_CreateWindow Error: %s", SDL_GetError());
-        SDL_Quit();
-        return 0;
-    }
-
-    offscreenRenderer = SDL_CreateRenderer(offscreenWindow, -1, 0);
-    if (offscreenRenderer == NULL)
-    {
-        printf("SDL_CreateRenderer Error: %s", SDL_GetError());
-        SDL_Quit();
-        return 0;
-    }
-
     graphicsTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
     if (graphicsTexture == NULL)
     {
@@ -744,14 +727,6 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    offscreenTexture = SDL_CreateTexture(offscreenRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
-    if (offscreenTexture == NULL)
-    {
-        printf("SDL_CreateTexture Error: %s", SDL_GetError());
-        SDL_Quit();
-        return 0;
-    }
-
     // Create the text mode texture
     textTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, TEXT_MODE_WIDTH, TEXT_MODE_HEIGHT);
     if (textTexture == NULL)
@@ -761,10 +736,36 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    keyboard = std::make_unique<SDLKeyboard>();
-#else
-    keyboard = std::make_unique<CLIKeyboard>();
+#if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
+
+    offscreenWindow = SDL_CreateWindow("Off Screen Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, OFFSCREEN_WINDOW_WIDTH, OFFSCREEN_WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+    if (offscreenWindow == NULL)
+    {
+        printf("SDL_CreateWindow Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    offscreenRenderer = SDL_CreateRenderer(offscreenWindow, -1, 0);
+    if (offscreenRenderer == NULL)
+    {
+        printf("SDL_CreateRenderer Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    offscreenTexture = SDL_CreateTexture(offscreenRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
+    if (offscreenTexture == NULL)
+    {
+        printf("SDL_CreateTexture Error: %s", SDL_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
 #endif
+
+    keyboard = std::make_unique<SDLKeyboard>();
+
     graphicsPixels = std::vector<uint32_t>();
     graphicsPixels.resize(GRAPHICS_MEMORY_ALLOC);
 
@@ -853,138 +854,152 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
             // Pull the pixel from the smaller texture
             uint32_t pixel = roto.argb;
 
-            //if(roto.content == LinePixel)
-            if(false)
+            if(s_useRotoscope)
             {
-                // Calculate the line's endpoints
-                float lineX1 = ((float)roto.lineData.x0 + 0.10f)  / (float)GRAPHICS_MODE_WIDTH;
-                float lineY1 = ((float)roto.lineData.y0 + 0.10f) / (float)GRAPHICS_MODE_HEIGHT;
-                float lineX2 = ((float)roto.lineData.x1 + 0.90f) / (float)GRAPHICS_MODE_WIDTH;
-                float lineY2 = ((float)roto.lineData.y1 + 0.90f) / (float)GRAPHICS_MODE_HEIGHT;
-
-                float a = polygonWidth;
-                float one_px = 1.0f / WINDOW_WIDTH;
-                std::pair<float, float> p1 = {lineX1, lineY1};
-                std::pair<float, float> p2 = {lineX2, lineY2};
-                std::pair<float, float> uv = {xcoord, ycoord};
-                auto mix = [](float a, float b, float t) { return a * (1 - t) + b * t; };
-                auto distance = [](std::pair<float, float> a, std::pair<float, float> b) { return sqrt(pow(b.first - a.first, 2) + pow(b.second - a.second, 2)); };
-
-                float d = distance(p1, p2);
-                float duv = distance(p1, uv);
-
-                float r = 1.0f - floor(1.0f - (a * one_px) + distance(std::make_pair(mix(p1.first, p2.first, std::clamp(duv / d, 0.0f, 1.0f)), mix(p1.second, p2.second, std::clamp(duv / d, 0.0f, 1.0f))), uv));
-
-                if (r > 0.0f)
+                //if(roto.content == LinePixel)
+                if(false)
                 {
-                    pixel = colortable[roto.lineData.fgColor & 0xf];
-                }
-                else
-                {
-                    pixel = colortable[roto.lineData.bgColor & 0xf];
-                }
-            } 
-            else if(roto.content == TextPixel)
-            {
-                float fontX = (float)roto.blt_x / (float)roto.blt_w;
-                float fontY = (float)roto.blt_y / (float)roto.blt_h;
-                
-                subPixelXOffset /= (float)roto.textData.fontWidth;
-                subPixelYOffset /= (float)roto.textData.fontHeight;
+                    // Calculate the line's endpoints
+                    float lineX1 = ((float)roto.lineData.x0 + 0.10f)  / (float)GRAPHICS_MODE_WIDTH;
+                    float lineY1 = ((float)roto.lineData.y0 + 0.10f) / (float)GRAPHICS_MODE_HEIGHT;
+                    float lineX2 = ((float)roto.lineData.x1 + 0.90f) / (float)GRAPHICS_MODE_WIDTH;
+                    float lineY2 = ((float)roto.lineData.y1 + 0.90f) / (float)GRAPHICS_MODE_HEIGHT;
 
-                fontX += subPixelXOffset;
-                fontY += subPixelYOffset;
+                    float a = polygonWidth;
+                    float one_px = 1.0f / WINDOW_WIDTH;
+                    std::pair<float, float> p1 = {lineX1, lineY1};
+                    std::pair<float, float> p2 = {lineX2, lineY2};
+                    std::pair<float, float> uv = {xcoord, ycoord};
+                    auto mix = [](float a, float b, float t) { return a * (1 - t) + b * t; };
+                    auto distance = [](std::pair<float, float> a, std::pair<float, float> b) { return sqrt(pow(b.first - a.first, 2) + pow(b.second - a.second, 2)); };
 
-                if(roto.textData.fontNum == 1)
-                {
-                    // Find the character in our atlas.
-                    constexpr float fontSpaceWidth = 8.0f * 4.0f;
-                    constexpr float fontSpaceHeight = 8.0f * 4.0f;
+                    float d = distance(p1, p2);
+                    float duv = distance(p1, uv);
 
-                    constexpr float atlasWidth = 448.0f;
-                    constexpr float atlasHeight = 160.0f;
+                    float r = 1.0f - floor(1.0f - (a * one_px) + distance(std::make_pair(mix(p1.first, p2.first, std::clamp(duv / d, 0.0f, 1.0f)), mix(p1.second, p2.second, std::clamp(duv / d, 0.0f, 1.0f))), uv));
 
-                    uint32_t c = roto.textData.character - 32;
-                    uint32_t fontsPerRow = 448 / (int)fontSpaceWidth;
-                    uint32_t fontRow = c / fontsPerRow;
-                    uint32_t fontCol = c % fontsPerRow;
-
-                    float u = fontCol * fontSpaceWidth / atlasWidth;
-                    float v = fontRow * fontSpaceHeight / atlasHeight;
-
-                    u += fontX * (fontSpaceWidth / atlasWidth);
-                    v += fontY * (fontSpaceHeight / atlasHeight);
-
-                    auto glyph = bilinearSample(FONT1Texture, u, v);
-                    pixel = colortable[roto.textData.bgColor & 0xf];
-                    if(glyph.r > 0.80f)
+                    if (r > 0.0f)
                     {
-                        pixel = colortable[roto.textData.fgColor & 0xf];
+                        pixel = colortable[roto.lineData.fgColor & 0xf];
                     }
-                    #if 0
                     else
                     {
-                        #if 1
-                        uint32_t r = static_cast<uint32_t>(fontX * 255);
-                        uint32_t g = static_cast<uint32_t>(fontY * 255);
-                        uint32_t b = 0;
-                        uint32_t a = 255;
+                        pixel = colortable[roto.lineData.bgColor & 0xf];
+                    }
+                } 
+                else if(roto.content == TextPixel)
+                {
+                    float fontX = (float)roto.blt_x / (float)roto.blt_w;
+                    float fontY = (float)roto.blt_y / (float)roto.blt_h;
+                    
+                    subPixelXOffset /= (float)roto.textData.fontWidth;
+                    subPixelYOffset /= (float)roto.textData.fontHeight;
 
-                        pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                    fontX += subPixelXOffset;
+                    fontY += subPixelYOffset;
+
+                    if(roto.textData.fontNum == 1)
+                    {
+                        // Find the character in our atlas.
+                        constexpr float fontSpaceWidth = 8.0f * 4.0f;
+                        constexpr float fontSpaceHeight = 8.0f * 4.0f;
+
+                        constexpr float atlasWidth = 448.0f;
+                        constexpr float atlasHeight = 160.0f;
+
+                        uint32_t c = roto.textData.character - 32;
+                        uint32_t fontsPerRow = 448 / (int)fontSpaceWidth;
+                        uint32_t fontRow = c / fontsPerRow;
+                        uint32_t fontCol = c % fontsPerRow;
+
+                        float u = fontCol * fontSpaceWidth / atlasWidth;
+                        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+                        u += fontX * (fontSpaceWidth / atlasWidth);
+                        v += fontY * (fontSpaceHeight / atlasHeight);
+
+                        auto glyph = bilinearSample(FONT1Texture, u, v);
+                        pixel = colortable[roto.textData.bgColor & 0xf];
+                        if(glyph.r > 0.80f)
+                        {
+                            pixel = colortable[roto.textData.fgColor & 0xf];
+                        }
+                        #if 0
+                        else
+                        {
+                            #if 1
+                            uint32_t r = static_cast<uint32_t>(fontX * 255);
+                            uint32_t g = static_cast<uint32_t>(fontY * 255);
+                            uint32_t b = 0;
+                            uint32_t a = 255;
+
+                            pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                            #endif
+                        }
                         #endif
-                    }
-                    #endif
-                } else if (roto.textData.fontNum == 2)
-                {
-                    // Find the character in our atlas.
-                    constexpr float fontSpaceWidth = 15.0f * 4.0f;
-                    constexpr float fontSpaceHeight = 11.0f * 4.0f;
-
-                    constexpr float atlasWidth = 840.0f;
-                    constexpr float atlasHeight = 220.0f;
-
-                    uint32_t c = roto.textData.character - 32;
-                    uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
-                    uint32_t fontRow = c / fontsPerRow;
-                    uint32_t fontCol = c % fontsPerRow;
-
-                    float u = fontCol * fontSpaceWidth / atlasWidth;
-                    float v = fontRow * fontSpaceHeight / atlasHeight;
-
-                    u += fontX * (fontSpaceWidth / atlasWidth);
-                    v += fontY * (fontSpaceHeight / atlasHeight);
-
-                    auto glyph = bilinearSample(FONT3Texture, u, v);
-                    pixel = colortable[roto.textData.bgColor & 0xf];
-                    if(glyph.r > 0.9f)
+                    } else if (roto.textData.fontNum == 2)
                     {
-                        pixel = colortable[roto.textData.fgColor & 0xf];
-                    }
-                } else if (roto.textData.fontNum == 3)
-                {
-                                        // Find the character in our atlas.
-                    constexpr float fontSpaceWidth = 15.0f * 4.0f;
-                    constexpr float fontSpaceHeight = 11.0f * 4.0f;
+                        // Find the character in our atlas.
+                        constexpr float fontSpaceWidth = 15.0f * 4.0f;
+                        constexpr float fontSpaceHeight = 11.0f * 4.0f;
 
-                    constexpr float atlasWidth = 840.0f;
-                    constexpr float atlasHeight = 220.0f;
+                        constexpr float atlasWidth = 840.0f;
+                        constexpr float atlasHeight = 220.0f;
 
-                    uint32_t c = roto.textData.character - 32;
-                    uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
-                    uint32_t fontRow = c / fontsPerRow;
-                    uint32_t fontCol = c % fontsPerRow;
+                        uint32_t c = roto.textData.character - 32;
+                        uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
+                        uint32_t fontRow = c / fontsPerRow;
+                        uint32_t fontCol = c % fontsPerRow;
 
-                    float u = fontCol * fontSpaceWidth / atlasWidth;
-                    float v = fontRow * fontSpaceHeight / atlasHeight;
+                        float u = fontCol * fontSpaceWidth / atlasWidth;
+                        float v = fontRow * fontSpaceHeight / atlasHeight;
 
-                    u += fontX * (fontSpaceWidth / atlasWidth);
-                    v += fontY * (fontSpaceHeight / atlasHeight);
+                        u += fontX * (fontSpaceWidth / atlasWidth);
+                        v += fontY * (fontSpaceHeight / atlasHeight);
 
-                    auto glyph = bilinearSample(FONT3Texture, u, v);
-                    pixel = colortable[roto.textData.bgColor & 0xf];
-                    if(glyph.r > 0.9f)
+                        auto glyph = bilinearSample(FONT3Texture, u, v);
+                        pixel = colortable[roto.textData.bgColor & 0xf];
+                        if(glyph.r > 0.9f)
+                        {
+                            pixel = colortable[roto.textData.fgColor & 0xf];
+                        }
+                    } else if (roto.textData.fontNum == 3)
                     {
-                        pixel = colortable[roto.textData.fgColor & 0xf];
+                                            // Find the character in our atlas.
+                        constexpr float fontSpaceWidth = 15.0f * 4.0f;
+                        constexpr float fontSpaceHeight = 11.0f * 4.0f;
+
+                        constexpr float atlasWidth = 840.0f;
+                        constexpr float atlasHeight = 220.0f;
+
+                        uint32_t c = roto.textData.character - 32;
+                        uint32_t fontsPerRow = 840 / (int)fontSpaceWidth;
+                        uint32_t fontRow = c / fontsPerRow;
+                        uint32_t fontCol = c % fontsPerRow;
+
+                        float u = fontCol * fontSpaceWidth / atlasWidth;
+                        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+                        u += fontX * (fontSpaceWidth / atlasWidth);
+                        v += fontY * (fontSpaceHeight / atlasHeight);
+
+                        auto glyph = bilinearSample(FONT3Texture, u, v);
+                        pixel = colortable[roto.textData.bgColor & 0xf];
+                        if(glyph.r > 0.9f)
+                        {
+                            pixel = colortable[roto.textData.fgColor & 0xf];
+                        }
+                        #if 0
+                        else
+                        {
+                            uint32_t r = static_cast<uint32_t>(fontX * 255);
+                            uint32_t g = static_cast<uint32_t>(fontY * 255);
+                            uint32_t b = 0;
+                            uint32_t a = 255;
+
+                            pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                        }
+                        #endif
                     }
                     #if 0
                     else
@@ -999,24 +1014,13 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     #endif
                 }
                 #if 0
-                else
+                else 
                 {
-                    uint32_t r = static_cast<uint32_t>(fontX * 255);
-                    uint32_t g = static_cast<uint32_t>(fontY * 255);
-                    uint32_t b = 0;
-                    uint32_t a = 255;
-
-                    pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                    //pixel = 0xffff0000;
+                    pixel = colortable[(int)roto.content];
                 }
                 #endif
             }
-            #if 0
-            else 
-            {
-                //pixel = 0xffff0000;
-                pixel = colortable[(int)roto.content];
-            }
-            #endif
 
             // Place the pixel in the larger surface
             windowData[index] = pixel;
@@ -1027,7 +1031,6 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
 
 void GraphicsUpdate()
 {
-#ifdef SDL
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;
     const void* data = nullptr;
@@ -1102,6 +1105,7 @@ void GraphicsUpdate()
     SDL_RenderPresent(renderer);
     SDL_PumpEvents();
 
+#if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     if(graphicsMode == SFGraphicsMode::Graphics)
     {
         data = (uint8_t*)graphicsPixels.data() + 0x20000;
@@ -1118,7 +1122,6 @@ void GraphicsUpdate()
 
 void GraphicsWait()
 {
-#ifdef SDL
     SDL_Event event;
 
     while(1)
@@ -1130,12 +1133,10 @@ void GraphicsWait()
                 return;
         }
     }
-#endif
 }
 
 void GraphicsQuit()
 {
-#ifdef SDL
     if(graphicsThread.joinable())
     {
         stopSemaphore.release();
@@ -1143,14 +1144,16 @@ void GraphicsQuit()
         graphicsThread.join();
     }
 
+#if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
+    SDL_DestroyRenderer(offscreenRenderer);
+    SDL_DestroyWindow(offscreenWindow);
     SDL_DestroyTexture(offscreenTexture);
+#endif
+    
     SDL_DestroyTexture(graphicsTexture);
     SDL_DestroyTexture(textTexture);
-    SDL_DestroyRenderer(offscreenRenderer);
     SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(offscreenWindow);
     SDL_DestroyWindow(window);
-#endif
 }
 
 void GraphicsSetCursor(int x, int y)
@@ -1165,159 +1168,21 @@ void GraphicsCarriageReturn()
     cursory++;
 }
 
-// Font Definition
-const uint8_t font4x6 [96][2] = {
- {  0x00  ,  0x00  },   /*SPACE*/
- {  0x49  ,  0x08  },   /*'!'*/
- {  0xb4  ,  0x00  },   /*'"'*/
- {  0xbe  ,  0xf6  },   /*'#'*/
- {  0x7b  ,  0x7a  },   /*'$'*/
- {  0xa5  ,  0x94  },   /*'%'*/
- {  0x55  ,  0xb8  },   /*'&'*/
- {  0x48  ,  0x00  },   /*'''*/
- {  0x29  ,  0x44  },   /*'('*/
- {  0x44  ,  0x2a  },   /*')'*/
- {  0x15  ,  0xa0  },   /*'*'*/
- {  0x0b  ,  0x42  },   /*'+'*/
- {  0x00  ,  0x50  },   /*','*/
- {  0x03  ,  0x02  },   /*'-'*/
- {  0x00  ,  0x08  },   /*'.'*/
- {  0x25  ,  0x90  },   /*'/'*/
- {  0x76  ,  0xba  },   /*'0'*/
- {  0x59  ,  0x5c  },   /*'1'*/
- {  0xc5  ,  0x9e  },   /*'2'*/
- {  0xc5  ,  0x38  },   /*'3'*/
- {  0x92  ,  0xe6  },   /*'4'*/
- {  0xf3  ,  0x3a  },   /*'5'*/
- {  0x73  ,  0xba  },   /*'6'*/
- {  0xe5  ,  0x90  },   /*'7'*/
- {  0x77  ,  0xba  },   /*'8'*/
- {  0x77  ,  0x3a  },   /*'9'*/
- {  0x08  ,  0x40  },   /*':'*/
- {  0x08  ,  0x50  },   /*';'*/
- {  0x2a  ,  0x44  },   /*'<'*/
- {  0x1c  ,  0xe0  },   /*'='*/
- {  0x88  ,  0x52  },   /*'>'*/
- {  0xe5  ,  0x08  },   /*'?'*/
- {  0x56  ,  0x8e  },   /*'@'*/
- {  0x77  ,  0xb6  },   /*'A'*/
- {  0x77  ,  0xb8  },   /*'B'*/
- {  0x72  ,  0x8c  },   /*'C'*/
- {  0xd6  ,  0xba  },   /*'D'*/
- {  0x73  ,  0x9e  },   /*'E'*/
- {  0x73  ,  0x92  },   /*'F'*/
- {  0x72  ,  0xae  },   /*'G'*/
- {  0xb7  ,  0xb6  },   /*'H'*/
- {  0xe9  ,  0x5c  },   /*'I'*/
- {  0x64  ,  0xaa  },   /*'J'*/
- {  0xb7  ,  0xb4  },   /*'K'*/
- {  0x92  ,  0x9c  },   /*'L'*/
- {  0xbe  ,  0xb6  },   /*'M'*/
- {  0xd6  ,  0xb6  },   /*'N'*/
- {  0x56  ,  0xaa  },   /*'O'*/
- {  0xd7  ,  0x92  },   /*'P'*/
- {  0x76  ,  0xee  },   /*'Q'*/
- {  0x77  ,  0xb4  },   /*'R'*/
- {  0x71  ,  0x38  },   /*'S'*/
- {  0xe9  ,  0x48  },   /*'T'*/
- {  0xb6  ,  0xae  },   /*'U'*/
- {  0xb6  ,  0xaa  },   /*'V'*/
- {  0xb6  ,  0xf6  },   /*'W'*/
- {  0xb5  ,  0xb4  },   /*'X'*/
- {  0xb5  ,  0x48  },   /*'Y'*/
- {  0xe5  ,  0x9c  },   /*'Z'*/
- {  0x69  ,  0x4c  },   /*'['*/
- {  0x91  ,  0x24  },   /*'\'*/
- {  0x64  ,  0x2e  },   /*']'*/
- {  0x54  ,  0x00  },   /*'^'*/
- {  0x00  ,  0x1c  },   /*'_'*/
- {  0x44  ,  0x00  },   /*'`'*/
- {  0x0e  ,  0xae  },   /*'a'*/
- {  0x9a  ,  0xba  },   /*'b'*/
- {  0x0e  ,  0x8c  },   /*'c'*/
- {  0x2e  ,  0xae  },   /*'d'*/
- {  0x0e  ,  0xce  },   /*'e'*/
- {  0x56  ,  0xd0  },   /*'f'*/
- {  0x55  ,  0x3B  },   /*'g'*/
- {  0x93  ,  0xb4  },   /*'h'*/
- {  0x41  ,  0x44  },   /*'i'*/
- {  0x41  ,  0x51  },   /*'j'*/
- {  0x97  ,  0xb4  },   /*'k'*/
- {  0x49  ,  0x44  },   /*'l'*/
- {  0x17  ,  0xb6  },   /*'m'*/
- {  0x1a  ,  0xb6  },   /*'n'*/
- {  0x0a  ,  0xaa  },   /*'o'*/
- {  0xd6  ,  0xd3  },   /*'p'*/
- {  0x76  ,  0x67  },   /*'q'*/
- {  0x17  ,  0x90  },   /*'r'*/
- {  0x0f  ,  0x38  },   /*'s'*/
- {  0x9a  ,  0x8c  },   /*'t'*/
- {  0x16  ,  0xae  },   /*'u'*/
- {  0x16  ,  0xba  },   /*'v'*/
- {  0x16  ,  0xf6  },   /*'w'*/
- {  0x15  ,  0xb4  },   /*'x'*/
- {  0xb5  ,  0x2b  },   /*'y'*/
- {  0x1c  ,  0x5e  },   /*'z'*/
- {  0x6b  ,  0x4c  },   /*'{'*/
- {  0x49  ,  0x48  },   /*'|'*/
- {  0xc9  ,  0x5a  },   /*'}'*/
- {  0x54  ,  0x00  },   /*'~'*/
- {  0x56  ,  0xe2  }    /*''*/
-};
-
-
-unsigned char getFontLine(unsigned char data, int line_num) {
-  const uint8_t index = (data-32);
-  unsigned char pixel = 0;
-  if (font4x6[index][1] & 1 == 1) line_num -= 1;
-  if (line_num == 0) {
-      pixel = (font4x6[index][0]) >> 4;
-  } else if (line_num == 1) {
-      pixel = (font4x6[index][0]) >> 1;
-  } else if (line_num == 2) { 
-      // Split over 2 bytes
-      return (((font4x6[index][0]) & 0x03) << 2) | (((font4x6[index][1]) & 0x02));
-  } else if (line_num == 3) {
-      pixel = (font4x6[index][1]) >> 4;
-  } else if (line_num == 4) {
-      pixel = (font4x6[index][1]) >> 1;
-  }
-  return pixel & 0xE;
-}
-
 void GraphicsChar(unsigned char s)
 {
-    if(graphicsMode == Text)
+    assert(graphicsMode == Text);
+    for(int jj=0; jj<8; jj++)
     {
-        for(int jj=0; jj<8; jj++)
+        int offset = ((int)s)*8 + jj;
+        for(int ii=0; ii<8; ii++)
         {
-            int offset = ((int)s)*8 + jj;
-            for(int ii=0; ii<8; ii++)
+            int color = 0;
+            if ((vgafont8[offset]) & (1<<(7-ii)))
             {
-                int color = 0;
-                if ((vgafont8[offset]) & (1<<(7-ii)))
-                {
-                    color = 0xFFFFFFFF;
-                }
+                color = 0xFFFFFFFF;
+            }
 
-                textPixels[(cursory*8+jj) * TEXT_MODE_WIDTH + (cursorx*8+ii)] = color;
-            }
-        }
-    }
-    else
-    {
-        for(int jj=0; jj<6; jj++)
-        {
-            unsigned char line = getFontLine(s, jj);
-            for(int ii=0; ii<4; ii++)
-            {
-                int color = 0;
-                if ((line) & (1<<(3-ii)))
-                {
-                    color = 0xFFFFFFFF;
-                }
-                graphicsPixels[(cursory*6+jj) * GRAPHICS_MODE_WIDTH + (cursorx*4+ii)] = color;
-            }
+            textPixels[(cursory*8+jj) * TEXT_MODE_WIDTH + (cursorx*8+ii)] = color;
         }
     }
 
@@ -1334,7 +1199,6 @@ void GraphicsText(char *s, int n)
     {
         GraphicsChar(s[i]);
     }
-    //GraphicsUpdate();
 }
 
 // 0 = text, 1 = ega graphics
