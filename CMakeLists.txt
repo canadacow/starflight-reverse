@@ -13,9 +13,10 @@ project(Starflight)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-find_package(SDL2 CONFIG REQUIRED)
+find_package(sdl2 CONFIG REQUIRED)
 find_package(Zstd CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
+find_package(bgfx CONFIG REQUIRED) 
 
 set_source_files_properties(
     src/cpu/cpu.cpp 
@@ -41,7 +42,8 @@ add_executable(emulatesdl
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)
 
 target_link_libraries(emulatesdl PRIVATE 
-        SDL2::SDL2 
         SDL2::SDL2main
-        xxHash::xxhash 
+        SDL2::SDL2
+        xxHash::xxhash
+        bgfx::bgfx
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
