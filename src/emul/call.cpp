@@ -1054,8 +1054,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint16_t fileNum = Pop();
                     uint16_t di = 0;
 
-                    //fileNum = 0x008c;
-
                     Push(ds);
                     Push(fileNum);
 
