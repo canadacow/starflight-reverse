@@ -33,9 +33,10 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
     vec2 mouse = iMouse.xy / iResolution.xy - 0.5;
 
-    vec2 uv = (fragCoord - 0.5 * iResolution.xy) / min(iResolution.y, iResolution.x);
-    vec3 camPos = vec3(0.0, -8.0, 0.0);
-    float fov = PI / 2.0; // 45 degrees
+    //vec2 uv = (fragCoord - 0.5 * iResolution.xy) / min(iResolution.y, iResolution.x);
+    vec2 uv = (fragCoord-.5*iResolution.xy)/iResolution.y;
+    vec3 camPos = vec3(0.0, -20.0, 0.0);
+    float fov = PI / 4.00; // 45 degrees
     vec3 rayDir = normalize(vec3(uv * tan(fov / 2.0), -1.0));
     
     rayDir *= rotateX(PI / 2.0);
@@ -71,12 +72,14 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         v -= 0.5;
         
         // Sample the texture
-        vec3 textureColor = texture(iChannel0, vec2(u, v)).rgb;
+        vec3 heightMap = texture(iChannel0, vec2(u, v)).rgb;
+        
+        vec3 albedoMap = texture(iChannel0, vec2(u, v + 0.5)).rgb;
 
         // Compute normals from the texture
         vec3 bumpNormal = bumpFromDepth(vec2(u, v), vec2(48.0, 24.0), 0.1).xyz; // Adjust the second parameter to accentuate the gradient
 
         // Use the blended diffuse lighting to set fragColor
-        fragColor = vec4(diff * vec3(1.0), 1.0);
+        fragColor = vec4(albedoMap, 1.);
     }
 }
