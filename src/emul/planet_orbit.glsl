@@ -35,14 +35,14 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 
     //vec2 uv = (fragCoord - 0.5 * iResolution.xy) / min(iResolution.y, iResolution.x);
     vec2 uv = (fragCoord-.5*iResolution.xy)/iResolution.y;
-    vec3 camPos = vec3(0.0, -20.0, 0.0);
+    vec3 camPos = vec3(0.0, -30.0, 0.0);
     float fov = PI / 4.00; // 45 degrees
     vec3 rayDir = normalize(vec3(uv * tan(fov / 2.0), -1.0));
     
     rayDir *= rotateX(PI / 2.0);
 
-    vec3 sphereCenter = vec3(4.0 * cos(iTime), 0.0, 4.0 * sin(iTime)); // Simulate orbit
-    float sphereRadius = 1.0;
+    vec3 sphereCenter = vec3(7.0 * cos(iTime), 0.0, 7.0 * sin(iTime)); // Simulate orbit
+    float sphereRadius = 2.0;
 
     vec3 oc = camPos - sphereCenter;
     float a = dot(rayDir, rayDir);
@@ -68,6 +68,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         float u = 0.5 + atan(normal.z, normal.x) / (2.0 * PI);
         float v = 0.5 - asin(normal.y) / PI;
         
+        vec3 colorMap = texture(iChannel1, vec2(u, v)).rgb;
+        
         v *= 0.5;
         v -= 0.5;
         
@@ -77,9 +79,33 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         vec3 albedoMap = texture(iChannel0, vec2(u, v + 0.5)).rgb;
 
         // Compute normals from the texture
-        vec3 bumpNormal = bumpFromDepth(vec2(u, v), vec2(48.0, 24.0), 0.1).xyz; // Adjust the second parameter to accentuate the gradient
+        vec4 bumpNormal = bumpFromDepth(vec2(u, v), vec2(48.0, 24.0), 0.1); // Adjust the second parameter to accentuate the gradient
+
+        // Define light properties
+        vec3 lightColor = vec3(1.0, 1.0, 1.0); // white light
+        float ambientStrength = 0.1;
+        float specularStrength = 0.5;
+        float shininess = 32.0;
+
+        // Calculate ambient light
+        vec3 ambient = ambientStrength * lightColor;
+
+        // Calculate diffuse light for bump map
+        float diffBump = max(dot(bumpNormal.xyz, lightDir), 0.0);
+
+        // Combine diffuse light of the sphere surface and the bump map
+        vec3 diffuse = diff /* * diffBump  */ * lightColor;
+
+        // Calculate specular light
+        vec3 viewDir = normalize(-rayDir);
+        vec3 reflectDir = reflect(-lightDir, bumpNormal.xyz);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+        vec3 specular = specularStrength * spec * lightColor;
+
+        // Combine results
+        vec3 result = (ambient + diffuse + specular) * albedoMap;
 
         // Use the blended diffuse lighting to set fragColor
-        fragColor = vec4(albedoMap, 1.);
+        fragColor = vec4(result, 1.0);
     }
 }
