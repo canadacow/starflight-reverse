@@ -97,15 +97,22 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         float ambientStrength = 0.1;
         float specularStrength = 0.5;
         float shininess = 32.0;
+        
+        // Check if the albedo is blue (you may need to adjust this condition depending on your specific color values)
+        if (albedoMap.b > albedoMap.r && albedoMap.b > albedoMap.g) {
+            specularStrength = 8.0; // Increase specular strength for blue albedo
+        } else {
+            specularStrength = 0.5; // Default specular strength for other colors
+        }
 
         // Calculate ambient light
         vec3 ambient = ambientStrength * lightColor;
 
         // Calculate diffuse light for bump map
-        float diffBump = max(dot(bumpNormal.xyz, lightDir), 0.0);
+        float diffBump = max(dot(bumpNormal.xyz, rayDir), 0.0);
 
         // Combine diffuse light of the sphere surface and the bump map
-        vec3 diffuse = diff /* * diffBump  */ * lightColor;
+        vec3 diffuse = diff * diffBump  * lightColor;
 
         // Calculate specular light
         vec3 viewDir = normalize(-rayDir);

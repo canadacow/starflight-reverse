@@ -1246,15 +1246,14 @@ void GraphicsUpdate()
         stride = TEXT_MODE_WIDTH;
         data = textPixels.data();
 
-        /*
         SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
         SDL_RenderPresent(renderer);
-        */
-        return;
     }
 
+
+#if 0
     bgfx::TextureHandle textureHandle = bgfx::createTexture2D(WINDOW_WIDTH, WINDOW_HEIGHT, false, 1, bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT | BGFX_SAMPLER_NONE);
 
     // Update the texture with your data
@@ -1271,6 +1270,13 @@ void GraphicsUpdate()
 
     bgfx::destroy(textureHandle);
     bgfx::destroy(frameBufferHandle);
+#else
+    SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
+    SDL_RenderPresent(renderer);
+    SDL_PumpEvents();
+#endif
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     if(graphicsMode == SFGraphicsMode::Graphics)
