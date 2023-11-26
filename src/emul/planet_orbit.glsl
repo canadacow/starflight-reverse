@@ -2,6 +2,8 @@
 
 float intensity = 3.0; 
 
+#define DEPTH	 5.5
+
 mat3 rotateX(float theta) {
     float c = cos(theta);
     float s = sin(theta);
@@ -16,25 +18,31 @@ float getHeight(vec2 uv) {
   return texture(iChannel0, uv).r;
 }
 
+
 vec4 bumpFromDepth(vec2 uv, vec2 resolution, float scale) {
   vec2 step = 1. / resolution;
+  //uv.y *= 0.5;
+  //step.y *= 0.5;
     
   float height = getHeight(uv);
+  
+  float R = abs(getHeight(uv + vec2(step.x, 0.)));
+  float L = abs(getHeight(uv + vec2(-step.x, 0.)));
+  float D = abs(getHeight(uv + vec2(0., step.y)));
+  float U = abs(getHeight(uv + vec2(0., -step.y)));  
     
-  vec2 dxy = height - vec2(
-      getHeight(uv + vec2(step.x, 0.)), 
-      getHeight(uv + vec2(0., step.y))
-  );
+  float X = (L-R) * .5;
+  float Y = (U-D) * .5;
     
-  return vec4(normalize(vec3(dxy * scale / step, 1.)), height);
+  return vec4(normalize(vec3(X, Y, 1. / DEPTH)), height);
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
     vec2 mouse = iMouse.xy / iResolution.xy - 0.5;
 
-    //vec2 uv = (fragCoord - 0.5 * iResolution.xy) / min(iResolution.y, iResolution.x);
     vec2 uv = (fragCoord-.5*iResolution.xy)/iResolution.y;
+    
     vec3 camPos = vec3(0.0, -30.0, 0.0);
     float fov = PI / 4.00; // 45 degrees
     vec3 rayDir = normalize(vec3(uv * tan(fov / 2.0), -1.0));
@@ -90,7 +98,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         vec3 albedoMap = texture(iChannel0, vec2(u, v + 0.5)).rgb;
 
         // Compute normals from the texture
-        vec4 bumpNormal = bumpFromDepth(vec2(u, v), vec2(48.0, 24.0), 0.1); // Adjust the second parameter to accentuate the gradient
+        vec4 bumpNormal = bumpFromDepth(vec2(u, v), vec2(48.0, 48.0), 0.1); // Adjust the second parameter to accentuate the gradient
 
         // Define light properties
         vec3 lightColor = vec3(1.0, 1.0, 1.0); // white light
@@ -100,7 +108,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         
         // Check if the albedo is blue (you may need to adjust this condition depending on your specific color values)
         if (albedoMap.b > albedoMap.r && albedoMap.b > albedoMap.g) {
-            specularStrength = 8.0; // Increase specular strength for blue albedo
+            specularStrength = 1.0; // Increase specular strength for blue albedo
         } else {
             specularStrength = 0.5; // Default specular strength for other colors
         }
@@ -109,7 +117,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         vec3 ambient = ambientStrength * lightColor;
 
         // Calculate diffuse light for bump map
-        float diffBump = max(dot(bumpNormal.xyz, rayDir), 0.0);
+        float diffBump = max(dot(bumpNormal.xyz, lightDir), 0.0);
 
         // Combine diffuse light of the sphere surface and the bump map
         vec3 diffuse = diff * diffBump  * lightColor;
@@ -125,6 +133,6 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         result += haloColor * diff * 0.2;
 
         // Use the blended diffuse lighting to set fragColor
-        fragColor = vec4(result, 1.0);
+        fragColor = vec4(vec3(result), 1.0);
     }
 }
