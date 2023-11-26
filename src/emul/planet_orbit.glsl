@@ -49,10 +49,21 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     float b = 2.0 * dot(oc, rayDir);
     float c = dot(oc, oc) - sphereRadius*sphereRadius;
     float discriminant = b*b - 4.0*a*c;
+    
+    vec3 haloColor = vec3(0.5, 0.7, 1.0); // Adjust this value to change the color of the halo
 
     if(discriminant < 0.0)
     {
-        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        // Calculate the closest distance from the ray to the sphere center
+        float tClosest = dot(-oc, rayDir) / a;
+        vec3 closestPoint = camPos + tClosest * rayDir;
+        float distanceToCenter = length(closestPoint - sphereCenter);
+
+        // Add atmospheric halo
+        float haloRadius = sphereRadius + 0.25; // Adjust this value to change the size of the halo
+        float haloIntensity = 1.0 - smoothstep(sphereRadius, haloRadius, distanceToCenter);
+        vec3 result = haloColor * haloIntensity;
+        fragColor = vec4(result, 1.0);
     }
     else
     {
@@ -104,6 +115,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 
         // Combine results
         vec3 result = (ambient + diffuse + specular) * albedoMap;
+        result += haloColor * diff * 0.2;
 
         // Use the blended diffuse lighting to set fragColor
         fragColor = vec4(result, 1.0);
