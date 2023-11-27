@@ -22,7 +22,6 @@
 #include <array>
 #include <utility>
 
-#include "sdl_helper.h"
 #include "vulkan_helper.h"
 
 #if defined(PLANES)
@@ -72,6 +71,14 @@ static double toneInHz = 440.0;
 
 static std::atomic<bool> s_useRotoscope = true;
 static std::atomic<bool> s_useEGA = true;
+
+struct GraphicsContext
+{
+    VulkanContext vc;
+    std::vector<avk::buffer> frameStagingBuffers;
+};
+
+static GraphicsContext s_gc{};
 
 union TextureColor {
     struct {
@@ -784,11 +791,20 @@ static int GraphicsInitThread(void *ptr)
 
 #endif
     
-    VulkanContext vc{};
-    auto instance = vc.vulkan_instance();
-    auto physicalDevice = vc.physical_device();
-    auto device = vc.device();
-    vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
+    s_gc.vc.vulkan_instance();
+    s_gc.vc.physical_device();
+    s_gc.vc.device();
+    s_gc.vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
+    {
+        s_gc.frameStagingBuffers.push_back(
+            s_gc.vc.create_buffer(
+                avk::memory_usage::host_coherent,
+                vk::BufferUsageFlagBits::eTransferSrc,
+                avk::generic_buffer_meta::create_from_size(WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint32_t)))
+        );
+    }
 
     keyboard = std::make_unique<SDLKeyboard>();
 
