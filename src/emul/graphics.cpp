@@ -75,9 +75,7 @@ static std::atomic<bool> s_useEGA = true;
 struct GraphicsContext
 {
     VulkanContext vc;
-    const avk::queue* mTransferQueue;
-    const avk::queue* mGraphicsQueue;
-    const avk::queue* mComputeQueue;
+    avk::queue mQueue;
 
     std::vector<avk::buffer> frameStagingBuffers;
 };
@@ -800,6 +798,13 @@ static int GraphicsInitThread(void *ptr)
     s_gc.vc.device();
     s_gc.vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
+    auto queueFamily = avk::queue::select_queue_family_index(s_gc.vc.physical_device(), {}, avk::queue_selection_preference::versatile_queue, s_gc.vc.surface());
+
+    s_gc.mQueue = avk::queue::prepare(&s_gc.vc, queueFamily, static_cast<uint32_t>(0));
+
+    s_gc.vc.set_queue_family_ownership(s_gc.mQueue.family_index());
+    s_gc.vc.set_present_queue(s_gc.mQueue);
+
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
         s_gc.frameStagingBuffers.push_back(
@@ -1167,6 +1172,7 @@ void GraphicsUpdate()
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;
     const void* data = nullptr;
+    size_t dataSize = 0;
 
     static std::vector<uint32_t> fullRes{};
     static std::vector<Rotoscope> backbuffer{};
@@ -1223,6 +1229,7 @@ void GraphicsUpdate()
         currentTexture = windowTexture;
         stride = WINDOW_WIDTH;
         data = fullRes.data();
+        dataSize = fullRes.size() * sizeof(uint32_t);
     #endif
     }
     else if (graphicsMode == SFGraphicsMode::Text)
@@ -1230,6 +1237,7 @@ void GraphicsUpdate()
         currentTexture = textTexture;
         stride = TEXT_MODE_WIDTH;
         data = textPixels.data();
+        dataSize = textPixels.size() * sizeof(uint32_t);
 
         SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
         SDL_RenderClear(renderer);
@@ -1238,8 +1246,15 @@ void GraphicsUpdate()
     }
 
     const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
-    //auto transferSemaphore = s_gc.vc.record
-    //auto& commandPool = s_gc.vc.get_command_pool_for_single_use_command_buffers(mGraphicsQueue);
+    auto transferSemaphore = s_gc.vc.record_and_submit({
+        s_gc.frameStagingBuffers[inFlightIndex]->fill(data, dataSize)
+        },
+        s_gc.mQueue);
+
+    auto imageAvailableSemaphore = s_gc.vc.consume_current_image_available_semaphore();
+
+    s_gc.vc.sync_before_render();
+    s_gc.vc.render_frame();
 
     SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
     SDL_RenderClear(renderer);

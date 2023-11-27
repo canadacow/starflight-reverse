@@ -423,3 +423,319 @@ avk::command_pool& VulkanContext::get_command_pool_for_resettable_command_buffer
 {
     return get_command_pool_for(aQueue, vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
 }
+
+std::vector<avk::semaphore> VulkanContext::remove_all_present_semaphore_dependencies_for_frame(frame_id_t aPresentFrameId)
+{
+    // No need to protect against concurrent access since that would be misuse of this function.
+    // This shall never be called from the invokee callbacks as being invoked through a parallel invoker.
+
+    // Find all to remove
+    auto to_remove = std::remove_if(
+        std::begin(mPresentSemaphoreDependencies), std::end(mPresentSemaphoreDependencies),
+        [maxTTL = aPresentFrameId - number_of_frames_in_flight()](const auto& tpl) {
+            return std::get<frame_id_t>(tpl) <= maxTTL;
+        });
+    // return ownership of all the semaphores to remove to the caller
+    std::vector<avk::semaphore> moved_semaphores;
+    for (decltype(to_remove) it = to_remove; it != std::end(mPresentSemaphoreDependencies); ++it) {
+        moved_semaphores.push_back(std::move(std::get<avk::semaphore>(*it)));
+    }
+    // Erase and return
+    mPresentSemaphoreDependencies.erase(to_remove, std::end(mPresentSemaphoreDependencies));
+    return moved_semaphores;
+}
+
+std::vector<avk::command_buffer> VulkanContext::clean_up_command_buffers_for_frame(frame_id_t aPresentFrameId)
+{
+    std::vector<avk::command_buffer> removedBuffers;
+    if (mLifetimeHandledCommandBuffers.empty()) {
+        return removedBuffers;
+    }
+    // No need to protect against concurrent access since that would be misuse of this function.
+    // This shall never be called from the invokee callbacks as being invoked through a parallel invoker.
+
+    // Up to the frame with id 'maxTTL', all command buffers can be safely removed
+    const auto maxTTL = aPresentFrameId - number_of_frames_in_flight();
+
+    // 1. SINGLE USE COMMAND BUFFERS
+    // Can not use the erase-remove idiom here because that would invalidate iterators and references
+    // HOWEVER: "[...]unless the erased elements are at the end or the beginning of the container,
+    // in which case only the iterators and references to the erased elements are invalidated." => Let's do that!
+    auto eraseBegin = std::begin(mLifetimeHandledCommandBuffers);
+    if (std::end(mLifetimeHandledCommandBuffers) == eraseBegin || std::get<frame_id_t>(*eraseBegin) > maxTTL) {
+        return removedBuffers;
+    }
+    // There are elements that we can remove => find position until where:
+    auto eraseEnd = eraseBegin;
+    while (eraseEnd != std::end(mLifetimeHandledCommandBuffers) && std::get<frame_id_t>(*eraseEnd) <= maxTTL) {
+        // return ownership of all the command_buffers to remove to the caller
+        removedBuffers.push_back(std::move(std::get<avk::command_buffer>(*eraseEnd)));
+        ++eraseEnd;
+    }
+    mLifetimeHandledCommandBuffers.erase(eraseBegin, eraseEnd);
+    return removedBuffers;
+}
+
+void VulkanContext::clean_up_outdated_swapchain_resources_for_frame(frame_id_t aPresentFrameId)
+{
+    if (mOutdatedSwapChainResources.empty()) {
+        return;
+    }
+
+    // Up to the frame with id 'maxTTL', all swap chain resources can be safely removed
+    const auto maxTTL = aPresentFrameId - number_of_frames_in_flight();
+
+    auto eraseBegin = std::begin(mOutdatedSwapChainResources);
+    if (std::end(mOutdatedSwapChainResources) == eraseBegin || std::get<frame_id_t>(*eraseBegin) > maxTTL) {
+        return;
+    }
+    auto eraseEnd = eraseBegin;
+    while (eraseEnd != std::end(mOutdatedSwapChainResources) && std::get<frame_id_t>(*eraseEnd) <= maxTTL) {
+        ++eraseEnd;
+    }
+    mOutdatedSwapChainResources.erase(eraseBegin, eraseEnd);
+}
+
+void VulkanContext::fill_in_present_semaphore_dependencies_for_frame(std::vector<vk::Semaphore>& aSemaphores, frame_id_t aFrameId) const
+{
+    for (const auto& [frameId, sem] : mPresentSemaphoreDependencies) {
+        if (frameId == aFrameId) {
+            auto& info = aSemaphores.emplace_back(sem->handle());
+        }
+    }
+}
+
+void VulkanContext::acquire_next_swap_chain_image_and_prepare_semaphores()
+{
+    if (mResourceRecreationDeterminator.is_any_recreation_necessary()) {
+        if (mResourceRecreationDeterminator.has_concurrent_frames_count_changed_only()) { //only update framesInFlight fences/semaphores
+            mActivePresentationQueue->handle().waitIdle(); // ensure the semaphores which we are going to potentially delete are not being used
+            update_concurrent_frame_synchronization(swapchain_creation_mode::update_existing_swapchain);
+            mResourceRecreationDeterminator.reset();
+        }
+        else { //recreate the whole swap chain then
+            update_resolution_and_recreate_swap_chain();
+        }
+    }
+    // Update the presentation queue only after potential swap chain updates:
+    update_active_presentation_queue();
+
+    // Get the next image from the swap chain, GPU -> GPU sync from previous present to the following acquire
+    auto imgAvailableSem = image_available_semaphore_for_frame();
+
+    // Update previous image index before getting a new image index for the current frame:
+    mPreviousFrameImageIndex = mCurrentFrameImageIndex;
+
+    try
+    {
+        auto result = device().acquireNextImageKHR(
+            swap_chain(), // the swap chain from which we wish to acquire an image
+            // At this point, I have to rant about the `timeout` parameter:
+            // The spec says: "timeout specifies how long the function waits, in nanoseconds, if no image is available."
+            // HOWEVER, don't think that a numeric_limit<int64_t>::max() will wait for nine quintillion nanoseconds!
+            //    No, instead it will return instantly, yielding an invalid swap chain image index. OMG, WTF?!
+            // Long story short: make sure to pass the UNSINGEDint64_t's maximum value, since only that will disable the timeout.
+            std::numeric_limits<uint64_t>::max(), // a timeout in nanoseconds for an image to become available. Using the maximum value of a 64 bit unsigned integer disables the timeout. [1]
+            imgAvailableSem->handle(), // The next two parameters specify synchronization objects that are to be signaled when the presentation engine is finished using the image [1]
+            nullptr,
+            &mCurrentFrameImageIndex); // a variable to output the index of the swap chain image that has become available. The index refers to the VkImage in our swapChainImages array. We're going to use that index to pick the right command buffer. [1]
+        if (vk::Result::eSuboptimalKHR == result) {
+            LOG_INFO("Swap chain is suboptimal in acquire_next_swap_chain_image_and_prepare_semaphores. Going to recreate it...");
+            mResourceRecreationDeterminator.set_recreation_required_for(recreation_determinator::reason::suboptimal_swap_chain);
+
+            // Workaround for binary semaphores:
+            // Since the semaphore is in a wait state right now, we'll have to wait for it until we can use it again.
+            auto fen = create_fence();
+            vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eAllCommands;
+            mActivePresentationQueue->handle().submit({ // TODO: This works, but is arguably not the greatest of all solutions... => Can it be done better with Timeline Semaphores? (Test on AMD!)
+                vk::SubmitInfo{}
+                    .setCommandBufferCount(0u)
+                    .setWaitSemaphoreCount(1u)
+                    .setPWaitSemaphores(imgAvailableSem->handle_addr())
+                    .setPWaitDstStageMask(&waitStage)
+                }, fen->handle());
+            fen->wait_until_signalled();
+
+            acquire_next_swap_chain_image_and_prepare_semaphores();
+            return;
+        }
+    }
+    catch (vk::OutOfDateKHRError omg) {
+        LOG_INFO(fmt::format("Swap chain out of date in acquire_next_swap_chain_image_and_prepare_semaphores. Reason[{}] in frame#{}. Going to recreate it...", omg.what(), current_frame()));
+        mResourceRecreationDeterminator.set_recreation_required_for(recreation_determinator::reason::invalid_swap_chain);
+        acquire_next_swap_chain_image_and_prepare_semaphores();
+        return;
+    }
+
+    // It could be that the image index that has been returned is currently in flight.
+    // There's no guarantee that we'll always get a nice cycling through the indices.
+    // => Must handle this case!
+    assert(current_image_index() == mCurrentFrameImageIndex);
+    if (mImagesInFlightFenceIndices[current_image_index()] >= 0) {
+        LOG_DEBUG_VERBOSE(fmt::format("Frame #{}: Have to issue an extra fence-wait because swap chain returned image[{}] but fence[{}] is currently in use.", current_frame(), mCurrentFrameImageIndex, mImagesInFlightFenceIndices[current_image_index()]));
+        auto& xf = mFramesInFlightFences[mImagesInFlightFenceIndices[current_image_index()]];
+        xf->wait_until_signalled();
+        // But do not reset! Otherwise we will wait forever at the next wait_until_signalled that will happen for sure.
+    }
+
+    // Set the image available semaphore to be consumed:
+    mCurrentFrameImageAvailableSemaphore = imgAvailableSem;
+
+    // Set the fence to be used:
+    mCurrentFrameFinishedFence = current_fence();
+}
+
+void VulkanContext::sync_before_render()
+{
+    // Wait for the fence before proceeding, GPU -> CPU synchronization via fence
+    const auto ci = current_in_flight_index();
+    auto cf = current_fence();
+    assert(cf->handle() == mFramesInFlightFences[current_in_flight_index()]->handle());
+    cf->wait_until_signalled();
+    cf->reset();
+
+    // Keep house with the in-flight images:
+    //   However, we don't know which index this fence had been mapped to => we have to search
+    for (auto& mapping : mImagesInFlightFenceIndices) {
+        if (ci == mapping) {
+            mapping = -1;
+            break;
+        }
+    }
+
+    // At this point we are certain that the frame which has used the current fence before is done.
+    //  => Clean up the resources of that previous frame!
+    auto semaphoresToBeFreed = remove_all_present_semaphore_dependencies_for_frame(current_frame());
+    auto commandBuffersToBeFreed = clean_up_command_buffers_for_frame(current_frame());
+    clean_up_outdated_swapchain_resources_for_frame(current_frame());
+
+    acquire_next_swap_chain_image_and_prepare_semaphores();
+}
+
+void VulkanContext::render_frame()
+{
+    const auto fenceIndex = static_cast<int>(current_in_flight_index());
+
+    // EXTERN -> WAIT
+    std::vector<vk::Semaphore> waitSemHandles;
+    fill_in_present_semaphore_dependencies_for_frame(waitSemHandles, current_frame());
+    std::vector<vk::SemaphoreSubmitInfoKHR> waitSemInfos(waitSemHandles.size());
+    std::ranges::transform(std::begin(waitSemHandles), std::end(waitSemHandles), std::begin(waitSemInfos), [](const auto& semHandle) {
+        return vk::SemaphoreSubmitInfoKHR{ semHandle, 0, vk::PipelineStageFlagBits2KHR::eAllCommands }; // TODO: Really ALL_COMMANDS or could we also use NONE?
+        });
+
+    if (!has_consumed_current_image_available_semaphore()) {
+        // Being in this branch indicates that image available semaphore has not been consumed yet
+        // meaning that no render calls were (correctly) executed  (hint: check if all invokess are possibly disabled).
+        auto imgAvailable = consume_current_image_available_semaphore();
+        waitSemInfos.emplace_back(imgAvailable->handle())
+            .setStageMask(vk::PipelineStageFlagBits2KHR::eAllCommands);
+    }
+
+    if (!has_used_current_frame_finished_fence()) {
+        // Need an additional submission to signal the fence.
+        auto fence = use_current_frame_finished_fence();
+        assert(fence->handle() == mFramesInFlightFences[fenceIndex]->handle());
+
+        // Using a temporary semaphore for the signal operation:
+        auto sigSem = create_semaphore();
+        vk::SemaphoreSubmitInfoKHR sigSemInfo{ sigSem->handle() };
+
+        // Waiting on the same semaphores here and during vkPresentKHR should be fine: (TODO: is it?)
+        auto submitInfo = vk::SubmitInfo2KHR{}
+            .setWaitSemaphoreInfoCount(static_cast<uint32_t>(waitSemInfos.size()))
+            .setPWaitSemaphoreInfos(waitSemInfos.data())
+            .setCommandBufferInfoCount(0u)    // Submit ZERO command buffers :O
+            .setSignalSemaphoreInfoCount(1u)
+            .setPSignalSemaphoreInfos(&sigSemInfo);
+#ifdef AVK_USE_SYNCHRONIZATION2_INSTEAD_OF_CORE
+        auto errorCode = mActivePresentationQueue->handle().submit2KHR(1u, &submitInfo, fence->handle(), dispatch_loader_ext());
+        if (vk::Result::eSuccess != errorCode) {
+            AVK_LOG_WARNING("submit2KHR returned " + vk::to_string(errorCode));
+        }
+#else
+        auto errorCode = mActivePresentationQueue->handle().submit2(1u, &submitInfo, fence->handle(), dispatch_loader_core());
+        if (vk::Result::eSuccess != errorCode) {
+            AVK_LOG_WARNING("submit2 returned " + vk::to_string(errorCode));
+        }
+#endif
+
+        // Consequently, the present call must wait on the temporary semaphore only:
+        waitSemHandles.clear();
+        waitSemHandles.emplace_back(sigSem->handle());
+        // Add it as dependency to the current frame, so that it gets properly lifetime-handled:
+        add_present_dependency_for_current_frame(std::move(sigSem));
+    }
+
+    try
+    {
+        // SIGNAL -> PRESENT
+        auto presentInfo = vk::PresentInfoKHR{}
+            .setWaitSemaphoreCount(waitSemHandles.size())
+            .setPWaitSemaphores(waitSemHandles.data())
+            .setSwapchainCount(1u)
+            .setPSwapchains(&swap_chain())
+            .setPImageIndices(&mCurrentFrameImageIndex)
+            .setPResults(nullptr);
+        auto result = mActivePresentationQueue->handle().presentKHR(presentInfo);
+
+        // Submitted => store the image index for extra reuse-safety:
+        mImagesInFlightFenceIndices[mCurrentFrameImageIndex] = fenceIndex;
+
+        if (vk::Result::eSuboptimalKHR == result) {
+            LOG_INFO("Swap chain is suboptimal in render_frame. Going to recreate it...");
+            mResourceRecreationDeterminator.set_recreation_required_for(recreation_determinator::reason::suboptimal_swap_chain);
+            // swap chain will be recreated in the next frame
+        }
+    }
+    catch (vk::OutOfDateKHRError omg) {
+        LOG_INFO(fmt::format("Swap chain out of date in render_frame. Reason[{}] in frame#{}. Going to recreate it...", omg.what(), current_frame()));
+        mResourceRecreationDeterminator.set_recreation_required_for(recreation_determinator::reason::invalid_swap_chain);
+        // Just do nothing. Ignore the failure. This frame is lost.
+        // swap chain will be recreated in the next frame
+    }
+
+    // increment frame counter
+    ++mCurrentFrame;
+}
+
+void VulkanContext::set_queue_family_ownership(std::vector<uint32_t> aQueueFamilies)
+{
+    mQueueFamilyIndicesGetter = [families = std::move(aQueueFamilies)]() { return families; };
+
+    // If the window has already been created, the new setting can't
+    // be applied unless the swapchain is being recreated.
+    if (is_alive()) {
+        mResourceRecreationDeterminator.set_recreation_required_for(recreation_determinator::reason::image_format_or_properties_changed);
+    }
+}
+
+void VulkanContext::set_queue_family_ownership(uint32_t aQueueFamily)
+{
+    set_queue_family_ownership(std::vector<uint32_t>{ aQueueFamily });
+}
+
+void VulkanContext::set_present_queue(avk::queue& aPresentQueue)
+{
+    if (nullptr == mActivePresentationQueue) {
+        mActivePresentationQueue = &aPresentQueue;
+    }
+    else {
+        // Update it later, namely after potential swap chain updates have been executed:
+        mPresentationQueueGetter = [newPresentQueue = &aPresentQueue]() { return newPresentQueue; };
+    }
+}
+
+void VulkanContext::update_resolution()
+{
+    // FIXME
+}
+
+void VulkanContext::update_resolution_and_recreate_swap_chain()
+{
+    // Gotta wait until the resolution has been updated on the main thread:
+    update_resolution();
+    mActivePresentationQueue->handle().waitIdle();
+
+    create_swap_chain(swapchain_creation_mode::update_existing_swapchain);
+}

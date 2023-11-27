@@ -32,6 +32,9 @@ struct vec2 {
 class VulkanContext : public avk::root
 {
 public:
+
+	using frame_id_t = int64_t;
+
 	VulkanContext() = default;
 	~VulkanContext() = default;
 
@@ -413,6 +416,49 @@ public:
 	avk::command_pool& get_command_pool_for_reusable_command_buffers(const avk::queue& aQueue);
 	avk::command_pool& get_command_pool_for_resettable_command_buffers(const avk::queue& aQueue);
 
+	std::vector<avk::semaphore> remove_all_present_semaphore_dependencies_for_frame(frame_id_t aPresentFrameId);
+	std::vector<avk::command_buffer> clean_up_command_buffers_for_frame(frame_id_t aPresentFrameId);
+	void clean_up_outdated_swapchain_resources_for_frame(frame_id_t aPresentFrameId);
+	void fill_in_present_semaphore_dependencies_for_frame(std::vector<vk::Semaphore>& aSemaphores, frame_id_t aFrameId) const;
+	void acquire_next_swap_chain_image_and_prepare_semaphores();
+
+	void update_resolution_and_recreate_swap_chain();
+
+	avk::queue& create_queue(vk::QueueFlags aRequiredFlags = {},
+		avk::queue_selection_preference aQueueSelectionPreference = avk::queue_selection_preference::versatile_queue,
+		bool aPresentSupportForWindow = false,
+		float aQueuePriority = 0.5f);
+
+	/** Get a reference to the image available semaphore of the current frame.
+	 *	It must be used by user code for a semaphore-wait operation, at a useful location,
+	 *	where the swapchain image must have become available for being rendered into.
+	 */
+	avk::semaphore consume_current_image_available_semaphore() {
+		if (!mCurrentFrameImageAvailableSemaphore.has_value()) {
+			throw avk::runtime_error("Current frame's image available semaphore has already been consumed. Must be consumed EXACTLY once. Do not try to get it multiple times!");
+		}
+		auto instance = std::move(mCurrentFrameImageAvailableSemaphore.value());
+		mCurrentFrameImageAvailableSemaphore.reset();
+		return instance;
+	}
+
+	/** Set the queue families which will have shared ownership of the of the swap chain images. */
+	void set_queue_family_ownership(std::vector<uint32_t> aQueueFamilies);
+
+	/** Set the queue family which will have exclusive ownership of the of the swap chain images. */
+	void set_queue_family_ownership(uint32_t aQueueFamily);
+
+	/** Set the queue that shall handle presenting. You MUST set it if you want to show any rendered images in this window!
+	 *	Should you use this method to change the presentation queue in a running application, please note that the
+	 *	swap chain will NOT be recreated by invoking this method---this might, or might not be the result that you're after.
+	 *	Should you desire to recreate the swapchain, too, e.g., to switch the ownership of the images, then
+	 *	please first use window::set_queue_family_ownership, then call window::set_present_queue!
+	 */
+	void set_present_queue(avk::queue& aPresentQueue);
+
+	void sync_before_render();
+	void render_frame();
+
 private:
 	vk::Instance mInstance;
 	vk::PhysicalDevice mPhysicalDevice;
@@ -435,6 +481,9 @@ private:
 	void handle_lifetime(outdated_swapchain_resource_t&& aOutdatedSwapchain, std::optional<frame_id_t> aFrameId = {});
 
 	void update_concurrent_frame_synchronization(swapchain_creation_mode aCreationMode);
+
+	void update_active_presentation_queue();
+	void update_resolution();
 
 #pragma region configuration properties
 	// A function which returns whether or not the window should be resizable
