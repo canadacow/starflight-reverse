@@ -235,7 +235,7 @@ private:
 
 	vk::SurfaceFormatKHR get_config_surface_format(const vk::SurfaceKHR & aSurface)
 	{
-		return vk::SurfaceFormatKHR{};
+		return vk::SurfaceFormatKHR{ vk::Format::eA8B8G8R8UnormPack32, vk::ColorSpaceKHR::eSrgbNonlinear };
 	}
 
 	vk::PresentModeKHR get_config_presentation_mode(const vk::SurfaceKHR & aSurface)
