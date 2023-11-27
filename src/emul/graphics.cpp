@@ -784,19 +784,11 @@ static int GraphicsInitThread(void *ptr)
 
 #endif
     
-    SDL_SysWMinfo wmi;
-    SDL_VERSION(&wmi.version);
-    if (!SDL_GetWindowWMInfo(window, &wmi) )
-    {
-        SDL_Quit();
-        return 0;
-    }
-
     VulkanContext vc{};
     auto instance = vc.vulkan_instance();
     auto physicalDevice = vc.physical_device();
     auto device = vc.device();
-    vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain);
+    vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     keyboard = std::make_unique<SDLKeyboard>();
 

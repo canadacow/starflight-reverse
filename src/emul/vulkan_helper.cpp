@@ -2,13 +2,65 @@
 
 #include <mutex>
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
+
 static std::mutex sSubmitMutex;
 
-void VulkanContext::create_swap_chain(swapchain_creation_mode aCreationMode)
+#ifdef _WIN32
+
+#include <windows.h>
+
+VkResult createWindowSurfaceWin32(VkInstance instance,
+    const VkAllocationCallbacks* allocator,
+    VkSurfaceKHR* surface,
+    void* window)
+{
+    VkResult err;
+    VkWin32SurfaceCreateInfoKHR sci;
+    PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR;
+
+    vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)
+        vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
+    if (!vkCreateWin32SurfaceKHR)
+    {
+        printf("Win32: Vulkan instance missing VK_KHR_win32_surface extension\n");
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
+    SDL_GetWindowWMInfo(window, &wmInfo);
+
+    memset(&sci, 0, sizeof(sci));
+    sci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    sci.hinstance = GetModuleHandle(NULL);
+    sci.hwnd = wmInfo.info.win.window;
+
+    err = vkCreateWin32SurfaceKHR(instance, &sci, allocator, surface);
+    if (err)
+    {
+        printf("Win32: Failed to create Vulkan surface: %d", err);
+    }
+
+    return err;
+}
+
+#endif
+
+void VulkanContext::create_swap_chain(swapchain_creation_mode aCreationMode, void* windowObject, uint32_t width, uint32_t height)
 {
     if (aCreationMode == swapchain_creation_mode::create_new_swapchain) {
         mCurrentFrame = 0; // Start af frame 0
+        mSwapChainExtent = vk::Extent2D{ width, height };
     }
+
+    VkSurfaceKHR surface;
+#ifdef _WIN32
+    createWindowSurfaceWin32(mInstance, nullptr, &surface, windowObject);
+#endif
+    vk::ObjectDestroy<vk::Instance, DISPATCH_LOADER_CORE_TYPE> deleter(vulkan_instance(), nullptr, dispatch_loader_core());
+    mSurface = vk::UniqueHandle<vk::SurfaceKHR, DISPATCH_LOADER_CORE_TYPE>(surface, deleter);
 
     construct_swap_chain_creation_info(aCreationMode);
 

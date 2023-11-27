@@ -1,5 +1,7 @@
 #pragma once
 
+#include <assert.h>
+
 #define VK_ENABLE_BETA_EXTENSIONS
 #define DISPATCH_LOADER_CORE_TYPE vk::DispatchLoaderDynamic
 #define DISPATCH_LOADER_EXT_TYPE vk::DispatchLoaderDynamic
@@ -209,7 +211,7 @@ public:
 		return mSwapChainExtent;
 	}
 
-	void create_swap_chain(swapchain_creation_mode aCreationMode);
+	void create_swap_chain(swapchain_creation_mode aCreationMode, void* windowObject = nullptr, uint32_t width = 0, uint32_t height = 0);
 	void construct_backbuffers(swapchain_creation_mode aCreationMode);
 	
 private:
@@ -258,7 +260,9 @@ private:
 
 	vec2<uint32_t> get_resolution_for_window()
 	{
-		return {1920, 1080};
+		assert(mSwapChainExtent.width != 0);
+		assert(mSwapChainExtent.height != 0);
+		return {mSwapChainExtent.width, mSwapChainExtent.height};
 	}
 
 	std::vector<avk::attachment> get_additional_back_buffer_attachments()
