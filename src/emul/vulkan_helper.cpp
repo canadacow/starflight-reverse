@@ -6,6 +6,7 @@
 #include <SDL2/SDL_syswm.h>
 
 static std::mutex sSubmitMutex;
+static std::mutex sConcurrentAccessMutex;
 
 #ifdef _WIN32
 
@@ -341,4 +342,84 @@ void VulkanContext::update_concurrent_frame_synchronization(swapchain_creation_m
 
     assert(static_cast<frame_id_t>(mFramesInFlightFences.size()) == get_config_number_of_concurrent_frames());
     assert(static_cast<frame_id_t>(mImageAvailableSemaphores.size()) == get_config_number_of_concurrent_frames());
+}
+
+avk::command_buffer VulkanContext::record_and_submit(std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, const avk::queue& aQueue, vk::CommandBufferUsageFlags aUsageFlags)
+{
+    auto& cmdPool = get_command_pool_for_single_use_command_buffers(aQueue);
+    auto cmdBfr = cmdPool->alloc_command_buffer(aUsageFlags);
+
+    record(std::move(aRecordedCommandsAndSyncInstructions))
+        .into_command_buffer(cmdBfr)
+        .then_submit_to(aQueue)
+        .submit();
+
+    return cmdBfr;
+}
+
+avk::semaphore VulkanContext::record_and_submit_with_semaphore(std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, const avk::queue& aQueue, avk::stage::pipeline_stage_flags aSrcSignalStage, vk::CommandBufferUsageFlags aUsageFlags)
+{
+    auto& cmdPool = get_command_pool_for_single_use_command_buffers(aQueue);
+    auto cmdBfr = cmdPool->alloc_command_buffer(aUsageFlags);
+    auto sem = create_semaphore();
+
+    record(std::move(aRecordedCommandsAndSyncInstructions))
+        .into_command_buffer(cmdBfr)
+        .then_submit_to(aQueue)
+        .signaling_upon_completion(aSrcSignalStage >> sem)
+        .submit();
+
+    sem->handle_lifetime_of(std::move(cmdBfr));
+    return sem;
+}
+
+avk::fence VulkanContext::record_and_submit_with_fence(std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, const avk::queue& aQueue, vk::CommandBufferUsageFlags aUsageFlags)
+{
+    auto& cmdPool = get_command_pool_for_single_use_command_buffers(aQueue);
+    auto cmdBfr = cmdPool->alloc_command_buffer(aUsageFlags);
+    auto fen = create_fence();
+
+    record(std::move(aRecordedCommandsAndSyncInstructions))
+        .into_command_buffer(cmdBfr)
+        .then_submit_to(aQueue)
+        .signaling_upon_completion(fen)
+        .submit();
+
+    fen->handle_lifetime_of(std::move(cmdBfr));
+    return fen;
+}
+
+avk::command_pool& VulkanContext::get_command_pool_for(uint32_t aQueueFamilyIndex, vk::CommandPoolCreateFlags aFlags)
+{
+    std::scoped_lock<std::mutex> guard(sConcurrentAccessMutex);
+    auto it = std::find_if(std::begin(mCommandPools), std::end(mCommandPools),
+        [lThreadId = std::this_thread::get_id(), lFamilyIdx = aQueueFamilyIndex, lFlags = aFlags](const std::tuple<std::thread::id, avk::command_pool>& existing) {
+            auto& tid = std::get<0>(existing);
+            auto& q = std::get<1>(existing);
+            return tid == lThreadId && q->queue_family_index() == lFamilyIdx && lFlags == q->create_info().flags;
+        });
+    if (it == std::end(mCommandPools)) {
+        return std::get<1>(mCommandPools.emplace_back(std::this_thread::get_id(), create_command_pool(aQueueFamilyIndex, aFlags)));
+    }
+    return std::get<1>(*it);
+}
+
+avk::command_pool& VulkanContext::get_command_pool_for(const avk::queue& aQueue, vk::CommandPoolCreateFlags aFlags)
+{
+    return get_command_pool_for(aQueue.family_index(), aFlags);
+}
+
+avk::command_pool& VulkanContext::get_command_pool_for_single_use_command_buffers(const avk::queue& aQueue)
+{
+    return get_command_pool_for(aQueue, vk::CommandPoolCreateFlagBits::eTransient);
+}
+
+avk::command_pool& VulkanContext::get_command_pool_for_reusable_command_buffers(const avk::queue& aQueue)
+{
+    return get_command_pool_for(aQueue, {});
+}
+
+avk::command_pool& VulkanContext::get_command_pool_for_resettable_command_buffers(const avk::queue& aQueue)
+{
+    return get_command_pool_for(aQueue, vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
 }

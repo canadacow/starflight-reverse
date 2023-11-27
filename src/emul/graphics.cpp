@@ -75,6 +75,10 @@ static std::atomic<bool> s_useEGA = true;
 struct GraphicsContext
 {
     VulkanContext vc;
+    const avk::queue* mTransferQueue;
+    const avk::queue* mGraphicsQueue;
+    const avk::queue* mComputeQueue;
+
     std::vector<avk::buffer> frameStagingBuffers;
 };
 
@@ -1232,6 +1236,10 @@ void GraphicsUpdate()
         SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
         SDL_RenderPresent(renderer);
     }
+
+    const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
+    //auto transferSemaphore = s_gc.vc.record
+    //auto& commandPool = s_gc.vc.get_command_pool_for_single_use_command_buffers(mGraphicsQueue);
 
     SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
     SDL_RenderClear(renderer);

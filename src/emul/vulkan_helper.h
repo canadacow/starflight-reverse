@@ -392,6 +392,27 @@ public:
 		return mFramesInFlightFences[current_in_flight_index()];
 	}
 
+	avk::command_buffer record_and_submit(
+		std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, 
+		const avk::queue& aQueue, 
+		vk::CommandBufferUsageFlags aUsageFlags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+	avk::semaphore record_and_submit_with_semaphore(
+		std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, 
+		const avk::queue& aQueue, avk::stage::pipeline_stage_flags aSrcSignalStage, 
+		vk::CommandBufferUsageFlags aUsageFlags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+	avk::fence record_and_submit_with_fence(
+		std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, 
+		const avk::queue& aQueue, 
+		vk::CommandBufferUsageFlags aUsageFlags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+	avk::command_pool& get_command_pool_for(uint32_t aQueueFamilyIndex, vk::CommandPoolCreateFlags aFlags);
+	avk::command_pool& get_command_pool_for(const avk::queue& aQueue, vk::CommandPoolCreateFlags aFlags);
+	avk::command_pool& get_command_pool_for_single_use_command_buffers(const avk::queue& aQueue);
+	avk::command_pool& get_command_pool_for_reusable_command_buffers(const avk::queue& aQueue);
+	avk::command_pool& get_command_pool_for_resettable_command_buffers(const avk::queue& aQueue);
+
 private:
 	vk::Instance mInstance;
 	vk::PhysicalDevice mPhysicalDevice;
@@ -403,6 +424,10 @@ private:
 #else
 	std::tuple<vk::PhysicalDevice, vk::Device> mMemoryAllocator;
 #endif
+
+	// Command pools are created/stored per thread and per queue family index.
+	// Queue family indices are stored within the command_pool objects, thread indices in the tuple.
+	std::deque<std::tuple<std::thread::id, avk::command_pool>> mCommandPools;
 
 	void construct_swap_chain_creation_info(swapchain_creation_mode aCreationMode);
 
