@@ -1,5 +1,6 @@
 #pragma once
 
+#define VK_ENABLE_BETA_EXTENSIONS
 #define DISPATCH_LOADER_CORE_TYPE vk::DispatchLoaderStatic
 #define DISPATCH_LOADER_EXT_TYPE vk::DispatchLoaderStatic
 #include <avk/avk.hpp>

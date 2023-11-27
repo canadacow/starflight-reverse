@@ -22,7 +22,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 find_package(sdl2 CONFIG REQUIRED)
 find_package(Zstd CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
-find_package(Vulkan REQUIRED)
+find_package(Vulkan 1.2.162 REQUIRED)
 
 set_source_files_properties(
     src/cpu/cpu.cpp 
