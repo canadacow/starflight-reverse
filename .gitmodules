@@ -1,3 +1,6 @@
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/microsoft/vcpkg.git
+[submodule "Auto-Vk"]
+	path = Auto-Vk
+	url = https://github.com/cg-tuwien/Auto-Vk.git

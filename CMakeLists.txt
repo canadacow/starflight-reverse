@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 
+if(WIN32)
+    add_compile_options(/bigobj)
+endif()
+
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
     CACHE STRING "Vcpkg toolchain file")
 if(WIN32)
@@ -10,13 +14,15 @@ endif()
 
 project(Starflight)
 
+add_subdirectory(Auto-Vk)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(sdl2 CONFIG REQUIRED)
 find_package(Zstd CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
-find_package(bgfx CONFIG REQUIRED) 
+find_package(Vulkan REQUIRED)
 
 set_source_files_properties(
     src/cpu/cpu.cpp 
@@ -38,6 +44,7 @@ add_executable(emulatesdl
     src/cpu/8086emu.cpp
     src/util/lodepng.cpp
     src/emul/sdl_helper.cpp
+    src/emul/vulkan_helper.cpp
 )
 
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)
@@ -46,5 +53,6 @@ target_link_libraries(emulatesdl PRIVATE
         SDL2::SDL2main
         SDL2::SDL2
         xxHash::xxhash
-        bgfx::bgfx
+        avk
+        Vulkan::Vulkan
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)

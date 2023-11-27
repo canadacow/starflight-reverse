@@ -23,16 +23,11 @@
 #include <utility>
 
 #include "sdl_helper.h"
+#include "vulkan_helper.h"
 
-#include <bgfx/bgfx.h>
-#include <bgfx/platform.h>
-#if defined(None) // X11 defines this...
-#	undef None
-#endif // defined(None)
-
-#if defined(PLANES) // X11 defines this...
-#	undef PLANES
-#endif // defined(None)
+#if defined(PLANES)
+    #undef PLANES
+#endif
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -797,19 +792,11 @@ static int GraphicsInitThread(void *ptr)
         return 0;
     }
 
-    bgfx::Init init{};
-    init.type = bgfx::RendererType::Vulkan;
-    init.resolution.width = WINDOW_WIDTH;
-    init.resolution.height = WINDOW_HEIGHT;
-    setup_bgfx_platform_data(init.platformData, wmi);
-
-    auto good = bgfx::init(init);
-    if (!good)
-    {
-        printf("bgfx failed to init.\n");
-        SDL_Quit();
-        return 0;
-    }
+    VulkanContext vc{};
+    auto instance = vc.vulkan_instance();
+    auto physicalDevice = vc.physical_device();
+    auto device = vc.device();
+    vc.construct_swap_chain_creation_info(VulkanContext::swapchain_creation_mode::create_new_swapchain);
 
     keyboard = std::make_unique<SDLKeyboard>();
 
@@ -871,20 +858,6 @@ void GraphicsInit()
 
     GraphicsInitThread(NULL);
 }
-
-template<typename T>
-struct vec2 {
-    union {
-        struct {
-            T x;
-            T y;
-        };
-        struct {
-            T u;
-            T v;
-        };
-    };
-};
 
 uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth)
 {
@@ -1252,31 +1225,11 @@ void GraphicsUpdate()
         SDL_RenderPresent(renderer);
     }
 
-
-#if 0
-    bgfx::TextureHandle textureHandle = bgfx::createTexture2D(WINDOW_WIDTH, WINDOW_HEIGHT, false, 1, bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT | BGFX_SAMPLER_NONE);
-
-    // Update the texture with your data
-    bgfx::updateTexture2D(textureHandle, 0, 0, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, bgfx::makeRef(data, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint32_t)));
-
-    // Create a new framebuffer using the texture
-    bgfx::FrameBufferHandle frameBufferHandle = bgfx::createFrameBuffer(1, &textureHandle, true);
-
-    bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x303030ff, 1.0f, 0);
-    bgfx::setViewRect(0, 0, 0, uint16_t(WINDOW_WIDTH), uint16_t(WINDOW_HEIGHT));
-    bgfx::touch(0);
-    bgfx::frame();
-    SDL_PumpEvents();
-
-    bgfx::destroy(textureHandle);
-    bgfx::destroy(frameBufferHandle);
-#else
     SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
     SDL_RenderPresent(renderer);
     SDL_PumpEvents();
-#endif
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     if(graphicsMode == SFGraphicsMode::Graphics)
