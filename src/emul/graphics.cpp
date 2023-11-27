@@ -796,7 +796,7 @@ static int GraphicsInitThread(void *ptr)
     auto instance = vc.vulkan_instance();
     auto physicalDevice = vc.physical_device();
     auto device = vc.device();
-    vc.construct_swap_chain_creation_info(VulkanContext::swapchain_creation_mode::create_new_swapchain);
+    vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain);
 
     keyboard = std::make_unique<SDLKeyboard>();
 

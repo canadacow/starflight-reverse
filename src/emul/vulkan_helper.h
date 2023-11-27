@@ -151,8 +151,6 @@ public:
 	using outdated_swapchain_t = std::tuple<vk::UniqueHandle<vk::SwapchainKHR, DISPATCH_LOADER_CORE_TYPE>, std::vector<avk::image_view>, avk::renderpass, std::vector<avk::framebuffer>>;
 	using outdated_swapchain_resource_t = std::variant<vk::UniqueHandle<vk::SwapchainKHR, DISPATCH_LOADER_CORE_TYPE>, std::vector<avk::image_view>, avk::renderpass, std::vector<avk::framebuffer>, outdated_swapchain_t>;
 
-	void construct_swap_chain_creation_info(swapchain_creation_mode aCreationMode);
-
 	const auto& surface() const {
 		return mSurface.get();
 	}
@@ -172,6 +170,9 @@ public:
 	auto swap_chain_extent() const {
 		return mSwapChainExtent;
 	}
+
+	void create_swap_chain(swapchain_creation_mode aCreationMode);
+	void construct_backbuffers(swapchain_creation_mode aCreationMode);
 	
 private:
 	vk::UniqueHandle<vk::Instance, DISPATCH_LOADER_CORE_TYPE> mInstance;
@@ -185,6 +186,8 @@ private:
 #else
 	std::tuple<vk::PhysicalDevice, vk::Device> mMemoryAllocator;
 #endif
+
+	void construct_swap_chain_creation_info(swapchain_creation_mode aCreationMode);
 
 	avk::image_usage get_config_image_usage_properties()
 	{
@@ -220,6 +223,34 @@ private:
 	{
 		return {1920, 1080};
 	}
+
+	std::vector<avk::attachment> get_additional_back_buffer_attachments()
+	{
+		return {};
+	}
+
+	[[nodiscard]] frame_id_t current_frame() const {
+		return mCurrentFrame;
+	}
+
+	[[nodiscard]] frame_id_t number_of_frames_in_flight() const {
+		return static_cast<frame_id_t>(mFramesInFlightFences.size());
+	}
+
+	/** Returns the "in flight index" for the requested frame. */
+	[[nodiscard]] frame_id_t current_in_flight_index() const {
+		return current_frame() % number_of_frames_in_flight();
+	}
+
+	/** Returns the fence for the current frame. */
+	[[nodiscard]] avk::fence current_fence() {
+		return mFramesInFlightFences[current_in_flight_index()];
+	}
+
+	void handle_lifetime(avk::command_buffer aCommandBuffer, std::optional<frame_id_t> aFrameId = {});
+	void handle_lifetime(outdated_swapchain_resource_t&& aOutdatedSwapchain, std::optional<frame_id_t> aFrameId = {});
+
+	void update_concurrent_frame_synchronization(swapchain_creation_mode aCreationMode);
 
 #pragma region configuration properties
 	// A function which returns whether or not the window should be resizable
