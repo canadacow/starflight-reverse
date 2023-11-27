@@ -1,5 +1,7 @@
 #include "vulkan_helper.h"
 
+#include <mutex>
+
 static std::mutex sSubmitMutex;
 
 void VulkanContext::create_swap_chain(swapchain_creation_mode aCreationMode)

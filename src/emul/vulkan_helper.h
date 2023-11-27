@@ -1,9 +1,17 @@
 #pragma once
 
 #define VK_ENABLE_BETA_EXTENSIONS
-#define DISPATCH_LOADER_CORE_TYPE vk::DispatchLoaderStatic
-#define DISPATCH_LOADER_EXT_TYPE vk::DispatchLoaderStatic
+#define DISPATCH_LOADER_CORE_TYPE vk::DispatchLoaderDynamic
+#define DISPATCH_LOADER_EXT_TYPE vk::DispatchLoaderDynamic
 #include <avk/avk.hpp>
+
+#ifdef _WIN32
+	#include <windows.h>
+    #include <vulkan/vulkan_win32.h>
+#elif __linux__
+    #include <xcb/xcb.h>
+	#include <vulkan/vulkan_xcb.h>
+#endif
 
 template<typename T>
 struct vec2 {
@@ -29,14 +37,36 @@ public:
 				reinterpret_cast<vk::DispatchLoaderDynamic*>(&mDispatchLoaderCore)->init(vkGetInstanceProcAddr);
 			}
 
-			mInstance = vk::createInstanceUnique(vk::InstanceCreateInfo{}, nullptr, mDispatchLoaderCore);
+			auto appInfo = vk::ApplicationInfo("Starflight", VK_MAKE_VERSION(1, 0, 0),
+									"Starflight", VK_MAKE_VERSION(1, 0, 0), // TODO: Real version of Auto-Vk-Toolkit
+									VK_API_VERSION_1_2);
+
+			std::vector<const char*> supportedValidationLayers;
+			supportedValidationLayers.push_back("VK_LAYER_KHRONOS_validation");
+
+			std::vector<const char*> requiredExtensions;
+#ifdef _WIN32
+			requiredExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#else
+			requiredExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+#endif
+			requiredExtensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+
+			auto instCreateInfo = vk::InstanceCreateInfo()
+				.setPApplicationInfo(&appInfo)
+				.setEnabledExtensionCount(static_cast<uint32_t>(requiredExtensions.size()))
+				.setPpEnabledExtensionNames(requiredExtensions.data())
+				.setEnabledLayerCount(static_cast<uint32_t>(supportedValidationLayers.size()))
+				.setPpEnabledLayerNames(supportedValidationLayers.data());
+
+			mInstance = vk::createInstance(instCreateInfo, nullptr, mDispatchLoaderCore);
 
 			if constexpr (std::is_same_v<std::remove_cv_t<decltype(mDispatchLoaderCore)>, vk::DispatchLoaderDynamic>) {
-				reinterpret_cast<vk::DispatchLoaderDynamic*>(&mDispatchLoaderCore)->init(mInstance.get());
+				reinterpret_cast<vk::DispatchLoaderDynamic*>(&mDispatchLoaderCore)->init(mInstance);
 			}
 		}
 
-		return mInstance.get();
+		return mInstance;
 	}
 	
 	vk::PhysicalDevice& physical_device() override
@@ -64,9 +94,19 @@ public:
 			}
 
 			// Create the device using the queue information from above:
-			mDevice = physical_device().createDeviceUnique(vk::DeviceCreateInfo{}
-				.setQueueCreateInfoCount(1u)
+			// Add the swapchain extension based on the platform:
+			std::vector<const char*> deviceExtensions;
+			deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+			vk::DeviceCreateInfo deviceCreateInfo{};
+			deviceCreateInfo.setQueueCreateInfoCount(1u)
 				.setPQueueCreateInfos(std::get<0>(config).data())
+				.setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
+				.setPpEnabledExtensionNames(deviceExtensions.data());
+
+			mDevice = physical_device().createDevice(deviceCreateInfo,
+				nullptr,
+				mDispatchLoaderCore
 			);
 
 			queues[0].assign_handle();
@@ -75,29 +115,26 @@ public:
 			mQueue = std::move(queues[0]);
 
 			if constexpr (std::is_same_v<std::remove_cv_t<decltype(mDispatchLoaderCore)>, vk::DispatchLoaderDynamic>) {
-				reinterpret_cast<vk::DispatchLoaderDynamic*>(&mDispatchLoaderCore)->init(mDevice.get());
-			}
-			if constexpr (std::is_same_v<std::remove_cv_t<decltype(mDispatchLoaderExt)>, vk::DispatchLoaderDynamic>) {
-				reinterpret_cast<vk::DispatchLoaderDynamic*>(&mDispatchLoaderExt)->init(mDevice.get());
+				reinterpret_cast<vk::DispatchLoaderDynamic*>(&mDispatchLoaderCore)->init(mDevice);
 			}
 			
 #if defined(AVK_USE_VMA)
 			// With everything in place, create the memory allocator:
 			VmaAllocatorCreateInfo allocatorInfo = {};
 			allocatorInfo.physicalDevice = physical_device();
-			allocatorInfo.device = device();
+			allocatorInfo.device = mDevice.get();
 			allocatorInfo.instance = vulkan_instance();
 			vmaCreateAllocator(&allocatorInfo, &mMemoryAllocator);
 #else
-			mMemoryAllocator = std::make_tuple(physical_device(), device());
+			mMemoryAllocator = std::make_tuple(physical_device(), mDevice);
 #endif
 		}
-		return mDevice.get();
+		return mDevice;
 	}
 	const vk::Device& device() const override
 	{
 		assert(mDevice);
-		return mDevice.get();
+		return mDevice;
 	}
 
 	vk::Queue queue()
@@ -119,11 +156,11 @@ public:
 
 	DISPATCH_LOADER_EXT_TYPE& dispatch_loader_ext() override
 	{
-		return mDispatchLoaderExt;
+		return mDispatchLoaderCore;
 	}
 	const DISPATCH_LOADER_EXT_TYPE& dispatch_loader_ext() const override
 	{
-		return mDispatchLoaderExt;
+		return mDispatchLoaderCore;
 	}
 
 	AVK_MEM_ALLOCATOR_TYPE& memory_allocator() override
@@ -176,12 +213,11 @@ public:
 	void construct_backbuffers(swapchain_creation_mode aCreationMode);
 	
 private:
-	vk::UniqueHandle<vk::Instance, DISPATCH_LOADER_CORE_TYPE> mInstance;
+	vk::Instance mInstance;
 	vk::PhysicalDevice mPhysicalDevice;
-	vk::UniqueHandle<vk::Device, DISPATCH_LOADER_CORE_TYPE> mDevice;
+	vk::Device mDevice;
 	avk::queue mQueue;
 	DISPATCH_LOADER_CORE_TYPE mDispatchLoaderCore;
-	DISPATCH_LOADER_EXT_TYPE mDispatchLoaderExt;
 #if defined(AVK_USE_VMA)
 	VmaAllocator mMemoryAllocator;
 #else

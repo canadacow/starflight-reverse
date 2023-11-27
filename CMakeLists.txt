@@ -55,4 +55,5 @@ target_link_libraries(emulatesdl PRIVATE
         xxHash::xxhash
         avk
         Vulkan::Vulkan
+        Vulkan::Headers
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
