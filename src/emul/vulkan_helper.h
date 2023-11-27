@@ -99,6 +99,7 @@ public:
 			// Add the swapchain extension based on the platform:
 			std::vector<const char*> deviceExtensions;
 			deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+			deviceExtensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
 
 			vk::DeviceCreateInfo deviceCreateInfo{};
 			deviceCreateInfo.setQueueCreateInfoCount(1u)
