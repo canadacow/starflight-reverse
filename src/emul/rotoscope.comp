@@ -1,0 +1,286 @@
+// GLSL Compute Shader
+#version 450
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+// Equivalent of PixelContents enum
+#define ClearPixel 0
+#define NavigationalPixel 1
+#define TextPixel 2
+#define LinePixel 3
+#define EllipsePixel 4
+#define BoxFillPixel 5
+#define PolyFillPixel 6
+#define PicPixel 7
+#define PlotPixel 8
+#define TilePixel 9
+#define SplashPixel 10
+
+// Equivalent of TextData struct
+struct TextData {
+    uint character;
+    uint xormode;
+    uint fontNum;
+    uint fontWidth;
+    uint fontHeight;
+};
+
+// Equivalent of LineData struct
+struct LineData {
+    uint x0;
+    uint y0;
+    uint x1;
+    uint y1;
+    uint n;
+    uint total;
+};
+
+// Equivalent of SplashData struct
+struct SplashData {
+    uint seg;
+    uint fileNum;
+};
+
+// Equivalent of Rotoscope struct
+struct Rotoscope {
+    uint content;
+    uint EGAcolor;
+    uint argb;
+    int blt_x;
+    int blt_y;
+    int blt_w;
+    int blt_h;
+    uint bgColor;
+    uint fgColor;
+    TextData textData;
+    LineData lineData;
+    SplashData splashData;
+};
+
+layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
+
+layout(std430, binding = 1) buffer RotoBuffer {
+    Rotoscope rotoPixels[];
+};
+
+layout(binding = 2) uniform sampler2D FONT1Texture;
+layout(binding = 3) uniform sampler2D FONT2Texture;
+layout(binding = 4) uniform sampler2D FONT3Texture;
+layout(binding = 5) uniform sampler2D LOGO1Texture;
+layout(binding = 6) uniform sampler2D LOGO2Texture;
+
+const int GRAPHICS_MODE_WIDTH = 160;
+const int GRAPHICS_MODE_HEIGHT = 200;
+const int WINDOW_WIDTH = 1280;
+const int WINDOW_HEIGHT = 800;
+
+const vec4 colortable[16] = 
+{
+    vec4(0.0, 0.0, 0.0, 1.0), // black
+    vec4(0.0, 0.0, 0.67, 1.0), // blue
+    vec4(0.0, 0.67, 0.0, 1.0), // green
+    vec4(0.0, 0.67, 0.67, 1.0), // cyan
+    vec4(0.67, 0.0, 0.0, 1.0), // red
+    vec4(0.67, 0.0, 0.67, 1.0), // magenta
+    vec4(0.67, 0.33, 0.0, 1.0), // brown
+    vec4(0.67, 0.67, 0.67, 1.0), // light gray
+    vec4(0.33, 0.33, 0.33, 1.0), // dark gray
+    vec4(0.33, 0.33, 1.0, 1.0),
+    vec4(0.33, 1.0, 0.33, 1.0),
+    vec4(0.33, 1.0, 1.0, 1.0),
+    vec4(1.0, 0.33, 0.33, 1.0),
+    vec4(1.0, 0.33, 1.0, 1.0),
+    vec4(1.0, 1.0, 0.33, 1.0),
+    vec4(1.0, 1.0, 1.0, 1.0),
+};
+
+vec2 mix(vec2 a, vec2 b, float t) {
+    return a * (1 - t) + b * t;
+}
+
+float distance(vec2 a, vec2 b) {
+    return length(b - a);
+}
+
+vec4 DrawLinePixel(const Rotoscope roto, vec2 uv, float polygonWidth) {
+    vec4 pixel;
+
+    float lineX1 = (roto.lineData.x0 + 0.10f) / GRAPHICS_MODE_WIDTH;
+    float lineY1 = (roto.lineData.y0 + 0.10f) / GRAPHICS_MODE_HEIGHT;
+    float lineX2 = (roto.lineData.x1 + 0.90f) / GRAPHICS_MODE_WIDTH;
+    float lineY2 = (roto.lineData.y1 + 0.90f) / GRAPHICS_MODE_HEIGHT;
+
+    float a = polygonWidth;
+    float one_px = 1.0f / WINDOW_WIDTH;
+    vec2 p1 = vec2(lineX1, lineY1);
+    vec2 p2 = vec2(lineX2, lineY2);
+
+    float d = distance(p1, p2);
+    float duv = distance(p1, uv);
+
+    float r = 1.0f - floor(1.0f - (a * one_px) + distance(mix(p1, p2, clamp(duv / d, 0.0f, 1.0f)), uv));
+
+    if (r > 0.0f) {
+        pixel = colortable[roto.fgColor & 0xf];
+    } else {
+        pixel = colortable[roto.bgColor & 0xf];
+    }
+
+    return pixel;
+}
+
+vec4 DrawFontPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
+    vec4 pixel;
+
+    float fontX = roto.blt_x / roto.blt_w;
+    float fontY = roto.blt_y / roto.blt_h;
+
+    subUv.x /= roto.textData.fontWidth;
+    subUv.y /= roto.textData.fontHeight;
+
+    fontX += subUv.x;
+    fontY += subUv.y;
+
+    if(roto.textData.fontNum == 1) {
+        // Find the character in our atlas.
+        const float fontSpaceWidth = 8.0f * 4.0f;
+        const float fontSpaceHeight = 8.0f * 4.0f;
+
+        const float atlasWidth = 448.0f;
+        const float atlasHeight = 160.0f;
+
+        uint c = roto.textData.character - 32;
+        uint fontsPerRow = 448 / uint(fontSpaceWidth);
+        uint fontRow = c / fontsPerRow;
+        uint fontCol = c % fontsPerRow;
+
+        float u = fontCol * fontSpaceWidth / atlasWidth;
+        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+        u += fontX * (fontSpaceWidth / atlasWidth);
+        v += fontY * (fontSpaceHeight / atlasHeight);
+
+        vec4 glyph = texture(FONT1Texture, vec2(u, v));
+        pixel = colortable[roto.bgColor & 0xf];
+        if(glyph.r > 0.80f) {
+            pixel = colortable[roto.fgColor & 0xf];
+        }
+    } else if (roto.textData.fontNum == 2.0) {
+        // Find the character in our atlas.
+        const float fontSpaceWidth = 15.0f * 4.0f;
+        const float fontSpaceHeight = 11.0f * 4.0f;
+
+        const float atlasWidth = 840.0f;
+        const float atlasHeight = 220.0f;
+
+        uint c = roto.textData.character - 32;
+        uint fontsPerRow = 840 / uint(fontSpaceWidth);
+        uint fontRow = c / fontsPerRow;
+        uint fontCol = c % fontsPerRow;
+
+        float u = fontCol * fontSpaceWidth / atlasWidth;
+        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+        u += fontX * (fontSpaceWidth / atlasWidth);
+        v += fontY * (fontSpaceHeight / atlasHeight);
+
+        vec4 glyph = texture(FONT2Texture, vec2(u, v));
+        pixel = colortable[roto.bgColor & 0xf];
+        if(glyph.r > 0.9f) {
+            pixel = colortable[roto.fgColor & 0xf];
+        }
+    } else if (roto.textData.fontNum == 3.0) {
+        // Find the character in our atlas.
+        const float fontSpaceWidth = 15.0f * 4.0f;
+        const float fontSpaceHeight = 11.0f * 4.0f;
+
+        const float atlasWidth = 840.0f;
+        const float atlasHeight = 220.0f;
+
+        uint c = roto.textData.character - 32;
+        uint fontsPerRow = 840 / uint(fontSpaceWidth);
+        uint fontRow = c / fontsPerRow;
+        uint fontCol = c % fontsPerRow;
+
+        float u = fontCol * fontSpaceWidth / atlasWidth;
+        float v = fontRow * fontSpaceHeight / atlasHeight;
+
+        u += fontX * (fontSpaceWidth / atlasWidth);
+        v += fontY * (fontSpaceHeight / atlasHeight);
+
+        vec4 glyph = texture(FONT3Texture, vec2(u, v));
+        pixel = colortable[roto.bgColor & 0xf];
+        if(glyph.r > 0.9f) {
+            pixel = colortable[roto.fgColor & 0xf];
+        }
+    }
+
+    return pixel;
+}
+
+vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv) {
+    vec4 pixel;
+
+    switch(roto.splashData.fileNum) {
+        case 0x008d: // First splash
+            pixel = texture(LOGO1Texture, uv);
+            break;
+        case 0x0036: // Second splash
+            pixel = texture(LOGO2Texture, uv);
+            break;
+        default:
+            pixel = vec4(unpackUnorm4x8(roto.argb));
+            break;
+    }
+
+    return pixel;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * WINDOW_WIDTH;
+
+    ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+
+    const float polygonWidth = WINDOW_WIDTH / GRAPHICS_MODE_WIDTH;
+
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    // Calculate the corresponding position in the smaller texture
+    uint srcX = x * uint(GRAPHICS_MODE_WIDTH) / uint(WINDOW_WIDTH);
+    uint srcY = y * uint(GRAPHICS_MODE_HEIGHT) / uint(WINDOW_HEIGHT);
+
+    // Calculate the index in the smaller texture
+    uint srcIndex = srcY * uint(GRAPHICS_MODE_WIDTH) + srcX;
+
+    Rotoscope roto = rotoPixels[srcIndex];
+
+    float xcoord = float(x) / WINDOW_WIDTH;
+    float ycoord = float(y) / WINDOW_HEIGHT;
+    vec2 uv = vec2(xcoord, ycoord);
+
+    float subPixelXOffset = (xcoord * GRAPHICS_MODE_WIDTH) - float(srcX);
+    float subPixelYOffset = (ycoord * GRAPHICS_MODE_HEIGHT) - float(srcY);
+    vec2 subUv = vec2(subPixelXOffset, subPixelYOffset);
+
+    // Pull the pixel from the smaller texture
+    vec4 pixel = vec4(unpackUnorm4x8(roto.argb));
+
+    switch(roto.content) {
+        case 1: // LinePixel
+            pixel = DrawLinePixel(roto, uv, polygonWidth);
+            break;
+        case 2: // TextPixel
+            pixel = DrawFontPixel(roto, uv, subUv);    
+            break;
+        case 3: // SplashPixel
+            pixel = DrawSplashPixel(roto, uv);
+            break;
+        default:
+            break;
+    }
+
+    // Place the pixel in the larger surface
+    imageStore(imgOutput, pixelPos, pixel);
+}
+
