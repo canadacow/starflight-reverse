@@ -75,7 +75,7 @@ static std::atomic<bool> s_useEGA = true;
 struct GraphicsContext
 {
     VulkanContext vc;
-    avk::queue mQueue;
+    avk::queue* mQueue;
 
     std::vector<avk::buffer> frameStagingBuffers;
 };
@@ -798,12 +798,7 @@ static int GraphicsInitThread(void *ptr)
     s_gc.vc.device();
     s_gc.vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    auto queueFamily = avk::queue::select_queue_family_index(s_gc.vc.physical_device(), {}, avk::queue_selection_preference::versatile_queue, s_gc.vc.surface());
-
-    s_gc.mQueue = avk::queue::prepare(&s_gc.vc, queueFamily, static_cast<uint32_t>(0));
-
-    s_gc.vc.set_queue_family_ownership(s_gc.mQueue.family_index());
-    s_gc.vc.set_present_queue(s_gc.mQueue);
+    s_gc.mQueue = s_gc.vc.getAVKQueue();
 
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
@@ -1238,28 +1233,50 @@ void GraphicsUpdate()
         stride = TEXT_MODE_WIDTH;
         data = textPixels.data();
         dataSize = textPixels.size() * sizeof(uint32_t);
-
-        SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
-        SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
-        SDL_RenderPresent(renderer);
     }
 
-    const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
-    auto transferSemaphore = s_gc.vc.record_and_submit({
-        s_gc.frameStagingBuffers[inFlightIndex]->fill(data, dataSize)
-        },
-        s_gc.mQueue);
+    s_gc.vc.sync_before_render();
 
     auto imageAvailableSemaphore = s_gc.vc.consume_current_image_available_semaphore();
+    const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
+    
+    auto& commandPool = s_gc.vc.get_command_pool_for_single_use_command_buffers(*s_gc.mQueue);
 
-    s_gc.vc.sync_before_render();
+    // Create a command buffer and render into the *current* swap chain image:
+    auto cmdBfr = commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+    
+    s_gc.vc.record({
+        // Fill the vertex buffer that corresponds to this the current inFlightIndex:
+        s_gc.frameStagingBuffers[inFlightIndex]->fill(data, 0, 0, dataSize),
+
+        // Install a barrier to synchronize the buffer copy with the subsequent render pass:
+        avk::sync::buffer_memory_barrier(s_gc.frameStagingBuffers[inFlightIndex].as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+            ),
+
+        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::undefined, avk::layout::transfer_dst}),
+
+        avk::copy_buffer_to_image(s_gc.frameStagingBuffers[inFlightIndex], s_gc.vc.current_backbuffer()->image_at(0), avk::layout::transfer_dst),
+
+        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::transfer_dst, avk::layout::present_src})
+    })
+    .into_command_buffer(cmdBfr)
+    .then_submit_to(*s_gc.mQueue)
+    // Do not start to render before the image has become available:
+    .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
+    .submit();    
+
     s_gc.vc.render_frame();
 
+/*
     SDL_UpdateTexture(currentTexture, NULL, data, stride * sizeof(uint32_t));
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, currentTexture, NULL, NULL);
     SDL_RenderPresent(renderer);
+    */
     SDL_PumpEvents();
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)

@@ -106,12 +106,22 @@ public:
 			std::vector<const char*> deviceExtensions;
 			deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 			deviceExtensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+			deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+
+			vk::PhysicalDeviceFeatures2 deviceFeatures{};
+			deviceFeatures.features.samplerAnisotropy = VK_TRUE;
+			deviceFeatures.features.geometryShader = VK_TRUE;
+			vk::PhysicalDeviceSynchronization2FeaturesKHR syncFeatures{};
+			syncFeatures.synchronization2 = VK_TRUE;
+			deviceFeatures.pNext = &syncFeatures;
 
 			vk::DeviceCreateInfo deviceCreateInfo{};
 			deviceCreateInfo.setQueueCreateInfoCount(1u)
 				.setPQueueCreateInfos(std::get<0>(config).data())
 				.setEnabledExtensionCount(static_cast<uint32_t>(deviceExtensions.size()))
 				.setPpEnabledExtensionNames(deviceExtensions.data());
+
+			deviceCreateInfo.setPNext(&deviceFeatures);
 
 			mDevice = physical_device().createDevice(deviceCreateInfo,
 				nullptr,
@@ -194,7 +204,6 @@ public:
 		create_new_swapchain
 	};
 
-	using frame_id_t = int64_t;
 	using outdated_swapchain_t = std::tuple<vk::UniqueHandle<vk::SwapchainKHR, DISPATCH_LOADER_CORE_TYPE>, std::vector<avk::image_view>, avk::renderpass, std::vector<avk::framebuffer>>;
 	using outdated_swapchain_resource_t = std::variant<vk::UniqueHandle<vk::SwapchainKHR, DISPATCH_LOADER_CORE_TYPE>, std::vector<avk::image_view>, avk::renderpass, std::vector<avk::framebuffer>, outdated_swapchain_t>;
 
@@ -228,7 +237,19 @@ public:
 
 	vk::SurfaceFormatKHR get_config_surface_format(const vk::SurfaceKHR & aSurface)
 	{
-		return vk::SurfaceFormatKHR{ vk::Format::eA8B8G8R8UnormPack32, vk::ColorSpaceKHR::eSrgbNonlinear };
+#if 0
+		uint32_t formatCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device(), aSurface, &formatCount, nullptr);
+		std::vector<VkSurfaceFormatKHR> surfaceFormats(formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device(), aSurface, &formatCount, surfaceFormats.data());
+		for (const auto& format : surfaceFormats) {
+			printf("Surface format: %d, color space: %d\n", format.format, format.colorSpace);
+		}
+
+		exit(0);
+#endif
+
+		return vk::SurfaceFormatKHR{ vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear };
 	}
 
 	vk::PresentModeKHR get_config_presentation_mode(const vk::SurfaceKHR & aSurface)
@@ -395,6 +416,47 @@ public:
 		return mFramesInFlightFences[current_in_flight_index()];
 	}
 
+	avk::semaphore image_available_semaphore_for_frame(std::optional<frame_id_t> aFrameId = {}) {
+		return mImageAvailableSemaphores[in_flight_index_for_frame(aFrameId)];
+	}
+
+	/** Returns whether or not the current frame's image available semaphore has already been consumed (by user code),
+ 	*	which must happen once in every frame!
+	*/
+	bool has_consumed_current_image_available_semaphore() const {
+		return !mCurrentFrameImageAvailableSemaphore.has_value();
+	}
+
+	/** Adds the given semaphore as an additional present-dependency to the current frame.
+	 *	That means, before an image is handed over to the presentation engine, the given semaphore must be signaled.
+		*	You can add multiple render finished semaphores, but there should (must!) be at least one per frame.
+		*	Important: It is the responsibility of the CALLER to ensure that the semaphore will be signaled.
+		*/
+	void add_present_dependency_for_current_frame(avk::semaphore aSemaphore) {
+		mPresentSemaphoreDependencies.emplace_back(current_frame(), std::move(aSemaphore));
+	}	
+
+	/** Get a reference to the current frame's render finished fence. 
+	 *	It must be used by user code for a fence-signal operation, indicating when a frame has been rendered completely.
+		*/
+	avk::fence use_current_frame_finished_fence() {
+		if (!mCurrentFrameFinishedFence.has_value()) {
+			throw avk::runtime_error("Current frame's frame finished fence has already been used. Must be used EXACTLY once. Do not try to get it multiple times!");
+		}
+		auto instance = std::move(mCurrentFrameFinishedFence.value());
+		mCurrentFrameFinishedFence.reset();
+		return instance;
+	}
+
+	bool is_alive() const { return true; }
+
+	/** Returns whether or not the current frame's render finished fence has already been retrieved (by user code)
+	 *	for being used in a fence-signal operation, which must happen once in every frame!
+	*/
+	bool has_used_current_frame_finished_fence() const {
+		return !mCurrentFrameFinishedFence.has_value();
+	}
+
 	avk::command_buffer record_and_submit(
 		std::vector<avk::recorded_commands_t> aRecordedCommandsAndSyncInstructions, 
 		const avk::queue& aQueue, 
@@ -458,6 +520,11 @@ public:
 
 	void sync_before_render();
 	void render_frame();
+
+	avk::queue* getAVKQueue()
+	{
+		return &mQueue;
+	}
 
 private:
 	vk::Instance mInstance;
@@ -567,9 +634,6 @@ private:
 
 	// The queue that is used for presenting. It MUST be set to a valid queue if window::render_frame() is ever going to be invoked.
 	avk::unique_function<avk::queue*()> mPresentationQueueGetter;
-
-	// The presentation queue that is active
-	avk::queue* mActivePresentationQueue = nullptr;
 
 	// Current frame's image index
 	uint32_t mCurrentFrameImageIndex;
