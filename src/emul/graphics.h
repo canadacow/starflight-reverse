@@ -71,7 +71,7 @@ struct RotoscopeShader {
     int32_t blt_w;
     int32_t blt_h;
     uint32_t bgColor;
-    uint32_t fbColor;
+    uint32_t fgColor;
     TextData textData;
     LineData lineData;
     SplashData splashData;
@@ -109,7 +109,7 @@ struct Rotoscope
     int16_t blt_h;
 
     uint8_t bgColor;
-    uint8_t fbColor;
+    uint8_t fgColor;
 
     union
     {
@@ -130,7 +130,7 @@ struct Rotoscope
         blt_w = 0;
         blt_h = 0;
         bgColor = 0;
-        fbColor = 0;
+        fgColor = 0;
     }
 
     Rotoscope(PixelContents pixel)
@@ -144,7 +144,7 @@ struct Rotoscope
         blt_w = 0;
         blt_h = 0;
         bgColor = 0;
-        fbColor = 0;
+        fgColor = 0;
     }
 
     Rotoscope& operator=(const Rotoscope& other)
@@ -158,6 +158,8 @@ struct Rotoscope
             blt_y = other.blt_y;
             blt_w = other.blt_w;
             blt_h = other.blt_h;
+            bgColor = other.bgColor;
+            fgColor = other.fgColor;
 
             switch(content)
             {

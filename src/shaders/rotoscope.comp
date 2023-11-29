@@ -171,7 +171,7 @@ vec4 DrawFontPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         if(glyph.r > 0.80f) {
             pixel = colortable[roto.fgColor & 0xf];
         }
-    } else if (roto.textData.fontNum == 2.0) {
+    } else if (roto.textData.fontNum == 2) {
         // Find the character in our atlas.
         const float fontSpaceWidth = 15.0f * 4.0f;
         const float fontSpaceHeight = 11.0f * 4.0f;
@@ -195,7 +195,7 @@ vec4 DrawFontPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         if(glyph.r > 0.9f) {
             pixel = colortable[roto.fgColor & 0xf];
         }
-    } else if (roto.textData.fontNum == 3.0) {
+    } else if (roto.textData.fontNum == 3) {
         // Find the character in our atlas.
         const float fontSpaceWidth = 15.0f * 4.0f;
         const float fontSpaceHeight = 11.0f * 4.0f;
@@ -235,7 +235,7 @@ vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv) {
             pixel = texture(LOGO2Texture, uv);
             break;
         default:
-            pixel = vec4(unpackUnorm4x8(roto.argb));
+            pixel = vec4(unpackUnorm4x8(roto.argb)).bgra;
             break;
     }
 
@@ -275,9 +275,11 @@ void main() {
     if(uniforms.useRotoscope != 0)
     {
         switch(roto.content) {
+            #if 0 
             case LinePixel: // LinePixel
                 pixel = DrawLinePixel(roto, uv, polygonWidth);
                 break;
+            #endif
             case TextPixel: // TextPixel
                 pixel = DrawFontPixel(roto, uv, subUv);    
                 break;

@@ -28,6 +28,8 @@
     #undef PLANES
 #endif
 
+//#define USE_CPU_RASTERIZATION 1
+
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
 
@@ -727,7 +729,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     blt_w = other.blt_w;
     blt_h = other.blt_h;
     bgColor = other.bgColor;
-    fbColor = other.fbColor;
+    fgColor = other.fgColor;
 
     switch(other.content)
     {
@@ -1103,7 +1105,7 @@ uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth
 
     if (r > 0.0f)
     {
-        pixel = colortable[roto.fbColor & 0xf];
+        pixel = colortable[roto.fgColor & 0xf];
     }
     else
     {
@@ -1150,7 +1152,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.80f)
         {
-            pixel = colortable[roto.fbColor & 0xf];
+            pixel = colortable[roto.fgColor & 0xf];
         }
         #if 0
         else
@@ -1189,7 +1191,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
-            pixel = colortable[roto.fbColor & 0xf];
+            pixel = colortable[roto.fgColor & 0xf];
         }
     } else if (roto.textData.fontNum == 3)
     {
@@ -1215,7 +1217,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
-            pixel = colortable[roto.fbColor & 0xf];
+            pixel = colortable[roto.fgColor & 0xf];
         }
         #if 0
         else
@@ -1379,8 +1381,11 @@ void GraphicsUpdate()
 
             for(int i = 0; i < GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT; ++i)
             {
+#if defined(USE_CPU_RASTERIZATION)
                 backbuffer[i] = rotoscopePixels[i];
+#else
                 shaderBackBuffer[i] = rotoscopePixels[i];
+#endif
             }
         }
 
@@ -1409,7 +1414,9 @@ void GraphicsUpdate()
         }     
 #endif    
 
+#if defined(USE_CPU_RASTERIZATION)
         DoRotoscope(fullRes, backbuffer);
+#endif
         currentTexture = windowTexture;
         stride = WINDOW_WIDTH;
         data = fullRes.data();
@@ -1432,7 +1439,7 @@ void GraphicsUpdate()
     s_gc.commandBuffers[inFlightIndex]->reset();
        
     s_gc.vc.record({
-#if 0        
+#if defined(USE_CPU_RASTERIZATION)
         s_gc.frameStagingBuffers[inFlightIndex]->fill(data, 0, 0, dataSize),
 
         avk::sync::buffer_memory_barrier(s_gc.frameStagingBuffers[inFlightIndex].as_reference(),
@@ -1617,13 +1624,19 @@ void GraphicsMode(int mode)
         while(!stopSemaphore.try_acquire()) {
             constexpr std::chrono::nanoseconds scanout_duration = std::chrono::nanoseconds(13340000); // 80% of 1/60th of a second
             constexpr std::chrono::nanoseconds retrace_duration = std::chrono::nanoseconds(3330000); // 20% of 1/60th of a second
+
             {
                 std::lock_guard<std::mutex> lg(graphicsRetrace);
                 GraphicsUpdate();
 
+#if defined(USE_CPU_RASTERIZATION)
                 std::this_thread::sleep_for(scanout_duration);
+#endif
             }
+
+#if defined(USE_CPU_RASTERIZATION)
             std::this_thread::sleep_for(retrace_duration);
+#endif
         }
     });
 }
@@ -1768,7 +1781,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32
     rs.lineData.y0 = 199 - y1;
     rs.lineData.y1 = 199 - y2;
     rs.lineData.total = n;
-    rs.fbColor = color;
+    rs.fgColor = color;
 
     for(int i=0; i<=n; i++)
     {
@@ -1896,7 +1909,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
     rs.content = TextPixel;
     rs.textData.character = c;
     rs.textData.fontNum = num;
-    rs.fbColor = color;
+    rs.fgColor = color;
     rs.textData.xormode = xormode;
 
     switch(num)
@@ -1984,7 +1997,7 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
                     if(srcPc.content == TextPixel)
                     {
                         srcPc.bgColor = srcPc.bgColor ^ (color & 0xf);
-                        srcPc.fbColor = srcPc.fbColor ^ (color & 0xf);
+                        srcPc.fgColor = srcPc.fgColor ^ (color & 0xf);
                         GraphicsPixel(x0, y0, xored, offset, srcPc);
                     }
                     else

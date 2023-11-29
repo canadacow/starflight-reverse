@@ -29,7 +29,7 @@ set(SHADER_BINARY "${CMAKE_CURRENT_BINARY_DIR}/../rotoscope.comp.spv")
 # Custom command to compile the shader
 add_custom_command(
     OUTPUT ${SHADER_BINARY}
-    COMMAND ${GLSL_COMPILER} ${SHADER_SOURCE} -o ${SHADER_BINARY}
+    COMMAND ${GLSL_COMPILER} ${SHADER_SOURCE} -g -o ${SHADER_BINARY}
     DEPENDS ${SHADER_SOURCE}
     COMMENT "Compiling shader ${SHADER_SOURCE}"
 )
