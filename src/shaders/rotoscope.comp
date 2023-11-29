@@ -290,7 +290,6 @@ void main() {
     }
     else if(uniforms.useEGA != 0)
     {
-
         uint c = EGAToCGA[roto.EGAcolor];
         if(subUv.x < 0.5f)
         {

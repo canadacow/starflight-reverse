@@ -80,6 +80,7 @@ struct GraphicsContext
     std::vector<avk::buffer> frameStagingBuffers;
     std::vector<avk::buffer> rotoscopeBuffers;
     std::vector<avk::buffer> uniformBuffers;
+    std::vector<avk::command_buffer> commandBuffers;
 
     avk::image_sampler LOGO1;
     avk::image_sampler LOGO2;
@@ -726,7 +727,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     blt_w = other.blt_w;
     blt_h = other.blt_h;
     bgColor = other.bgColor;
-    fgColor = other.fgColor;
+    fbColor = other.fbColor;
 
     switch(other.content)
     {
@@ -737,6 +738,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case PolyFillPixel:
         case TilePixel:
         case NavigationalPixel:
+        case PicPixel:
             break;
         case TextPixel:
             textData.character = other.textData.character;
@@ -989,6 +991,9 @@ static int GraphicsInitThread(void *ptr)
 
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
+    auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
+
+
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
         s_gc.frameStagingBuffers.push_back(
@@ -1010,6 +1015,10 @@ static int GraphicsInitThread(void *ptr)
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
                 avk::uniform_buffer_meta::create_from_size(sizeof(UniformBlock)))
+        );
+
+        s_gc.commandBuffers.push_back(
+            commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
         );
     }
 
@@ -1094,7 +1103,7 @@ uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth
 
     if (r > 0.0f)
     {
-        pixel = colortable[roto.fgColor & 0xf];
+        pixel = colortable[roto.fbColor & 0xf];
     }
     else
     {
@@ -1141,7 +1150,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.80f)
         {
-            pixel = colortable[roto.fgColor & 0xf];
+            pixel = colortable[roto.fbColor & 0xf];
         }
         #if 0
         else
@@ -1180,7 +1189,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
-            pixel = colortable[roto.fgColor & 0xf];
+            pixel = colortable[roto.fbColor & 0xf];
         }
     } else if (roto.textData.fontNum == 3)
     {
@@ -1206,7 +1215,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
-            pixel = colortable[roto.fgColor & 0xf];
+            pixel = colortable[roto.fbColor & 0xf];
         }
         #if 0
         else
@@ -1418,12 +1427,9 @@ void GraphicsUpdate()
 
     auto imageAvailableSemaphore = s_gc.vc.consume_current_image_available_semaphore();
     const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
-    
-    auto& commandPool = s_gc.vc.get_command_pool_for_single_use_command_buffers(*s_gc.mQueue);
 
-    // Create a command buffer and render into the *current* swap chain image:
-    auto cmdBfr = commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-   
+    s_gc.commandBuffers[inFlightIndex]->reset();
+       
     s_gc.vc.record({
 #if 0        
         s_gc.frameStagingBuffers[inFlightIndex]->fill(data, 0, 0, dataSize),
@@ -1476,7 +1482,7 @@ void GraphicsUpdate()
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::general, avk::layout::present_src})
 #endif
     })
-    .into_command_buffer(cmdBfr)
+    .into_command_buffer(s_gc.commandBuffers[inFlightIndex])
     .then_submit_to(*s_gc.mQueue)
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
@@ -1530,6 +1536,8 @@ void GraphicsQuit()
 
         graphicsThread.join();
     }
+
+    s_gc.vc.device().waitIdle();
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     SDL_DestroyRenderer(offscreenRenderer);
@@ -1759,7 +1767,7 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32
     rs.lineData.y0 = 199 - y1;
     rs.lineData.y1 = 199 - y2;
     rs.lineData.total = n;
-    rs.fgColor = color;
+    rs.fbColor = color;
 
     for(int i=0; i<=n; i++)
     {
@@ -1887,7 +1895,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
     rs.content = TextPixel;
     rs.textData.character = c;
     rs.textData.fontNum = num;
-    rs.fgColor = color;
+    rs.fbColor = color;
     rs.textData.xormode = xormode;
 
     switch(num)
@@ -1975,7 +1983,7 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
                     if(srcPc.content == TextPixel)
                     {
                         srcPc.bgColor = srcPc.bgColor ^ (color & 0xf);
-                        srcPc.fgColor = srcPc.fgColor ^ (color & 0xf);
+                        srcPc.fbColor = srcPc.fbColor ^ (color & 0xf);
                         GraphicsPixel(x0, y0, xored, offset, srcPc);
                     }
                     else
