@@ -78,6 +78,10 @@ struct GraphicsContext
     avk::queue* mQueue;
 
     std::vector<avk::buffer> frameStagingBuffers;
+    std::vector<avk::buffer> rotoscopeBuffers;
+    std::vector<avk::buffer> uniformBuffers;
+
+    avk::compute_pipeline rotoscopePipeline;
 };
 
 static GraphicsContext s_gc{};
@@ -808,7 +812,46 @@ static int GraphicsInitThread(void *ptr)
                 vk::BufferUsageFlagBits::eTransferSrc,
                 avk::generic_buffer_meta::create_from_size(WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint32_t)))
         );
+
+        s_gc.rotoscopeBuffers.push_back(
+            s_gc.vc.create_buffer(
+                avk::memory_usage::device,
+                vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+                avk::storage_buffer_meta::create_from_size(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * sizeof(RotoscopeShader)))
+        );
+
+        s_gc.uniformBuffers.push_back(
+            s_gc.vc.create_buffer(
+                avk::memory_usage::device,
+                vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
+                avk::uniform_buffer_meta::create_from_size(sizeof(UniformBlock)))
+        );
     }
+
+/*
+std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
+    vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute), // imgOutput
+    vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute), // RotoBuffer
+    vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute), // FONT1Texture
+    vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute), // FONT2Texture
+    vk::DescriptorSetLayoutBinding(4, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute), // FONT3Texture
+    vk::DescriptorSetLayoutBinding(5, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute), // LOGO1Texture
+    vk::DescriptorSetLayoutBinding(6, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute), // LOGO2Texture
+    vk::DescriptorSetLayoutBinding(7, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eCompute) // uniforms
+};
+*/
+
+    s_gc.rotoscopePipeline = s_gc.vc.create_compute_pipeline_for(
+        "rotoscope.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.rotoscopeBuffers[0]),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 4, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 5, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 7, s_gc.uniformBuffers[0])
+    );
 
     keyboard = std::make_unique<SDLKeyboard>();
 
@@ -894,11 +937,11 @@ uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth
 
     if (r > 0.0f)
     {
-        pixel = colortable[roto.lineData.fgColor & 0xf];
+        pixel = colortable[roto.fgColor & 0xf];
     }
     else
     {
-        pixel = colortable[roto.lineData.bgColor & 0xf];
+        pixel = colortable[roto.bgColor & 0xf];
     }
 
     return pixel;
@@ -938,10 +981,10 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         v += fontY * (fontSpaceHeight / atlasHeight);
 
         auto glyph = bilinearSample(FONT1Texture, u, v);
-        pixel = colortable[roto.textData.bgColor & 0xf];
+        pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.80f)
         {
-            pixel = colortable[roto.textData.fgColor & 0xf];
+            pixel = colortable[roto.fgColor & 0xf];
         }
         #if 0
         else
@@ -977,10 +1020,10 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         v += fontY * (fontSpaceHeight / atlasHeight);
 
         auto glyph = bilinearSample(FONT3Texture, u, v);
-        pixel = colortable[roto.textData.bgColor & 0xf];
+        pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
-            pixel = colortable[roto.textData.fgColor & 0xf];
+            pixel = colortable[roto.fgColor & 0xf];
         }
     } else if (roto.textData.fontNum == 3)
     {
@@ -1003,10 +1046,10 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         v += fontY * (fontSpaceHeight / atlasHeight);
 
         auto glyph = bilinearSample(FONT3Texture, u, v);
-        pixel = colortable[roto.textData.bgColor & 0xf];
+        pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
-            pixel = colortable[roto.textData.fgColor & 0xf];
+            pixel = colortable[roto.fgColor & 0xf];
         }
         #if 0
         else
@@ -1544,13 +1587,13 @@ void GraphicsLine(int x1, int y1, int x2, int y2, int color, int xormode, uint32
     rs.lineData.y0 = 199 - y1;
     rs.lineData.y1 = 199 - y2;
     rs.lineData.total = n;
-    rs.lineData.fgColor = color;
+    rs.fgColor = color;
 
     for(int i=0; i<=n; i++)
     {
         rs.lineData.n = i;
 
-        rs.lineData.bgColor = GraphicsPeek(x, y, offset);
+        rs.bgColor = GraphicsPeek(x, y, offset);
         GraphicsPixel(x, y, color, offset, rs);
         x += dx;
         y += dy;
@@ -1672,7 +1715,7 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
     rs.content = TextPixel;
     rs.textData.character = c;
     rs.textData.fontNum = num;
-    rs.textData.fgColor = color;
+    rs.fgColor = color;
     rs.textData.xormode = xormode;
 
     switch(num)
@@ -1749,7 +1792,7 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
 
             if(pc.content == TextPixel)
             {
-                pc.textData.bgColor = src;
+                pc.bgColor = src;
             }
 
             if ((*img) & (1<<(15-n)))
@@ -1759,8 +1802,8 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
 
                     if(srcPc.content == TextPixel)
                     {
-                        srcPc.textData.bgColor = srcPc.textData.bgColor ^ (color & 0xf);
-                        srcPc.textData.fgColor = srcPc.textData.fgColor ^ (color & 0xf);
+                        srcPc.bgColor = srcPc.bgColor ^ (color & 0xf);
+                        srcPc.fgColor = srcPc.fgColor ^ (color & 0xf);
                         GraphicsPixel(x0, y0, xored, offset, srcPc);
                     }
                     else

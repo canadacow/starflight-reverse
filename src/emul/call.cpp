@@ -2585,8 +2585,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 rs.EGAcolor = color;
                 if(rs.content == TextPixel)
                 {
-                    rs.textData.bgColor = rs.textData.bgColor ^ (color & 0xf);
-                    rs.textData.fgColor = rs.textData.fgColor ^ (color & 0xf);
+                    rs.bgColor = rs.bgColor ^ (color & 0xf);
+                    rs.fgColor = rs.fgColor ^ (color & 0xf);
                 }
 
                 GraphicsPixel(x, y, pixel_data, Read16(0x5648), rs);

@@ -22,21 +22,65 @@ enum PixelContents
     SplashPixel,
 };
 
+#pragma pack(push, 1)
+
+// Equivalent of UniformBlock struct
+struct UniformBlock {
+    int32_t GRAPHICS_MODE_WIDTH;
+    int32_t GRAPHICS_MODE_HEIGHT;
+    int32_t WINDOW_WIDTH;
+    int32_t WINDOW_HEIGHT;
+    uint32_t useRotoscope;
+    uint32_t useEGA;
+};
+
+// Equivalent of TextData struct
+struct TextData {
+    uint32_t character;
+    uint32_t xormode;
+    uint32_t fontNum;
+    uint32_t fontWidth;
+    uint32_t fontHeight;
+};
+
+// Equivalent of LineData struct
+struct LineData {
+    uint32_t x0;
+    uint32_t y0;
+    uint32_t x1;
+    uint32_t y1;
+    uint32_t n;
+    uint32_t total;
+};
+
+// Equivalent of SplashData struct
+struct SplashData {
+    uint32_t seg;
+    uint32_t fileNum;
+};
+
+// Equivalent of Rotoscope struct
+struct RotoscopeShader {
+    uint32_t content;
+    uint32_t EGAcolor;
+    uint32_t argb;
+    int32_t blt_x;
+    int32_t blt_y;
+    int32_t blt_w;
+    int32_t blt_h;
+    uint32_t bgColor;
+    uint32_t fgColor;
+    TextData textData;
+    LineData lineData;
+    SplashData splashData;
+};
+
+#pragma pack(pop)
+
 struct NavigationData
 {
     uint8_t window_x;
     uint8_t window_y;
-};
-
-struct TextData
-{
-    char character;
-    uint8_t bgColor;
-    uint8_t fgColor;
-    uint8_t xormode;
-    uint8_t fontNum;
-    uint8_t fontWidth;
-    uint8_t fontHeight;
 };
 
 struct PicData
@@ -44,24 +88,6 @@ struct PicData
     uint64_t picID;
     uint8_t  pic_x;
     uint8_t  pic_y;
-};
-
-struct LineData
-{
-    uint8_t x0;
-    uint8_t y0;
-    uint8_t x1;
-    uint8_t y1;
-    uint8_t n;
-    uint8_t total;
-    uint8_t bgColor;
-    uint8_t fgColor;
-};
-
-struct SplashData
-{
-    uint16_t seg;
-    uint16_t fileNum;
 };
 
 struct Rotoscope
@@ -77,6 +103,9 @@ struct Rotoscope
 
     int16_t blt_w;
     int16_t blt_h;
+
+    uint8_t bgColor;
+    uint8_t fgColor;
 
     union
     {
