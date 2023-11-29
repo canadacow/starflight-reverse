@@ -21,7 +21,7 @@ find_package(Vulkan REQUIRED)
 set(GLSL_COMPILER "$ENV{VULKAN_SDK}/bin/glslc")
 
 # Path to the shader source file
-set(SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/emul/rotoscope.comp")
+set(SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/rotoscope.comp")
 
 # Path to the output SPIR-V binary
 set(SHADER_BINARY "${CMAKE_CURRENT_BINARY_DIR}/rotoscope.spv")

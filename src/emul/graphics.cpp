@@ -82,6 +82,8 @@ struct GraphicsContext
     std::vector<avk::buffer> uniformBuffers;
 
     avk::compute_pipeline rotoscopePipeline;
+
+    avk::descriptor_cache descriptorCache;
 };
 
 static GraphicsContext s_gc{};
@@ -709,6 +711,54 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
+RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
+    content = other.content;
+    EGAcolor = other.EGAcolor;
+    argb = other.argb;
+    blt_x = other.blt_x;
+    blt_y = other.blt_y;
+    blt_w = other.blt_w;
+    blt_h = other.blt_h;
+    bgColor = other.bgColor;
+    fgColor = other.fgColor;
+
+    switch(other.content)
+    {
+        case ClearPixel:
+        case EllipsePixel:
+        case BoxFillPixel:
+        case PlotPixel:
+        case PolyFillPixel:
+        case TilePixel:
+        case NavigationalPixel:
+            break;
+        case TextPixel:
+            textData.character = other.textData.character;
+            textData.xormode = other.textData.xormode;
+            textData.fontNum = other.textData.fontNum;
+            textData.fontWidth = other.textData.fontWidth;
+            textData.fontHeight = other.textData.fontHeight;
+            break;
+        case LinePixel:
+            lineData.x0 = other.lineData.x0;
+            lineData.y0 = other.lineData.y0;
+            lineData.x1 = other.lineData.x1;
+            lineData.y1 = other.lineData.y1;
+            lineData.n = other.lineData.n;
+            lineData.total = other.lineData.total;
+            break;
+        case SplashPixel:
+            splashData.seg = other.splashData.seg;
+            splashData.fileNum = other.splashData.fileNum;
+            break;
+        default:
+            assert(false);
+            break;
+    }
+
+    return *this;
+}
+
 static int GraphicsInitThread(void *ptr)
 {
     SDL_DisplayMode dm;
@@ -842,7 +892,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 */
 
     s_gc.rotoscopePipeline = s_gc.vc.create_compute_pipeline_for(
-        "rotoscope.comp",
+        "shaders/rotoscope.comp",
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
         avk::descriptor_binding<avk::buffer>(0, 1, s_gc.rotoscopeBuffers[0]),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
@@ -852,6 +902,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
         avk::descriptor_binding<avk::buffer>(0, 7, s_gc.uniformBuffers[0])
     );
+
+    s_gc.descriptorCache = s_gc.vc.create_descriptor_cache();
 
     keyboard = std::make_unique<SDLKeyboard>();
 
@@ -1213,10 +1265,21 @@ void GraphicsUpdate()
     static std::vector<uint32_t> fullRes{};
     static std::vector<Rotoscope> backbuffer{};
 
+    static std::vector<RotoscopeShader> shaderBackBuffer{};
+    static UniformBlock uniform{};
+
     if(fullRes.size() == 0)
     {
         fullRes.resize(WINDOW_WIDTH * WINDOW_HEIGHT);
         backbuffer.resize(GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT);
+        shaderBackBuffer.resize(GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT);
+
+        uniform.graphics_mode_width = GRAPHICS_MODE_WIDTH;
+        uniform.graphics_mode_height = GRAPHICS_MODE_HEIGHT;
+        uniform.window_width = WINDOW_WIDTH;
+        uniform.window_height = WINDOW_HEIGHT;
+        uniform.useEGA = s_useEGA ? 1 : 0;
+        uniform.useRotoscope = s_useRotoscope ? 1 : 0;
     }
 
     // Choose the correct texture based on the current mode
@@ -1233,6 +1296,7 @@ void GraphicsUpdate()
             for(int i = 0; i < GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT; ++i)
             {
                 backbuffer[i] = rotoscopePixels[i];
+                shaderBackBuffer[i] = rotoscopePixels[i];
             }
         }
 
@@ -1285,12 +1349,11 @@ void GraphicsUpdate()
 
     // Create a command buffer and render into the *current* swap chain image:
     auto cmdBfr = commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-    
+   
     s_gc.vc.record({
-        // Fill the vertex buffer that corresponds to this the current inFlightIndex:
+#if 0        
         s_gc.frameStagingBuffers[inFlightIndex]->fill(data, 0, 0, dataSize),
 
-        // Install a barrier to synchronize the buffer copy with the subsequent render pass:
         avk::sync::buffer_memory_barrier(s_gc.frameStagingBuffers[inFlightIndex].as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
@@ -1303,12 +1366,42 @@ void GraphicsUpdate()
 
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::transfer_dst, avk::layout::present_src})
+#else
+
+        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::undefined, avk::layout::general}),
+
+        s_gc.rotoscopeBuffers[inFlightIndex]->fill(shaderBackBuffer.data(), 0, 0, shaderBackBuffer.size() * sizeof(RotoscopeShader)),
+
+        avk::sync::buffer_memory_barrier(s_gc.rotoscopeBuffers[inFlightIndex].as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+            ),
+
+        s_gc.uniformBuffers[inFlightIndex]->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+
+        avk::sync::buffer_memory_barrier(s_gc.uniformBuffers[inFlightIndex].as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+            ),
+
+        avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()),
+        avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
+                avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
+                avk::descriptor_binding(0, 1, s_gc.rotoscopeBuffers[inFlightIndex]->as_storage_buffer()),
+                avk::descriptor_binding(0, 7, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
+            })),
+        avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
+
+        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::general, avk::layout::present_src})
+#endif
     })
     .into_command_buffer(cmdBfr)
     .then_submit_to(*s_gc.mQueue)
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
-    .submit();    
+    .submit();
 
     s_gc.vc.render_frame();
 

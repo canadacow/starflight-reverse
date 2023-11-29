@@ -26,10 +26,10 @@ enum PixelContents
 
 // Equivalent of UniformBlock struct
 struct UniformBlock {
-    int32_t GRAPHICS_MODE_WIDTH;
-    int32_t GRAPHICS_MODE_HEIGHT;
-    int32_t WINDOW_WIDTH;
-    int32_t WINDOW_HEIGHT;
+    int32_t graphics_mode_width;
+    int32_t graphics_mode_height;
+    int32_t window_width;
+    int32_t window_height;
     uint32_t useRotoscope;
     uint32_t useEGA;
 };
@@ -59,6 +59,8 @@ struct SplashData {
     uint32_t fileNum;
 };
 
+struct Rotoscope;
+
 // Equivalent of Rotoscope struct
 struct RotoscopeShader {
     uint32_t content;
@@ -73,6 +75,8 @@ struct RotoscopeShader {
     TextData textData;
     LineData lineData;
     SplashData splashData;
+
+    RotoscopeShader& operator=(const Rotoscope& other);
 };
 
 #pragma pack(pop)
