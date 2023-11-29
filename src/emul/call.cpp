@@ -1067,8 +1067,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     rs.splashData.seg = ds;
                     rs.splashData.fileNum = fileNum;
 
-                    constexpr CGAToEGAMap map;
-
                     for(int y = 0; y < 200; ++y)
                     {
                         for (int x = 0; x < 80; ++x)
@@ -1083,12 +1081,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             //Push(firstCGA);
                             //ASMCall(0x6C86); // C>EGA
                             //uint8_t firstColor = Pop();
-                            uint8_t firstColor = map.getCGAToEGA(firstCGA);                            
+                            uint8_t firstColor = CGAToEGA[firstCGA];
 
                             //Push(secondCGA);
                             //ASMCall(0x6C86); // C>EGA
                             //uint8_t secondColor = Pop();
-                            uint8_t secondColor = map.getCGAToEGA(secondCGA);
+                            uint8_t secondColor = CGAToEGA[secondCGA];
 
                             rs.blt_x = x * 2;
                             GraphicsPixel(rs.blt_x, y, firstColor, Read16(0x5648), rs);

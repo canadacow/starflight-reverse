@@ -1092,8 +1092,6 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
     uint32_t index = 0;
     const float polygonWidth = (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH;
 
-    constexpr CGAToEGAMap map;
-
     for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
     {
         for(uint32_t x = 0; x < WINDOW_WIDTH; ++x)
@@ -1143,7 +1141,7 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                 {
                     static uint32_t CGAPalette[4] = {0xff000000, 0xff00aaaa, 0xffaa00aa, 0xffaaaaaa};
 
-                    uint8_t c = map.getEGAToCGA(roto.EGAcolor);
+                    uint8_t c = EGAToCGA[roto.EGAcolor];
                     if(subUv.u < 0.5f)
                     {
                         pixel = CGAPalette[(c >> 2) & 3];

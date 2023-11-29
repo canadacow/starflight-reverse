@@ -69,10 +69,14 @@ layout(binding = 4) uniform sampler2D FONT3Texture;
 layout(binding = 5) uniform sampler2D LOGO1Texture;
 layout(binding = 6) uniform sampler2D LOGO2Texture;
 
-const int GRAPHICS_MODE_WIDTH = 160;
-const int GRAPHICS_MODE_HEIGHT = 200;
-const int WINDOW_WIDTH = 1280;
-const int WINDOW_HEIGHT = 800;
+layout(binding = 7) uniform UniformBlock {
+    int GRAPHICS_MODE_WIDTH;
+    int GRAPHICS_MODE_HEIGHT;
+    int WINDOW_WIDTH;
+    int WINDOW_HEIGHT;
+    uint useRotoscope;
+    uint useEGA;
+} uniforms;
 
 const vec4 colortable[16] = 
 {
@@ -94,24 +98,26 @@ const vec4 colortable[16] =
     vec4(1.0, 1.0, 1.0, 1.0),
 };
 
-vec2 mix(vec2 a, vec2 b, float t) {
-    return a * (1 - t) + b * t;
-}
+const vec4 CGAPalette[4] = 
+{
+    vec4(0.0, 0.0, 0.0, 1.0), // black
+    vec4(0.0, 0.67, 0.67, 1.0), // cyan
+    vec4(0.67, 0.0, 0.67, 1.0), // magenta
+    vec4(0.67, 0.67, 0.67, 1.0), // light gray
+};
 
-float distance(vec2 a, vec2 b) {
-    return length(b - a);
-}
+const uint EGAToCGA[16] = {0, 2, 1, 11, 4, 6, 8, 10, 5, 3, 9, 7, 14, 0, 13, 15};
 
 vec4 DrawLinePixel(const Rotoscope roto, vec2 uv, float polygonWidth) {
     vec4 pixel;
 
-    float lineX1 = (roto.lineData.x0 + 0.10f) / GRAPHICS_MODE_WIDTH;
-    float lineY1 = (roto.lineData.y0 + 0.10f) / GRAPHICS_MODE_HEIGHT;
-    float lineX2 = (roto.lineData.x1 + 0.90f) / GRAPHICS_MODE_WIDTH;
-    float lineY2 = (roto.lineData.y1 + 0.90f) / GRAPHICS_MODE_HEIGHT;
+    float lineX1 = (roto.lineData.x0 + 0.10f) / uniforms.GRAPHICS_MODE_WIDTH;
+    float lineY1 = (roto.lineData.y0 + 0.10f) / uniforms.GRAPHICS_MODE_HEIGHT;
+    float lineX2 = (roto.lineData.x1 + 0.90f) / uniforms.GRAPHICS_MODE_WIDTH;
+    float lineY2 = (roto.lineData.y1 + 0.90f) / uniforms.GRAPHICS_MODE_HEIGHT;
 
     float a = polygonWidth;
-    float one_px = 1.0f / WINDOW_WIDTH;
+    float one_px = 1.0f / uniforms.WINDOW_WIDTH;
     vec2 p1 = vec2(lineX1, lineY1);
     vec2 p2 = vec2(lineX2, lineY2);
 
@@ -237,47 +243,63 @@ vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv) {
 }
 
 void main() {
-    uint index = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * WINDOW_WIDTH;
+    uint index = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * uniforms.WINDOW_WIDTH;
 
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
 
-    const float polygonWidth = WINDOW_WIDTH / GRAPHICS_MODE_WIDTH;
+    const float polygonWidth = uniforms.WINDOW_WIDTH / uniforms.GRAPHICS_MODE_WIDTH;
 
     uint x = gl_GlobalInvocationID.x;
     uint y = gl_GlobalInvocationID.y;
 
     // Calculate the corresponding position in the smaller texture
-    uint srcX = x * uint(GRAPHICS_MODE_WIDTH) / uint(WINDOW_WIDTH);
-    uint srcY = y * uint(GRAPHICS_MODE_HEIGHT) / uint(WINDOW_HEIGHT);
+    uint srcX = x * uint(uniforms.GRAPHICS_MODE_WIDTH) / uint(uniforms.WINDOW_WIDTH);
+    uint srcY = y * uint(uniforms.GRAPHICS_MODE_HEIGHT) / uint(uniforms.WINDOW_HEIGHT);
 
     // Calculate the index in the smaller texture
-    uint srcIndex = srcY * uint(GRAPHICS_MODE_WIDTH) + srcX;
+    uint srcIndex = srcY * uint(uniforms.GRAPHICS_MODE_WIDTH) + srcX;
 
     Rotoscope roto = rotoPixels[srcIndex];
 
-    float xcoord = float(x) / WINDOW_WIDTH;
-    float ycoord = float(y) / WINDOW_HEIGHT;
+    float xcoord = float(x) / uniforms.WINDOW_WIDTH;
+    float ycoord = float(y) / uniforms.WINDOW_HEIGHT;
     vec2 uv = vec2(xcoord, ycoord);
 
-    float subPixelXOffset = (xcoord * GRAPHICS_MODE_WIDTH) - float(srcX);
-    float subPixelYOffset = (ycoord * GRAPHICS_MODE_HEIGHT) - float(srcY);
+    float subPixelXOffset = (xcoord * uniforms.GRAPHICS_MODE_WIDTH) - float(srcX);
+    float subPixelYOffset = (ycoord * uniforms.GRAPHICS_MODE_HEIGHT) - float(srcY);
     vec2 subUv = vec2(subPixelXOffset, subPixelYOffset);
 
     // Pull the pixel from the smaller texture
     vec4 pixel = vec4(unpackUnorm4x8(roto.argb));
 
-    switch(roto.content) {
-        case 1: // LinePixel
-            pixel = DrawLinePixel(roto, uv, polygonWidth);
-            break;
-        case 2: // TextPixel
-            pixel = DrawFontPixel(roto, uv, subUv);    
-            break;
-        case 3: // SplashPixel
-            pixel = DrawSplashPixel(roto, uv);
-            break;
-        default:
-            break;
+    if(uniforms.useRotoscope != 0)
+    {
+        switch(roto.content) {
+            case 1: // LinePixel
+                pixel = DrawLinePixel(roto, uv, polygonWidth);
+                break;
+            case 2: // TextPixel
+                pixel = DrawFontPixel(roto, uv, subUv);    
+                break;
+            case 3: // SplashPixel
+                pixel = DrawSplashPixel(roto, uv);
+                break;
+            default:
+                break;
+        }
+    }
+    else if(uniforms.useEGA != 0)
+    {
+
+        uint c = EGAToCGA[roto.EGAcolor];
+        if(subUv.x < 0.5f)
+        {
+            pixel = CGAPalette[(c >> 2) & 3];
+        }
+        else
+        {
+            pixel = CGAPalette[c & 3];
+        }
     }
 
     // Place the pixel in the larger surface

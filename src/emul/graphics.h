@@ -168,32 +168,8 @@ struct Rotoscope
     }
 };
 
-class CGAToEGAMap {
-public:
-    constexpr CGAToEGAMap() : CGAToEGA{}, EGAToCGA{} {
-        for (const auto& pair : map) {
-            CGAToEGA[pair.first] = pair.second;
-            EGAToCGA[pair.second] = pair.first;
-        }
-    }
-
-    constexpr int getCGAToEGA(int key) const {
-        return CGAToEGA[key];
-    }
-
-    constexpr int getEGAToCGA(int value) const {
-        return EGAToCGA[value];
-    }
-
-private:
-    static constexpr std::array<std::pair<int, int>, 16> map = {{
-        {0, 0}, {1, 2}, {2, 1}, {3, 9}, {4, 4}, {5, 8}, {6, 5}, {7, 11},
-        {8, 6}, {9, 10}, {10, 7}, {11, 3}, {12, 6}, {13, 14}, {14, 12}, {15, 15}
-    }};
-
-    std::array<int, 16> CGAToEGA;
-    std::array<int, 16> EGAToCGA;
-};
+static const int CGAToEGA[16] = {0, 2, 1, 9, 4, 8, 5, 11, 6, 10, 7, 3, 6, 14, 12, 15};
+static const int EGAToCGA[16] = {0, 2, 1, 11, 4, 6, 8, 10, 5, 3, 9, 7, 14, 0, 13, 15};
 
 extern uint32_t colortable[16];
 
