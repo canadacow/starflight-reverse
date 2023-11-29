@@ -1361,9 +1361,10 @@ void GraphicsUpdate()
         uniform.graphics_mode_height = GRAPHICS_MODE_HEIGHT;
         uniform.window_width = WINDOW_WIDTH;
         uniform.window_height = WINDOW_HEIGHT;
-        uniform.useEGA = s_useEGA ? 1 : 0;
-        uniform.useRotoscope = s_useRotoscope ? 1 : 0;
     }
+
+    uniform.useEGA = s_useEGA ? 1 : 0;
+    uniform.useRotoscope = s_useRotoscope ? 1 : 0;
 
     // Choose the correct texture based on the current mode
     if (graphicsMode == SFGraphicsMode::Graphics)
