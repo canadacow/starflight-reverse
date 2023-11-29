@@ -81,6 +81,12 @@ struct GraphicsContext
     std::vector<avk::buffer> rotoscopeBuffers;
     std::vector<avk::buffer> uniformBuffers;
 
+    avk::image_sampler LOGO1;
+    avk::image_sampler LOGO2;
+    avk::image_sampler FONT1;
+    avk::image_sampler FONT2;
+    avk::image_sampler FONT3;
+
     avk::compute_pipeline rotoscopePipeline;
 
     avk::descriptor_cache descriptorCache;
@@ -759,6 +765,135 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     return *this;
 }
 
+static Texture<1536, 1152, 4> LOGO1Texture;
+static Texture<1536, 1152, 4> LOGO2Texture;
+
+avk::image imageFromData(const void* data, uint32_t width, uint32_t height, uint32_t bytesPerPixel, vk::Format format, avk::image_usage usage)
+{
+    uint32_t dataSize = width * height * bytesPerPixel;
+
+    auto sb = s_gc.vc.create_buffer(
+        AVK_STAGING_BUFFER_MEMORY_USAGE,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        avk::generic_buffer_meta::create_from_size(dataSize)
+    );
+
+    auto image = s_gc.vc.create_image(width, height, format, 1, avk::memory_usage::device, usage);
+
+    s_gc.vc.record_and_submit_with_fence({
+
+        sb->fill(data, 0, 0, dataSize),
+
+        avk::sync::buffer_memory_barrier(sb.as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+            ),
+
+        avk::sync::image_memory_barrier(image.as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::undefined, avk::layout::transfer_dst}),
+
+        avk::copy_buffer_to_image(sb, image, avk::layout::transfer_dst),
+
+        avk::sync::image_memory_barrier(image.as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::transfer_dst, avk::layout::shader_read_only_optimal})        
+
+    }, *s_gc.mQueue)->wait_until_signalled();
+
+    return image;
+}
+
+void LoadSplashImages()
+{
+    std::vector<uint8_t> image;
+    unsigned width, height;
+
+    unsigned error = lodepng::decode(image, width, height, "logo_1.png", LCT_RGBA, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    fillTexture(LOGO1Texture, image);
+    s_gc.LOGO1 = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );    
+    image.clear();
+
+    error = lodepng::decode(image, width, height, "logo_2.png", LCT_RGBA, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    fillTexture(LOGO2Texture, image);
+    s_gc.LOGO2 = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );    
+    image.clear();
+}
+
+void LoadFonts()
+{
+    std::vector<uint8_t> image;
+    unsigned width, height;
+
+    unsigned error = lodepng::decode(image, width, height, "FONT1_sdf.png", LCT_GREY, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    fillTexture(FONT1Texture, image);
+    s_gc.FONT1 = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), width, height, 1, vk::Format::eR8Unorm, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );
+    image.clear();
+
+    error = lodepng::decode(image, width, height, "FONT2_sdf.png", LCT_GREY, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    fillTexture(FONT2Texture, image);
+    s_gc.FONT2 = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), width, height, 1, vk::Format::eR8Unorm, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );
+    image.clear();
+
+    error = lodepng::decode(image, width, height, "FONT3_sdf.png", LCT_GREY, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    fillTexture(FONT3Texture, image);
+    s_gc.FONT3 = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), width, height, 1, vk::Format::eR8Unorm, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );    
+    image.clear();
+}
+
 static int GraphicsInitThread(void *ptr)
 {
     SDL_DisplayMode dm;
@@ -865,14 +1000,14 @@ static int GraphicsInitThread(void *ptr)
 
         s_gc.rotoscopeBuffers.push_back(
             s_gc.vc.create_buffer(
-                avk::memory_usage::device,
+                avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
                 avk::storage_buffer_meta::create_from_size(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * sizeof(RotoscopeShader)))
         );
 
         s_gc.uniformBuffers.push_back(
             s_gc.vc.create_buffer(
-                avk::memory_usage::device,
+                avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
                 avk::uniform_buffer_meta::create_from_size(sizeof(UniformBlock)))
         );
@@ -892,7 +1027,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 */
 
     s_gc.rotoscopePipeline = s_gc.vc.create_compute_pipeline_for(
-        "shaders/rotoscope.comp",
+        "rotoscope.comp",
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
         avk::descriptor_binding<avk::buffer>(0, 1, s_gc.rotoscopeBuffers[0]),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
@@ -905,6 +1040,9 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
     s_gc.descriptorCache = s_gc.vc.create_descriptor_cache();
 
+    LoadFonts();
+    LoadSplashImages();
+
     keyboard = std::make_unique<SDLKeyboard>();
 
     graphicsPixels = std::vector<uint32_t>();
@@ -915,39 +1053,6 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
-
-    std::vector<uint8_t> image;
-    unsigned width, height;
-
-    unsigned error = lodepng::decode(image, width, height, "FONT1_sdf.png", LCT_GREY, 8);
-    if(error) 
-    {
-        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-        exit(-1);
-    }
-
-    fillTexture(FONT1Texture, image);
-    image.clear();
-
-    error = lodepng::decode(image, width, height, "FONT2_sdf.png", LCT_GREY, 8);
-    if(error) 
-    {
-        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-        exit(-1);
-    }
-
-    fillTexture(FONT2Texture, image);
-    image.clear();
-
-    error = lodepng::decode(image, width, height, "FONT3_sdf.png", LCT_GREY, 8);
-    if(error) 
-    {
-        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-        exit(-1);
-    }
-
-    fillTexture(FONT3Texture, image);
-    image.clear();
 
     return 0;
 }
@@ -1132,38 +1237,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 
 uint32_t DrawSplashPixel(const Rotoscope& roto, vec2<float> uv)
 {
-    static Texture<1536, 1152, 4> LOGO1Texture;
-    static Texture<1536, 1152, 4> LOGO2Texture;
-    static bool loaded = false;
-
     uint32_t pixel = 0;
-
-    if(!loaded)
-    {
-        loaded = true;
-        std::vector<uint8_t> image;
-        unsigned width, height;
-
-        unsigned error = lodepng::decode(image, width, height, "logo_1.png", LCT_RGBA, 8);
-        if(error) 
-        {
-            printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-            exit(-1);
-        }
-
-        fillTexture(LOGO1Texture, image);
-        image.clear();
-
-        error = lodepng::decode(image, width, height, "logo_2.png", LCT_RGBA, 8);
-        if(error) 
-        {
-            printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-            exit(-1);
-        }
-
-        fillTexture(LOGO2Texture, image);
-        image.clear();
-    }
 
     switch(roto.splashData.fileNum)
     {
@@ -1389,6 +1463,11 @@ void GraphicsUpdate()
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
                 avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.rotoscopeBuffers[inFlightIndex]->as_storage_buffer()),
+                avk::descriptor_binding(0, 2, s_gc.FONT1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 3, s_gc.FONT2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 4, s_gc.FONT3->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 5, s_gc.LOGO1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 7, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),

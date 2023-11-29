@@ -232,7 +232,7 @@ public:
 
 	avk::image_usage get_config_image_usage_properties()
 	{
-		return avk::image_usage::color_attachment | avk::image_usage::transfer_destination | avk::image_usage::transfer_source | avk::image_usage::presentable | avk::image_usage::tiling_optimal;
+		return avk::image_usage::color_attachment | avk::image_usage::transfer_destination | avk::image_usage::transfer_source | avk::image_usage::presentable | avk::image_usage::tiling_optimal | avk::image_usage::general_storage_image;
 	}
 
 	vk::SurfaceFormatKHR get_config_surface_format(const vk::SurfaceKHR & aSurface)

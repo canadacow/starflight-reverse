@@ -24,7 +24,7 @@ set(GLSL_COMPILER "$ENV{VULKAN_SDK}/bin/glslc")
 set(SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/rotoscope.comp")
 
 # Path to the output SPIR-V binary
-set(SHADER_BINARY "${CMAKE_CURRENT_BINARY_DIR}/rotoscope.spv")
+set(SHADER_BINARY "${CMAKE_CURRENT_BINARY_DIR}/../rotoscope.comp.spv")
 
 # Custom command to compile the shader
 add_custom_command(
