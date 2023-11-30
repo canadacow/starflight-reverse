@@ -96,6 +96,8 @@ struct GraphicsContext
     avk::compute_pipeline textPipeline;
 
     avk::descriptor_cache descriptorCache;
+
+    std::chrono::time_point<std::chrono::system_clock> epoch;
 };
 
 static GraphicsContext s_gc{};
@@ -1069,6 +1071,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
     );
 
+    s_gc.epoch = std::chrono::system_clock::now();
+
     keyboard = std::make_unique<SDLKeyboard>();
 
     graphicsPixels = std::vector<uint32_t>();
@@ -1081,6 +1085,11 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
     return 0;
+}
+
+void GraphicsSplash(uint16_t seg, uint16_t fileNum)
+{
+    s_gc.epoch = std::chrono::system_clock::now();
 }
 
 void GraphicsInit()
@@ -1484,6 +1493,7 @@ void GraphicsUpdate()
 
     uniform.useEGA = s_useEGA ? 1 : 0;
     uniform.useRotoscope = s_useRotoscope ? 1 : 0;
+    uniform.iTime = std::chrono::duration<float>(std::chrono::system_clock::now() - s_gc.epoch).count();
 
     // Choose the correct texture based on the current mode
     if (graphicsMode == SFGraphicsMode::Graphics)

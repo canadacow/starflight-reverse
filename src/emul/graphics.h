@@ -32,6 +32,7 @@ struct UniformBlock {
     int32_t window_height;
     uint32_t useRotoscope;
     uint32_t useEGA;
+    float iTime; // Time in seconds from an arbitrary point in time
 };
 
 // Equivalent of TextData struct
@@ -229,6 +230,8 @@ void GraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc = Roto
 void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
 void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
 void GraphicsSave(char *filename);
+
+void GraphicsSplash(uint16_t seg, uint16_t fileNum);
 
 void WaitForVBlank();
 

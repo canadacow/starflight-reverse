@@ -1,6 +1,10 @@
 // GLSL Compute Shader
 #version 450
 
+#extension GL_GOOGLE_include_directive : enable
+
+#include "galaxy.h"
+
 layout(local_size_x = 32, local_size_y = 32) in;
 
 // Equivalent of PixelContents enum
@@ -74,6 +78,7 @@ layout(binding = 7) uniform UniformBlock {
     int WINDOW_HEIGHT;
     uint useRotoscope;
     uint useEGA;
+    float iTime;
 } uniforms;
 
 const vec4 colortable[16] = 
@@ -216,12 +221,21 @@ vec4 DrawFontPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     return pixel;
 }
 
-vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv) {
+vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv, vec2 windowSize) {
     vec4 pixel;
+
+    vec4 fragColor;
+    vec2 fragCoord = uv * windowSize;
+    fragCoord.y = windowSize.y - fragCoord.y;
+
+    float iTime = uniforms.iTime;
+    ivec2 iResolution = ivec2(windowSize);
 
     switch(roto.splashData.fileNum) {
         case 0x008d: // First splash
             pixel = texture(LOGO1Texture, uv);
+            galaxyRender(fragColor, fragCoord, iTime, iResolution);
+            pixel.xyz += fragColor.xyz;
             break;
         case 0x0036: // Second splash
             pixel = texture(LOGO2Texture, uv);
@@ -268,7 +282,7 @@ void main() {
                 pixel = DrawFontPixel(roto, uv, subUv);    
                 break;
             case SplashPixel: // SplashPixel
-                pixel = DrawSplashPixel(roto, uv);
+                pixel = DrawSplashPixel(roto, uv, windowSize);
                 break;
             default:
                 break;
