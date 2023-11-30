@@ -17,28 +17,37 @@ project(Starflight)
 # Find the Vulkan package
 find_package(Vulkan REQUIRED)
 
+# List of shaders
+set(SHADER_LIST
+    "rotoscope.comp"
+    "text.comp"
+    # Add more shaders here
+)
 # Path to the Vulkan SDK's glslc shader compiler
 set(GLSL_COMPILER "$ENV{VULKAN_SDK}/bin/glslc")
 
-# Path to the shader source file
-set(SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/rotoscope.comp")
+foreach(SHADER ${SHADER_LIST})
+    # Path to the shader source file
+    set(SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/${SHADER}")
 
-# Path to the output SPIR-V binary
-set(SHADER_BINARY "${CMAKE_CURRENT_BINARY_DIR}/../rotoscope.comp.spv")
+    # Path to the output SPIR-V binary
+    set(SHADER_BINARY "${CMAKE_CURRENT_BINARY_DIR}/../${SHADER}.spv")
 
-# Custom command to compile the shader
-add_custom_command(
-    OUTPUT ${SHADER_BINARY}
-    COMMAND ${GLSL_COMPILER} ${SHADER_SOURCE} -g -o ${SHADER_BINARY}
-    DEPENDS ${SHADER_SOURCE}
-    COMMENT "Compiling shader ${SHADER_SOURCE}"
-)
+    # Custom command to compile the shader
+    add_custom_command(
+        OUTPUT ${SHADER_BINARY}
+        COMMAND ${GLSL_COMPILER} ${SHADER_SOURCE} -g -o ${SHADER_BINARY}
+        DEPENDS ${SHADER_SOURCE}
+        COMMENT "Compiling shader ${SHADER_SOURCE}"
+    )
 
-# Custom target to trigger the shader compilation
-add_custom_target(
-    ShaderCompilation ALL
-    DEPENDS ${SHADER_BINARY}
-)
+    # Custom target to trigger the shader compilation
+    add_custom_target(
+        ${SHADER}_compilation ALL
+        DEPENDS ${SHADER_BINARY}
+    )
+    
+endforeach()
 
 add_subdirectory(Auto-Vk)
 
@@ -84,5 +93,6 @@ target_link_libraries(emulatesdl PRIVATE
         Vulkan::Headers
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 
-# Make sure your main target depends on the ShaderCompilation
-add_dependencies(emulatesdl ShaderCompilation)
+foreach(SHADER ${SHADER_LIST})
+    add_dependencies(emulatesdl ${SHADER}_compilation)
+endforeach()

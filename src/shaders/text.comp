@@ -1,0 +1,28 @@
+// GLSL Compute Shader
+#version 450
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
+layout(binding = 1) uniform sampler2D imgInput;
+
+layout(binding = 2) uniform UniformBlock {
+    int GRAPHICS_MODE_WIDTH;
+    int GRAPHICS_MODE_HEIGHT;
+    int WINDOW_WIDTH;
+    int WINDOW_HEIGHT;
+    uint useRotoscope;
+    uint useEGA;
+} uniforms;
+
+void main() {
+    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+
+    if (pixelCoords.x >= uniforms.WINDOW_WIDTH || pixelCoords.y >= uniforms.WINDOW_HEIGHT)
+        return;
+
+    vec2 uv = vec2(float(pixelCoords.x) / float(uniforms.WINDOW_WIDTH), float(pixelCoords.y) / float(uniforms.WINDOW_HEIGHT));
+    vec4 color = texture(imgInput, uv);
+    imageStore(imgOutput, pixelCoords, color);
+}
+
