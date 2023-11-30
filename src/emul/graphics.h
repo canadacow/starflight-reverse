@@ -39,8 +39,6 @@ struct TextData {
     uint32_t character;
     uint32_t xormode;
     uint32_t fontNum;
-    uint32_t fontWidth;
-    uint32_t fontHeight;
 };
 
 // Equivalent of LineData struct

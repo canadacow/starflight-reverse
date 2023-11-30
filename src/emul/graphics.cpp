@@ -746,8 +746,6 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
             textData.character = other.textData.character;
             textData.xormode = other.textData.xormode;
             textData.fontNum = other.textData.fontNum;
-            textData.fontWidth = other.textData.fontWidth;
-            textData.fontHeight = other.textData.fontHeight;
             break;
         case LinePixel:
             lineData.x0 = other.lineData.x0;
@@ -1119,11 +1117,8 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 {
     uint32_t pixel = 0;
 
-    float fontX = (float)roto.blt_x / (float)roto.blt_w;
-    float fontY = (float)roto.blt_y / (float)roto.blt_h;
-    
-    subUv.u /= (float)roto.textData.fontWidth;
-    subUv.v /= (float)roto.textData.fontHeight;
+    float fontX = ((float)roto.blt_x + subUv.x) / (float)roto.blt_w;
+    float fontY = ((float)roto.blt_y + subUv.v) / (float)roto.blt_h;
 
     fontX += subUv.u;
     fontY += subUv.v;
@@ -1917,33 +1912,30 @@ int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color
         case 1:
         {
             auto width = 3;
+            auto height = 5;
             auto image = font1_table[c];
-            rs.textData.fontWidth = width;
-            rs.textData.fontHeight = 5;
 
-            GraphicsBLT(x1, y1, 5, width, (const char*)&image, color, xormode, offset, rs);
+            GraphicsBLT(x1, y1, height, width, (const char*)&image, color, xormode, offset, rs);
 
             return width;
         }
         case 2:
         {
             auto width = char_width_table[c];
+            auto height = 7;
             auto image = font2_table[c].data();
-            rs.textData.fontWidth = width;
-            rs.textData.fontHeight = 7;
 
-            GraphicsBLT(x1, y1, 7, width, (const char*)image, color, xormode, offset, rs);
+            GraphicsBLT(x1, y1, height, width, (const char*)image, color, xormode, offset, rs);
 
             return width;
         }
         case 3:
         {
             auto width = char_width_table[c];
+            auto height = 9;
             auto image = font3_table[c].data();
-            rs.textData.fontWidth = width;
-            rs.textData.fontHeight = 9;
 
-            GraphicsBLT(x1, y1, 9, width, (const char*)image, color, xormode, offset, rs);
+            GraphicsBLT(x1, y1, height, width, (const char*)image, color, xormode, offset, rs);
 
             return width;            
         }

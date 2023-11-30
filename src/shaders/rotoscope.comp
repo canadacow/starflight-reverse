@@ -21,8 +21,6 @@ struct TextData {
     uint character;
     uint xormode;
     uint fontNum;
-    uint fontWidth;
-    uint fontHeight;
 };
 
 // Equivalent of LineData struct
@@ -138,14 +136,8 @@ vec4 DrawLinePixel(const Rotoscope roto, vec2 uv, float polygonWidth) {
 vec4 DrawFontPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
-    float fontX = roto.blt_x / roto.blt_w;
-    float fontY = roto.blt_y / roto.blt_h;
-
-    subUv.x /= roto.textData.fontWidth;
-    subUv.y /= roto.textData.fontHeight;
-
-    fontX += subUv.x;
-    fontY += subUv.y;
+    float fontX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
+    float fontY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
 
     if(roto.textData.fontNum == 1) {
         // Find the character in our atlas.
@@ -243,31 +235,23 @@ vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv) {
 }
 
 void main() {
-    uint index = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * uniforms.WINDOW_WIDTH;
-
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+    vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
+    vec2 graphicSize = vec2(float(uniforms.GRAPHICS_MODE_WIDTH), float(uniforms.GRAPHICS_MODE_HEIGHT));
+    
+    vec2 uv = vec2(pixelPos) / windowSize;
 
     const float polygonWidth = uniforms.WINDOW_WIDTH / uniforms.GRAPHICS_MODE_WIDTH;
 
-    uint x = gl_GlobalInvocationID.x;
-    uint y = gl_GlobalInvocationID.y;
-
     // Calculate the corresponding position in the smaller texture
-    uint srcX = x * uint(uniforms.GRAPHICS_MODE_WIDTH) / uint(uniforms.WINDOW_WIDTH);
-    uint srcY = y * uint(uniforms.GRAPHICS_MODE_HEIGHT) / uint(uniforms.WINDOW_HEIGHT);
+    uvec2 src = uvec2(floor(uv * graphicSize));
 
     // Calculate the index in the smaller texture
-    uint srcIndex = srcY * uint(uniforms.GRAPHICS_MODE_WIDTH) + srcX;
+    uint srcIndex = src.y * uint(uniforms.GRAPHICS_MODE_WIDTH) + src.x;
 
     Rotoscope roto = rotoPixels[srcIndex];
 
-    float xcoord = float(x) / uniforms.WINDOW_WIDTH;
-    float ycoord = float(y) / uniforms.WINDOW_HEIGHT;
-    vec2 uv = vec2(xcoord, ycoord);
-
-    float subPixelXOffset = (xcoord * uniforms.GRAPHICS_MODE_WIDTH) - float(srcX);
-    float subPixelYOffset = (ycoord * uniforms.GRAPHICS_MODE_HEIGHT) - float(srcY);
-    vec2 subUv = vec2(subPixelXOffset, subPixelYOffset);
+    vec2 subUv = (uv * graphicSize) - vec2(src);
 
     // Pull the pixel from the smaller texture
     vec4 pixel = vec4(unpackUnorm4x8(roto.argb)).bgra;
@@ -290,7 +274,7 @@ void main() {
                 break;
         }
     }
-    else if(uniforms.useEGA != 0)
+    else if(uniforms.useEGA == 0)
     {
         uint c = EGAToCGA[roto.EGAcolor];
         if(subUv.x < 0.5f)
