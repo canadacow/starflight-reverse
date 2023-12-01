@@ -19,6 +19,7 @@ layout(local_size_x = 32, local_size_y = 32) in;
 #define PlotPixel 8
 #define TilePixel 9
 #define SplashPixel 10
+#define RunBitPixel 11
 
 // Equivalent of TextData struct
 struct TextData {
@@ -39,8 +40,11 @@ struct LineData {
 
 // Equivalent of SplashData struct
 struct SplashData {
-    uint seg;
     uint fileNum;
+};
+
+struct RunBitData {
+    uint segmentAndOffset;
 };
 
 // Equivalent of Rotoscope struct
@@ -57,6 +61,7 @@ struct Rotoscope {
     TextData textData;
     LineData lineData;
     SplashData splashData;
+    RunBitData runBitData;
 };
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;

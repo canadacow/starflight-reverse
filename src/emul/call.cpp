@@ -35,6 +35,8 @@ unsigned short int regdi = REGDI; // points to word "OPERATOR"
 unsigned short int cx = 0x0;
 unsigned short int dx = 0x0;
 
+static uint16_t CurrentImageTagForHybridBlit = 0;
+
 
 // ------------------------------------------------
 
@@ -1035,6 +1037,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
+                if (nextInstr == 0xf410) // PORT-PIC
+                {
+                    CurrentImageTagForHybridBlit = 0xf410;
+                }
+
                 if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
@@ -1064,7 +1071,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     Rotoscope rs = SplashPixel;
                     rs.blt_w = 160;
                     rs.blt_h = 200;
-                    rs.splashData.seg = ds;
+                    
+                    // With only two splash images (?) not sure how useful
+                    // it is to pass the data segment around
+                    //rs.splashData.seg = ds;
+                    
                     rs.splashData.fileNum = fileNum;
 
                     GraphicsSplash(ds, fileNum);
@@ -3076,8 +3087,31 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             int temp2 = Read16Long(segment, offset); // size of this color segment - 6
             uint32_t bufseg = Read16(0x5648);
 
-            //printf("color=%i xblt=%i yblt=%i wblt=%i 0x%04x:0x%04x 0x%04x temp2=%i\n", color, XBLT, YBLT, WBLT, segment, offset, regsp, temp2);
+            Rotoscope rc{};
+            rc.content = RunBitPixel;
+            rc.runBitData.tag = CurrentImageTagForHybridBlit;
+            rc.blt_w = WBLT;
+
             int xofs = 0;
+            int verticalLines = 0;
+            for(int i=0; i<temp2; i++)
+            {
+                int al = Read8Long(segment, offset + 2 + i);
+                if (al == 0) continue;
+                for(int j=0; j<al; j++)
+                {
+                    if ((++xofs) >= WBLT)
+                    {
+                        xofs = 0;
+                        verticalLines++;
+                    }
+                }
+            }
+
+            rc.blt_h = verticalLines;
+
+            //printf("color=%i xblt=%i yblt=%i wblt=%i 0x%04x:0x%04x 0x%04x temp2=%i\n", color, XBLT, YBLT, WBLT, segment, offset, regsp, temp2);
+            xofs = 0;
             int yofs = 0;
             for(int i=0; i<temp2; i++)
             {
@@ -3085,11 +3119,35 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if (al == 0) continue;
                 for(int j=0; j<al; j++)
                 {
-                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color, bufseg);
+                    rc.blt_x = xofs;
+                    rc.blt_y = yofs;
+
+                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color, bufseg, rc);
                     if ((++xofs) >= WBLT)
                     {
                         xofs = 0;
                         yofs++;
+                    }
+                }
+            }
+
+            // Clear any lines not already rotoscoped a RunBitPxiel with this seg/offset
+            for (int y = 0; y < verticalLines; ++y)
+            {
+                for (int x = 0; x < WBLT; ++x)
+                {
+                    int xat = x + XBLT;
+                    int yat = YBLT - y;
+
+                    Rotoscope inRs{};
+                    GraphicsPeek(xat, yat, bufseg, &inRs);
+                    if (inRs.content != RunBitPixel)
+                    {
+                        rc.blt_x = x;
+                        rc.blt_y = y;
+                        rc.EGAcolor = 0;
+                        rc.argb = 0;
+                        GraphicsPixel(xat, yat, 0, bufseg, rc);
                     }
                 }
             }

@@ -20,6 +20,7 @@ enum PixelContents
     PlotPixel,
     TilePixel,
     SplashPixel,
+    RunBitPixel,
 };
 
 #pragma pack(push, 1)
@@ -54,8 +55,11 @@ struct LineData {
 
 // Equivalent of SplashData struct
 struct SplashData {
-    uint32_t seg;
     uint32_t fileNum;
+};
+
+struct RunBitData {
+    uint32_t tag;
 };
 
 struct Rotoscope;
@@ -74,6 +78,7 @@ struct RotoscopeShader {
     TextData textData;
     LineData lineData;
     SplashData splashData;
+    RunBitData runBitData;
 
     RotoscopeShader& operator=(const Rotoscope& other);
 };
@@ -117,6 +122,7 @@ struct Rotoscope
         PicData picData;
         LineData lineData;
         SplashData splashData;
+        RunBitData runBitData;
     };
 
     Rotoscope()
@@ -185,6 +191,9 @@ struct Rotoscope
                     break;
                 case SplashPixel:
                     splashData = other.splashData;
+                    break;
+                case RunBitPixel:
+                    runBitData = other.runBitData;
                     break;
                 default:
                     assert(false);

@@ -28,7 +28,7 @@
     #undef PLANES
 #endif
 
-//#define USE_CPU_RASTERIZATION 1
+#define USE_CPU_RASTERIZATION 1
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -89,6 +89,8 @@ struct GraphicsContext
     avk::image_sampler FONT1;
     avk::image_sampler FONT2;
     avk::image_sampler FONT3;
+
+    avk::image_sampler PORTPIC;
 
     avk::image_sampler textImage;
 
@@ -748,22 +750,16 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case PicPixel:
             break;
         case TextPixel:
-            textData.character = other.textData.character;
-            textData.xormode = other.textData.xormode;
-            textData.fontNum = other.textData.fontNum;
+            textData = other.textData;
             break;
         case LinePixel:
-            lineData.x0 = other.lineData.x0;
-            lineData.y0 = other.lineData.y0;
-            lineData.x1 = other.lineData.x1;
-            lineData.y1 = other.lineData.y1;
-            lineData.n = other.lineData.n;
-            lineData.total = other.lineData.total;
+            lineData = other.lineData;
             break;
         case SplashPixel:
-            splashData.seg = other.splashData.seg;
-            splashData.fileNum = other.splashData.fileNum;
+            splashData = other.splashData;
             break;
+        case RunBitPixel:
+            runBitData = other.runBitData;
         default:
             assert(false);
             break;
@@ -774,6 +770,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
 
 static Texture<1536, 1152, 4> LOGO1Texture;
 static Texture<1536, 1152, 4> LOGO2Texture;
+static Texture<1536, 1152, 4>  PORTPICTexture;
 
 avk::image imageFromData(const void* data, uint32_t width, uint32_t height, uint32_t bytesPerPixel, vk::Format format, avk::image_usage usage)
 {
@@ -814,37 +811,40 @@ void LoadSplashImages()
     std::vector<uint8_t> image;
     unsigned width, height;
 
-    unsigned error = lodepng::decode(image, width, height, "logo_1.png", LCT_RGBA, 8);
-    if(error) 
+    struct ImageToLoad
     {
-        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-        exit(-1);
-    }
+        std::string name;
+        Texture<1536, 1152, 4>* pic;
+        avk::image_sampler* vkPic;
 
-    fillTexture(LOGO1Texture, image);
-    s_gc.LOGO1 = s_gc.vc.create_image_sampler(
-        s_gc.vc.create_image_view(
-            imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
-        ), 
-        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
-    );    
-    image.clear();
+        ImageToLoad(const std::string& name, Texture<1536, 1152, 4>* pic, avk::image_sampler* vkPic)
+            : name(name), pic(pic), vkPic(vkPic) {}
+    };
 
-    error = lodepng::decode(image, width, height, "logo_2.png", LCT_RGBA, 8);
-    if(error) 
+    static const std::vector<ImageToLoad> images = {
+        { "logo_1.png", &LOGO1Texture, &s_gc.LOGO1 },
+        { "logo_2.png", &LOGO2Texture, &s_gc.LOGO2 },
+        { "station.png", &PORTPICTexture, &s_gc.PORTPIC }
+    };
+
+    for (auto& img : images)
     {
-        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
-        exit(-1);
-    }
+        unsigned error = lodepng::decode(image, width, height, img.name, LCT_RGBA, 8);
+        if (error)
+        {
+            printf("decoder error %d, %s loading %s\n", error, lodepng_error_text(error), img.name.c_str());
+            exit(-1);
+        }
 
-    fillTexture(LOGO2Texture, image);
-    s_gc.LOGO2 = s_gc.vc.create_image_sampler(
-        s_gc.vc.create_image_view(
-            imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
-        ), 
-        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
-    );    
-    image.clear();
+        fillTexture(*img.pic, image);
+        *img.vkPic = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+        );
+        image.clear();
+    }
 }
 
 void LoadFonts()
@@ -1264,6 +1264,27 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     return pixel;
 }
 
+uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
+{
+    uint32_t pixel = 0;
+
+    float subX = ((float)roto.blt_x + subUv.x) / (float)roto.blt_w;
+    float subY = ((float)roto.blt_y + subUv.y) / (float)roto.blt_h;
+
+    switch (roto.splashData.fileNum)
+    {
+        case 0xf410: // Port-Pic
+            pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, subY));
+            break;
+        default:
+            assert(false);
+            pixel = roto.argb;
+            break;
+    }
+
+    return pixel;
+}
+
 uint32_t DrawSplashPixel(const Rotoscope& roto, vec2<float> uv)
 {
     uint32_t pixel = 0;
@@ -1326,6 +1347,9 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                         break;
                     case SplashPixel:
                         pixel = DrawSplashPixel(roto, uv);
+                        break;
+                    case RunBitPixel:
+                        pixel = DrawRunBit(roto, uv, subUv);
                         break;
                     default:
                         //pixel = 0xffff0000;
@@ -1833,9 +1857,9 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
         return;
     }
 
-    if(pc.content == TextPixel)
+    if (pc.content == ClearPixel)
     {
-        printf("\n");
+        assert(color == 0);
     }
 
     pc.argb = color;
