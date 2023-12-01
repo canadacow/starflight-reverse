@@ -1067,6 +1067,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     rs.splashData.seg = ds;
                     rs.splashData.fileNum = fileNum;
 
+                    GraphicsSplash(ds, fileNum);
+
                     for(int y = 0; y < 200; ++y)
                     {
                         for (int x = 0; x < 80; ++x)

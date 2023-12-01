@@ -1146,9 +1146,6 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     float fontX = ((float)roto.blt_x + subUv.x) / (float)roto.blt_w;
     float fontY = ((float)roto.blt_y + subUv.v) / (float)roto.blt_h;
 
-    fontX += subUv.u;
-    fontY += subUv.v;
-
     if(roto.textData.fontNum == 1)
     {
         // Find the character in our atlas.
@@ -1208,7 +1205,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         u += fontX * (fontSpaceWidth / atlasWidth);
         v += fontY * (fontSpaceHeight / atlasHeight);
 
-        auto glyph = bilinearSample(FONT3Texture, u, v);
+        auto glyph = bilinearSample(FONT2Texture, u, v);
         pixel = colortable[roto.bgColor & 0xf];
         if(glyph.r > 0.9f)
         {
@@ -1518,7 +1515,7 @@ void GraphicsUpdate()
 
 #if 0
         static int frameCount = 0;
-        std::string filename = "frame_" + std::to_string(frameCount++) + ".png";
+        std::string filename = "frames/frame_" + std::to_string(frameCount++) + ".png";
         std::vector<unsigned char> png;
         unsigned width = GRAPHICS_MODE_WIDTH, height = GRAPHICS_MODE_HEIGHT;
         std::vector<unsigned char> image;
