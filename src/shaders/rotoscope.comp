@@ -4,6 +4,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "galaxy.h"
+#include "station_stars.h"
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -235,7 +236,7 @@ vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv, vec2 windowSize) {
     fragCoord.y = windowSize.y - fragCoord.y;
 
     float iTime = uniforms.iTime;
-    ivec2 iResolution = ivec2(windowSize);
+    vec2 iResolution = windowSize;
 
     switch(roto.splashData.fileNum) {
         case 0x008d: // First splash
@@ -254,23 +255,40 @@ vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv, vec2 windowSize) {
     return pixel;
 }
 
-vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv, vec2 windowSize) {
+float rgb2hue(vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return abs(q.z + (q.w - q.y) / (6.0 * d + e));
+}
+
+bool isGreen(vec3 rgb) {
+    float hue = rgb2hue(rgb);
+    return hue > 0.25 && hue < 0.35;
+}
+
+vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
-    vec4 fragColor;
-    vec2 fragCoord = uv * windowSize;
-    fragCoord.y = windowSize.y - fragCoord.y;
-
     float iTime = uniforms.iTime;
-    ivec2 iResolution = ivec2(windowSize);
 
     float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
     float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
+
+    vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
+    vec2 fragCoord = vec2(subX * iResolution.x, subY * iResolution.y);
 
     switch (roto.runBitData.segmentAndOffset)
     {
         case 44: // Port-Pic Top 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, subY * 0.5f));
+            if(isGreen(pixel.rgb))
+            {
+                stationStarsRender(pixel, fragCoord, iTime, iResolution);
+            }
             break;
         case 49: // Port-Pic Botton 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, (subY * 0.5f) + 0.5f));
@@ -320,7 +338,7 @@ void main() {
                 pixel = DrawSplashPixel(roto, uv, windowSize);
                 break;
             case RunBitPixel:
-                pixel = DrawRunBitPixel(roto, uv, subUv, windowSize);
+                pixel = DrawRunBitPixel(roto, uv, subUv);
                 break;
             default:
                 break;

@@ -1037,9 +1037,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
-                if (nextInstr == 0xbe9d) // @.HYBRID
+                if (nextInstr == 0x7339) // FILE<
                 {
-                    CurrentImageTagForHybridBlit = Read16(regsp);
+                    uint16_t fileNum = Read16(regsp);
+                    uint16_t ds = Read16(regsp + 2);
+
+                    if (ds == 0x0ee1)
+                    {
+                        printf("Read file at 0x%x:0x%x\n", ds, fileNum);
+                        CurrentImageTagForHybridBlit = fileNum;
+                    }
                 }
 
                 if(nextInstr == 0xe7ec)
@@ -1056,7 +1063,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 }
                 else if (nextInstr == 0xe60c)
                 {
-                      // CSCR>EGA
+                    // CSCR>EGA
                     uint16_t ds = Read16(0x52b3);
                     uint16_t fileNum = Pop();
                     uint16_t di = 0;

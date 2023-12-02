@@ -58,7 +58,7 @@ float fbm( vec3 p )
   return f/s;
 }
 
-void galaxyRender( out vec4 fragColor, in vec2 fragCoord, in float iTime, in ivec2 iResolution)
+void galaxyRender( out vec4 fragColor, in vec2 fragCoord, in float iTime, in vec2 iResolution)
 {
 	float time = 1.6 + (iTime * 0.1);
 

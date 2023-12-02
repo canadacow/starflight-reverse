@@ -1281,6 +1281,9 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         case 49: // Port-Pic Botton 100 pixels
             pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, (subY * 0.5f) + 0.5f));
             break;
+        case 125: // Man
+            pixel = roto.argb;
+            break;
         default:
             assert(false);
             pixel = roto.argb;
