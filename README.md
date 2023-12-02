@@ -13,6 +13,23 @@ Real-time Rotoscoped Vulkan/AI Generated project to bring a 40 year old game int
   </tr>  
 </table>
 
+## State of the Build ##
+
+To switch live between the Rotoscoped and classic EGA output, press F1. Once in EGA output, F2 will switch between the EGA and dithered CGA/RGB palette.
+
+The whole game is playable as all of Starflight with both the FORTH code and assembly is fully emulated.
+
+Known issues with emulation:
+
+1. On any communications encounter with aliens, on terminating communications your hull will be destroyed and the health of your ship critical. This appears to be due to corruption happening between overlay loads. This, is in many respects, game breaking and will absolutely need to be addressed independent of rotoscoping.
+2. FONT3 doesn't render correctly in emulated modes (haven't found the 9x font table in memory.)
+3. Clipped of nebula doesn't work in the Starmap.
+4. Technically a 0th issue. As checked in, for expediency and testing purposes, you start with 1,000,000 credits and have infinite money. Fuel is never burned during hyperspace travel.
+
+## Building ##
+
+In theory I have it building on Windows and Linux x64 by way of CMake/Vcpkg. I'm working quickly with to get a whole idea of what needs to be done functionality-wise so I strongly suspect the build is broken for a multitude of reasons at the moment. You will almost certainly have the most luck with Windows x64 and Visual Studio 2022 Community Edition.
+
 ## What is Starflight and what is this project about? ##
 
 For complete background on this project see the original [here](https://github.com/s-macke/starflight-reverse#readme).
