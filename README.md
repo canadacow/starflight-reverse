@@ -25,7 +25,7 @@ To switch live between the Rotoscoped and classic EGA output, press F1. Once in 
 
 The whole game is playable as all of Starflight with both the FORTH code and assembly is fully emulated.
 
-Known issues with emulation:
+**Known issues with emulation:**
 
 1. On any communications encounter with aliens, on terminating communications your hull will be destroyed and the health of your ship critical. This appears to be due to corruption happening between overlay loads. This, is in many respects, game breaking and will absolutely need to be addressed independent of rotoscoping.
 2. FONT3 doesn't render correctly in emulated modes (haven't found the 9x font table in memory.)
