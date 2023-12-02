@@ -267,7 +267,7 @@ float rgb2hue(vec3 c) {
 
 bool isGreen(vec3 rgb) {
     float hue = rgb2hue(rgb);
-    return hue > 0.25 && hue < 0.35;
+    return hue > 0.32 && hue < 0.34;
 }
 
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {

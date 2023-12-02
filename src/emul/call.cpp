@@ -1044,9 +1044,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     if (ds == 0x0ee1)
                     {
-                        printf("Read file at 0x%x:0x%x\n", ds, fileNum);
                         CurrentImageTagForHybridBlit = fileNum;
                     }
+
+                    printf("Read file at %04x:%04x\n", ds, fileNum);
                 }
 
                 if(nextInstr == 0xe7ec)
