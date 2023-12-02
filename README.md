@@ -1,6 +1,12 @@
 # Starflight-Reverse - Remastered #
 
-Real-time Rotoscoped Vulkan/AI Generated project to bring a 40 year old game into the 21st century.
+## What is Starflight and what is this project about? ##
+
+For complete background on this project see the original [here](https://github.com/s-macke/starflight-reverse#readme).
+
+For additional information on Starflight and this interesting time in computer gaming, check out the book [Starflight](https://www.amazon.com/Starflight-Exploded-Computer-Gaming-1987-1994/dp/1732355290) on Amazon.
+
+This specific fork is a **Real-time Rotoscoped Vulkan/AI Generated project bringing Starflight into the 21st century.**
 
 <table border="none">
   <tr>
@@ -29,9 +35,3 @@ Known issues with emulation:
 ## Building ##
 
 In theory I have it building on Windows and Linux x64 by way of CMake/Vcpkg. I'm working quickly with to get a whole idea of what needs to be done functionality-wise so I strongly suspect the build is broken for a multitude of reasons at the moment. You will almost certainly have the most luck with Windows x64 and Visual Studio 2022 Community Edition.
-
-## What is Starflight and what is this project about? ##
-
-For complete background on this project see the original [here](https://github.com/s-macke/starflight-reverse#readme).
-
-For additional information on Starflight and this interesting time in computer gaming, check out the book [Starflight](https://www.amazon.com/Starflight-Exploded-Computer-Gaming-1987-1994/dp/1732355290) on Amazon.
