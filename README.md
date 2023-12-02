@@ -5,10 +5,10 @@ Real-time Rotoscoped Vulkan/AI Generated project to bring a 40 year old game int
 <table border="none">
   <tr>
     <td>
-      <img src="https://github.com/canadacow/starflight-reverse/assets/664680/16c4c4c4-754f-495d-bb32-7f4aaf4d0296" width="400" height="300"> 
+      <img src="https://github.com/canadacow/starflight-reverse/assets/664680/16c4c4c4-754f-495d-bb32-7f4aaf4d0296" width="320" height="240"> 
     </td>
     <td>
-      <img src="https://github.com/canadacow/starflight-reverse/assets/664680/89d034cf-9e6e-40e3-95e0-fb6e09a68373" width="400" height="300"> 
+      <img src="https://github.com/canadacow/starflight-reverse/assets/664680/89d034cf-9e6e-40e3-95e0-fb6e09a68373" width="320" height="240"> 
     </td>
   </tr>  
 </table>
