@@ -1037,9 +1037,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
-                if (nextInstr == 0xf410) // PORT-PIC
+                if (nextInstr == 0xbe9d) // @.HYBRID
                 {
-                    CurrentImageTagForHybridBlit = 0xf410;
+                    CurrentImageTagForHybridBlit = Read16(regsp);
                 }
 
                 if(nextInstr == 0xe7ec)

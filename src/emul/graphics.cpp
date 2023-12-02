@@ -28,7 +28,7 @@
     #undef PLANES
 #endif
 
-#define USE_CPU_RASTERIZATION 1
+//#define USE_CPU_RASTERIZATION 1
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -650,7 +650,7 @@ public:
 
     // Destructive read equivalent to Int 16 ah = 0
     unsigned short getKeyStroke() override {
-        if (eventQueue.empty())
+        while (eventQueue.empty())
         {
             update(true);
         }
@@ -760,6 +760,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
             break;
         case RunBitPixel:
             runBitData = other.runBitData;
+            break;
         default:
             assert(false);
             break;
@@ -770,7 +771,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
 
 static Texture<1536, 1152, 4> LOGO1Texture;
 static Texture<1536, 1152, 4> LOGO2Texture;
-static Texture<1536, 1152, 4>  PORTPICTexture;
+static Texture<1536, 1152, 4> PORTPICTexture;
 
 avk::image imageFromData(const void* data, uint32_t width, uint32_t height, uint32_t bytesPerPixel, vk::Format format, avk::image_usage usage)
 {
@@ -814,17 +815,17 @@ void LoadSplashImages()
     struct ImageToLoad
     {
         std::string name;
-        Texture<1536, 1152, 4>* pic;
-        avk::image_sampler* vkPic;
+        Texture<1536, 1152, 4>& pic;
+        avk::image_sampler& vkPic;
 
-        ImageToLoad(const std::string& name, Texture<1536, 1152, 4>* pic, avk::image_sampler* vkPic)
+        ImageToLoad(const std::string& name, Texture<1536, 1152, 4>& pic, avk::image_sampler& vkPic)
             : name(name), pic(pic), vkPic(vkPic) {}
     };
 
     static const std::vector<ImageToLoad> images = {
-        { "logo_1.png", &LOGO1Texture, &s_gc.LOGO1 },
-        { "logo_2.png", &LOGO2Texture, &s_gc.LOGO2 },
-        { "station.png", &PORTPICTexture, &s_gc.PORTPIC }
+        { "logo_1.png", LOGO1Texture, s_gc.LOGO1 },
+        { "logo_2.png", LOGO2Texture, s_gc.LOGO2 },
+        { "station.png", PORTPICTexture, s_gc.PORTPIC }
     };
 
     for (auto& img : images)
@@ -836,8 +837,8 @@ void LoadSplashImages()
             exit(-1);
         }
 
-        fillTexture(*img.pic, image);
-        *img.vkPic = s_gc.vc.create_image_sampler(
+        fillTexture(img.pic, image);
+        img.vkPic = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
                 imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
             ),
@@ -1049,7 +1050,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 4, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 5, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 7, s_gc.uniformBuffers[0])
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 8, s_gc.uniformBuffers[0])
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1273,8 +1275,11 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 
     switch (roto.splashData.fileNum)
     {
-        case 0xf410: // Port-Pic
-            pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, subY));
+        case 44: // Port-Pic Top 100 pixels
+            pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, subY * 0.5f));
+            break;
+        case 49: // Port-Pic Botton 100 pixels
+            pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, (subY * 0.5f) + 0.5f));
             break;
         default:
             assert(false);
@@ -1478,7 +1483,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 4, s_gc.FONT3->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 5, s_gc.LOGO1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 7, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
+                avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 8, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 

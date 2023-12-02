@@ -75,8 +75,9 @@ layout(binding = 3) uniform sampler2D FONT2Texture;
 layout(binding = 4) uniform sampler2D FONT3Texture;
 layout(binding = 5) uniform sampler2D LOGO1Texture;
 layout(binding = 6) uniform sampler2D LOGO2Texture;
+layout(binding = 7) uniform sampler2D PORTPICTexture;
 
-layout(binding = 7) uniform UniformBlock {
+layout(binding = 8) uniform UniformBlock {
     int GRAPHICS_MODE_WIDTH;
     int GRAPHICS_MODE_HEIGHT;
     int WINDOW_WIDTH;
@@ -253,6 +254,35 @@ vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv, vec2 windowSize) {
     return pixel;
 }
 
+vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv, vec2 windowSize) {
+    vec4 pixel;
+
+    vec4 fragColor;
+    vec2 fragCoord = uv * windowSize;
+    fragCoord.y = windowSize.y - fragCoord.y;
+
+    float iTime = uniforms.iTime;
+    ivec2 iResolution = ivec2(windowSize);
+
+    float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
+    float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
+
+    switch (roto.runBitData.segmentAndOffset)
+    {
+        case 44: // Port-Pic Top 100 pixels
+            pixel = texture(PORTPICTexture, vec2(subX, subY * 0.5f));
+            break;
+        case 49: // Port-Pic Botton 100 pixels
+            pixel = texture(PORTPICTexture, vec2(subX, (subY * 0.5f) + 0.5f));
+            break;
+        default:
+            pixel = vec4(1.0, 0.0, 0.0, 1.0); // vec4(unpackUnorm4x8(roto.argb)).bgra;
+            break;
+    }
+
+    return pixel;
+}
+
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
     vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
@@ -279,15 +309,18 @@ void main() {
     {
         switch(roto.content) {
             #if 0 
-            case LinePixel: // LinePixel
+            case LinePixel:
                 pixel = DrawLinePixel(roto, uv, polygonWidth);
                 break;
             #endif
-            case TextPixel: // TextPixel
+            case TextPixel:
                 pixel = DrawFontPixel(roto, uv, subUv);    
                 break;
-            case SplashPixel: // SplashPixel
+            case SplashPixel:
                 pixel = DrawSplashPixel(roto, uv, windowSize);
+                break;
+            case RunBitPixel:
+                pixel = DrawRunBitPixel(roto, uv, subUv, windowSize);
                 break;
             default:
                 break;
