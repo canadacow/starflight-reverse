@@ -19,7 +19,6 @@ enum PixelContents
     PicPixel,
     PlotPixel,
     TilePixel,
-    SplashPixel,
     RunBitPixel,
 };
 
@@ -53,11 +52,6 @@ struct LineData {
     uint32_t total;
 };
 
-// Equivalent of SplashData struct
-struct SplashData {
-    uint32_t fileNum;
-};
-
 struct RunBitData {
     uint32_t tag;
 };
@@ -77,7 +71,6 @@ struct RotoscopeShader {
     uint32_t fgColor;
     TextData textData;
     LineData lineData;
-    SplashData splashData;
     RunBitData runBitData;
 
     RotoscopeShader& operator=(const Rotoscope& other);
@@ -121,7 +114,6 @@ struct Rotoscope
         TextData textData;
         PicData picData;
         LineData lineData;
-        SplashData splashData;
         RunBitData runBitData;
     };
 
@@ -140,7 +132,7 @@ struct Rotoscope
 
     Rotoscope(PixelContents pixel)
     {
-        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || SplashPixel);
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == RunBitPixel);
         content = pixel;
         EGAcolor = 0;
         argb = 0;
@@ -188,9 +180,6 @@ struct Rotoscope
                     break;
                 case LinePixel:
                     lineData = other.lineData;
-                    break;
-                case SplashPixel:
-                    splashData = other.splashData;
                     break;
                 case RunBitPixel:
                     runBitData = other.runBitData;

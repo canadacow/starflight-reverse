@@ -755,9 +755,6 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case LinePixel:
             lineData = other.lineData;
             break;
-        case SplashPixel:
-            splashData = other.splashData;
-            break;
         case RunBitPixel:
             runBitData = other.runBitData;
             break;
@@ -1273,7 +1270,7 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     float subX = ((float)roto.blt_x + subUv.x) / (float)roto.blt_w;
     float subY = ((float)roto.blt_y + subUv.y) / (float)roto.blt_h;
 
-    switch (roto.splashData.fileNum)
+    switch (roto.runBitData.tag)
     {
         case 44: // Port-Pic Top 100 pixels
             pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, subY * 0.5f));
@@ -1281,32 +1278,17 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         case 49: // Port-Pic Botton 100 pixels
             pixel = TextureColorToARGB(bilinearSample(PORTPICTexture, subX, (subY * 0.5f) + 0.5f));
             break;
+        case 141: // First splash
+            pixel = TextureColorToARGB(bilinearSample(LOGO1Texture, uv.u, uv.v));
+            break;
+        case 54:
+            pixel = TextureColorToARGB(bilinearSample(LOGO2Texture, uv.u, uv.v));
+            break;
         case 125: // Man
             pixel = roto.argb;
             break;
         default:
             assert(false);
-            pixel = roto.argb;
-            break;
-    }
-
-    return pixel;
-}
-
-uint32_t DrawSplashPixel(const Rotoscope& roto, vec2<float> uv)
-{
-    uint32_t pixel = 0;
-
-    switch(roto.splashData.fileNum)
-    {
-        case 0x008d: // First splash
-            pixel = TextureColorToARGB(bilinearSample(LOGO1Texture, uv.u, uv.v));
-            break;
-        case 0x0036: // Second splash
-            pixel = TextureColorToARGB(bilinearSample(LOGO2Texture, uv.u, uv.v));
-            break;
-        default:
-            //assert(false);
             pixel = roto.argb;
             break;
     }
@@ -1352,9 +1334,6 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                         break;
                     case TextPixel:
                         pixel = DrawFontPixel(roto, uv, subUv);    
-                        break;
-                    case SplashPixel:
-                        pixel = DrawSplashPixel(roto, uv);
                         break;
                     case RunBitPixel:
                         pixel = DrawRunBit(roto, uv, subUv);

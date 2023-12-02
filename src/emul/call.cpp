@@ -1042,7 +1042,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint16_t fileNum = Read16(regsp);
                     uint16_t ds = Read16(regsp + 2);
 
-                    if (ds == 0x0ee1)
+                    //if (ds == 0x0ee1)
                     {
                         CurrentImageTagForHybridBlit = fileNum;
                     }
@@ -1076,7 +1076,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     ForthCall(0x8bfb); // >HIDDEN
                     ForthCall(0x8fc1); // DARK
 
-                    Rotoscope rs = SplashPixel;
+                    Rotoscope rs = RunBitPixel;
                     rs.blt_w = 160;
                     rs.blt_h = 200;
                     
@@ -1084,16 +1084,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     // it is to pass the data segment around
                     //rs.splashData.seg = ds;
                     
-                    rs.splashData.fileNum = fileNum;
+                    rs.runBitData.tag = fileNum;
 
                     GraphicsSplash(ds, fileNum);
 
                     for(int y = 0; y < 200; ++y)
                     {
+                        rs.blt_y = 199 - y;
+
                         for (int x = 0; x < 80; ++x)
                         {
-                            rs.blt_y = 199 - y;
-
                             uint8_t colors = Read8Long(ds, di);
 
                             uint8_t firstCGA = (colors >> 4) & 0xf;

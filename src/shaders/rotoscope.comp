@@ -19,8 +19,7 @@ layout(local_size_x = 32, local_size_y = 32) in;
 #define PicPixel 7
 #define PlotPixel 8
 #define TilePixel 9
-#define SplashPixel 10
-#define RunBitPixel 11
+#define RunBitPixel 10
 
 // Equivalent of TextData struct
 struct TextData {
@@ -39,13 +38,8 @@ struct LineData {
     uint total;
 };
 
-// Equivalent of SplashData struct
-struct SplashData {
-    uint fileNum;
-};
-
 struct RunBitData {
-    uint segmentAndOffset;
+    uint tag;
 };
 
 // Equivalent of Rotoscope struct
@@ -61,7 +55,6 @@ struct Rotoscope {
     uint fgColor;
     TextData textData;
     LineData lineData;
-    SplashData splashData;
     RunBitData runBitData;
 };
 
@@ -228,33 +221,6 @@ vec4 DrawFontPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     return pixel;
 }
 
-vec4 DrawSplashPixel(const Rotoscope roto, vec2 uv, vec2 windowSize) {
-    vec4 pixel;
-
-    vec4 fragColor;
-    vec2 fragCoord = uv * windowSize;
-    fragCoord.y = windowSize.y - fragCoord.y;
-
-    float iTime = uniforms.iTime;
-    vec2 iResolution = windowSize;
-
-    switch(roto.splashData.fileNum) {
-        case 0x008d: // First splash
-            pixel = texture(LOGO1Texture, uv);
-            galaxyRender(fragColor, fragCoord, iTime, iResolution);
-            pixel.xyz += fragColor.xyz;
-            break;
-        case 0x0036: // Second splash
-            pixel = texture(LOGO2Texture, uv);
-            break;
-        default:
-            pixel = vec4(unpackUnorm4x8(roto.argb)).bgra;
-            break;
-    }
-
-    return pixel;
-}
-
 float rgb2hue(vec3 c) {
     vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
     vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
@@ -273,6 +239,7 @@ bool isGreen(vec3 rgb) {
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
+    vec4 fragColor;
     float iTime = uniforms.iTime;
 
     float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
@@ -281,7 +248,7 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
     vec2 fragCoord = vec2(subX * iResolution.x, subY * iResolution.y);
 
-    switch (roto.runBitData.segmentAndOffset)
+    switch (roto.runBitData.tag)
     {
         case 44: // Port-Pic Top 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, subY * 0.5f));
@@ -292,6 +259,15 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             break;
         case 49: // Port-Pic Botton 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, (subY * 0.5f) + 0.5f));
+            break;
+        case 141: // First splash
+            pixel = texture(LOGO1Texture, uv);
+            fragCoord.y = 199.0 - fragCoord.y;
+            galaxyRender(fragColor, fragCoord, iTime, iResolution);
+            pixel.xyz += fragColor.xyz;
+            break;
+        case 54:  // Second logo screen
+            pixel = texture(LOGO2Texture, uv);
             break;
         default:
             pixel = vec4(1.0, 0.0, 0.0, 1.0); // vec4(unpackUnorm4x8(roto.argb)).bgra;
@@ -333,9 +309,6 @@ void main() {
             #endif
             case TextPixel:
                 pixel = DrawFontPixel(roto, uv, subUv);    
-                break;
-            case SplashPixel:
-                pixel = DrawSplashPixel(roto, uv, windowSize);
                 break;
             case RunBitPixel:
                 pixel = DrawRunBitPixel(roto, uv, subUv);
