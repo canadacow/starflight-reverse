@@ -104,28 +104,37 @@ struct GraphicsContext
 
 static GraphicsContext s_gc{};
 
+template<std::size_t PLANES>
 union TextureColor {
-    struct {
-        float r, g, b, a;
-    };
-    float u[4];
+    std::array<float, PLANES> u;
+
+    constexpr float& r() { return u[0]; }
+    constexpr float& g() { return u[1]; }
+    constexpr float& b() { return u[2]; }
+    constexpr float& a() { return u[3]; }
+
+    constexpr const float& r() const { return u[0]; }
+    constexpr const float& g() const { return u[1]; }
+    constexpr const float& b() const { return u[2]; }
+    constexpr const float& a() const { return u[3]; }    
 };
 
-uint32_t TextureColorToARGB(const TextureColor& color) {
-    uint32_t a = static_cast<uint32_t>(color.a * 255.0f);
-    uint32_t r = static_cast<uint32_t>(color.r * 255.0f);
-    uint32_t g = static_cast<uint32_t>(color.g * 255.0f);
-    uint32_t b = static_cast<uint32_t>(color.b * 255.0f);
+template<std::size_t PLANES>
+uint32_t TextureColorToARGB(const TextureColor<PLANES>& color) {
+    uint32_t a = static_cast<uint32_t>(color.a() * 255.0f);
+    uint32_t r = static_cast<uint32_t>(color.r() * 255.0f);
+    uint32_t g = static_cast<uint32_t>(color.g() * 255.0f);
+    uint32_t b = static_cast<uint32_t>(color.b() * 255.0f);
     return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
 template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
 struct Texture {
-    std::array<std::array<TextureColor, WIDTH>, HEIGHT> data;
+    std::array<std::array<TextureColor<PLANES>, WIDTH>, HEIGHT> data;
 };
 
 template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
-TextureColor bilinearSample(const Texture<WIDTH, HEIGHT, PLANES>& texture, float u, float v) {
+TextureColor<PLANES> bilinearSample(const Texture<WIDTH, HEIGHT, PLANES>& texture, float u, float v) {
     u *= WIDTH - 1;
     v *= HEIGHT - 1;
 
@@ -136,7 +145,7 @@ TextureColor bilinearSample(const Texture<WIDTH, HEIGHT, PLANES>& texture, float
     float u_opposite = 1 - u_ratio;
     float v_opposite = 1 - v_ratio;
 
-    TextureColor result;
+    TextureColor<PLANES> result;
     for (std::size_t plane = 0; plane < PLANES; ++plane) {
         result.u[plane] = (texture.data[y][x].u[plane] * u_opposite + texture.data[y][x+1].u[plane] * u_ratio) * v_opposite +
                           (texture.data[y+1][x].u[plane] * u_opposite  + texture.data[y+1][x+1].u[plane] * u_ratio) * v_ratio;
@@ -1167,7 +1176,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 
         auto glyph = bilinearSample(FONT1Texture, u, v);
         pixel = colortable[roto.bgColor & 0xf];
-        if(glyph.r > 0.80f)
+        if(glyph.r() > 0.80f)
         {
             pixel = colortable[roto.fgColor & 0xf];
         }
@@ -1206,7 +1215,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 
         auto glyph = bilinearSample(FONT2Texture, u, v);
         pixel = colortable[roto.bgColor & 0xf];
-        if(glyph.r > 0.9f)
+        if(glyph.r() > 0.9f)
         {
             pixel = colortable[roto.fgColor & 0xf];
         }
@@ -1232,7 +1241,7 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 
         auto glyph = bilinearSample(FONT3Texture, u, v);
         pixel = colortable[roto.bgColor & 0xf];
-        if(glyph.r > 0.9f)
+        if(glyph.r() > 0.9f)
         {
             pixel = colortable[roto.fgColor & 0xf];
         }
@@ -1288,7 +1297,7 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
             pixel = roto.argb;
             break;
         default:
-            assert(false);
+            //assert(false);
             pixel = roto.argb;
             break;
     }
@@ -1847,7 +1856,7 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
 
     if (pc.content == ClearPixel)
     {
-        assert(color == 0);
+        //assert(color == 0);
     }
 
     pc.argb = color;

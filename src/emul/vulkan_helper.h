@@ -51,7 +51,7 @@ public:
 
 			std::vector<const char*> supportedValidationLayers;
 			supportedValidationLayers.push_back("VK_LAYER_KHRONOS_validation");
-			supportedValidationLayers.push_back("VK_LAYER_LUNARG_monitor");
+			//supportedValidationLayers.push_back("VK_LAYER_LUNARG_monitor");
 
 			std::vector<const char*> requiredExtensions;
 #ifdef _WIN32

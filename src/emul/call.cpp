@@ -9,6 +9,7 @@
 #include"callstack.h"
 #include"findword.h"
 #include"../disasOV/global.h"
+#include "../util/lodepng.h"
 
 #include <stack>
 #include <assert.h>
@@ -3118,6 +3119,23 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
             rc.blt_h = verticalLines;
 
+            static std::unordered_map<uint16_t, std::vector<uint32_t>> pixImages;
+
+            auto it = pixImages.find(CurrentImageTagForHybridBlit);
+            if(it == pixImages.end())
+            {
+                std::vector<uint32_t> pixImage;
+                pixImage.resize(verticalLines * WBLT);
+                auto result = pixImages.emplace(CurrentImageTagForHybridBlit, std::move(pixImage));
+                it = result.first;
+            }
+
+            uint32_t argb = colortable[color & 0xf] | 0xFF000000;
+            uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
+                            ((argb & 0xFF) << 16) | // Move red to third position
+                            ((argb & 0xFF00)) | // Keep green as is
+                            ((argb & 0xFF0000) >> 16); // Move blue to rightmost
+
             //printf("color=%i xblt=%i yblt=%i wblt=%i 0x%04x:0x%04x 0x%04x temp2=%i\n", color, XBLT, YBLT, WBLT, segment, offset, regsp, temp2);
             xofs = 0;
             int yofs = 0;
@@ -3130,7 +3148,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     rc.blt_x = xofs;
                     rc.blt_y = yofs;
 
-                    if ((i&1) == 0) GraphicsPixel(XBLT+xofs, YBLT-yofs, color, bufseg, rc);
+                    if ((i&1) == 0)
+                    {
+                        GraphicsPixel(XBLT+xofs, YBLT-yofs, color, bufseg, rc);
+
+                        it->second[yofs * WBLT + xofs] = abgr;
+                    }
+                    
                     if ((++xofs) >= WBLT)
                     {
                         xofs = 0;
@@ -3156,9 +3180,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         rc.EGAcolor = 0;
                         rc.argb = 0;
                         GraphicsPixel(xat, yat, 0, bufseg, rc);
+                        it->second[y * WBLT + x] = 0xff000000;
                     }
                 }
             }
+
+            // Store the ARGB image in pixImage into a png file
+            std::string filename = "pix/pix_" + std::to_string(rc.runBitData.tag) + ".png";
+            unsigned error = lodepng::encode(filename, (const unsigned char*)it->second.data(), WBLT, verticalLines, LCT_RGBA);
+            if(error) printf("encoder error %u: %s\n", error, lodepng_error_text(error));
         }
         break;
 
