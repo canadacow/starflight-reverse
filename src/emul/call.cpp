@@ -3148,8 +3148,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     rc.blt_x = xofs;
                     rc.blt_y = yofs;
 
+                    Rotoscope inRs{};
+                    GraphicsPeek(XBLT + xofs, YBLT - yofs, bufseg, &inRs);
                     if ((i&1) == 0)
                     {
+                        rc.bgColor = inRs.EGAcolor;
+                        rc.fgColor = color;
                         GraphicsPixel(XBLT+xofs, YBLT-yofs, color, bufseg, rc);
 
                         it->second[yofs * WBLT + xofs] = abgr;
@@ -3179,6 +3183,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         rc.blt_y = y;
                         rc.EGAcolor = 0;
                         rc.argb = 0;
+                        rc.bgColor = rc.EGAcolor;
+                        rc.fgColor = color;
                         GraphicsPixel(xat, yat, 0, bufseg, rc);
                         it->second[y * WBLT + x] = 0xff000000;
                     }

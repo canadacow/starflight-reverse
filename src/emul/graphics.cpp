@@ -92,6 +92,8 @@ struct GraphicsContext
 
     avk::image_sampler PORTPIC;
 
+    avk::image_sampler RACEDOSATLAS;
+
     avk::image_sampler textImage;
 
     avk::compute_pipeline rotoscopePipeline;
@@ -164,9 +166,21 @@ void fillTexture(Texture<WIDTH, HEIGHT, PLANES>& texture, const std::vector<uint
     }
 }
 
+template<std::size_t WIDTH, std::size_t HEIGHT, std::size_t PLANES>
+void fillTextureLiteral(Texture<WIDTH, HEIGHT, PLANES>& texture, const std::vector<float>& image) {
+    for (int i = 0; i < WIDTH; ++i) {
+        for (int j = 0; j < HEIGHT; ++j) {
+            for (int k = 0; k < PLANES; ++k) {
+                texture.data[j][i].u[k] = image[(j * WIDTH + i) * PLANES + k];
+            }
+        }
+    }
+}
+
 Texture<448, 160, 1> FONT1Texture;
 Texture<840, 180, 1> FONT2Texture;
 Texture<840, 220, 1> FONT3Texture;
+Texture<2160, 392, 1> RaceDosPicTexture;
 
 enum SFGraphicsMode
 {
@@ -854,6 +868,32 @@ void LoadSplashImages()
     }
 }
 
+void LoadSDFImages()
+{
+    std::ifstream file("atlas.raw", std::ios::binary);
+    if (!file)
+    {
+        printf("Error opening atlas.raw\n");
+        exit(-1);
+    }
+
+    std::vector<float> buffer(RaceDosPicTexture.data.size() * RaceDosPicTexture.data[0].size());
+    file.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(float));
+    if (!file)
+    {
+        printf("Error reading atlas.raw\n");
+        exit(-1);
+    }
+
+    fillTextureLiteral(RaceDosPicTexture, buffer);
+
+    auto image = imageFromData(buffer.data(), RaceDosPicTexture.data[0].size(), RaceDosPicTexture.data.size(), 4, vk::Format::eR32Sfloat, avk::image_usage::general_image);
+    s_gc.RACEDOSATLAS = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(image), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );
+}
+
 void LoadFonts()
 {
     std::vector<uint8_t> image;
@@ -1057,7 +1097,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 5, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 8, s_gc.uniformBuffers[0])
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 9, s_gc.uniformBuffers[0])
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1071,6 +1112,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
     LoadFonts();
     LoadSplashImages();
+    LoadSDFImages();
 
     s_gc.textImage = s_gc.vc.create_image_sampler(
         s_gc.vc.create_image_view(
@@ -1272,9 +1314,23 @@ uint32_t DrawFontPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     return pixel;
 }
 
+uint32_t DrawSDFSilhouette(const Rotoscope& roto, vec2<float> subUv) {
+    auto sdf = bilinearSample(RaceDosPicTexture, subUv.x, subUv.y);
+
+    if (sdf.r() < 0.5)
+    {
+        return colortable[roto.bgColor & 0xf];
+    }
+    else
+    {
+        return colortable[roto.fgColor & 0xf];
+    }
+}
+
 uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 {
     uint32_t pixel = 0;
+    vec2<float> sub{};
 
     float subX = ((float)roto.blt_x + subUv.x) / (float)roto.blt_w;
     float subY = ((float)roto.blt_y + subUv.y) / (float)roto.blt_h;
@@ -1293,8 +1349,25 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
         case 54:
             pixel = TextureColorToARGB(bilinearSample(LOGO2Texture, uv.u, uv.v));
             break;
-        case 125: // Man
-            pixel = roto.argb;
+        case 125:
+            sub = vec2<float>(subX / 5.0f, subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 126:
+            sub = vec2<float>(subX / 5.0f + (1.0f / 5.0f), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 127:
+            sub = vec2<float>(subX / 5.0f + (2.0f / 5.0f), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 128:
+            sub = vec2<float>(subX / 5.0f + (3.0f / 5.0f), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 129:
+            sub = vec2<float>(subX / 5.0f + (4.0f / 5.0f), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
             break;
         default:
             //assert(false);
@@ -1475,7 +1548,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 5, s_gc.LOGO1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 8, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
+                avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 9, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 

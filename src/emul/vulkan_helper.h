@@ -27,6 +27,9 @@ struct vec2 {
             T v;
         };
     };
+
+	vec2() : x(0), y(0) {}
+	vec2(T _x, T _y) : x(_x), y(_y) {}
 };
 
 class VulkanContext : public avk::root

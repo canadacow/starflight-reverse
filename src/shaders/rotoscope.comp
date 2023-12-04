@@ -70,8 +70,9 @@ layout(binding = 4) uniform sampler2D FONT3Texture;
 layout(binding = 5) uniform sampler2D LOGO1Texture;
 layout(binding = 6) uniform sampler2D LOGO2Texture;
 layout(binding = 7) uniform sampler2D PORTPICTexture;
+layout(binding = 8) uniform sampler2D RACEDOSATLASTexture;
 
-layout(binding = 8) uniform UniformBlock {
+layout(binding = 9) uniform UniformBlock {
     int GRAPHICS_MODE_WIDTH;
     int GRAPHICS_MODE_HEIGHT;
     int WINDOW_WIDTH;
@@ -236,10 +237,25 @@ bool isGreen(vec3 rgb) {
     return hue > 0.32 && hue < 0.34;
 }
 
+vec4 DrawSDFSilhouette(const Rotoscope roto, vec2 subUv) {
+    vec4 sdf = texture(RACEDOSATLASTexture, subUv);
+
+    if(sdf.r < 0.5)
+    {
+        return colortable[roto.bgColor & 0xf];
+    }
+    else
+    {
+        return colortable[roto.fgColor & 0xf];
+    }
+}
+
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
     vec4 fragColor;
+    vec2 sub;
+
     float iTime = uniforms.iTime;
 
     float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
@@ -268,6 +284,26 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             break;
         case 54:  // Second logo screen
             pixel = texture(LOGO2Texture, uv);
+            break;
+        case 125:
+            sub = vec2(subX / 5.0, subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 126:
+            sub = vec2(subX / 5.0 + (1.0 / 5.0), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 127:
+            sub = vec2(subX / 5.0 + (2.0 / 5.0), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 128:
+            sub = vec2(subX / 5.0 + (3.0 / 5.0), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
+            break;
+        case 129:
+            sub = vec2(subX / 5.0 + (4.0 / 5.0), subY);
+            pixel = DrawSDFSilhouette(roto, sub);
             break;
         default:
             pixel = vec4(1.0, 0.0, 0.0, 1.0); // vec4(unpackUnorm4x8(roto.argb)).bgra;
