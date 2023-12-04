@@ -22,6 +22,9 @@
 #include <array>
 #include <utility>
 
+#include <zstd.h>
+#include <xxhash.h>
+
 #include "vulkan_helper.h"
 
 #if defined(PLANES)
@@ -870,18 +873,35 @@ void LoadSplashImages()
 
 void LoadSDFImages()
 {
-    std::ifstream file("atlas.raw", std::ios::binary);
+    std::ifstream file("atlas.raw.zst", std::ios::binary | std::ios::ate);
     if (!file)
     {
-        printf("Error opening atlas.raw\n");
+        printf("Error opening atlas.raw.zst\n");
         exit(-1);
     }
 
-    std::vector<float> buffer(RaceDosPicTexture.data.size() * RaceDosPicTexture.data[0].size());
-    file.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(float));
-    if (!file)
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> compressedData(size);
+    if (!file.read(compressedData.data(), size))
     {
-        printf("Error reading atlas.raw\n");
+        printf("Error reading atlas.raw.zst\n");
+        exit(-1);
+    }
+
+    unsigned long long const rSize = ZSTD_getFrameContentSize(compressedData.data(), size);
+    if (rSize == ZSTD_CONTENTSIZE_ERROR || rSize == ZSTD_CONTENTSIZE_UNKNOWN)
+    {
+        printf("Error determining decompressed size\n");
+        exit(-1);
+    }
+
+    std::vector<float> buffer(rSize / sizeof(float));
+    size_t const dSize = ZSTD_decompress(buffer.data(), rSize, compressedData.data(), size);
+    if (ZSTD_isError(dSize))
+    {
+        printf("Error decompressing atlas.raw.zst: %s\n", ZSTD_getErrorName(dSize));
         exit(-1);
     }
 
