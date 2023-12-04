@@ -25,6 +25,8 @@
 #include <zstd.h>
 #include <xxhash.h>
 
+#include "../cpu/cpu.h"
+
 #include "vulkan_helper.h"
 
 #if defined(PLANES)
@@ -1440,9 +1442,11 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                     case RunBitPixel:
                         pixel = DrawRunBit(roto, uv, subUv);
                         break;
+                    case NavigationalPixel:
+                        break;
                     default:
                         //pixel = 0xffff0000;
-                        //pixel = colortable[(int)roto.content];
+                        pixel = colortable[(int)roto.content];
                         break;
                 }
             }
@@ -1591,11 +1595,11 @@ void GraphicsUpdate()
     static std::vector<RotoscopeShader> shaderBackBuffer{};
     static UniformBlock uniform{};
 
-    if(fullRes.size() == 0)
+    if (fullRes.size() == 0)
     {
         fullRes.resize(WINDOW_WIDTH * WINDOW_HEIGHT);
-        backbuffer.resize(GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT);
-        shaderBackBuffer.resize(GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT);
+        backbuffer.resize(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT);
+        shaderBackBuffer.resize(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT);
 
         uniform.graphics_mode_width = GRAPHICS_MODE_WIDTH;
         uniform.graphics_mode_height = GRAPHICS_MODE_HEIGHT;
@@ -1607,23 +1611,30 @@ void GraphicsUpdate()
     uniform.useRotoscope = s_useRotoscope ? 1 : 0;
     uniform.iTime = std::chrono::duration<float>(std::chrono::system_clock::now() - s_gc.epoch).count();
 
+    bool hasNavigation = false;
+
     // Choose the correct texture based on the current mode
     if (graphicsMode == SFGraphicsMode::Graphics)
     {
-    #if 0
+#if 0
         currentTexture = graphicsTexture;
         stride = GRAPHICS_MODE_WIDTH;
         data = graphicsPixels.data() + graphicsDisplayOffset;
-    #else
+#else
         {
             std::lock_guard<std::mutex> lg(rotoscopePixelMutex);
 
-            for(int i = 0; i < GRAPHICS_MODE_WIDTH *GRAPHICS_MODE_HEIGHT; ++i)
+            for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i)
             {
 #if defined(USE_CPU_RASTERIZATION)
                 backbuffer[i] = rotoscopePixels[i];
 #else
                 shaderBackBuffer[i] = rotoscopePixels[i];
+
+                if (rotoscopePixels[i].content == NavigationalPixel)
+                {
+                    hasNavigation = true;
+                }
 #endif
             }
         }
@@ -1635,9 +1646,9 @@ void GraphicsUpdate()
         unsigned width = GRAPHICS_MODE_WIDTH, height = GRAPHICS_MODE_HEIGHT;
         std::vector<unsigned char> image;
         image.resize(width * height * 4);
-        for(unsigned y = 0; y < height; y++)
+        for (unsigned y = 0; y < height; y++)
         {
-            for(unsigned x = 0; x < width; x++)
+            for (unsigned x = 0; x < width; x++)
             {
                 uint32_t pixel = graphicsPixels[y * width + x];
                 image[4 * width * y + 4 * x + 0] = (pixel >> 16) & 0xFF; // R
@@ -1647,10 +1658,10 @@ void GraphicsUpdate()
             }
         }
         unsigned error = lodepng::encode(filename, image, width, height);
-        if(error)
+        if (error)
         {
             printf("encoder error %u: %s\n", error, lodepng_error_text(error));
-        }     
+        }
 #endif    
 
 #if defined(USE_CPU_RASTERIZATION)
@@ -1660,7 +1671,7 @@ void GraphicsUpdate()
         stride = WINDOW_WIDTH;
         data = fullRes.data();
         dataSize = fullRes.size() * sizeof(uint32_t);
-    #endif
+#endif
     }
     else if (graphicsMode == SFGraphicsMode::Text)
     {
@@ -1690,6 +1701,17 @@ void GraphicsUpdate()
 #else
         commands = GPURotoscope(inFlightIndex, uniform, shaderBackBuffer);
 #endif
+    }
+
+    if (hasNavigation)
+    {
+        int16_t worldCoordsX = (int16_t)Read16(0x5dae);
+        int16_t worldCoordsY = (int16_t)Read16(0x5db9);
+        int16_t heading = (int16_t)Read16(0x5dc7);
+
+        uniform.worldX = (float)worldCoordsX / 1000.0f;
+        uniform.worldY = (float)worldCoordsY / -1000.0f;
+        uniform.heading = (float)heading;    
     }
 
     s_gc.vc.record(std::move(commands))

@@ -33,6 +33,10 @@ struct UniformBlock {
     uint32_t useRotoscope;
     uint32_t useEGA;
     float iTime; // Time in seconds from an arbitrary point in time
+    float worldX;
+    float worldY;
+    float heading;
+    uint32_t context;
 };
 
 // Equivalent of TextData struct

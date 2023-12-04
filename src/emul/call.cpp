@@ -2669,6 +2669,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 for (int j = 0; j < 72; ++j) {
                     Rotoscope rs;
                     auto color = GraphicsPeek(sourceX + j, sourceY, sourceSegment, &rs);
+
+                    rs.content = NavigationalPixel;
+                    rs.blt_x = j;
+                    rs.blt_y = loopCounter - 1;
+                    rs.blt_w = 72;
+                    rs.blt_h = 120;
                     GraphicsPixel(destinationX + j, destinationY, color, destinationSegment, rs);
                 }
 
