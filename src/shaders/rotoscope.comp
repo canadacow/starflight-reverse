@@ -72,8 +72,9 @@ layout(binding = 5) uniform sampler2D LOGO1Texture;
 layout(binding = 6) uniform sampler2D LOGO2Texture;
 layout(binding = 7) uniform sampler2D PORTPICTexture;
 layout(binding = 8) uniform sampler2D RACEDOSATLASTexture;
+layout(binding = 9) uniform sampler2D NavigationTexture;
 
-layout(binding = 9) uniform UniformBlock {
+layout(binding = 10) uniform UniformBlock {
     int GRAPHICS_MODE_WIDTH;
     int GRAPHICS_MODE_HEIGHT;
     int WINDOW_WIDTH;
@@ -271,7 +272,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
     vec2 worldCoords = vec2(uniforms.worldX, uniforms.worldY);
 
-    hyperspaceRender(pixel, fragCoord, iTime, iResolution, worldCoords);
+    hyperspaceRender(pixel, fragCoord, iTime, iResolution, worldCoords + vec2(1000.0, 1000.0));
 
     return pixel;
 }

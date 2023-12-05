@@ -88,6 +88,7 @@ struct GraphicsContext
     std::vector<avk::buffer> rotoscopeBuffers;
     std::vector<avk::buffer> uniformBuffers;
     std::vector<avk::command_buffer> commandBuffers;
+    std::vector<avk::image_sampler> navigationImages;
 
     avk::image_sampler LOGO1;
     avk::image_sampler LOGO2;
@@ -1067,6 +1068,9 @@ static int GraphicsInitThread(void *ptr)
 
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
+    // Navigation window is 72 x 120 pixels.
+    uint32_t navWidth = (uint32_t)ceilf((72 / 160) * (float)WINDOW_WIDTH);
+    uint32_t navHeight = (uint32_t)ceilf((120 / 200) * (float)WINDOW_HEIGHT);
 
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
@@ -1094,6 +1098,12 @@ static int GraphicsInitThread(void *ptr)
         s_gc.commandBuffers.push_back(
             commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
         );
+
+        s_gc.navigationImages.push_back(s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
+            ),
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)));
     }
 
 /*
@@ -1120,7 +1130,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 9, s_gc.uniformBuffers[0])
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.uniformBuffers[0])
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1573,7 +1584,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 9, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
+                avk::descriptor_binding(0, 9, s_gc.navigationImages[inFlightIndex]->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 10, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
