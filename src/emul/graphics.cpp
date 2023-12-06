@@ -1069,8 +1069,8 @@ static int GraphicsInitThread(void *ptr)
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     // Navigation window is 72 x 120 pixels.
-    uint32_t navWidth = (uint32_t)ceilf((72 / 160) * (float)WINDOW_WIDTH);
-    uint32_t navHeight = (uint32_t)ceilf((120 / 200) * (float)WINDOW_HEIGHT);
+    uint32_t navWidth = (uint32_t)ceilf((72.0f / 160.0f) * (float)WINDOW_WIDTH);
+    uint32_t navHeight = (uint32_t)ceilf((120.0f / 200.0f) * (float)WINDOW_HEIGHT);
 
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {

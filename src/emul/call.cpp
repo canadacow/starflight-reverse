@@ -1051,6 +1051,67 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     printf("Read file at %04x:%04x\n", ds, fileNum);
                 }
 
+                if (nextInstr == 0x9cfc) // .LOCAL-ICONS basically the screen update function
+                {
+                    uint16_t localCount = Read16(0x59f5); // ILOCAL?
+                    printf("localCount %d\n", localCount);
+
+                    // Structure to represent an icon
+                    typedef struct {
+                        int16_t x;
+                        int16_t y;
+                        int16_t screenX;
+                        int16_t screenY;
+                        uint8_t id;
+                        uint8_t clr;
+                        uint16_t lo_iaddr;
+                        uint8_t hi_iaddr;
+                    } Icon;
+
+                    auto getIcon = [](uint16_t index) -> Icon {
+                        uint16_t IXSEG = Read16(0x59be);
+                        uint16_t IYSEG = Read16(0x59c2);
+                        uint16_t IDSEG = Read16(0x59c6);
+                        uint16_t ICSEG = Read16(0x59ca);
+                        uint16_t ILSEG = Read16(0x59ce);
+                        uint16_t IHSEG = Read16(0x59da);
+
+                        Icon icon;
+                        uint16_t IINDEX = index;
+                        icon.x = (int16_t)Read16Long(IXSEG, IINDEX * 2);
+                        icon.y = (int16_t)Read16Long(IYSEG, IINDEX * 2);
+                        icon.id = Read8Long(IDSEG, IINDEX);
+                        icon.clr = Read8Long(ICSEG, IINDEX);
+                        icon.lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
+                        icon.hi_iaddr = Read8Long(IHSEG, IINDEX);
+                        return icon;
+                    };
+
+                    for (uint16_t i = 0; i < localCount; ++i)
+                    {
+                        uint16_t index = i;
+
+                        Icon icon = getIcon(index);
+
+                        Push(icon.x);
+                        Push(icon.y);
+                        ASMCall(0x9970); // WLD>SCR
+                        icon.screenY = Pop();
+                        icon.screenX = Pop();
+
+                        /*
+                        CASE.ICONCASES(icon - id--)
+                            SYS - ICON   IS.STARSYS
+                            NULL - ICON  IS NOP
+                            FLUX - ICON  IS.FLUX - ICON
+                            INVIS - ICON IS NOP
+                            OTHERS.CIRCLEICON  \ nebula, stars, planets)
+                        */
+
+                        printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
+                    }
+                }
+
                 if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
@@ -2724,6 +2785,56 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x9d18: // ?ILOCUS
         {
             Run8086(cs, addr, ds, cs, &regsp);
+#if 0
+            uint16_t locusCount = Read16(regsp);
+
+            // Structure to represent an icon
+            typedef struct {
+                int16_t x;
+                int16_t y;
+                int16_t screenX;
+                int16_t screenY;
+                uint8_t id;
+                uint8_t clr;
+                uint16_t lo_iaddr;
+                uint8_t hi_iaddr;
+            } Icon;
+
+            auto getIcon = [](uint16_t index) -> Icon {
+                uint16_t IXSEG = Read16(0x59be);
+                uint16_t IYSEG = Read16(0x59c2);
+                uint16_t IDSEG = Read16(0x59c6);
+                uint16_t ICSEG = Read16(0x59ca);
+                uint16_t ILSEG = Read16(0x59ce);
+                uint16_t IHSEG = Read16(0x59da);
+
+
+                Icon icon;
+                uint16_t IINDEX = index;
+                icon.x = (int16_t)Read16Long(IXSEG, IINDEX * 2);
+                icon.y = (int16_t)Read16Long(IYSEG, IINDEX * 2);
+                icon.id = Read8Long(IDSEG, IINDEX);
+                icon.clr = Read8Long(ICSEG, IINDEX);
+                icon.lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
+                icon.hi_iaddr = Read8Long(IHSEG, IINDEX);
+                return icon;
+            };
+
+            for (uint16_t i = 0; i < locusCount; ++i)
+            {
+                uint16_t index = Read16(regsp + 2 + (i * 2));
+
+                Icon icon = getIcon(index);
+
+                Push(icon.x);
+                Push(icon.y);
+                ASMCall(0x9970); // WLD>SCR
+                icon.screenY = Pop();
+                icon.screenX = Pop();
+
+                printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, locusCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
+            }
+#endif
         }
         break;
         case 0x9e14: // XCHGICON
