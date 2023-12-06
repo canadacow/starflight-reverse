@@ -6,6 +6,22 @@
 
 #include <array>
 #include <utility>
+#include <vector>
+
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t screenX;
+    int16_t screenY;
+    int16_t bltX;
+    int16_t bltY;
+    uint8_t id;
+    uint8_t clr;
+    uint16_t lo_iaddr;
+    uint8_t hi_iaddr;
+} Icon;
+
+extern std::vector<Icon> GetLocalIconList();
 
 enum PixelContents
 {

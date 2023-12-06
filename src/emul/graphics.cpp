@@ -33,7 +33,7 @@
     #undef PLANES
 #endif
 
-//#define USE_CPU_RASTERIZATION 1
+#define USE_CPU_RASTERIZATION 1
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -1360,6 +1360,98 @@ uint32_t DrawSDFSilhouette(const Rotoscope& roto, vec2<float> subUv) {
     }
 }
 
+float calculateDistance(vec2<float> point1, vec2<float> point2) {
+    float xDist = point2.x - point1.x;
+    float yDist = 0.60f * (point2.y - point1.y);
+    return sqrt((xDist * xDist) + (yDist * yDist));
+}
+
+float calculateBoundingBoxDistance(vec2<float> point1, vec2<float> point2) {
+    float xDist = abs(point2.x - point1.x);
+    float yDist = abs(point2.y - point1.y);
+    return max(xDist, yDist);
+}
+
+uint32_t DrawNavigationPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv, const std::vector<Icon>& icons)
+{
+    uint32_t pixel = 0;
+    vec2<float> sub{};
+
+    float subX = ((float)roto.blt_x + subUv.x) / (float)roto.blt_w;
+    float subY = ((float)roto.blt_y + subUv.y) / (float)roto.blt_h;
+
+    /* 
+    50     C= NULL-ICON    ( 0 radius circle icon)
+    253    C= SYS-ICON     ( star icon)                             
+    254    C= INVIS-ICON   ( invisible icon - may collide)          
+    255    C= FLUX-ICON    ( flux icon identifier)   
+    */
+
+/*
+ @IX @IY ?INVIS               \ in the vis area?                
+  @ID 51 91 WITHIN OR           \ or a filled circle            
+  IF @ID NULL-ICON <                                            
+    IF .8X8ICON ELSE @ID .ICONCASES THEN                        
+  THEN ;                                                        
+  */
+
+    auto pixelPos = vec2<float>((float)roto.blt_x + subUv.x, (float)roto.blt_y + subUv.y);
+
+    for(auto icon : icons)
+    {
+        auto iconPos = vec2<float>((float)icon.screenX, (float)icon.screenY);
+        auto bltPos = vec2<float>((float)icon.bltX + 3.0f, (float)icon.bltY + 3.0f);
+
+        if(icon.id >= 51 && icon.id <= 91)
+        {
+            float basesize = 29.0f * (float)(icon.id - 50);
+
+            if(calculateDistance(iconPos, pixelPos) < basesize)
+            {
+                return colortable[icon.clr & 0xf];
+            }
+        }
+        else if(icon.id < 50)
+        {
+            // Draw 8x8 icon. #29 is our spacecraft
+            if(calculateBoundingBoxDistance(bltPos, pixelPos) < 4.0f)
+            {
+                return colortable[icon.clr & 0xf];
+            }
+        }
+        else
+        {
+            switch(icon.id)
+            {
+                case 253: // Star icon
+                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY)
+                    {
+                        return colortable[icon.clr & 0xf];
+                    }
+                    break;
+                case 254: // Invisible icon (Encounter hit testing?)
+                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY)
+                    {
+                        return colortable[icon.clr & 0xf];
+                    }
+                    break;
+                case 255: // Flux icon
+                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY)
+                    {
+                        return colortable[icon.clr & 0xf];
+                    }
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        }
+
+    }
+    
+    return 0x0;
+}
+
 uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
 {
     uint32_t pixel = 0;
@@ -1416,6 +1508,8 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
     uint32_t index = 0;
     const float polygonWidth = (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH;
 
+    std::vector<Icon> icons = GetLocalIconList();
+
     for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
     {
         for(uint32_t x = 0; x < WINDOW_WIDTH; ++x)
@@ -1454,6 +1548,7 @@ void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>
                         pixel = DrawRunBit(roto, uv, subUv);
                         break;
                     case NavigationalPixel:
+                        pixel = DrawNavigationPixel(roto, uv, subUv, icons);
                         break;
                     default:
                         //pixel = 0xffff0000;

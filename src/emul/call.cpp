@@ -924,6 +924,15 @@ uint8_t frequencyLookupTable[] = {
 extern unsigned short regbx;
 uint16_t nparmsStackSi = 0;
 
+static std::mutex s_localIconListMutex;
+std::vector<Icon> s_localIconList;
+
+std::vector<Icon> GetLocalIconList()
+{
+    std::lock_guard<std::mutex> lg(s_localIconListMutex);
+    return s_localIconList;
+}
+
 void ForthCall(uint16_t word)
 {
     Call(0x224c, word - 0x2);
@@ -1056,18 +1065,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint16_t localCount = Read16(0x59f5); // ILOCAL?
                     printf("localCount %d\n", localCount);
 
-                    // Structure to represent an icon
-                    typedef struct {
-                        int16_t x;
-                        int16_t y;
-                        int16_t screenX;
-                        int16_t screenY;
-                        uint8_t id;
-                        uint8_t clr;
-                        uint16_t lo_iaddr;
-                        uint8_t hi_iaddr;
-                    } Icon;
-
                     auto getIcon = [](uint16_t index) -> Icon {
                         uint16_t IXSEG = Read16(0x59be);
                         uint16_t IYSEG = Read16(0x59c2);
@@ -1087,6 +1084,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         return icon;
                     };
 
+                    std::lock_guard<std::mutex> lg(s_localIconListMutex);
+                    s_localIconList.clear();
+
                     for (uint16_t i = 0; i < localCount; ++i)
                     {
                         uint16_t index = i;
@@ -1099,16 +1099,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         icon.screenY = Pop();
                         icon.screenX = Pop();
 
-                        /*
-                        CASE.ICONCASES(icon - id--)
-                            SYS - ICON   IS.STARSYS
-                            NULL - ICON  IS NOP
-                            FLUX - ICON  IS.FLUX - ICON
-                            INVIS - ICON IS NOP
-                            OTHERS.CIRCLEICON  \ nebula, stars, planets)
-                        */
+                        Push(icon.screenX);
+                        Push(icon.screenY);
+                        ASMCall(0x99b4); // SCR>BLT
+                        icon.bltY = 120 - Pop();
+                        icon.bltX = Pop();
 
-                        printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
+                        icon.screenY = 120 - icon.screenY;
+
+                        //printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
+
+                        s_localIconList.push_back(icon);
                     }
                 }
 
