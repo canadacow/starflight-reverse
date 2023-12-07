@@ -1372,6 +1372,12 @@ float calculateBoundingBoxDistance(vec2<float> point1, vec2<float> point2) {
     return max(xDist, yDist);
 }
 
+float calculateBoundingBoxDistanceIcon(vec2<float> point1, vec2<float> point2) {
+    float xDist = abs(point2.x - point1.x);
+    float yDist = 0.60f * abs(point2.y - point1.y);
+    return max(xDist, yDist);
+}
+
 uint32_t DrawNavigationPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv, const std::vector<Icon>& icons)
 {
     uint32_t pixel = 0;
@@ -1421,10 +1427,35 @@ uint32_t DrawNavigationPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> 
         }
         else
         {
+            float distance = 1.0;
+
             switch(icon.id)
             {
                 case 253: // Star icon
-                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY)
+                    /*
+                    CASE SYSCASES ( color -- *bltseg-pfa )                          
+                    RED    IS SSYSEG   \ small starsystem blt                     
+                    ORANGE IS SSYSEG   \ medium starsystem blt                    
+                    WHITE  IS MSYSEG   \ medium starsystem blt                    
+                    YELLOW IS MSYSEG   \ medium starsystem blt                    
+                    OTHERS LSYSEG        \ large starsystem blt  
+                    */
+                    
+                    switch(icon.clr & 0xf)
+                    {
+                        case 0x4: // RED
+                        case 0x6: // ORANGE
+                            distance = 7.0f;
+                            break;
+                        case 0xE: // YELLOW
+                        case 0xF: // WHITE
+                            distance = 10.0f;
+                            break;
+                        default: // OTHERS
+                            distance = 14.0f;
+                            break;
+                    }
+                    if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance)
                     {
                         return colortable[icon.clr & 0xf];
                     }
