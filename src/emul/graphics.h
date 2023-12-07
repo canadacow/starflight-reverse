@@ -8,21 +8,6 @@
 #include <utility>
 #include <vector>
 
-typedef struct {
-    int16_t x;
-    int16_t y;
-    int16_t screenX;
-    int16_t screenY;
-    int16_t bltX;
-    int16_t bltY;
-    uint8_t id;
-    uint8_t clr;
-    uint16_t lo_iaddr;
-    uint8_t hi_iaddr;
-} Icon;
-
-extern std::vector<Icon> GetLocalIconList();
-
 enum PixelContents
 {
     ClearPixel = 0,
@@ -53,6 +38,44 @@ struct UniformBlock {
     float worldY;
     float heading;
     uint32_t context;
+};
+
+struct Icon {
+    uint32_t active;
+    int32_t x;
+    int32_t y;
+    int32_t screenX;
+    int32_t screenY;
+    int32_t bltX;
+    int32_t bltY;
+    uint32_t id;
+    uint32_t clr;
+    uint32_t lo_iaddr;
+    uint32_t hi_iaddr;
+};
+
+extern std::vector<Icon> GetLocalIconList();
+
+struct IconUniform {
+    Icon icons[32];
+
+    IconUniform(std::vector<Icon> _icons)
+    {
+        assert(_icons.size() < sizeof(icons));
+
+        for(int i = 0; i < sizeof(icons); ++i)
+        {
+            if(i < _icons.size())
+            {
+                icons[i] = _icons.at(i);
+                icons[i].active = 1;
+            }
+            else
+            {
+                icons[i].active = 0;
+            }
+        }
+    }
 };
 
 // Equivalent of TextData struct

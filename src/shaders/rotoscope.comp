@@ -22,6 +22,20 @@ layout(local_size_x = 32, local_size_y = 32) in;
 #define TilePixel 9
 #define RunBitPixel 10
 
+struct Icon {
+    uint isActive;
+    int x;
+    int y;
+    int screenX;
+    int screenY;
+    int bltX;
+    int bltY;
+    uint id;
+    uint clr;
+    uint lo_iaddr;
+    uint hi_iaddr;
+};
+
 // Equivalent of TextData struct
 struct TextData {
     uint character;
@@ -87,6 +101,10 @@ layout(binding = 10) uniform UniformBlock {
     float heading;
     uint context;
 } uniforms;
+
+layout(binding = 11) uniform IconBlock {
+    Icon icons[32];
+};
 
 const vec4 colortable[16] = 
 {

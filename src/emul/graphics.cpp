@@ -84,11 +84,16 @@ struct GraphicsContext
     VulkanContext vc;
     avk::queue* mQueue;
 
-    std::vector<avk::buffer> frameStagingBuffers;
-    std::vector<avk::buffer> rotoscopeBuffers;
-    std::vector<avk::buffer> uniformBuffers;
-    std::vector<avk::command_buffer> commandBuffers;
-    std::vector<avk::image_sampler> navigationImages;
+    struct BufferData {
+        avk::buffer frameStaging;
+        avk::buffer rotoscope;
+        avk::buffer uniform;
+        avk::buffer iconUniform;
+        avk::command_buffer command;
+        avk::image_sampler navigation;
+    };
+    
+    std::vector<BufferData> buffers;
 
     avk::image_sampler LOGO1;
     avk::image_sampler LOGO2;
@@ -1074,36 +1079,36 @@ static int GraphicsInitThread(void *ptr)
 
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
-        s_gc.frameStagingBuffers.push_back(
+        GraphicsContext::BufferData bd{};
+
+        bd.frameStaging = 
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferSrc,
-                avk::generic_buffer_meta::create_from_size(WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint32_t)))
-        );
+                avk::generic_buffer_meta::create_from_size(WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint32_t)));
 
-        s_gc.rotoscopeBuffers.push_back(
+        bd.rotoscope = 
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-                avk::storage_buffer_meta::create_from_size(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * sizeof(RotoscopeShader)))
-        );
+                avk::storage_buffer_meta::create_from_size(GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT * sizeof(RotoscopeShader)));
 
-        s_gc.uniformBuffers.push_back(
+        bd.uniform = 
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(UniformBlock)))
-        );
+                avk::uniform_buffer_meta::create_from_size(sizeof(UniformBlock)));
 
-        s_gc.commandBuffers.push_back(
-            commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-        );
+        bd.command = 
+            commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 
-        s_gc.navigationImages.push_back(s_gc.vc.create_image_sampler(
+        bd.navigation = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
                 s_gc.vc.create_image(navWidth, navHeight, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
             ),
-        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)));
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
+
+        s_gc.buffers.push_back(std::move(bd));
     }
 
 /*
@@ -1122,7 +1127,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     s_gc.rotoscopePipeline = s_gc.vc.create_compute_pipeline_for(
         "rotoscope.comp",
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.rotoscopeBuffers[0]),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 4, 1u),
@@ -1131,14 +1136,14 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.uniformBuffers[0])
+        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.buffers[0].uniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
         "text.comp",
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 1, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 2, s_gc.uniformBuffers[0])
+        avk::descriptor_binding<avk::buffer>(0, 2, s_gc.buffers[0].uniform)
     );
 
     s_gc.descriptorCache = s_gc.vc.create_descriptor_cache();
@@ -1639,9 +1644,9 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
         avk::sync::image_memory_barrier(s_gc.textImage->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }),
 
-        s_gc.uniformBuffers[inFlightIndex]->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+        s_gc.buffers[inFlightIndex].uniform->fill(&uniform, 0, 0, sizeof(UniformBlock)),
 
-        avk::sync::buffer_memory_barrier(s_gc.uniformBuffers[inFlightIndex].as_reference(),
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].uniform.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
         ),
@@ -1650,7 +1655,7 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
         avk::command::bind_descriptors(s_gc.textPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
                 avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.textImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 2, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
+                avk::descriptor_binding(0, 2, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
@@ -1662,9 +1667,9 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
 std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFlightIndex, const void* data, uint64_t dataSize)
 {
     return {
-        s_gc.frameStagingBuffers[inFlightIndex]->fill(data, 0, 0, dataSize),
+        s_gc.buffers[inFlightIndex].frameStaging->fill(data, 0, 0, dataSize),
 
-        avk::sync::buffer_memory_barrier(s_gc.frameStagingBuffers[inFlightIndex].as_reference(),
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].frameStaging.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
             ),
@@ -1672,7 +1677,7 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::undefined, avk::layout::transfer_dst}),
 
-        avk::copy_buffer_to_image(s_gc.frameStagingBuffers[inFlightIndex], s_gc.vc.current_backbuffer()->image_at(0), avk::layout::transfer_dst),
+        avk::copy_buffer_to_image(s_gc.buffers[inFlightIndex].frameStaging, s_gc.vc.current_backbuffer()->image_at(0), avk::layout::transfer_dst),
 
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::transfer_dst, avk::layout::present_src})
@@ -1685,16 +1690,16 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
         avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }),
 
-        s_gc.rotoscopeBuffers[inFlightIndex]->fill(shaderBackBuffer.data(), 0, 0, shaderBackBuffer.size() * sizeof(RotoscopeShader)),
+        s_gc.buffers[inFlightIndex].rotoscope->fill(shaderBackBuffer.data(), 0, 0, shaderBackBuffer.size() * sizeof(RotoscopeShader)),
 
-        avk::sync::buffer_memory_barrier(s_gc.rotoscopeBuffers[inFlightIndex].as_reference(),
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].rotoscope.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
         ),
 
-        s_gc.uniformBuffers[inFlightIndex]->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+        s_gc.buffers[inFlightIndex].rotoscope->fill(&uniform, 0, 0, sizeof(UniformBlock)),
 
-        avk::sync::buffer_memory_barrier(s_gc.uniformBuffers[inFlightIndex].as_reference(),
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].rotoscope.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
         ),
@@ -1702,7 +1707,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()),
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
                 avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
-                avk::descriptor_binding(0, 1, s_gc.rotoscopeBuffers[inFlightIndex]->as_storage_buffer()),
+                avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
                 avk::descriptor_binding(0, 2, s_gc.FONT1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 3, s_gc.FONT2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 4, s_gc.FONT3->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
@@ -1710,8 +1715,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 9, s_gc.navigationImages[inFlightIndex]->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 10, s_gc.uniformBuffers[inFlightIndex]->as_uniform_buffer())
+                avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 10, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
@@ -1824,7 +1829,7 @@ void GraphicsUpdate()
     auto imageAvailableSemaphore = s_gc.vc.consume_current_image_available_semaphore();
     const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
 
-    s_gc.commandBuffers[inFlightIndex]->reset();
+    s_gc.buffers[inFlightIndex].command->reset();
 
     std::vector<avk::recorded_commands_t> commands{};
 
@@ -1853,7 +1858,7 @@ void GraphicsUpdate()
     }
 
     s_gc.vc.record(std::move(commands))
-    .into_command_buffer(s_gc.commandBuffers[inFlightIndex])
+    .into_command_buffer(s_gc.buffers[inFlightIndex].command)
     .then_submit_to(*s_gc.mQueue)
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
