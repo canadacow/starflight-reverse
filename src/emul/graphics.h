@@ -61,9 +61,9 @@ struct IconUniform {
 
     IconUniform(std::vector<Icon> _icons)
     {
-        assert(_icons.size() < sizeof(icons));
+        assert(_icons.size() < _countof(icons));
 
-        for(int i = 0; i < sizeof(icons); ++i)
+        for(int i = 0; i < _countof(icons); ++i)
         {
             if(i < _icons.size())
             {

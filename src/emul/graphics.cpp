@@ -33,7 +33,7 @@
     #undef PLANES
 #endif
 
-#define USE_CPU_RASTERIZATION 1
+// #define USE_CPU_RASTERIZATION 1
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200
@@ -1108,6 +1108,12 @@ static int GraphicsInitThread(void *ptr)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
+        bd.iconUniform =
+            s_gc.vc.create_buffer(
+                avk::memory_usage::host_coherent,
+                vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform)));
+
         s_gc.buffers.push_back(std::move(bd));
     }
 
@@ -1135,8 +1141,9 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
-        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.buffers[0].uniform)
+        //avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 9, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.buffers[0].iconUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1539,12 +1546,10 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     return pixel;
 }
 
-void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels)
+void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels, const std::vector<Icon>& icons)
 {
     uint32_t index = 0;
     const float polygonWidth = (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH;
-
-    std::vector<Icon> icons = GetLocalIconList();
 
     for(uint32_t y = 0; y < WINDOW_HEIGHT; ++y)
     {
@@ -1684,7 +1689,7 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
     };
 }
 
-std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, const std::vector<RotoscopeShader>& shaderBackBuffer)
+std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, IconUniform& iconUniform, const std::vector<RotoscopeShader>& shaderBackBuffer)
 {
     return {
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
@@ -1697,12 +1702,14 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
             avk::access::auto_access >> avk::access::auto_access
         ),
 
-        s_gc.buffers[inFlightIndex].rotoscope->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+        s_gc.buffers[inFlightIndex].uniform->fill(&uniform, 0, 0, sizeof(UniformBlock)),
 
         avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].rotoscope.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
         ),
+
+        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform)),
 
         avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()),
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
@@ -1715,8 +1722,9 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 10, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer())
+                //avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                avk::descriptor_binding(0, 10, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
@@ -1737,6 +1745,8 @@ void GraphicsUpdate()
 
     static std::vector<RotoscopeShader> shaderBackBuffer{};
     static UniformBlock uniform{};
+
+    std::vector<Icon> icons = GetLocalIconList();
 
     if (fullRes.size() == 0)
     {
@@ -1808,7 +1818,7 @@ void GraphicsUpdate()
 #endif    
 
 #if defined(USE_CPU_RASTERIZATION)
-        DoRotoscope(fullRes, backbuffer);
+        DoRotoscope(fullRes, backbuffer, icons);
 #endif
         currentTexture = windowTexture;
         stride = WINDOW_WIDTH;
@@ -1842,7 +1852,10 @@ void GraphicsUpdate()
 #if defined(USE_CPU_RASTERIZATION)
         commands = CPUCopyPass(inFlightIndex, data, dataSize);
 #else
-        commands = GPURotoscope(inFlightIndex, uniform, shaderBackBuffer);
+
+        IconUniform ic(icons);
+
+        commands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer);
 #endif
     }
 

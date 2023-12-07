@@ -86,9 +86,8 @@ layout(binding = 5) uniform sampler2D LOGO1Texture;
 layout(binding = 6) uniform sampler2D LOGO2Texture;
 layout(binding = 7) uniform sampler2D PORTPICTexture;
 layout(binding = 8) uniform sampler2D RACEDOSATLASTexture;
-layout(binding = 9) uniform sampler2D NavigationTexture;
 
-layout(binding = 10) uniform UniformBlock {
+layout(binding = 9) uniform UniformBlock {
     int GRAPHICS_MODE_WIDTH;
     int GRAPHICS_MODE_HEIGHT;
     int WINDOW_WIDTH;
@@ -102,7 +101,7 @@ layout(binding = 10) uniform UniformBlock {
     uint context;
 } uniforms;
 
-layout(binding = 11) uniform IconBlock {
+layout(binding = 10) uniform IconBlock {
     Icon icons[32];
 };
 
@@ -395,7 +394,7 @@ void main() {
                 pixel = DrawRunBitPixel(roto, uv, subUv);
                 break;
             case NavigationalPixel:
-                pixel = DrawNavigationPixel(roto, uv, subUv);
+                //pixel = DrawNavigationPixel(roto, uv, subUv);
                 break;
             default:
                 break;
