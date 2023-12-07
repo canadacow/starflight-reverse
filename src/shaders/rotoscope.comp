@@ -273,6 +273,24 @@ vec4 DrawSDFSilhouette(const Rotoscope roto, vec2 subUv) {
     }
 }
 
+float calculateDistance(vec2 point1, vec2 point2) {
+    float xDist = point2.x - point1.x;
+    float yDist = 0.60f * (point2.y - point1.y);
+    return sqrt((xDist * xDist) + (yDist * yDist));
+}
+
+float calculateBoundingBoxDistance(vec2 point1, vec2 point2) {
+    float xDist = abs(point2.x - point1.x);
+    float yDist = abs(point2.y - point1.y);
+    return max(xDist, yDist);
+}
+
+float calculateBoundingBoxDistanceIcon(vec2 point1, vec2 point2) {
+    float xDist = abs(point2.x - point1.x);
+    float yDist = 0.60f * abs(point2.y - point1.y);
+    return max(xDist, yDist);
+}
+
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
@@ -284,14 +302,75 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
     float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
 
+    vec2 pixelPos = vec2(float(roto.blt_x) + subUv.x, float(roto.blt_y) + subUv.y);
+
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
     vec2 fragCoord = vec2(subX * iResolution.x, subY * iResolution.y);
 
     vec2 worldCoords = vec2(uniforms.worldX, uniforms.worldY);
 
+    vec4 iconPixel = vec4(0.);
+
+    for(int i = 0; i < 32; i++) {
+        Icon icon = icons[i];
+
+        if(icon.isActive == 0)
+            continue;
+
+        vec2 iconPos = vec2(float(icon.screenX), float(icon.screenY));
+        vec2 bltPos = vec2(float(icon.bltX) + 3.0, float(icon.bltY) + 3.0);
+
+        if(icon.id >= 51 && icon.id <= 91) {
+            float basesize = 29.0f * float(icon.id - 50);
+
+            if(calculateDistance(iconPos, pixelPos) < basesize) {
+                iconPixel = colortable[icon.clr & 0xf];
+            }
+        } else if(icon.id < 50) {
+            if(calculateBoundingBoxDistance(bltPos, pixelPos) < 4.0f) {
+                iconPixel = colortable[icon.clr & 0xf];
+            }
+        } else {
+            float distance = 1.0;
+
+            switch(icon.id) {
+                case 253:
+                    switch(icon.clr & 0xf) {
+                        case 0x4: // RED
+                        case 0x6: // ORANGE
+                            distance = 7.0f;
+                            break;
+                        case 0xE: // YELLOW
+                        case 0xF: // WHITE
+                            distance = 10.0f;
+                            break;
+                        default: // OTHERS
+                            distance = 14.0f;
+                            break;
+                    }
+                    if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
+                        iconPixel = colortable[icon.clr & 0xf];
+                    }
+                    break;
+                case 254: // Invisible icon (Encounter hit testing?)
+                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY) {
+                        iconPixel = colortable[icon.clr & 0xf];
+                    }
+                    break;
+                case 255: // Flux icon
+                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY) {
+                        iconPixel = colortable[icon.clr & 0xf];
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
     hyperspaceRender(pixel, fragCoord, iTime, iResolution, worldCoords + vec2(1000.0, 1000.0));
 
-    return pixel;
+    return pixel + iconPixel;
 }
 
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
@@ -394,7 +473,7 @@ void main() {
                 pixel = DrawRunBitPixel(roto, uv, subUv);
                 break;
             case NavigationalPixel:
-                //pixel = DrawNavigationPixel(roto, uv, subUv);
+                pixel = DrawNavigationPixel(roto, uv, subUv);
                 break;
             default:
                 break;

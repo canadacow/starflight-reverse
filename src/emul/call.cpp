@@ -1075,8 +1075,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         Icon icon;
                         uint16_t IINDEX = index;
-                        icon.x = (int16_t)Read16Long(IXSEG, IINDEX * 2);
-                        icon.y = (int16_t)Read16Long(IYSEG, IINDEX * 2);
+                        icon.x = (int32_t)(int16_t)Read16Long(IXSEG, IINDEX * 2);
+                        icon.y = (int32_t)(int16_t)Read16Long(IYSEG, IINDEX * 2);
                         icon.id = Read8Long(IDSEG, IINDEX);
                         icon.clr = Read8Long(ICSEG, IINDEX);
                         icon.lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
@@ -1096,14 +1096,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         Push(icon.x);
                         Push(icon.y);
                         ASMCall(0x9970); // WLD>SCR
-                        icon.screenY = Pop();
-                        icon.screenX = Pop();
+                        icon.screenY = (int32_t)(int16_t)Pop();
+                        icon.screenX = (int32_t)(int16_t)Pop();
 
                         Push(icon.screenX);
                         Push(icon.screenY);
                         ASMCall(0x99b4); // SCR>BLT
-                        icon.bltY = 120 - Pop();
-                        icon.bltX = Pop();
+                        icon.bltY = 120 - (int32_t)(int16_t)Pop();
+                        icon.bltX = (int32_t)(int16_t)Pop();
 
                         icon.screenY = 120 - icon.screenY;
 

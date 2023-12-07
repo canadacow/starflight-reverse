@@ -33,7 +33,7 @@
     #undef PLANES
 #endif
 
-// #define USE_CPU_RASTERIZATION 1
+//#define USE_CPU_RASTERIZATION 1
 
 #define TEXT_MODE_WIDTH 640
 #define TEXT_MODE_HEIGHT 200

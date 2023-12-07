@@ -52,6 +52,7 @@ struct Icon {
     uint32_t clr;
     uint32_t lo_iaddr;
     uint32_t hi_iaddr;
+    uint32_t padding;
 };
 
 extern std::vector<Icon> GetLocalIconList();
