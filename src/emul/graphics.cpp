@@ -1855,6 +1855,11 @@ void GraphicsUpdate()
 
         IconUniform ic(icons);
 
+        if (icons.size())
+        {
+            printf("");
+        }
+
         commands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer);
 #endif
     }

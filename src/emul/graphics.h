@@ -40,8 +40,8 @@ struct UniformBlock {
     uint32_t context;
 };
 
-struct Icon {
-    uint32_t active;
+struct ShaderIcon {
+    uint32_t isActive;
     int32_t x;
     int32_t y;
     int32_t screenX;
@@ -55,10 +55,22 @@ struct Icon {
     uint32_t padding;
 };
 
+struct Icon {
+    int32_t x;
+    int32_t y;
+    int32_t screenX;
+    int32_t screenY;
+    int32_t bltX;
+    int32_t bltY;
+    uint32_t id;
+    uint32_t clr;
+    uint32_t iaddr;
+};
+
 extern std::vector<Icon> GetLocalIconList();
 
 struct IconUniform {
-    Icon icons[32];
+    ShaderIcon icons[32];
 
     IconUniform(std::vector<Icon> _icons)
     {
@@ -68,12 +80,23 @@ struct IconUniform {
         {
             if(i < _icons.size())
             {
-                icons[i] = _icons.at(i);
-                icons[i].active = 1;
+                auto& from = _icons.at(i);
+                auto& to = icons[i];
+
+                to.x = from.x;
+                to.y = from.y;
+                to.screenX = from.screenX;
+                to.screenY = from.screenY;
+                to.bltX = from.bltX;
+                to.bltY = from.bltY;
+                to.id = from.id;
+                to.clr = from.clr;
+
+                to.isActive = 1;
             }
             else
             {
-                icons[i].active = 0;
+                icons[i].isActive = 0;
             }
         }
     }

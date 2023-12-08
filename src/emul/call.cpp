@@ -11,6 +11,9 @@
 #include"../disasOV/global.h"
 #include "../util/lodepng.h"
 
+#include "starsystem.h"
+#include "instance.h"
+
 #include <stack>
 #include <assert.h>
 #include <filesystem>
@@ -1079,8 +1082,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         icon.y = (int32_t)(int16_t)Read16Long(IYSEG, IINDEX * 2);
                         icon.id = Read8Long(IDSEG, IINDEX);
                         icon.clr = Read8Long(ICSEG, IINDEX);
-                        icon.lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
-                        icon.hi_iaddr = Read8Long(IHSEG, IINDEX);
+
+                        
+                        uint32_t lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
+                        uint32_t hi_iaddr = Read8Long(IHSEG, IINDEX);
+                        icon.iaddr = (hi_iaddr << 16) | lo_iaddr;
+
                         return icon;
                     };
 
@@ -1089,6 +1096,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     for (uint16_t i = 0; i < localCount; ++i)
                     {
+                        bool found = false;
+
                         uint16_t index = i;
 
                         Icon icon = getIcon(index);
@@ -1106,6 +1115,69 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         icon.bltX = (int32_t)(int16_t)Pop();
 
                         icon.screenY = 120 - icon.screenY;
+
+                        auto systemIt = starsystem.find(icon.iaddr);
+                        
+                        if(systemIt != starsystem.end())
+                        {
+                            auto ss = systemIt->second;
+
+                            printf("Object at index %d is star system at %d x %d\n", i, ss.x, ss.y);
+
+                            found = true;
+                        }
+
+                        auto planetIt = planets.find(icon.iaddr);
+
+                        if(planetIt != planets.end())
+                        {
+                            auto p = planetIt->second;
+
+                            printf("Object at index %d is star system at %d x %d in orbit %d\n", i, p.x, p.y, p.orbit);
+
+                            found = true;
+                        }
+
+                        if(!found)
+                        {
+                            auto inIt = instances.find(icon.iaddr);
+                            assert(inIt != instances.end());
+
+                            auto inst = inIt->second;
+
+                            auto it = InstanceTypes.find(inst.classType);
+                            assert(it != InstanceTypes.end());
+
+                            if (it->first == 0xb && inst.off != 0)
+                            {
+                                // BOX. Points to something else??, e.g. planet or star.
+                                inIt = instances.find(inst.off);
+                                assert(inIt != instances.end());
+
+                                inst = inIt->second;
+                                it = InstanceTypes.find(inst.classType);
+                                assert(it != InstanceTypes.end());
+
+                                if(it->first == 0x20)
+                                {
+                                    planetIt = planets.find(inst.instanceoffset);
+                                    assert(planetIt != planets.end());
+
+                                    auto p = planetIt->second;
+
+                                    printf("Object at index %d is star system at %d x %d in orbit %d\n", i, p.x, p.y, p.orbit);
+
+                                }
+                                else
+                                {
+                                    printf("Object at index %d is %s, iaddr 0x%x\n", i, it->second.data(), inst.instanceoffset);
+                                }
+                            }
+                            else
+                            {
+                                printf("Object at index %d is %s, iaddr 0x%x offset 0x%x\n", i, it->second.data(), icon.iaddr, inst.off);
+                            }
+                       }
 
                         //printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
 
