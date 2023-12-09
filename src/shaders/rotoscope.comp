@@ -7,6 +7,7 @@
 #include "station_stars.h"
 #include "hyperspace_stars.h"
 #include "starburst.h"
+#include "nebula.h"
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -407,9 +408,15 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
     if(nebulaPixel > 0.0)
     {
-        pixel += colortable[0x2];
-    }
+        vec4 p;
 
+        nebulaPixel = min(nebulaPixel / 8.0, 1.0);
+
+        vec2 uv=fragCoord.xy/iResolution.xy-.5;
+        nebula(p, uv + (worldCoords * 50.0), iTime);
+        pixel += p * nebulaPixel;
+    }
+    
     return pixel + iconPixel;
 }
 

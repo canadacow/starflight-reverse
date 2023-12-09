@@ -1,7 +1,7 @@
 // Star Nest by Pablo Roman Andrioli
 // License: MIT
 
-#define iterations 17
+#define iterations_hs 17
 #define formuparam 0.53
 
 #define volsteps_hs 5
@@ -42,7 +42,7 @@ void hyperspaceRender( out vec4 fragColor, in vec2 fragCoord, in float iTime, in
 		vec3 p=from+s*dir*.5;
 		p = abs(vec3(tile)-mod(p,vec3(tile*2.))); // tiling fold
 		float pa,a=pa=0.;
-		for (int i=0; i<iterations; i++) { 
+		for (int i=0; i<iterations_hs; i++) { 
 			p=abs(p)/dot(p,p)-formuparam; // the magic formula
 			a+=abs(length(p)-pa); // absolute sum of average change
 			pa=length(p);
