@@ -1115,6 +1115,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         icon.bltX = (int32_t)(int16_t)Pop();
 
                         icon.screenY = 120 - icon.screenY;
+                        icon.icon_type = 0; // Unknown at this point
 
                         auto systemIt = starsystem.find(icon.iaddr);
                         
@@ -1175,12 +1176,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 }
                                 else
                                 {
+                                    if(inst.classType == 0x2e) // Nebula
+                                    {
+                                        icon.icon_type = (uint32_t)IconType::Nebula;
+                                    }
+
                                     printf("Object at index %d is %s, iaddr 0x%x offset 0x%x\n", i, it->second.data(), icon.iaddr, inst.off);
                                 }
                             }
                             else
                             {
-                                printf("Object at index %d has unknown iaddr 0x%x\n", icon.iaddr);
+                                printf("Object at index %d has unknown iaddr 0x%x\n", i, icon.iaddr);
                             }
                        }
 

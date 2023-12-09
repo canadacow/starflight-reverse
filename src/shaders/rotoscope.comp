@@ -321,6 +321,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 worldCoords = vec2(uniforms.worldX, uniforms.worldY);
 
     vec4 iconPixel = vec4(0.);
+    float nebulaPixel = 0.0;
 
     for(int i = 0; i < 32; i++) {
         Icon icon = icons[i];
@@ -335,7 +336,14 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             float basesize = 29.0f * float(icon.id - 50);
 
             if(calculateDistance(iconPos, pixelPos) < basesize) {
-                iconPixel += colortable[icon.clr & 0xf];
+                if(icon.icon_type == Icon_Nebula)
+                {
+                    nebulaPixel += basesize - calculateDistance(iconPos, pixelPos);
+                }
+                else
+                {
+                    iconPixel += colortable[icon.clr & 0xf];
+                }
             }
         } else if(icon.id < 50) {
             if(calculateBoundingBoxDistance(bltPos, pixelPos) < 4.0f) {
@@ -396,6 +404,11 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     }
 
     hyperspaceRender(pixel, fragCoord, iTime, iResolution, worldCoords + vec2(1000.0, 1000.0));
+
+    if(nebulaPixel > 0.0)
+    {
+        pixel += colortable[0x2];
+    }
 
     return pixel + iconPixel;
 }

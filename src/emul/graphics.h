@@ -23,6 +23,14 @@ enum PixelContents
     RunBitPixel,
 };
 
+enum IconType
+{
+    UnknownIcon = 0,
+    Sun,
+    Planet,
+    Nebula,
+};
+
 #pragma pack(push, 1)
 
 // Equivalent of UniformBlock struct
@@ -50,7 +58,7 @@ struct ShaderIcon {
     int32_t bltY;
     uint32_t id;
     uint32_t clr;
-    uint32_t lo_iaddr;
+    uint32_t icon_type;
     uint32_t hi_iaddr;
     uint32_t padding;
 };
@@ -64,6 +72,7 @@ struct Icon {
     int32_t bltY;
     uint32_t id;
     uint32_t clr;
+    uint32_t icon_type;
     uint32_t iaddr;
 };
 
@@ -91,6 +100,7 @@ struct IconUniform {
                 to.bltY = from.bltY;
                 to.id = from.id;
                 to.clr = from.clr;
+                to.icon_type = from.icon_type;
 
                 to.isActive = 1;
             }
