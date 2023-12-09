@@ -79,6 +79,13 @@ static double toneInHz = 440.0;
 static std::atomic<bool> s_useRotoscope = true;
 static std::atomic<bool> s_useEGA = true;
 
+static std::mutex s_deadReckoningMutex;
+static vec2<int16_t> s_deadReckoning = {};
+static std::chrono::time_point<std::chrono::system_clock> s_deadReckoningSet;
+
+static std::mutex s_frameCountMutex;
+static uint64_t s_frameCount;
+
 struct GraphicsContext
 {
     VulkanContext vc;
@@ -106,6 +113,8 @@ struct GraphicsContext
     avk::image_sampler RACEDOSATLAS;
 
     avk::image_sampler textImage;
+
+    avk::image_sampler shipImage;
 
     avk::compute_pipeline rotoscopePipeline;
     avk::compute_pipeline textPipeline;
@@ -616,6 +625,12 @@ public:
                     }
                     return true;
                     break;
+                case SDL_KEYUP:
+                    {
+                        //std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+                        //s_deadReckoning = { 0 , 0 };
+                    }
+                    break;
                 case SDL_WINDOWEVENT:
                     {
                         if(event.window.event == SDL_WINDOWEVENT_CLOSE)
@@ -759,6 +774,26 @@ void BeepTone(uint16_t pitFreq)
 void BeepOff()
 {
     s_audioPlaying = false;
+}
+
+void GraphicsSetDeadReckoning(int16_t x, int16_t y)
+{
+    std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+    s_deadReckoning = { x , y };
+    s_deadReckoningSet = std::chrono::system_clock::now();
+}
+
+void GraphicsReportGameFrame()
+{
+    uint64_t framesDrawn = 0;
+    {
+        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+
+        framesDrawn = s_frameCount;
+        s_frameCount = 0;
+    }
+
+    printf("Drew %d frames between one game frame\n", framesDrawn);
 }
 
 RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
@@ -976,6 +1011,27 @@ void LoadFonts()
     image.clear();
 }
 
+void LoadAssets()
+{
+    std::vector<uint8_t> image;
+    unsigned width, height;
+
+    unsigned error = lodepng::decode(image, width, height, "ship.png", LCT_RGBA, 8);
+    if(error) 
+    {
+        printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    s_gc.shipImage = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::cubic, avk::border_handling_mode::clamp_to_edge)
+    );
+    image.clear();
+}
+
 static int GraphicsInitThread(void *ptr)
 {
     SDL_DisplayMode dm;
@@ -1141,9 +1197,10 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
         //avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 9, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 11, s_gc.buffers[0].iconUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1158,6 +1215,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     LoadFonts();
     LoadSplashImages();
     LoadSDFImages();
+    LoadAssets();
 
     s_gc.textImage = s_gc.vc.create_image_sampler(
         s_gc.vc.create_image_view(
@@ -1722,9 +1780,10 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 9, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 //avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
-                avk::descriptor_binding(0, 10, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
+                avk::descriptor_binding(0, 10, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                avk::descriptor_binding(0, 11, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
@@ -1872,7 +1931,14 @@ void GraphicsUpdate()
 
         uniform.worldX = (float)worldCoordsX / 1000.0f;
         uniform.worldY = (float)worldCoordsY / -1000.0f;
-        uniform.heading = (float)heading;    
+        uniform.heading = (float)heading;
+
+        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+
+        // Will figure out navigation smooth scrolling eventually
+        //auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
+        //uniform.deadX = (float)s_deadReckoning.y / 4.0f * (float)s_frameCount;
+        //uniform.deadY = (float)-s_deadReckoning.x / 4.0f * (float)s_frameCount;
     }
 
     s_gc.vc.record(std::move(commands))
@@ -1881,6 +1947,11 @@ void GraphicsUpdate()
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
     .submit();
+
+    {
+        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+        ++s_frameCount;
+    }
 
     s_gc.vc.render_frame();
 

@@ -1045,6 +1045,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 uint16_t nextInstr = bx + 2;
 
+                int16_t worldXDelta = 0;
+                int16_t worldYDelta = 0;
+
                 if(nextInstr == 0xaf81)
                 {
                     //WaitForVBlank();
@@ -1063,8 +1066,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     printf("Read file at %04x:%04x\n", ds, fileNum);
                 }
 
+                if (nextInstr == 0xe4fa) // (?NEWHEADXY)
+                {
+                    worldXDelta = (int16_t)Read16(0x5dae);
+                    worldYDelta = (int16_t)Read16(0x5db9);
+                }
+
                 if (nextInstr == 0x9cfc) // .LOCAL-ICONS basically the screen update function
                 {
+                    GraphicsReportGameFrame();
+
                     uint16_t localCount = Read16(0x59f5); // ILOCAL?
                     printf("localCount %d\n", localCount);
 
@@ -1435,6 +1446,23 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             break;
                         }
                     }
+                }
+
+                if (nextInstr == 0xe4fa) // (?NEWHEADXY)
+                {
+                    Push(worldYDelta);
+                    Push(worldXDelta);
+                    ASMCall(0x9970); // WLD>SCR
+                    int16_t oldY = (int16_t)(int16_t)Pop();
+                    int16_t oldX = (int32_t)(int16_t)Pop();
+
+                    Push(Read16(0x5db9));
+                    Push(Read16(0x5dae));
+                    ASMCall(0x9970); // WLD>SCR
+                    int16_t newY = (int16_t)(int16_t)Pop();
+                    int16_t newX = (int16_t)(int16_t)Pop();
+
+                    GraphicsSetDeadReckoning(newX - oldX, newY - oldY);
                 }
             }
         break;

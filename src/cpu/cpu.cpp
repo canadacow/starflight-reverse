@@ -47,6 +47,13 @@ void Write8Long(unsigned short s, unsigned short o, unsigned char x)
         fflush(stdout);
     }
     #endif
+
+    #if 0
+    if (addr == ComputeAddress(StarflightBaseSegment, 0x5dae))
+    {
+        printf("");
+    }
+    #endif
     
     #if 0
     constexpr uint16_t hullvalue = 0x63ef + 0x11;
