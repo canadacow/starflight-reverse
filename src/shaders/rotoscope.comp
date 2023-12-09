@@ -6,6 +6,7 @@
 #include "galaxy.h"
 #include "station_stars.h"
 #include "hyperspace_stars.h"
+#include "starburst.h"
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -22,6 +23,11 @@ layout(local_size_x = 32, local_size_y = 32) in;
 #define TilePixel 9
 #define RunBitPixel 10
 
+#define Icon_Other  0
+#define Icon_Sun    1
+#define Icon_Planet 2
+#define Icon_Nebula 3
+
 struct Icon {
     uint isActive;
     int x;
@@ -32,7 +38,7 @@ struct Icon {
     int bltY;
     uint id;
     uint clr;
-    uint lo_iaddr;
+    uint icon_type;
     uint hi_iaddr;
 };
 
@@ -291,6 +297,11 @@ float calculateBoundingBoxDistanceIcon(vec2 point1, vec2 point2) {
     return max(xDist, yDist);
 }
 
+vec2 calculateNormalizedUV(vec2 point1, vec2 point2, float width) {
+    vec2 uv = vec2((point2.x - point1.x) / width, 0.60f * (point2.y - point1.y) / width) + vec2(0.5, 0.5);
+    return uv;
+}
+
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
@@ -324,11 +335,11 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             float basesize = 29.0f * float(icon.id - 50);
 
             if(calculateDistance(iconPos, pixelPos) < basesize) {
-                iconPixel = colortable[icon.clr & 0xf];
+                iconPixel += colortable[icon.clr & 0xf];
             }
         } else if(icon.id < 50) {
             if(calculateBoundingBoxDistance(bltPos, pixelPos) < 4.0f) {
-                iconPixel = colortable[icon.clr & 0xf];
+                iconPixel += colortable[icon.clr & 0xf];
             }
         } else {
             float distance = 1.0;
@@ -349,17 +360,33 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                             break;
                     }
                     if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
-                        iconPixel = colortable[icon.clr & 0xf];
+                        vec2 normUV = calculateNormalizedUV(iconPos, pixelPos, distance * 2.0);
+                        vec4 p;
+                        starburst(p, normUV, iTime, 1.05);
+
+                        iconPixel += p;
                     }
                     break;
                 case 254: // Invisible icon (Encounter hit testing?)
                     if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY) {
-                        iconPixel = colortable[icon.clr & 0xf];
+                        iconPixel += colortable[icon.clr & 0xf];
                     }
                     break;
                 case 255: // Flux icon
-                    if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY) {
-                        iconPixel = colortable[icon.clr & 0xf];
+                    if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < 14.0) {
+                        vec2 normUV = calculateNormalizedUV(iconPos, pixelPos, 30.0) - 0.5;
+
+                        float radius = length(normUV);
+    
+                        float warpFactor = 0.33 - radius;
+    
+                        warpFactor = max(0.0, warpFactor);
+
+                        warpFactor *= warpFactor;
+    
+                        vec2 warp = warpFactor * vec2(starburst_noise(normUV + vec2(iTime)), starburst_noise(normUV + vec2(0.4, iTime)));
+
+                        worldCoords += warp;
                     }
                     break;
                 default:

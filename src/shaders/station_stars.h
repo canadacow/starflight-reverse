@@ -11,7 +11,7 @@
 #define tile   0.850
 #define speed  0.0001 
 
-#define brightness 0.0005
+#define brightness_ss 0.0005
 #define darkmatter 0.300
 #define distfading 0.70
 #define saturation 0.850
@@ -54,7 +54,7 @@ void stationStarsRender( out vec4 fragColor, in vec2 fragCoord, in float iTime, 
 		if (r>6) fade*=1.-dm; // dark matter, don't render near
 		//v+=vec3(dm,dm*.5,0.);
 		v+=fade;
-		v+=vec3(s,s*s,s*s*s*s)*a*brightness*fade; // coloring based on distance
+		v+=vec3(s,s*s,s*s*s*s)*a*brightness_ss*fade; // coloring based on distance
 		fade*=distfading; // distance fading
 		s+=stepsize;
 	}

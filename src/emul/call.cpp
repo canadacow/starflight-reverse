@@ -1141,41 +1141,46 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         if(!found)
                         {
                             auto inIt = instances.find(icon.iaddr);
-                            assert(inIt != instances.end());
-
-                            auto inst = inIt->second;
-
-                            auto it = InstanceTypes.find(inst.classType);
-                            assert(it != InstanceTypes.end());
-
-                            if (it->first == 0xb && inst.off != 0)
+                            if (inIt != instances.end())
                             {
-                                // BOX. Points to something else??, e.g. planet or star.
-                                inIt = instances.find(inst.off);
-                                assert(inIt != instances.end());
+                                auto inst = inIt->second;
 
-                                inst = inIt->second;
-                                it = InstanceTypes.find(inst.classType);
+                                auto it = InstanceTypes.find(inst.classType);
                                 assert(it != InstanceTypes.end());
 
-                                if(it->first == 0x20)
+                                if (it->first == 0xb && inst.off != 0)
                                 {
-                                    planetIt = planets.find(inst.instanceoffset);
-                                    assert(planetIt != planets.end());
+                                    // BOX. Points to something else??, e.g. planet or star.
+                                    inIt = instances.find(inst.off);
+                                    assert(inIt != instances.end());
 
-                                    auto p = planetIt->second;
+                                    inst = inIt->second;
+                                    it = InstanceTypes.find(inst.classType);
+                                    assert(it != InstanceTypes.end());
 
-                                    printf("Object at index %d is star system at %d x %d in orbit %d\n", i, p.x, p.y, p.orbit);
+                                    if (it->first == 0x20)
+                                    {
+                                        planetIt = planets.find(inst.instanceoffset);
+                                        assert(planetIt != planets.end());
 
+                                        auto p = planetIt->second;
+
+                                        printf("Object at index %d is star system at %d x %d in orbit %d\n", i, p.x, p.y, p.orbit);
+
+                                    }
+                                    else
+                                    {
+                                        printf("Object at index %d is %s, iaddr 0x%x\n", i, it->second.data(), inst.instanceoffset);
+                                    }
                                 }
                                 else
                                 {
-                                    printf("Object at index %d is %s, iaddr 0x%x\n", i, it->second.data(), inst.instanceoffset);
+                                    printf("Object at index %d is %s, iaddr 0x%x offset 0x%x\n", i, it->second.data(), icon.iaddr, inst.off);
                                 }
                             }
                             else
                             {
-                                printf("Object at index %d is %s, iaddr 0x%x offset 0x%x\n", i, it->second.data(), icon.iaddr, inst.off);
+                                printf("Object at index %d has unknown iaddr 0x%x\n", icon.iaddr);
                             }
                        }
 
