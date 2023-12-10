@@ -1027,7 +1027,7 @@ void LoadAssets()
         s_gc.vc.create_image_view(
             imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
         ), 
-        s_gc.vc.create_sampler(avk::filter_mode::cubic, avk::border_handling_mode::clamp_to_edge)
+        s_gc.vc.create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_edge)
     );
     image.clear();
 }

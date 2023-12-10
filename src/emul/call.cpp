@@ -946,6 +946,44 @@ void ASMCall(uint16_t word)
     Call(word, word);
 }
 
+uint16_t GetInstanceClass()
+{
+    ForthCall(0x7520); // @INST-CLASS
+    return Pop();
+}
+
+uint32_t GetInstanceOffset()
+{
+    ForthCall(0x750e); // @INST-OFF
+    uint32_t hi_iaddr = Pop();
+    uint32_t lo_iaddr = Pop();
+
+    return hi_iaddr << 16 | lo_iaddr;
+}
+
+uint32_t ForthGetCurrent()
+{
+    ASMCall(0x7577); // CI
+    uint32_t hi_iaddr = Pop();
+    uint32_t lo_iaddr = Pop();
+
+    return hi_iaddr << 16 | lo_iaddr;
+}
+
+void ForthPushCurrent(uint32_t iaddr)
+{
+    Push(iaddr & 0xffff);
+    Push(iaddr >> 16);
+    ASMCall(0x753f); // >C
+
+    ForthCall(0x798c); // SET-CURRENT
+}
+
+void ForthPopCurrent()
+{
+    ForthCall(0x7593); // CDROP
+}
+
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
@@ -1105,6 +1143,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     std::lock_guard<std::mutex> lg(s_localIconListMutex);
                     s_localIconList.clear();
 
+                    //ASMCall(0x7577); // CI
+                    //uint16_t hi_iaddr = Pop();
+                    //uint16_t lo_iaddr = Pop();
+                    //printf("CI is presently 0x%x\n", hi_iaddr << 16 | lo_iaddr);
+
+                    auto currentCI = ForthGetCurrent();
+
                     for (uint16_t i = 0; i < localCount; ++i)
                     {
                         bool found = false;
@@ -1128,7 +1173,27 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         icon.screenY = 120 - icon.screenY;
                         icon.icon_type = 0; // Unknown at this point
 
-                        auto systemIt = starsystem.find(icon.iaddr);
+                        uint32_t current_iaddr = icon.iaddr;
+
+                        ForthPushCurrent(current_iaddr);
+                        auto instType = GetInstanceClass();
+                        auto instOff = GetInstanceOffset();
+
+                        if (instType == 0xb) // BOX
+                        {
+                            current_iaddr = instOff;
+                            ForthPushCurrent(current_iaddr);
+                            instType = GetInstanceClass();
+                            instOff = GetInstanceOffset();
+                            ForthPopCurrent();
+                        }
+
+                        ForthPopCurrent();
+
+                        auto check = ForthGetCurrent();
+                        assert(check == currentCI);
+
+                        auto systemIt = starsystem.find(current_iaddr);
                         
                         if(systemIt != starsystem.end())
                         {
@@ -1139,7 +1204,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             found = true;
                         }
 
-                        auto planetIt = planets.find(icon.iaddr);
+                        auto planetIt = planets.find(current_iaddr);
 
                         if(planetIt != planets.end())
                         {
@@ -1149,6 +1214,32 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                             found = true;
                         }
+
+                        auto it = InstanceTypes.find(instType);
+                        assert(it != InstanceTypes.end());
+
+                        if (it->second == "STAR")
+                        {
+                            icon.icon_type = (uint32_t)IconType::Sun;
+                            found = true;
+                        }
+                        if (it->second == "NEBULA")
+                        {
+                            icon.icon_type = (uint32_t)IconType::Nebula;
+                            found = true;
+                        }
+                        if (it->second == "SHIP")
+                        {
+                            // Handled elsewhere
+                            found = true;
+                        }
+                        if (it->second == "FLUX")
+                        {
+                            // Handled elsewhere
+                            found = true;
+                        }
+
+                        printf("Object at index %d is %s, iaddr 0x%x found? %d\n", i, it->second.c_str(), current_iaddr, found);
 
                         if(!found)
                         {
@@ -1160,50 +1251,20 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 auto it = InstanceTypes.find(inst.classType);
                                 assert(it != InstanceTypes.end());
 
-                                if (it->first == 0xb && inst.off != 0)
+                                if (it->first == 0xb)
                                 {
-                                    // BOX. Points to something else??, e.g. planet or star.
-                                    inIt = instances.find(inst.off);
-                                    assert(inIt != instances.end());
-
-                                    inst = inIt->second;
-                                    it = InstanceTypes.find(inst.classType);
-                                    assert(it != InstanceTypes.end());
-
-                                    if (it->first == 0x20)
-                                    {
-                                        planetIt = planets.find(inst.instanceoffset);
-                                        assert(planetIt != planets.end());
-
-                                        auto p = planetIt->second;
-
-                                        printf("Object at index %d is star system at %d x %d in orbit %d\n", i, p.x, p.y, p.orbit);
-
-                                    }
-                                    else
-                                    {
-                                        printf("Object at index %d is %s, iaddr 0x%x\n", i, it->second.c_str(), inst.instanceoffset);
-                                        if (it->second == "STAR")
-                                        {
-                                            icon.icon_type = (uint32_t)IconType::Sun;
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    if(it->second == "NEBULA")
-                                    {
-                                        icon.icon_type = (uint32_t)IconType::Nebula;
-                                    }
-
+                                    // More things to unbox than just planets and stars?
                                     printf("Object at index %d is %s, iaddr 0x%x offset 0x%x\n", i, it->second.data(), icon.iaddr, inst.off);
+
+                                    assert(false);
                                 }
                             }
                             else
                             {
                                 printf("Object at index %d has unknown iaddr 0x%x\n", i, icon.iaddr);
+                                assert(false);
                             }
-                       }
+                        }
 
                         //printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
 

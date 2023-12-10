@@ -29,6 +29,7 @@ enum IconType
     Sun,
     Planet,
     Nebula,
+    Flux,
 };
 
 #pragma pack(push, 1)
