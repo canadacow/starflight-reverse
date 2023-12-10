@@ -1274,6 +1274,35 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         s_localIconList.push_back(icon);
                     }
+
+                    // Second pass to find the sun if we're in a solar system
+                    bool inSolarSystem = false;
+                    int32_t sunLocationX = 0;
+                    int32_t sunLocationY = 0;
+                    for (auto icon : s_localIconList)
+                    {
+                        if (icon.icon_type == IconType::Sun)
+                        {
+                            sunLocationX = icon.x;
+                            sunLocationY = icon.y;
+
+                            inSolarSystem = true;
+                            break;
+                        }
+                    }
+
+                    if (inSolarSystem)
+                    {
+                        // Place the Sun at the center and compute planets relative to the sun.
+                        for (auto& icon : s_localIconList)
+                        {
+                            if (icon.icon_type == IconType::Planet)
+                            {
+                                icon.planet_to_sunX = icon.x - sunLocationX;
+                                icon.planet_to_sunY = icon.y - sunLocationY;
+                            }
+                        }
+                    }
                 }
 
                 if(nextInstr == 0xe7ec)

@@ -73,7 +73,7 @@ vec2 Spiral(vec2 uv)
 	return uv + offset*vec2(1.0,1.0)*1.1*texBlurry.x ;
 }
 
-void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime )
+void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir)
 {
 	// Camera setup
 	vec3 camUp = vec3(0, 1, 0);
@@ -162,7 +162,7 @@ void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime )
 	vec3 ref = reflect(normalize(worldPix - camPos), noiseNormal);
 	refNoise = refNoise * 0.25 + 0.75;
 	float orbitSpeed = 0.125;
-	vec3 sunDir = normalize(vec3(1.0, 0.0, 0.0));
+	//vec3 sunDir = normalize(vec3(1.0, 0.0, 0.0));
 	vec3 refNorm = normalize(ref);
 	float glance = saturate(dot(refNorm, sunDir) * saturate(sunDir.z - 0.65));
 	float landMask = finalLand.x + finalLand.y * 1.5;

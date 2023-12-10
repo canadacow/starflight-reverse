@@ -61,8 +61,8 @@ struct ShaderIcon {
     uint32_t id;
     uint32_t clr;
     uint32_t icon_type;
-    uint32_t hi_iaddr;
-    uint32_t padding;
+    int32_t planet_to_sunX;
+    int32_t planet_to_sunY;
 };
 
 struct Icon {
@@ -76,6 +76,8 @@ struct Icon {
     uint32_t clr;
     uint32_t icon_type;
     uint32_t iaddr;
+    int32_t planet_to_sunX;
+    int32_t planet_to_sunY;
 };
 
 extern std::vector<Icon> GetLocalIconList();
@@ -103,6 +105,8 @@ struct IconUniform {
                 to.id = from.id;
                 to.clr = from.clr;
                 to.icon_type = from.icon_type;
+                to.planet_to_sunX = from.planet_to_sunX;
+                to.planet_to_sunY = from.planet_to_sunY;
 
                 to.isActive = 1;
             }
