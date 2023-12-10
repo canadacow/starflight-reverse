@@ -1228,6 +1228,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             icon.icon_type = (uint32_t)IconType::Nebula;
                             found = true;
                         }
+                        if (it->second == "PLANET")
+                        {
+                            icon.icon_type = (uint32_t)IconType::Planet;
+                        }
                         if (it->second == "SHIP")
                         {
                             // Handled elsewhere

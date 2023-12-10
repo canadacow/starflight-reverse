@@ -9,6 +9,7 @@
 #include "starburst.h"
 #include "nebula.h"
 #include "sun.h"
+#include "planet.h"
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -347,6 +348,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 sunPixel = vec4(0.);
     vec4 iconPixel = vec4(0.);
     vec4 shipPixel = vec4(0.);
+    vec4 planetPixel = vec4(0.);
     float nebulaPixel = 0.0;
 
     for(int i = 0; i < 32; i++) {
@@ -409,6 +411,25 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                         float luma = 0.299 * sunPixel.r + 0.587 * sunPixel.g + 0.114 * sunPixel.b;
                         sunPixel.a = luma;
                         sunPixel.rgb *= sunPixel.a;
+                    }
+                }
+            }
+            else if(icon.icon_type == Icon_Planet)
+            {
+                float dist = calculateDistance(iconPos, pixelPos);
+                if(dist < basesize * 1.05) {
+                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 1.00);
+                    draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime);
+
+                    if(dist < basesize * 1.0)
+                    {
+                        planetPixel.a = 1.0;
+                    }
+                    else
+                    {
+                        float luma = 0.299 * planetPixel.r + 0.587 * planetPixel.g + 0.114 * planetPixel.b;
+                        planetPixel.a = luma;
+                        planetPixel.rgb *= planetPixel.a;
                     }
                 }
             }
@@ -488,6 +509,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
     pixel += starPixel;
     pixel = sunPixel  + (pixel * (1 - sunPixel.a));
+    pixel = planetPixel + (pixel * (1 - planetPixel.a));
     pixel = iconPixel + (pixel * (1 - iconPixel.a));
     pixel = shipPixel + (pixel * (1 - shipPixel.a));
     
