@@ -395,9 +395,21 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             }
             else if(icon.icon_type == Icon_Sun)
             {
-                if(calculateDistance(iconPos, pixelPos) < basesize * 4.0) {
+                float dist = calculateDistance(iconPos, pixelPos);
+                if(dist < basesize * 4.0) {
                     vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 4.0);
-                    main_star(sunPixel, normUV, iTime);
+                    main_star(sunPixel, normUV, iTime, colortable[icon.clr & 0xf].rgb);
+
+                    if(dist < basesize * 0.96)
+                    {
+                        sunPixel.a = 1.0;
+                    }
+                    else
+                    {
+                        float luma = 0.299 * sunPixel.r + 0.587 * sunPixel.g + 0.114 * sunPixel.b;
+                        sunPixel.a = luma;
+                        sunPixel.rgb *= sunPixel.a;
+                    }
                 }
             }
             else
@@ -475,7 +487,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     }
 
     pixel += starPixel;
-    pixel += sunPixel;
+    pixel = sunPixel  + (pixel * (1 - sunPixel.a));
     pixel = iconPixel + (pixel * (1 - iconPixel.a));
     pixel = shipPixel + (pixel * (1 - shipPixel.a));
     

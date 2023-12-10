@@ -28,13 +28,14 @@ float star_noise(vec3 uv, float res)	// by trisomie21
 	return mix(r0, r1, f.z)*2.-1.;
 }
 
-void main_star( out vec4 fragColor, in vec2 uv, in float iTime )
+void main_star( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunColor )
 {
 	float radius		= 0.24;
 	float invRadius 	= 1.0/radius;
 	
-	vec3 orange			= vec3( 0.8, 0.65, 0.3 );
-	vec3 orangeRed		= vec3( 0.8, 0.35, 0.1 );
+	vec3 orange			= sunColor;
+	vec3 orangeRed		= clamp(vec3(sunColor.r * 1.25, sunColor.g * 0.5, sunColor.b * 0.5), 0.0, 1.0);
+	
 	float time		= iTime * 0.1;
 	float aspect	= 1.0;
 	vec2 p 			= -0.5 + uv;

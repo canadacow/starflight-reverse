@@ -1179,7 +1179,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto instType = GetInstanceClass();
                         auto instOff = GetInstanceOffset();
 
-                        if (instType == 0xb) // BOX
+                        if (instType == 0xb) // Unbox this box
                         {
                             current_iaddr = instOff;
                             ForthPushCurrent(current_iaddr);
