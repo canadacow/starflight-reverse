@@ -1182,12 +1182,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                     }
                                     else
                                     {
-                                        printf("Object at index %d is %s, iaddr 0x%x\n", i, it->second.data(), inst.instanceoffset);
+                                        printf("Object at index %d is %s, iaddr 0x%x\n", i, it->second.c_str(), inst.instanceoffset);
+                                        if (it->second == "STAR")
+                                        {
+                                            icon.icon_type = (uint32_t)IconType::Sun;
+                                        }
                                     }
                                 }
                                 else
                                 {
-                                    if(inst.classType == 0x2e) // Nebula
+                                    if(it->second == "NEBULA")
                                     {
                                         icon.icon_type = (uint32_t)IconType::Nebula;
                                     }

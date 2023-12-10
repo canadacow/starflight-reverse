@@ -8,6 +8,7 @@
 #include "hyperspace_stars.h"
 #include "starburst.h"
 #include "nebula.h"
+#include "sun.h"
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -342,6 +343,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
     vec2 worldCoords = vec2(uniforms.worldX, uniforms.worldY);
 
+    vec4 starPixel = vec4(0.);
+    vec4 sunPixel = vec4(0.);
     vec4 iconPixel = vec4(0.);
     vec4 shipPixel = vec4(0.);
     float nebulaPixel = 0.0;
@@ -384,13 +387,22 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         } else if(icon.id >= 51 && icon.id <= 91) {
             float basesize = 29.0f * float(icon.id - 50);
 
-            if(calculateDistance(iconPos, pixelPos) < basesize) {
-                if(icon.icon_type == Icon_Nebula)
-                {
+            if(icon.icon_type == Icon_Nebula)
+            {
+                if(calculateDistance(iconPos, pixelPos) < basesize) {
                     nebulaPixel += basesize - calculateDistance(iconPos, pixelPos);
                 }
-                else
-                {
+            }
+            else if(icon.icon_type == Icon_Sun)
+            {
+                if(calculateDistance(iconPos, pixelPos) < basesize * 4.0) {
+                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 4.0);
+                    main_star(sunPixel, normUV, iTime);
+                }
+            }
+            else
+            {
+                if(calculateDistance(iconPos, pixelPos) < basesize) {
                     iconPixel += colortable[icon.clr & 0xf];
                 }
             }
@@ -418,10 +430,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     }
                     if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                         vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
-                        vec4 p;
-                        starburst(p, normUV, iTime, 1.05);
-
-                        iconPixel += p;
+                        starburst(starPixel, normUV, iTime, 1.05);
                     }
                     break;
                 case 254: // Invisible icon (Encounter hit testing?)
@@ -465,6 +474,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         pixel += p * nebulaPixel;
     }
 
+    pixel += starPixel;
+    pixel += sunPixel;
     pixel = iconPixel + (pixel * (1 - iconPixel.a));
     pixel = shipPixel + (pixel * (1 - shipPixel.a));
     
