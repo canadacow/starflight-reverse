@@ -113,7 +113,9 @@ void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir
 	// texBlurry = texture(iChannel0, (polar.xy + vec2(t, 0)) * 0.03125 * 0.25).rgb;
     vec4 texNoise = vec4(0.0);
     texBlurry = vec3(0.0);
-	vec3 tex = vec3(0.0);
+	vec3 tex = texture(PlanetTextures, vec3(polar.xy, 0.0)).rgb;
+    
+    vec3(0.0);
     vec3 texS = vec3(0.0);
     vec3 texFlip = vec3(0.0);
     vec3 texFlipS = vec3(0.0);

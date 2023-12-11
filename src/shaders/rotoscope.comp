@@ -3,14 +3,6 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
-#include "galaxy.h"
-#include "station_stars.h"
-#include "hyperspace_stars.h"
-#include "starburst.h"
-#include "nebula.h"
-#include "sun.h"
-#include "planet.h"
-
 layout(local_size_x = 32, local_size_y = 32) in;
 
 // Equivalent of PixelContents enum
@@ -97,8 +89,9 @@ layout(binding = 6) uniform sampler2D LOGO2Texture;
 layout(binding = 7) uniform sampler2D PORTPICTexture;
 layout(binding = 8) uniform sampler2D RACEDOSATLASTexture;
 layout(binding = 9) uniform sampler2D ShipTexture;
+layout(binding = 10) uniform sampler2DArray PlanetTextures;
 
-layout(binding = 10) uniform UniformBlock {
+layout(binding = 11) uniform UniformBlock {
     int GRAPHICS_MODE_WIDTH;
     int GRAPHICS_MODE_HEIGHT;
     int WINDOW_WIDTH;
@@ -113,7 +106,7 @@ layout(binding = 10) uniform UniformBlock {
     float deadY;
 } uniforms;
 
-layout(binding = 11) uniform IconBlock {
+layout(binding = 12) uniform IconBlock {
     Icon icons[32];
 };
 
@@ -136,6 +129,14 @@ const vec4 colortable[16] =
     vec4(1.0, 1.0, 0.33, 1.0),
     vec4(1.0, 1.0, 1.0, 1.0),
 };
+
+#include "galaxy.h"
+#include "station_stars.h"
+#include "hyperspace_stars.h"
+#include "starburst.h"
+#include "nebula.h"
+#include "sun.h"
+#include "planet.h"
 
 const vec4 CGAPalette[4] = 
 {

@@ -1220,9 +1220,10 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 7, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 10, 1u),
         //avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 10, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 11, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 11, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 12, s_gc.buffers[0].iconUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1803,9 +1804,10 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 9, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 10, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 //avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 10, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
-                avk::descriptor_binding(0, 11, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
+                avk::descriptor_binding(0, 11, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                avk::descriptor_binding(0, 12, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
@@ -1829,6 +1831,40 @@ void GraphicsUpdate()
 
     if (s_gc.shouldInitPlanets)
     {
+
+        uint32_t dataSize = 48 * 24 * 4;
+
+        auto sb = s_gc.vc.create_buffer(
+            AVK_STAGING_BUFFER_MEMORY_USAGE,
+            vk::BufferUsageFlagBits::eTransferSrc,
+            avk::generic_buffer_meta::create_from_size(dataSize)
+        );
+
+        std::vector<avk::recorded_commands_t> commands{};
+
+        commands.push_back(
+            avk::sync::buffer_memory_barrier(sb.as_reference(),
+                avk::stage::auto_stage >> avk::stage::auto_stage,
+                avk::access::auto_access >> avk::access::auto_access
+            ));
+
+        commands.push_back(
+            avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }));
+
+        int i = 0;
+        for(auto& ps : s_gc.surfaceData)
+        {
+            commands.push_back(sb->fill(ps.second.albedo.data(), 0, 0, dataSize));
+            commands.push_back(avk::copy_buffer_to_image_layer_mip_level(sb, s_gc.planetAlbedoImages->get_image(), i, 0, avk::layout::transfer_dst));
+            ++i;
+        }
+
+        commands.push_back(avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }));
+
+        s_gc.vc.record_and_submit_with_fence(commands, *s_gc.mQueue)->wait_until_signalled();
+
         s_gc.shouldInitPlanets = false;
         s_gc.planetsDone.release();
     }
