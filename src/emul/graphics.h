@@ -7,6 +7,8 @@
 #include <array>
 #include <utility>
 #include <vector>
+#include <unordered_map>
+#include <map>
 
 enum PixelContents
 {
@@ -160,6 +162,12 @@ struct RotoscopeShader {
 };
 
 #pragma pack(pop)
+
+struct PlanetSurface
+{
+    std::vector<uint8_t> relief;
+    std::vector<uint32_t> albedo;
+};
 
 struct NavigationData
 {
@@ -316,6 +324,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY);
 void GraphicsReportGameFrame();
 
 void GraphicsSplash(uint16_t seg, uint16_t fileNum);
+
+void GraphicsInitPlanets(std::map<uint32_t, PlanetSurface> surfaces);
 
 void WaitForVBlank();
 

@@ -1091,6 +1091,46 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
+                if (nextInstr == 0xb5aa) // HIMUS
+                {
+                    std::map<uint32_t, PlanetSurface> surfaces{};
+
+                    for (const auto& p : planets)
+                    {
+                        Push(p.second.seed);
+                        ForthCall(0xc302); // MERCATOR-GEN
+
+                        PlanetSurface ps{};
+                        ps.relief.resize(48 * 24);
+                        ps.albedo.resize(48 * 24);
+
+                        uint16_t seg = 0x7e51;
+
+                        const uint8_t* palette = GetPlanetColorMap(p.second.species);
+
+                        uint32_t t = 0;
+                        for (int j = 23; j >= 0; j--)
+                        {
+                            for (int i = 0; i < 48; i++)
+                            {
+                                int32_t val = (int32_t)(int8_t)Read8Long(seg, j * 48 + i);
+                                ps.relief[t] = val + 128;
+
+                                int c = val;
+                                c = c < 0 ? 0 : ((c >> 1) & 0x38);
+                                c = palette[c] & 0xF;
+                                ps.albedo[t] = colortable[c];
+
+                                ++t;
+                            }
+                        }
+
+                        surfaces.emplace(p.second.instanceoffset, std::move(ps));
+                    }
+
+                    GraphicsInitPlanets(surfaces);
+                }
+
                 if (nextInstr == 0x7339) // FILE<
                 {
                     uint16_t fileNum = Read16(regsp);

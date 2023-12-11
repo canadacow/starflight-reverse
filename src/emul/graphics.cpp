@@ -115,6 +115,7 @@ struct GraphicsContext
     avk::image_sampler textImage;
 
     avk::image_sampler shipImage;
+    avk::image_sampler planetAlbedoImages;
 
     avk::compute_pipeline rotoscopePipeline;
     avk::compute_pipeline textPipeline;
@@ -122,6 +123,11 @@ struct GraphicsContext
     avk::descriptor_cache descriptorCache;
 
     std::chrono::time_point<std::chrono::system_clock> epoch;
+
+    std::map<uint32_t, PlanetSurface> surfaceData{};
+
+    bool shouldInitPlanets = false;
+    std::binary_semaphore planetsDone{0};
 };
 
 static GraphicsContext s_gc{};
@@ -1030,6 +1036,22 @@ void LoadAssets()
         s_gc.vc.create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_edge)
     );
     image.clear();
+
+    s_gc.planetAlbedoImages = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            s_gc.vc.create_image(48, 24, vk::Format::eR8G8B8A8Unorm, 811, avk::memory_usage::device, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+    );
+}
+
+void GraphicsInitPlanets(std::map<uint32_t, PlanetSurface> surfaces)
+{
+    s_gc.surfaceData = surfaces;
+
+    s_gc.shouldInitPlanets = true;
+
+    s_gc.planetsDone.acquire();
 }
 
 static int GraphicsInitThread(void *ptr)
@@ -1804,6 +1826,12 @@ void GraphicsUpdate()
 
     static std::vector<RotoscopeShader> shaderBackBuffer{};
     static UniformBlock uniform{};
+
+    if (s_gc.shouldInitPlanets)
+    {
+        s_gc.shouldInitPlanets = false;
+        s_gc.planetsDone.release();
+    }
 
     std::vector<Icon> icons = GetLocalIconList();
 
