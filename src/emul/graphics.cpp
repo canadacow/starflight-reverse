@@ -1043,6 +1043,11 @@ void LoadAssets()
         ), 
         s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
     );
+
+    s_gc.vc.record_and_submit_with_fence({
+            avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal })
+    }, *s_gc.mQueue)->wait_until_signalled();
 }
 
 void GraphicsInitPlanets(std::map<uint32_t, PlanetSurface> surfaces)
@@ -1831,8 +1836,8 @@ void GraphicsUpdate()
 
     if (s_gc.shouldInitPlanets)
     {
-
-        uint32_t dataSize = 48 * 24 * 4;
+        const uint32_t mapSize = 48 * 24 * 4;
+        const uint32_t dataSize = mapSize * s_gc.surfaceData.size();
 
         auto sb = s_gc.vc.create_buffer(
             AVK_STAGING_BUFFER_MEMORY_USAGE,
@@ -1850,13 +1855,13 @@ void GraphicsUpdate()
 
         commands.push_back(
             avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
-                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }));
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::transfer_dst }));
 
         int i = 0;
         for(auto& ps : s_gc.surfaceData)
         {
-            commands.push_back(sb->fill(ps.second.albedo.data(), 0, 0, dataSize));
-            commands.push_back(avk::copy_buffer_to_image_layer_mip_level(sb, s_gc.planetAlbedoImages->get_image(), i, 0, avk::layout::transfer_dst));
+            commands.push_back(sb->fill(ps.second.albedo.data(), 0, i * mapSize, mapSize));
+            commands.push_back(avk::copy_buffer_to_image_layer_mip_level(sb, s_gc.planetAlbedoImages->get_image(), i, 0, avk::layout::transfer_dst, vk::ImageAspectFlagBits::eColor, i * mapSize));
             ++i;
         }
 

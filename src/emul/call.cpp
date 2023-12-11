@@ -1119,8 +1119,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 int c = val;
                                 c = c < 0 ? 0 : ((c >> 1) & 0x38);
                                 c = palette[c] & 0xF;
-                                ps.albedo[t] = colortable[c];
 
+                                uint32_t argb = colortable[c & 0xf] | 0xFF000000;
+                                uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
+                                    ((argb & 0xFF) << 16) | // Move red to third position
+                                    ((argb & 0xFF00)) | // Keep green as is
+                                    ((argb & 0xFF0000) >> 16); // Move blue to rightmost
+
+                                ps.albedo[t] = abgr;
                                 ++t;
                             }
                         }
