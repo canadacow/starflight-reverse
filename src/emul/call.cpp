@@ -1113,7 +1113,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         {
                             for (int i = 0; i < 48; i++)
                             {
-                                int32_t val = (int32_t)(int8_t)Read8Long(seg, j * 48 + i);
+                                int val = 0;
+                                if(p.second.species != 18)
+                                {
+                                    val = (int32_t)(int8_t)Read8Long(seg, j * 48 + i);
+                                }
+                                else
+                                {
+                                    val = (int32_t)(int8_t)earthmap[j * 48 + i];
+                                }
+                                
                                 ps.relief[t] = val + 128;
 
                                 int c = val;
@@ -1131,7 +1140,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
 
-                        surfaces.emplace(p.second.instanceoffset, std::move(ps));
+                        surfaces.emplace(p.second.seed, std::move(ps));
                     }
 
                     GraphicsInitPlanets(surfaces);
