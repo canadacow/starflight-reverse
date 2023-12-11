@@ -57,14 +57,21 @@ struct ShaderIcon {
     int32_t x;
     int32_t y;
     int32_t screenX;
+
     int32_t screenY;
     int32_t bltX;
     int32_t bltY;
     uint32_t id;
+
     uint32_t clr;
     uint32_t icon_type;
     int32_t planet_to_sunX;
     int32_t planet_to_sunY;
+
+    uint32_t planetIndex;
+    uint32_t padding0;
+    uint32_t padding1;
+    uint32_t padding2;
 };
 
 struct Icon {
@@ -72,14 +79,18 @@ struct Icon {
     int32_t y;
     int32_t screenX;
     int32_t screenY;
+
     int32_t bltX;
     int32_t bltY;
     uint32_t id;
     uint32_t clr;
+
     uint32_t icon_type;
     uint32_t iaddr;
     int32_t planet_to_sunX;
     int32_t planet_to_sunY;
+
+    uint32_t seed;
 };
 
 extern std::vector<Icon> GetLocalIconList();
@@ -110,6 +121,8 @@ struct IconUniform {
                 to.planet_to_sunX = from.planet_to_sunX;
                 to.planet_to_sunY = from.planet_to_sunY;
 
+                to.planetIndex = IndexFromSeed(from.seed);
+
                 to.isActive = 1;
             }
             else
@@ -118,6 +131,8 @@ struct IconUniform {
             }
         }
     }
+
+    uint32_t IndexFromSeed(uint32_t seed);
 };
 
 // Equivalent of TextData struct
@@ -325,7 +340,7 @@ void GraphicsReportGameFrame();
 
 void GraphicsSplash(uint16_t seg, uint16_t fileNum);
 
-void GraphicsInitPlanets(std::map<uint32_t, PlanetSurface> surfaces);
+void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces);
 
 void WaitForVBlank();
 

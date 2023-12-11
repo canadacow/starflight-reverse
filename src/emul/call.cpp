@@ -1093,7 +1093,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if (nextInstr == 0xb5aa) // HIMUS
                 {
-                    std::map<uint32_t, PlanetSurface> surfaces{};
+                    std::unordered_map<uint32_t, PlanetSurface> surfaces{};
 
                     for (const auto& p : planets)
                     {
@@ -1218,6 +1218,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         icon.screenY = 120 - icon.screenY;
                         icon.icon_type = 0; // Unknown at this point
+                        icon.seed = 0; // Also unknown at this point
 
                         uint32_t current_iaddr = icon.iaddr;
 
@@ -1256,7 +1257,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         {
                             auto p = planetIt->second;
 
-                            printf("Object at index %d is star system at %d x %d in orbit %d\n", i, p.x, p.y, p.orbit);
+                            printf("Object at index %d is star system at %d x %d in orbit %d seed 0x%x\n", i, p.x, p.y, p.orbit, p.seed);
+
+                            icon.seed = p.seed;
 
                             found = true;
                         }

@@ -114,7 +114,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec2 uv = fragCoord/iResolution.xy - 0.5;
     uv.x *= iResolution.x/iResolution.y;
     
-    vec3 sunDir = normalize(vec3(0.0, 0.0, 1.0)); // Sun direction
+    vec3 sunDir = normalize(vec3(0.0, 0.0, 2.0)); // Sun direction
 
 #if 0
     // North Pole

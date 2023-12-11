@@ -1,190 +1,203 @@
-/*--------------------------------------------------------------------------------------
-License CC0 - http://creativecommons.org/publicdomain/zero/1.0/
-To the extent possible under law, the author(s) have dedicated all copyright and related and neighboring rights to this software to the public domain worldwide. This software is distributed without any warranty.
-----------------------------------------------------------------------------------------
-^ This means do ANYTHING YOU WANT with this code. Because we are programmers, not lawyers.
--Otavio Good
-*/
+const float PI = 3.14159265359;
 
-float PI=3.14159265;
-vec3 sunCol = vec3(258.0, 208.0, 100.0) / 15.0;
+const float SPECULAR_INTENSITY = 1.0;
+const float SPECULAR_POWER = 10.0;
 
-float distFromSphere;
-vec3 normal;
-vec3 texBlurry;
-
-vec3 saturate(vec3 a)
-{
-	return clamp(a, 0.0, 1.0);
-}
-vec2 saturate(vec2 a)
-{
-	return clamp(a, 0.0, 1.0);
-}
-float saturate(float a)
-{
-	return clamp(a, 0.0, 1.0);
+vec4 cubic(float v){
+    vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v;
+    vec4 s = n * n * n;
+    float x = s.x;
+    float y = s.y - 4.0 * s.x;
+    float z = s.z - 4.0 * s.y + 6.0 * s.x;
+    float w = 6.0 - x - y - z;
+    return vec4(x, y, z, w) * (1.0/6.0);
 }
 
-vec3 GetSunColorReflection(vec3 rayDir, vec3 sunDir)
-{
-	vec3 localRay = normalize(rayDir);
-	float sunIntensity = 1.0 - (dot(localRay, sunDir) * 0.5 + 0.5);
-	//sunIntensity = (float)Math.Pow(sunIntensity, 14.0);
-	sunIntensity = 0.2 / sunIntensity;
-	sunIntensity = min(sunIntensity, 40000.0);
-	return sunCol * sunIntensity;
+mat2 rot(float a) {
+	float s = sin(a), c = cos(a);
+    return mat2(c, s, -s, c);
 }
 
-float IntersectSphereAndRay(vec3 pos, float radius, vec3 posA, vec3 posB, out vec3 intersectA2, out vec3 intersectB2)
-{
-	vec3 eyeVec2 = normalize(posB-posA);
-	float dp = dot(eyeVec2, pos - posA);
-	vec3 pointOnLine = eyeVec2 * dp + posA;
-	float distance = length(pointOnLine - pos);
-	float ac = radius*radius - distance*distance;
-	float rightLen = 0.0;
-	if (ac >= 0.0) rightLen = sqrt(ac);
-	intersectA2 = pointOnLine - eyeVec2 * rightLen;
-	intersectB2 = pointOnLine + eyeVec2 * rightLen;
-	distFromSphere = distance - radius;
-	if (distance <= radius) return 1.0;
-	return 0.0;
+float kset(int it, vec3 p, vec3 q, float sc, float c, float iTime) {
+    p.xz *= rot(iTime * .2);
+    p += q;
+    p *= sc;
+    float l = 0., l2;
+    for (int i = 0; i < it; i++) {
+    	p = abs(p) / dot(p, p) - c;
+		l += exp(-1. * abs(length(p) - l2));
+	    l2 = length(p);
+    }
+    return l * .08;    
 }
 
-vec2 Spiral(vec2 uv)
-{
-	float reps = 2.0;
-	vec2 uv2 = fract(uv*reps);
-	vec2 center = floor(fract(uv*reps)) + 0.5;
-	vec2 delta = uv2 - center;
-	float dist = length(delta);
-	float angle = atan(delta.y, delta.x);
-	//if (distance(center, uv2) < 0.02) return vec2(10,10);
-	float nudge = dist * 4.0;
-	vec2 offset = vec2(delta.y, -delta.x);// * 0.2 / dist ;// vec2(sin(angle+nudge), cos(angle+nudge));
-	float blend = max(abs(delta.x), abs(delta.y))* 2.0;
-	blend = clamp((0.5 - dist) * 2.0, 0.0, 1.0);
-	blend = pow(blend, 1.5);
-	//offset *= clamp(1.0 - blend, 0.0, 1.0);
-	offset *= clamp(blend, 0.0, 1.0);
-	//if (dist > 0.5) offset = vec2(0,0);
-	//offset *= dist;
-	return uv + offset*vec2(1.0,1.0)*1.1*texBlurry.x ;
+float clouds(vec3 p2, vec3 dir, float iTime) {
+		p2 -= .1 * dir;
+    	p2.y *= 3.;
+    	float cl1 = 0., cl2 = 0.;
+        for (int i = 0; i < 15; i++) {
+			p2 -= .05 * dir;
+            cl1 += kset(20, p2, vec3(1.7, 3., .54), .3, .95, iTime);
+            cl2 += kset(18, p2, vec3(1.2, 1.7, 1.4), .2, .85, iTime);
+        }    
+        cl1 = pow(cl1 * .045, 10.);
+        cl2 = pow(cl2 * .055, 15.);
+		return cl1 - cl2;
 }
 
-void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir)
-{
-	// Camera setup
-	vec3 camUp = vec3(0, 1, 0);
-	vec3 camLookat = vec3(0, 0.0, 0);
-	float mx = -PI / 2.0;
-	float my = 0.0;
-	vec3 camPos = vec3(cos(my) * cos(mx), sin(my), cos(my) * sin(mx)) * 2.5;
-	vec3 camVec = normalize(camLookat - camPos);
-	vec3 sideNorm = normalize(cross(camUp, camVec));
-	vec3 upNorm = cross(camVec, sideNorm);
-	vec3 worldFacing = camPos + camVec;
-	vec3 worldPix = worldFacing + uv.x * sideNorm + uv.y * upNorm;
-	vec3 relVec = normalize(worldPix - camPos);
+vec4 textureBicubicArray(sampler2DArray tex, vec2 texCoords, uint layer){
 
-	// Planet setup
-	vec3 planetPos = vec3(0.0, 0.0, 0.0);
-	vec3 iA, iB, iA2, iB2;
-	float t = iTime * 0.1 + 0.7;
-	float cloudT = iTime * 0.1;
-	float distFromSphere2;
-	vec3 normal2;
-	float hit2 = IntersectSphereAndRay(planetPos, 1.18, camPos, worldPix, iA2, iB2);
-	normal2 = normal;
-	distFromSphere2 = distFromSphere;
-	float hit = IntersectSphereAndRay(planetPos, 1.10, camPos, worldPix, iA, iB);
-	normal = normalize(iA - planetPos);
+   vec2 texSize = vec2(textureSize(tex, 0));
+   vec2 invTexSize = 1.0 / texSize;
+   
+   texCoords = texCoords * texSize - 0.5;
+   
+    vec2 fxy = fract(texCoords);
+    texCoords -= fxy;
 
-	// Texture setup
-	vec2 polar = vec2(atan(normal.x, normal.z), acos(normal.y));
-	polar.x = (polar.x + PI) / (PI * 2.0);
-	polar.y = polar.y / PI;
-	polar.x = polar.x + 2.03;
-	polar.xy = iA.xy;
-	// vec4 texNoise = texture(iChannel2, (polar.xy + vec2(t, 0)) * 2.0);
-	// texNoise.y = texture(iChannel2, (polar.xy + vec2(t, 0)) * 1.0).y;
-	// texNoise.z = texture(iChannel2, (polar.xy + vec2(t, 0)) * 4.0).z;
-	// texBlurry = texture(iChannel0, (polar.xy + vec2(t, 0)) * 0.03125 * 0.25).rgb;
-    vec4 texNoise = vec4(0.0);
-    texBlurry = vec3(0.0);
-	vec3 tex = texture(PlanetTextures, vec3(polar.xy, 0.0)).rgb;
+    vec4 xcubic = cubic(fxy.x);
+    vec4 ycubic = cubic(fxy.y);
+
+    vec4 c = texCoords.xxyy + vec2 (-0.5, +1.5).xyxy;
     
-    vec3(0.0);
-    vec3 texS = vec3(0.0);
-    vec3 texFlip = vec3(0.0);
-    vec3 texFlipS = vec3(0.0);
-	// tex *= tex;
-	// vec3 texFlip = texture(iChannel0, (1.0 - (polar.xy + vec2(t, 0)) * 0.5)).rgb;
-	// texFlip *= texFlip;
-	// vec3 texS = texture(iChannel0, (Spiral(polar.xy + vec2(t, 0)) + vec2(cloudT * 0.25, 0)) * 1.0).rgb;
-	// texS *= texS;
-	// vec3 texFlipS = texture(iChannel0, (1.0 - (Spiral(polar.xy + vec2(t, 0)) + vec2(cloudT * 0.25, 0)) * 0.5)).rgb;
-	// texFlipS *= texFlipS;
+    vec4 s = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
+    vec4 offset = c + vec4 (xcubic.yw, ycubic.yw) / s;
+    
+    offset *= invTexSize.xxyy;
+    
+    vec4 sample0 = texture(tex, vec3(offset.xz, layer));
+    vec4 sample1 = texture(tex, vec3(offset.yz, layer));
+    vec4 sample2 = texture(tex, vec3(offset.xw, layer));
+    vec4 sample3 = texture(tex, vec3(offset.yw, layer));
 
-	// Atmosphere setup
-	float atmosphereDensity = 1.45 + normal.z;
-	vec3 atmosphereColor = vec3(0.075, 0.35, 0.99) * 0.45;
-	float cloudDensity = max(0.0, pow(texFlipS.x * texS.x, 0.7) * 3.0);
-	vec3 finalAtmosphere = atmosphereColor * atmosphereDensity;
-	vec3 finalColor = finalAtmosphere;
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
 
-	// Land setup
-	// vec3 detailMap = min(texture(iChannel3, (polar.xy + vec2(t, 0)) * 2.0).xyz, 0.25) * 4.0;
-    vec3 detailMap = vec3(0.0);
-	// float land = pow(max(0.0, texture(iChannel1, (polar.xy + vec2(t, 0)) * 0.25).z - 0.25), 0.4) * 0.75;
-    float land = 0.0;
-	float land2 = 0.0;
-	land *= detailMap.x;
-	land2 = max(0.0, land2);
-	land -= tex.x * 0.65;
-	land = max(0.0, land);
-	float iceFactor = abs(pow(normal.y, 2.0));
-	vec3 landColor = max(vec3(0.0, 0.0, 0.0), vec3(0.13, 0.65, 0.01) * land);
-	vec3 landColor2 = max(vec3(0.0, 0.0, 0.0), vec3(0.8, 0.4, 0.01) * land2);
-	vec3 mixedLand = (landColor + landColor2) * 0.5;
-	mixedLand *= (detailMap.zyx + 2.0) * 0.333;
-	vec3 finalLand = mix(mixedLand, vec3(7.0, 7.0, 7.0) * land, iceFactor);
-	finalLand = mix(atmosphereColor * 0.05, finalLand, pow(min(1.0, max(0.0, -distFromSphere * 1.0)), 0.2));
-	finalColor += finalLand;
-	finalColor *= hit;
+    return mix(
+       mix(sample3, sample2, sx), mix(sample1, sample0, sx)
+    , sy);
+}
 
-	// Reflection setup
-	float refNoise = (texNoise.x + texNoise.y + texNoise.z) * 0.3333;
-	vec3 noiseNormal = normal;
-	noiseNormal.x += refNoise * 0.05 * hit;
-	noiseNormal.y += tex.x * hit * 0.1;
-	noiseNormal.z += texFlip.x * hit * 0.1;
-	noiseNormal = normalize(noiseNormal);
-	vec3 ref = reflect(normalize(worldPix - camPos), noiseNormal);
-	refNoise = refNoise * 0.25 + 0.75;
-	float orbitSpeed = 0.125;
-	//vec3 sunDir = normalize(vec3(1.0, 0.0, 0.0));
-	vec3 refNorm = normalize(ref);
-	float glance = saturate(dot(refNorm, sunDir) * saturate(sunDir.z - 0.65));
-	float landMask = finalLand.x + finalLand.y * 1.5;
-	vec3 sunRef = GetSunColorReflection(refNorm, sunDir) * 0.005 * hit * (1.0 - saturate(landMask * 3.5)) * (1.0 - texS.x) * refNoise;
-	sunRef = mix(sunRef, vec3(3.75, 0.8, 0.02) * hit, glance);
-	finalColor += sunRef;
+vec3 getCameraRayDir(vec2 uv, vec3 camPos, vec3 camTarget)
+{
+    // Calculate camera's "orthonormal basis", i.e. its transform matrix components
+    vec3 camForward = normalize(camTarget - camPos);
+    vec3 camRight = normalize(cross(vec3(0.0, 1.0, 0.0), camForward));
+    vec3 camUp = normalize(cross(camForward, camRight));
+     
+    float fPersp = 2.0;
+    vec3 vDir = normalize(uv.x * camRight + uv.y * camUp + camForward * fPersp);
+ 
+    return vDir;
+}
 
-	// Final color setup
-	vec3 sunsColor = vec3(0.);
-	float outerGlow = 1.0 - clamp(distFromSphere * 20.0, 0.0, 1.0);
-	outerGlow = pow(outerGlow, 5.2);
-	finalColor += (atmosphereColor + vec3(0.2, 0.2, 0.2)) * outerGlow * (1.0 - hit);
-	float light = saturate(dot(sunDir, noiseNormal));
-	finalColor *= light * 0.75 + 0.001;
-	finalColor += sunsColor;
-	float scattering;
-	if (hit2 == 1.0) scattering = distance(iA2, iB2);
-	scattering *= pow(saturate(dot(relVec, sunDir) - 0.96), 2.0);
-	scattering *= hit2 * (1.0 - hit);
-	scattering *= outerGlow;
-	finalColor += vec3(1.0, 0.25, 0.05) * scattering * 3060.0;
-	fragColor = clamp(vec4(sqrt(finalColor), 1.0), 0.0, 1.0);
+void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir, in uint planetIndex)
+{
+#if 0
+    // North Pole
+    vec3 camPos = vec3(0, 2, .001);
+#elif 1
+    // Side perspective
+    vec3 camPos = vec3(0, 0, 1);
+#else
+    float t = clamp(iTime / 3.0, 0.0, 1.0); // iTime divided by the number of seconds for the transition
+    vec3 northPole = vec3(0, 2, .001);
+    vec3 sidePerspective = vec3(0, 0, 2);
+    vec3 camPos = mix(northPole, sidePerspective, t);
+#endif
+
+    vec3 camTarget = vec3(0, 0, 0);
+    vec3 rayDir = getCameraRayDir(uv, camPos, camTarget);      
+    
+    vec3 sphereCenter = vec3(0, 0, 0); // Sphere (planet) center
+    float sphereRadius = 0.24; // Sphere (planet) radius
+
+    vec3 oc = camPos - sphereCenter;
+    float a = dot(rayDir, rayDir);
+    float b = 2.0 * dot(oc, rayDir);
+    float c = dot(oc, oc) - sphereRadius*sphereRadius;
+    float discriminant = b*b - 4.0*a*c;
+
+	vec3 color;
+	vec3 point;
+	vec3 rayNormal;
+    float fresnelFactor;
+    float diffuse = 0.0;
+
+	vec3 viewDir = normalize(camPos - point);
+	float fresnelExponent = 2.0; // Adjust this to change the strength of the Fresnel effect
+
+    if (discriminant < 0.0) {
+        color = vec3(0.); // Background color
+        point = camPos * rayDir;
+        rayNormal = normalize(point - sphereCenter);
+    } else {
+        // Calculate the intersection point
+        float t = (-b - sqrt(discriminant)) / (2.0 * a);
+        point = camPos + t * rayDir;
+
+        // Calculate the normal at the intersection point
+        rayNormal = normalize(point - sphereCenter);
+
+        vec3 normal = rayNormal;
+
+        // Rotate the normal
+        float rotationSpeed = 0.3; // Adjust this to change the rotation speed
+        float angle = iTime * rotationSpeed;
+        mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+        normal.xz = rotationMatrix * normal.xz;
+
+        // Calculate the latitude and longitude for the Mercator projection
+        float latitude = asin(normal.y) / PI + 0.5;
+        float longitude = atan(normal.z, normal.x) / (2.0 * PI) + 0.5;
+
+        // Generate noise based on latitude and longitude
+        float noise = noise(vec2(latitude * 256.0, longitude * 256.0));
+
+        // Sample the texture
+        vec3 albedo = textureBicubicArray(PlanetTextures, vec2(longitude,latitude), planetIndex).rgb;
+        
+        // Adjust the color based on the noise
+        albedo = mix(albedo, albedo * noise, 0.1);
+
+        // Calculate the diffuse color
+        diffuse = max(dot(rayNormal, sunDir), 0.0);
+   
+        color = albedo * diffuse;
+
+		// Generate clouds
+        float cloudIntensity = clamp(clouds(point, rayDir, iTime) - 0.8, 0.0, 1.0);
+        vec3 cloudColor = vec3(1.3) * cloudIntensity;
+
+        // Add clouds to the color
+        color += cloudColor * diffuse;
+
+        fresnelFactor = pow(1.0 - max(dot(viewDir, rayNormal), 0.0), fresnelExponent);
+		color += fresnelFactor * color;
+        
+        // Perturb the normal for the specular calculation
+        vec3 perturbedNormal = normalize(rayNormal + vec3(noise / 10.0));
+
+        // Add specular lighting for blue parts
+        if (albedo.b > albedo.r && albedo.b > albedo.g) { // If blue is the dominant color
+            vec3 reflectDir = reflect(-sunDir, perturbedNormal);
+            float spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
+            color += vec3(1.0, 1.0, 1.0) * spec * SPECULAR_INTENSITY;
+        } else { // For land
+            vec3 reflectDir = reflect(-sunDir, perturbedNormal);
+            float spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
+            color += vec3(1.0, 1.0, 1.0) * spec * (SPECULAR_INTENSITY * 0.25); // 25% of the specular intensity for water
+        }
+        
+    }
+
+	fresnelFactor = pow(1.0 - max(dot(viewDir, rayNormal), 0.0), fresnelExponent);
+
+	// Add blue-tint atmosphere
+	float atmosphereIntensity = 0.5; // Adjust this to change the intensity of the atmosphere
+	float atmosphereFade = smoothstep(-0.75, 1.0, discriminant); 
+	vec3 atmosphereColor = vec3(0.1, 0.2, 0.6) * atmosphereIntensity * atmosphereFade; // Adjust the color to a more realistic sky blue
+	color += atmosphereColor * (diffuse + 1.0 * fresnelFactor);
+
+    fragColor = vec4(color,1.0);
 }

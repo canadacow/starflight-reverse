@@ -124,7 +124,9 @@ struct GraphicsContext
 
     std::chrono::time_point<std::chrono::system_clock> epoch;
 
-    std::map<uint32_t, PlanetSurface> surfaceData{};
+    std::unordered_map<uint32_t, PlanetSurface> surfaceData{};
+
+    std::unordered_map<uint32_t, uint32_t> seedToIndex;
 
     bool shouldInitPlanets = false;
     std::binary_semaphore planetsDone{0};
@@ -1041,7 +1043,7 @@ void LoadAssets()
         s_gc.vc.create_image_view(
             s_gc.vc.create_image(48, 24, vk::Format::eR8G8B8A8Unorm, 811, avk::memory_usage::device, avk::image_usage::general_image)
         ), 
-        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
     );
 
     s_gc.vc.record_and_submit_with_fence({
@@ -1050,7 +1052,7 @@ void LoadAssets()
     }, *s_gc.mQueue)->wait_until_signalled();
 }
 
-void GraphicsInitPlanets(std::map<uint32_t, PlanetSurface> surfaces)
+void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
 {
     s_gc.surfaceData = surfaces;
 
@@ -1821,6 +1823,21 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     };
 }
 
+uint32_t IconUniform::IndexFromSeed(uint32_t seed)
+{
+    if(seed == 0)
+    {
+        return 0;
+    }
+
+    assert(s_gc.surfaceData.size());
+
+    auto it = s_gc.seedToIndex.find(seed);
+    assert(it != s_gc.seedToIndex.end());
+
+    return it->second;
+}
+
 void GraphicsUpdate()
 {
     SDL_Texture* currentTexture = NULL;
@@ -1862,6 +1879,9 @@ void GraphicsUpdate()
         {
             commands.push_back(sb->fill(ps.second.albedo.data(), 0, i * mapSize, mapSize));
             commands.push_back(avk::copy_buffer_to_image_layer_mip_level(sb, s_gc.planetAlbedoImages->get_image(), i, 0, avk::layout::transfer_dst, vk::ImageAspectFlagBits::eColor, i * mapSize));
+
+            s_gc.seedToIndex.emplace(ps.first, i);
+
             ++i;
         }
 

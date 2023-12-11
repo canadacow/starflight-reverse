@@ -28,14 +28,18 @@ struct Icon {
     int x;
     int y;
     int screenX;
+
     int screenY;
     int bltX;
     int bltY;
     uint id;
+
     uint clr;
     uint icon_type;
     int planet_to_sunX;
     int planet_to_sunY;
+
+    uint planetIndex;
 };
 
 // Equivalent of TextData struct
@@ -422,10 +426,10 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 if(dist < basesize * 1.05) {
                     vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 1.00);
 
-                    vec2 planet_to_sun = vec2(-icon.planet_to_sunX, icon.planet_to_sunY);
-                    vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun, 0.0));
+                    vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
+                    vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
 
-                    draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm);
+                    draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex);
 
                     if(dist < basesize * 1.0)
                     {
