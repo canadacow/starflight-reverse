@@ -280,6 +280,9 @@ void Init8086(uint8_t* systemMemory)
 			bios_table_lookup[i][j] = regs8[regs16[0x81 + i] + j];
 }
 
+extern unsigned short int regsi;
+extern unsigned short int regbp;
+
 // Emulator entry point
 void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp)
 {
@@ -291,6 +294,10 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp
     regs16[REG_DS] = ds;
     regs16[REG_SS] = ss;
     regs16[REG_SP] = *regSp;
+	regs16[REG_SI] = regsi;
+	regs16[REG_BP] = regbp;
+
+	regs16[REG_DI] = 0x78C; // always constant, points to WORD "OPERATOR"
 
 	// Instruction execution loop. Terminates if CS:IP = 0:0
 	for (;;)
@@ -308,6 +315,8 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp
 		if(memcmp(opcode_stream, forthEnding.data(), forthEnding.size()) == 0)
 		{
 			*regSp = regs16[REG_SP];
+			regbp = regs16[REG_BP];
+			regsi = regs16[REG_SI];
 			break;
 		}
 
