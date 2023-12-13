@@ -1816,7 +1816,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 11, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
                 avk::descriptor_binding(0, 12, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
             })),
-        avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
+        avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1),
 
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::present_src })

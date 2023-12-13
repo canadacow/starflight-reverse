@@ -91,47 +91,39 @@ vec3 getCameraRayDir(vec2 uv, vec3 camPos, vec3 camTarget)
     return vDir;
 }
 
-void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir, in uint planetIndex)
+
+void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir, in uint planetIndex)
 {
-#if 0
-    // North Pole
-    vec3 camPos = vec3(0, 2, .001);
-#elif 1
+
     // Side perspective
     vec3 camPos = vec3(0, 0, 1);
-#else
-    float t = clamp(iTime / 3.0, 0.0, 1.0); // iTime divided by the number of seconds for the transition
-    vec3 northPole = vec3(0, 2, .001);
-    vec3 sidePerspective = vec3(0, 0, 2);
-    vec3 camPos = mix(northPole, sidePerspective, t);
-#endif
-
     vec3 camTarget = vec3(0, 0, 0);
-    vec3 rayDir = getCameraRayDir(uv, camPos, camTarget);      
-    
+    vec3 rayDir = getCameraRayDir(uv, camPos, camTarget);
+
     vec3 sphereCenter = vec3(0, 0, 0); // Sphere (planet) center
     float sphereRadius = 0.24; // Sphere (planet) radius
 
     vec3 oc = camPos - sphereCenter;
     float a = dot(rayDir, rayDir);
     float b = 2.0 * dot(oc, rayDir);
-    float c = dot(oc, oc) - sphereRadius*sphereRadius;
-    float discriminant = b*b - 4.0*a*c;
+    float c = dot(oc, oc) - sphereRadius * sphereRadius;
+    float discriminant = b * b - 4.0 * a * c;
 
-	vec3 color;
-	vec3 point;
-	vec3 rayNormal;
+    vec3 color;
+    vec3 point;
+    vec3 rayNormal;
     float fresnelFactor;
     float diffuse = 0.0;
 
-	vec3 viewDir = normalize(camPos - point);
-	float fresnelExponent = 2.0; // Adjust this to change the strength of the Fresnel effect
+    vec3 viewDir = normalize(camPos - point);
+    float fresnelExponent = 2.0; // Adjust this to change the strength of the Fresnel effect
 
     if (discriminant < 0.0) {
         color = vec3(0.); // Background color
         point = camPos * rayDir;
         rayNormal = normalize(point - sphereCenter);
-    } else {
+    }
+    else {
         // Calculate the intersection point
         float t = (-b - sqrt(discriminant)) / (2.0 * a);
         point = camPos + t * rayDir;
@@ -155,26 +147,27 @@ void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir
         float noise = noise(vec2(latitude * 256.0, longitude * 256.0));
 
         // Sample the texture
-        vec3 albedo = textureBicubicArray(PlanetTextures, vec2(longitude,latitude), planetIndex).rgb;
-        
+        vec3 albedo = textureBicubicArray(PlanetTextures, vec2(longitude, latitude), planetIndex).rgb;
+        //vec3 albedo = texture(PlanetTextures, vec3(longitude,latitude, planetIndex)).rgb;
+
         // Adjust the color based on the noise
         albedo = mix(albedo, albedo * noise, 0.1);
 
         // Calculate the diffuse color
         diffuse = max(dot(rayNormal, sunDir), 0.0);
-   
+
         color = albedo * diffuse;
 
-		// Generate clouds
+        // Generate clouds
         float cloudIntensity = clamp(clouds(point, rayDir, iTime) - 0.8, 0.0, 1.0);
         vec3 cloudColor = vec3(1.3) * cloudIntensity;
 
         // Add clouds to the color
-        color += cloudColor * diffuse;
+        //color += cloudColor * diffuse;
 
         fresnelFactor = pow(1.0 - max(dot(viewDir, rayNormal), 0.0), fresnelExponent);
-		color += fresnelFactor * color;
-        
+        color += fresnelFactor * color;
+
         // Perturb the normal for the specular calculation
         vec3 perturbedNormal = normalize(rayNormal + vec3(noise / 10.0));
 
@@ -183,21 +176,22 @@ void draw_planet( out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir
             vec3 reflectDir = reflect(-sunDir, perturbedNormal);
             float spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
             color += vec3(1.0, 1.0, 1.0) * spec * SPECULAR_INTENSITY;
-        } else { // For land
+        }
+        else { // For land
             vec3 reflectDir = reflect(-sunDir, perturbedNormal);
             float spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
             color += vec3(1.0, 1.0, 1.0) * spec * (SPECULAR_INTENSITY * 0.25); // 25% of the specular intensity for water
         }
-        
     }
 
-	fresnelFactor = pow(1.0 - max(dot(viewDir, rayNormal), 0.0), fresnelExponent);
+    fresnelFactor = pow(1.0 - max(dot(viewDir, rayNormal), 0.0), fresnelExponent);
 
-	// Add blue-tint atmosphere
-	float atmosphereIntensity = 0.5; // Adjust this to change the intensity of the atmosphere
-	float atmosphereFade = smoothstep(-0.75, 1.0, discriminant); 
-	vec3 atmosphereColor = vec3(0.1, 0.2, 0.6) * atmosphereIntensity * atmosphereFade; // Adjust the color to a more realistic sky blue
-	color += atmosphereColor * (diffuse + 1.0 * fresnelFactor);
+    // Add blue-tint atmosphere
+    float atmosphereIntensity = 0.5; // Adjust this to change the intensity of the atmosphere
+    float atmosphereFade = smoothstep(-0.75, 1.0, discriminant);
+    vec3 atmosphereColor = vec3(0.1, 0.2, 0.6) * atmosphereIntensity * atmosphereFade; // Adjust the color to a more realistic sky blue
+    color += atmosphereColor * (diffuse + 1.0 * fresnelFactor);
 
-    fragColor = vec4(color,1.0);
+    fragColor = vec4(color, 1.0);
 }
+

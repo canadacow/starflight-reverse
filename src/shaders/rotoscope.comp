@@ -3,7 +3,7 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
-layout(local_size_x = 32, local_size_y = 32) in;
+layout(local_size_x = 4, local_size_y = 4) in;
 
 // Equivalent of PixelContents enum
 #define ClearPixel 0
@@ -319,7 +319,7 @@ vec2 calculateNormalizedUVIcon(vec2 point1, vec2 point2, float width) {
 }
 
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
-    vec4 pixel;
+    vec4 pixel = vec4(0.);
 
     vec4 fragColor;
     vec2 sub;
@@ -357,7 +357,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 planetPixel = vec4(0.);
     float nebulaPixel = 0.0;
 
-    for(int i = 0; i < 32; i++) {
+    for(int i = 0; i < 16; i++) {
         Icon icon = icons[i];
 
         if(icon.isActive == 0)
