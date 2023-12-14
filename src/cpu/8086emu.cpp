@@ -236,7 +236,11 @@ char pc_interrupt(unsigned char interrupt_num)
         // Divide by zero interrupt
         regs16[REG_AX] = 0;
         regs16[REG_DX] = 0;
-    }
+	}
+	else if (interrupt_num == 0xa)
+	{
+		// Timer interrupt. We don't care in starflight
+	}
     else
     {
         printf("8086 emulator got %d interrupt\n", interrupt_num);
