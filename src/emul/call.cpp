@@ -526,6 +526,53 @@ void LXCHG8(unsigned short es, unsigned short bx, unsigned short ax)
 // 0x49d6: mov    es:[bx],cl
 }
 
+RETURNCODE ForthCall(uint16_t word)
+{
+    return Call(0x224c, word - 0x2);
+}
+
+void ASMCall(uint16_t word)
+{
+    Call(word, word);
+}
+
+uint16_t GetInstanceClass()
+{
+    ForthCall(0x7520); // @INST-CLASS
+    return Pop();
+}
+
+uint32_t GetInstanceOffset()
+{
+    ForthCall(0x750e); // @INST-OFF
+    uint32_t hi_iaddr = Pop();
+    uint32_t lo_iaddr = Pop();
+
+    return hi_iaddr << 16 | lo_iaddr;
+}
+
+uint32_t ForthGetCurrent()
+{
+    ASMCall(0x7577); // CI
+    uint32_t hi_iaddr = Pop();
+    uint32_t lo_iaddr = Pop();
+
+    return hi_iaddr << 16 | lo_iaddr;
+}
+
+void ForthPushCurrent(uint32_t iaddr)
+{
+    Push(iaddr & 0xffff);
+    Push(iaddr >> 16);
+    ASMCall(0x753f); // >C
+
+    ForthCall(0x798c); // SET-CURRENT
+}
+
+void ForthPopCurrent()
+{
+    ForthCall(0x7593); // CDROP
+}
 
 void Find() // "(FIND)"
 {
@@ -786,21 +833,21 @@ struct Rule {
         // a way to cache them and if that's valuable. We'll see.
         bool result = true;
 
-        for(uint8_t condIdx = 0; condIdx < conditionCount; ++condIdx)
+        for (uint8_t condIdx = 0; condIdx < conditionCount; ++condIdx)
         {
+            const WORD* curWord = nullptr;
+
             auto executeWord = [&](uint16_t execWord) -> enum RETURNCODE
             {
                 uint16_t auxSi = regsi;
 
                 auto word = GetWord(execWord, -1);
                 auto ret = Call(word->code, word->word - 2);
+                curWord = word;
+
                 if (ret != OK) return ret;
 
-                while(regsi != auxSi)
-                {
-                    ret = Step();
-                    if (ret != OK) return ret;
-                }
+                assert(auxSi == regsi);
 
                 return OK;
             };
@@ -811,29 +858,46 @@ struct Rule {
             auto* cacheValue = &flagCache[condition.getIndex()];
 
             uint16_t poppedValue = *cacheValue;
-            if(poppedValue == 0xff)
+            if (poppedValue == 0xff)
             {
                 auto ret = executeWord(conditionWord);
                 if (ret != OK) return ret;
-                
+
                 poppedValue = Pop();
-                *cacheValue = poppedValue & 0xff;
+
+                //*cacheValue = poppedValue & 0xff;
             }
 
-            if(condition.isNegated())
+            bool actionResult = false;
+            const char* modifier = "";
+
+            if (condition.isNegated())
             {
-                result = result && (poppedValue == 0);
+                modifier = "NOT ";
+                actionResult = poppedValue == 0;
             }
             else
             {
-                result = result && (poppedValue != 0);
+                actionResult = poppedValue != 0;
             }
 
-            if((result) && (condIdx + 1 == conditionCount))
+            result = result && actionResult;
+
+            printf("Overlay %s, Code 0x%x, word 0x%x (%d of %d) test is '%s%s' which is now %d, rule currently resolves to %d\n", GetOverlayName(curWord->ov), curWord->code, curWord->word - 2, condIdx, conditionCount, modifier, curWord->name, actionResult, result);
+
+            if (condIdx + 1 == conditionCount)
             {
-                auto ret = executeWord(forthWord);
-                if (ret != OK) return ret;
-            }
+                if (result)
+                {
+                    auto ret = executeWord(forthWord);
+                    printf("Whole rule (of %d subrules) resolves to true, executing %s:%s\n", conditionCount, GetOverlayName(curWord->ov), curWord->name);
+                    if (ret != OK) return ret;
+                }
+                else
+                {
+                    printf("Whole rule resolves to false.\n");
+                }
+           }
         }
 
        return OK;
@@ -936,54 +1000,6 @@ std::vector<Icon> GetLocalIconList()
     return s_localIconList;
 }
 
-void ForthCall(uint16_t word)
-{
-    Call(0x224c, word - 0x2);
-}
-
-void ASMCall(uint16_t word)
-{
-    Call(word, word);
-}
-
-uint16_t GetInstanceClass()
-{
-    ForthCall(0x7520); // @INST-CLASS
-    return Pop();
-}
-
-uint32_t GetInstanceOffset()
-{
-    ForthCall(0x750e); // @INST-OFF
-    uint32_t hi_iaddr = Pop();
-    uint32_t lo_iaddr = Pop();
-
-    return hi_iaddr << 16 | lo_iaddr;
-}
-
-uint32_t ForthGetCurrent()
-{
-    ASMCall(0x7577); // CI
-    uint32_t hi_iaddr = Pop();
-    uint32_t lo_iaddr = Pop();
-
-    return hi_iaddr << 16 | lo_iaddr;
-}
-
-void ForthPushCurrent(uint32_t iaddr)
-{
-    Push(iaddr & 0xffff);
-    Push(iaddr >> 16);
-    ASMCall(0x753f); // >C
-
-    ForthCall(0x798c); // SET-CURRENT
-}
-
-void ForthPopCurrent()
-{
-    ForthCall(0x7593); // CDROP
-}
-
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
@@ -1054,13 +1070,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     wordName = FindWordCanFail(bx + 2, ovidx, true);
     overlayName = GetOverlayName(ovidx);
     wordValue = bx + 2;
-
-    //printf("Step 0x%04x addr 0x%04x - OV %s WORD 0x%04x %s\n", regsi-2, addr,  GetOverlayName(regsi, ovidx), bx+2, FindWordCanFail(bx+2, ovidx, true));
-    
-    //uint16_t* hullValue = (uint16_t*)&m[StarflightBaseSegment << 4 + (0x63ef + 0x11)];
-    //*hullValue = 50;
-    //Write16(0x63ef + 0x11, 50);
-    //m[0x7d20] = 50;
 
     // bx contains pointer to WORD
     if ((regsp < FILESTAR0SIZE+0x100) || (regsp > (0xF6F4)))
@@ -1625,11 +1634,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0xb869: // call rule
             {
+            /* 
                 uint16_t nextInstr = bx + 2;
                 auto meta = (const RuleMetadata*)&mem[nextInstr];
                 auto res = meta->Execute(nextInstr);
                 if (res != OK) return res;
                 Push(0); // Not sure why
+                */
+
+                ParameterCall(bx, 0xb869);
             }
         break;
 

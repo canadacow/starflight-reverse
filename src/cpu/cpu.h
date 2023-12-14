@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-constexpr uint16_t StarflightBaseSegment = 0x192;
+constexpr uint32_t StarflightBaseSegment = 0x192;
 constexpr uint32_t SystemMemorySize = 0x10FFF0;
 
 extern unsigned char *mem;
