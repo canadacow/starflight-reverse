@@ -1583,6 +1583,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     // 0xe85c: WORD '?IN-NEB' codep=0x224c wordp=0xe85e params=0 returns=1
                     
+                    bool hasShip = false;
                     int32_t shipScreenX = 0;
                     int32_t shipScreenY = 0;
                     for (auto icon : s_localIconList)
@@ -1591,26 +1592,30 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         {
                             shipScreenX = icon.screenX;
                             shipScreenY = icon.screenY;
+                            hasShip = true;
                             break;
                         }
                     }
 
                     bool inNebula = false;
-                    for (auto icon : s_localIconList)
+                    if (hasShip)
                     {
-                        if (icon.icon_type == IconType::Nebula)
+                        for (auto icon : s_localIconList)
                         {
-                            auto calculateDistance = [](int32_t x0, int32_t y0, int32_t x1, int32_t y1) -> float {
-                                float xDist = (float)x1 - (float)x0;
-                                float yDist = 0.60f * float(y1 - y0);
-                                return sqrt((xDist * xDist) + (yDist * yDist));
-                            };
-
-                            float basesize = 29.0f * (float)(icon.id - 50);
-                            if(calculateDistance(shipScreenX, shipScreenY, icon.screenX, icon.screenY) < basesize)
+                            if (icon.icon_type == IconType::Nebula)
                             {
-                                inNebula = true;
-                                break;
+                                auto calculateDistance = [](int32_t x0, int32_t y0, int32_t x1, int32_t y1) -> float {
+                                    float xDist = (float)x1 - (float)x0;
+                                    float yDist = 0.60f * float(y1 - y0);
+                                    return sqrt((xDist * xDist) + (yDist * yDist));
+                                };
+
+                                float basesize = 29.0f * (float)(icon.id - 50);
+                                if (calculateDistance(shipScreenX, shipScreenY, icon.screenX, icon.screenY) < basesize)
+                                {
+                                    inNebula = true;
+                                    break;
+                                }
                             }
                         }
                     }
