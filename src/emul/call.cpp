@@ -1302,6 +1302,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         if (it->second == "SHIP")
                         {
                             // Handled elsewhere
+                            icon.icon_type = (uint32_t)IconType::Ship;
                             found = true;
                         }
                         if (it->second == "FLUX")
@@ -1581,7 +1582,47 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     // doesn't test for the right color.
 
                     // 0xe85c: WORD '?IN-NEB' codep=0x224c wordp=0xe85e params=0 returns=1
-                    Push(0);
+                    
+                    int32_t shipScreenX = 0;
+                    int32_t shipScreenY = 0;
+                    for (auto icon : s_localIconList)
+                    {
+                        if (icon.icon_type == IconType::Ship)
+                        {
+                            shipScreenX = icon.screenX;
+                            shipScreenY = icon.screenY;
+                            break;
+                        }
+                    }
+
+                    bool inNebula = false;
+                    for (auto icon : s_localIconList)
+                    {
+                        if (icon.icon_type == IconType::Nebula)
+                        {
+                            auto calculateDistance = [](int32_t x0, int32_t y0, int32_t x1, int32_t y1) -> float {
+                                float xDist = (float)x1 - (float)x0;
+                                float yDist = 0.60f * float(y1 - y0);
+                                return sqrt((xDist * xDist) + (yDist * yDist));
+                            };
+
+                            float basesize = 29.0f * (float)(icon.id - 50);
+                            if(calculateDistance(shipScreenX, shipScreenY, icon.screenX, icon.screenY) < basesize)
+                            {
+                                inNebula = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if(inNebula)
+                    {
+                        Push(1);
+                    }
+                    else
+                    {
+                        Push(0);
+                    }
                 }
                 else if (nextInstr == 0x2af1)
                 {

@@ -32,6 +32,7 @@ enum IconType
     Planet,
     Nebula,
     Flux,
+    Ship,
 };
 
 #pragma pack(push, 1)
