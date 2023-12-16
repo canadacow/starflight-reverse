@@ -1,15 +1,16 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include"call.h"
-#include"../cpu/cpu.h"
-#include"fract.h"
-#include"graphics.h"
-#include"callstack.h"
-#include"findword.h"
-#include"../disasOV/global.h"
+#include "call.h"
+#include "../cpu/cpu.h"
+#include "fract.h"
+#include "graphics.h"
+#include "callstack.h"
+#include "findword.h"
+#include "../disasOV/global.h"
 #include "../util/lodepng.h"
+#include "../tts/speech.h"
 
 #include "starsystem.h"
 #include "instance.h"
@@ -994,6 +995,9 @@ uint16_t nparmsStackSi = 0;
 static std::mutex s_localIconListMutex;
 std::vector<Icon> s_localIconList;
 
+static bool s_shouldRecordText = false;
+static std::string s_recordedText = "";
+
 std::vector<Icon> GetLocalIconList()
 {
     std::lock_guard<std::mutex> lg(s_localIconListMutex);
@@ -1098,6 +1102,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xaf81)
                 {
                     //WaitForVBlank();
+                }
+
+                if (nextInstr == 0xe446) // (PHRASE>CT)
+                {
+                    s_recordedText = "";
+                    s_shouldRecordText = true;
                 }
 
                 if (nextInstr == 0xb5aa) // HIMUS
@@ -1675,6 +1685,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     GraphicsSetDeadReckoning(newX - oldX, newY - oldY);
                 }
+
+                if (nextInstr == 0xe446) // (PHRASE>CT)
+                {
+                    //printf("We recorded the string '%s'\n", s_recordedText.c_str());
+                    SayText(s_recordedText);
+
+                    s_recordedText = "";
+                    s_shouldRecordText = false;
+                }
             }
         break;
 
@@ -1758,6 +1777,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             {
               //printf("EMIT: \n");
               //PrintCallstacktrace(bxtemp);
+
             }
 
             if (bx == 0x6e) // TYPE
@@ -1773,9 +1793,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 outStr += Read8(offset+i);
               }
 
-              if(outStr == "CAUTION")
+              if(outStr == "RECEIVING:")
               {
                 printf("\n");
+              }
+
+              if (s_shouldRecordText)
+              {
+                  s_recordedText += outStr + " ";
               }
 
               printf("TYPE: %s\n", outStr.c_str());

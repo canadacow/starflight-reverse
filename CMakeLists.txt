@@ -67,7 +67,21 @@ set_source_files_properties(
     PROPERTIES LANGUAGE CXX
 )
 
+set(HEADER_FILES
+    src/emul/call.h
+    src/cpu/cpu.h
+    src/emul/findword.h
+    src/emul/callstack.h
+    src/disasOV/global.h
+    src/emul/graphics.h
+    src/emul/fract.h
+    src/disasmX86/debugger.h
+	src/util/lodepng.h 
+    src/tts/speech.h
+)
+
 add_executable(emulatesdl 
+    ${HEADER_FILES}
     src/emul/emul.cpp 
     src/emul/call.cpp 
     src/cpu/cpu.cpp
@@ -80,6 +94,7 @@ add_executable(emulatesdl
     src/util/lodepng.cpp
     src/emul/sdl_helper.cpp
     src/emul/vulkan_helper.cpp
+    src/tts/speech.cpp
 )
 
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)

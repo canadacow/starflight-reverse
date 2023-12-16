@@ -1,12 +1,13 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include"../cpu/cpu.h"
-#include"call.h"
-#include"findword.h"
-#include"graphics.h"
-#include"../patch/patch.h"
+#include "../cpu/cpu.h"
+#include "call.h"
+#include "findword.h"
+#include "graphics.h"
+#include "../patch/patch.h"
+#include "../tts/speech.h"
 
 #include <string>
 #include <thread>
@@ -25,6 +26,7 @@ int main(int argc, char *argv[]) {
     InitCPU();
     InitEmulator(hash);
     GraphicsInit();
+    InitTextToSpeech();
 
     enum RETURNCODE ret;
     do
