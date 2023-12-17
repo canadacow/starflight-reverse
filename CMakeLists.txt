@@ -58,6 +58,7 @@ find_package(sdl2 CONFIG REQUIRED)
 find_package(Zstd CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
 find_package(Vulkan 1.2.162 REQUIRED)
+find_package(CURL REQUIRED)
 
 set_source_files_properties(
     src/cpu/cpu.cpp 
@@ -78,6 +79,7 @@ set(HEADER_FILES
     src/disasmX86/debugger.h
 	src/util/lodepng.h 
     src/tts/speech.h
+    ${CURL_INCLUDE_DIRS}
 )
 
 add_executable(emulatesdl 
@@ -106,7 +108,8 @@ target_link_libraries(emulatesdl PRIVATE
         avk
         Vulkan::Vulkan
         Vulkan::Headers
-        $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+        $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
+        ${CURL_LIBRARIES})
 
 foreach(SHADER ${SHADER_LIST})
     add_dependencies(emulatesdl ${SHADER}_compilation)

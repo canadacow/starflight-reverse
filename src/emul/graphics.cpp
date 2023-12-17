@@ -26,6 +26,7 @@
 #include <xxhash.h>
 
 #include "../cpu/cpu.h"
+#include "../tts/speech.h"
 
 #include "vulkan_helper.h"
 
@@ -645,6 +646,7 @@ public:
                         {
                             if(SDL_GetWindowFromID(event.window.windowID) == window)
                             {
+                                StopSpeech();
                                 GraphicsQuit();
                                 exit(0);
                             }

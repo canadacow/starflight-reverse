@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
     } while (ret == OK || ret == EXIT);
 
     //GraphicsWait();
+    StopSpeech();
     GraphicsQuit();
     return 0;
 }

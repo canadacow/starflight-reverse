@@ -4,3 +4,4 @@
 
 void InitTextToSpeech();
 void SayText(std::string text);
+void StopSpeech();

@@ -1104,7 +1104,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
-                if (nextInstr == 0xe446) // (PHRASE>CT)
+                if (nextInstr == 0xe4b6) // (PHRASE>CT)
                 {
                     s_recordedText = "";
                     s_shouldRecordText = true;
@@ -1686,10 +1686,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsSetDeadReckoning(newX - oldX, newY - oldY);
                 }
 
-                if (nextInstr == 0xe446) // (PHRASE>CT)
+                if (nextInstr == 0xe4b6) // (PHRASE>CT)
                 {
                     //printf("We recorded the string '%s'\n", s_recordedText.c_str());
-                    SayText(s_recordedText);
+                    if (s_recordedText.substr(0, 11) == "RECEIVING: ") // Check if s_recordedText starts with "RECEIVING: "
+                    {
+                        std::string recordedTextWithoutReceiving = s_recordedText.substr(11); // Remove "RECEIVING: " from the start
+                        SayText(recordedTextWithoutReceiving);
+                    }
 
                     s_recordedText = "";
                     s_shouldRecordText = false;
