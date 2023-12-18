@@ -94,8 +94,11 @@ layout(binding = 7) uniform sampler2D PORTPICTexture;
 layout(binding = 8) uniform sampler2D RACEDOSATLASTexture;
 layout(binding = 9) uniform sampler2D ShipTexture;
 layout(binding = 10) uniform sampler2DArray PlanetTextures;
+layout(binding = 11) uniform sampler2D AlienColorTexture;
+layout(binding = 12) uniform sampler2D AlienDepthTexture;
+layout(binding = 13) uniform sampler2D AlienBackgroundTexture;
 
-layout(binding = 11) uniform UniformBlock {
+layout(binding = 14) uniform UniformBlock {
     int GRAPHICS_MODE_WIDTH;
     int GRAPHICS_MODE_HEIGHT;
     int WINDOW_WIDTH;
@@ -113,7 +116,7 @@ layout(binding = 11) uniform UniformBlock {
     uint game_context; 
 } uniforms;
 
-layout(binding = 12) uniform IconBlock {
+layout(binding = 15) uniform IconBlock {
     Icon icons[32];
 };
 
@@ -545,6 +548,11 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
     switch (roto.runBitData.tag)
     {
+        case 9: // Mechan 9 comms
+            {
+                pixel = vec4(1.0, 1.0, 0.0, 1.0); // vec4(unpackUnorm4x8(roto.argb)).bgra;
+            }
+            break;
         case 44: // Port-Pic Top 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, subY * 0.5f));
             if(isGreen(pixel.rgb))

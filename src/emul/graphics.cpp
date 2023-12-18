@@ -118,6 +118,10 @@ struct GraphicsContext
     avk::image_sampler shipImage;
     avk::image_sampler planetAlbedoImages;
 
+    avk::image_sampler alienColorImage;
+    avk::image_sampler alienDepthImage;
+    avk::image_sampler alienBackgroundImage;
+
     avk::compute_pipeline rotoscopePipeline;
     avk::compute_pipeline textPipeline;
 
@@ -1048,6 +1052,27 @@ void LoadAssets()
         s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
     );
 
+    s_gc.alienColorImage = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            s_gc.vc.create_image(512, 512, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
+    );
+
+    s_gc.alienBackgroundImage = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            s_gc.vc.create_image(512, 512, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
+    );
+
+    s_gc.alienDepthImage = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            s_gc.vc.create_image(512, 512, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
+        ), 
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
+    );
+
     s_gc.vc.record_and_submit_with_fence({
             avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal })
@@ -1230,9 +1255,12 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 8, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 10, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 11, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 12, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 13, 1u),
         //avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
-        avk::descriptor_binding<avk::buffer>(0, 11, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 12, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 14, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1814,9 +1842,12 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 9, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 10, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 11, s_gc.alienColorImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 12, s_gc.alienDepthImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 13, s_gc.alienBackgroundImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 //avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 11, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
-                avk::descriptor_binding(0, 12, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
+                avk::descriptor_binding(0, 14, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                avk::descriptor_binding(0, 15, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1),
 
@@ -1917,6 +1948,72 @@ void GraphicsUpdate()
     uniform.game_context = gameContext;
 
     bool hasNavigation = false;
+    static uint32_t activeAlien = 0;
+
+    std::vector<avk::recorded_commands_t> commands{};
+
+    auto setActiveAlien = [&](uint32_t newAlien){
+        const static std::unordered_map<uint32_t, std::string> aliens = {
+            { 9 , "mechan"}
+        };
+
+        if(activeAlien != newAlien)
+        {
+            const uint32_t dataSize = 512 * 512 * 4;
+
+            std::array<avk::image_t&, 3> alienImgs = {
+                s_gc.alienColorImage->get_image(),
+                s_gc.alienDepthImage->get_image(),
+                s_gc.alienBackgroundImage->get_image()
+            };
+
+            std::array<std::string, 3> files = {
+                "npc.png",
+                "depth.png",
+                "background.png"
+            };
+
+            for(int i = 0; i < 3; i++) {
+                auto sb = s_gc.vc.create_buffer(
+                    AVK_STAGING_BUFFER_MEMORY_USAGE,
+                    vk::BufferUsageFlagBits::eTransferSrc,
+                    avk::generic_buffer_meta::create_from_size(dataSize)
+                );
+
+                std::vector<uint8_t> image;
+                unsigned width, height;
+
+                std::string filename = "mechan/" + files[i];
+
+                unsigned error = lodepng::decode(image, width, height, filename, LCT_RGBA, 8);
+                if (error)
+                {
+                    printf("decoder error %d, %s loading %s\n", error, lodepng_error_text(error), filename.c_str());
+                    exit(-1);
+                }
+
+                sb->fill(image.data(), 0, 0, dataSize),
+
+                commands.push_back(
+                    avk::sync::buffer_memory_barrier(sb.as_reference(),
+                        avk::stage::auto_stage >> avk::stage::auto_stage,
+                        avk::access::auto_access >> avk::access::auto_access
+                    ));
+
+                commands.push_back(
+                    avk::sync::image_memory_barrier(alienImgs[i],
+                        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::transfer_dst }));
+
+                commands.push_back(avk::copy_buffer_to_image(sb, alienImgs[i], avk::layout::transfer_dst));
+
+                commands.push_back(
+                    avk::sync::image_memory_barrier(alienImgs[i],
+                        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }));
+            }
+            
+            activeAlien = newAlien;
+        }
+    };
 
     // Choose the correct texture based on the current mode
     if (graphicsMode == SFGraphicsMode::Graphics)
@@ -1939,6 +2036,18 @@ void GraphicsUpdate()
                 if (rotoscopePixels[i].content == NavigationalPixel)
                 {
                     hasNavigation = true;
+                }
+
+                if(rotoscopePixels[i].content == RunBitPixel)
+                {
+                    switch(rotoscopePixels[i].runBitData.tag)
+                    {
+                        case 9: // MECHAN 9
+                            setActiveAlien(rotoscopePixels[i].runBitData.tag);
+                            break;
+                        default:
+                        break;
+                    }
                 }
 #endif
             }
@@ -1993,21 +2102,21 @@ void GraphicsUpdate()
 
     s_gc.buffers[inFlightIndex].command->reset();
 
-    std::vector<avk::recorded_commands_t> commands{};
-
     if (graphicsMode == SFGraphicsMode::Text)
     {
-        commands = TextPass(inFlightIndex, uniform, data, dataSize);
+        auto textCommands = TextPass(inFlightIndex, uniform, data, dataSize);
+        commands.insert(commands.end(), textCommands.begin(), textCommands.end());
     }
     else
     {
 #if defined(USE_CPU_RASTERIZATION)
-        commands = CPUCopyPass(inFlightIndex, data, dataSize);
+        auto cpuCommands = CPUCopyPass(inFlightIndex, data, dataSize);
+        commands.insert(commands.end(), cpuCommands.begin(), cpuCommands.end());
 #else
 
         IconUniform ic(icons);
-
-        commands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer);
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer);
+        commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
     }
 
