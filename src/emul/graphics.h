@@ -35,6 +35,18 @@ enum IconType
     Ship,
 };
 
+// V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+// (3 = hyperspace, 4 = encounter, 5 = starport)
+enum GameContext
+{
+    GC_PlanetSurface = 0,
+    GC_Orbit = 1,
+    GC_System = 2,
+    GC_Hyperspace = 3,
+    GC_Encounter = 4,
+    GC_Starport = 5
+};
+
 #pragma pack(push, 1)
 
 // Equivalent of UniformBlock struct
@@ -51,6 +63,9 @@ struct UniformBlock {
     float heading;
     float deadX;
     float deadY;
+    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+    // (3 = hyperspace, 4 = encounter, 5 = starport)
+    uint32_t game_context; 
 };
 
 struct ShaderIcon {
@@ -94,7 +109,7 @@ struct Icon {
     uint32_t seed;
 };
 
-extern std::vector<Icon> GetLocalIconList();
+extern std::vector<Icon> GetLocalIconList(uint32_t* gameContext);
 
 struct IconUniform {
     ShaderIcon icons[32];

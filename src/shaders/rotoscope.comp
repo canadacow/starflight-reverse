@@ -108,6 +108,9 @@ layout(binding = 11) uniform UniformBlock {
     float heading;
     float deadX;
     float deadY;
+    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+    // (3 = hyperspace, 4 = encounter, 5 = starport)
+    uint game_context; 
 } uniforms;
 
 layout(binding = 12) uniform IconBlock {
@@ -626,7 +629,11 @@ void main() {
                 pixel = DrawRunBitPixel(roto, uv, subUv);
                 break;
             case NavigationalPixel:
-                pixel = DrawNavigationPixel(roto, uv, subUv);
+                if((uniforms.game_context == 2 || uniforms.game_context == 3))
+                {
+                    // System and hyperspace
+                    pixel = DrawNavigationPixel(roto, uv, subUv);
+                }
                 break;
             default:
                 break;

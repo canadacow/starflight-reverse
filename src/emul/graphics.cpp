@@ -1896,7 +1896,8 @@ void GraphicsUpdate()
         s_gc.planetsDone.release();
     }
 
-    std::vector<Icon> icons = GetLocalIconList();
+    uint32_t gameContext;
+    std::vector<Icon> icons = GetLocalIconList(&gameContext);
 
     if (fullRes.size() == 0)
     {
@@ -1913,6 +1914,7 @@ void GraphicsUpdate()
     uniform.useEGA = s_useEGA ? 1 : 0;
     uniform.useRotoscope = s_useRotoscope ? 1 : 0;
     uniform.iTime = std::chrono::duration<float>(std::chrono::system_clock::now() - s_gc.epoch).count();
+    uniform.game_context = gameContext;
 
     bool hasNavigation = false;
 

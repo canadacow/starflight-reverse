@@ -992,15 +992,17 @@ uint8_t frequencyLookupTable[] = {
 extern unsigned short regbx;
 uint16_t nparmsStackSi = 0;
 
-static std::mutex s_localIconListMutex;
+static std::recursive_mutex s_localIconListMutex;
 std::vector<Icon> s_localIconList;
+uint32_t          s_gameContext;
 
 static bool s_shouldRecordText = false;
 static std::string s_recordedText = "";
 
-std::vector<Icon> GetLocalIconList()
+std::vector<Icon> GetLocalIconList(uint32_t* gameContext)
 {
-    std::lock_guard<std::mutex> lg(s_localIconListMutex);
+    std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
+    *gameContext = s_gameContext;
     return s_localIconList;
 }
 
@@ -1074,6 +1076,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     wordName = FindWordCanFail(bx + 2, ovidx, true);
     overlayName = GetOverlayName(ovidx);
     wordValue = bx + 2;
+
+    {
+        std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
+        s_gameContext = Read16(0x5a5c);
+    }
 
     // bx contains pointer to WORD
     if ((regsp < FILESTAR0SIZE+0x100) || (regsp > (0xF6F4)))
@@ -1214,7 +1221,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         return icon;
                     };
 
-                    std::lock_guard<std::mutex> lg(s_localIconListMutex);
+                    std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
                     s_localIconList.clear();
 
                     //ASMCall(0x7577); // CI
