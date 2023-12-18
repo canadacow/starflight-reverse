@@ -1961,10 +1961,10 @@ void GraphicsUpdate()
         {
             const uint32_t dataSize = 512 * 512 * 4;
 
-            std::array<avk::image_t&, 3> alienImgs = {
-                s_gc.alienColorImage->get_image(),
-                s_gc.alienDepthImage->get_image(),
-                s_gc.alienBackgroundImage->get_image()
+            std::array<avk::image_sampler, 3> alienImgs = {
+                s_gc.alienColorImage,
+                s_gc.alienDepthImage,
+                s_gc.alienBackgroundImage
             };
 
             std::array<std::string, 3> files = {
@@ -2001,13 +2001,13 @@ void GraphicsUpdate()
                     ));
 
                 commands.push_back(
-                    avk::sync::image_memory_barrier(alienImgs[i],
+                    avk::sync::image_memory_barrier(alienImgs[i]->get_image(),
                         avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::transfer_dst }));
 
-                commands.push_back(avk::copy_buffer_to_image(sb, alienImgs[i], avk::layout::transfer_dst));
+                commands.push_back(avk::copy_buffer_to_image(sb, alienImgs[i]->get_image(), avk::layout::transfer_dst));
 
                 commands.push_back(
-                    avk::sync::image_memory_barrier(alienImgs[i],
+                    avk::sync::image_memory_barrier(alienImgs[i]->get_image(),
                         avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }));
             }
             
