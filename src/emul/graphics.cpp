@@ -1075,7 +1075,17 @@ void LoadAssets()
 
     s_gc.vc.record_and_submit_with_fence({
             avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
-                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal })
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
+
+            avk::sync::image_memory_barrier(s_gc.alienColorImage->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
+
+            avk::sync::image_memory_barrier(s_gc.alienDepthImage->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
+
+            avk::sync::image_memory_barrier(s_gc.alienBackgroundImage->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
+
     }, *s_gc.mQueue)->wait_until_signalled();
 }
 
@@ -1994,7 +2004,7 @@ void GraphicsUpdate()
 
                 commands.push_back(
                     avk::sync::image_memory_barrier(alienImgs[i]->get_image(),
-                        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }));
+                        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::transfer_dst }));
 
                 sb->fill(image.data(), 0, 0, dataSize),
 

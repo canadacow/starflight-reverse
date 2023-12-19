@@ -158,6 +158,94 @@ const vec4 CGAPalette[4] =
 
 const uint EGAToCGA[16] = {0, 2, 1, 11, 4, 6, 8, 10, 5, 3, 9, 7, 14, 0, 13, 15};
 
+void drawMechan( out vec4 fragColor, in vec2 uv )
+{
+    // Sample the image from iChannel0
+    vec4 robot = texture(AlienColorTexture, uv);
+
+    // Define light position
+    vec3 lightPos = vec3(0.0, 0.0, -1.10);
+    
+    // Calculate the direction from the light to the robot
+    vec2 lightDir = normalize(lightPos.xy - uv);
+    
+    float depth = texture(AlienDepthTexture, uv).r;
+    
+    if (depth < 0.4)
+    {
+        robot.rgba = vec4(0.0);
+    }
+
+    vec4 wall = texture(AlienBackgroundTexture, uv);
+
+    // Calculate shadow position
+    vec2 shadowPos = uv - 0.5 + lightPos.xy;
+    shadowPos /= abs(lightPos.z);
+
+    // Sample the robot texture at the shadow position
+    vec4 shadow = texture(AlienColorTexture, shadowPos);
+    if(shadowPos.x > 1.0 || shadowPos.x < 0.0 || shadowPos.y < 0.0 || shadowPos.y > 1.0)
+    {
+        shadow.rgba = vec4(0.0);
+    }
+    
+    // Sample the depth buffer from iChannel1
+    float shadowDepth = texture(AlienDepthTexture, shadowPos).r;
+    
+    if(shadowDepth < 0.4)
+    {
+        shadow.rgba = vec4(0.0);
+    }
+
+    // If the shadow position is within the robot's silhouette, darken the wall
+    if (shadow.a > 0.0)
+    {
+        wall.rgb *= 0.5;
+    }
+
+    // Calculate view direction
+    vec3 viewDir = normalize(vec3(uv, 0.0) - vec3(lightPos.xy, depth));
+
+    // Calculate reflection direction
+    vec3 reflectDir = reflect(viewDir, vec3(lightDir, 0.0));
+
+    // Calculate specular intensity
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 20.0);
+
+    // Reduce specular intensity for dark or green pixels
+    float reflectivity = smoothstep(0.2, 0.6, length(robot.rgb - vec3(0.0, 1.0, 0.0)));
+    spec *= reflectivity;
+
+    // Add specular intensity to the robot color
+    robot.rgb += vec3(0.5) * spec;
+
+    // Pre-multiplied alpha blend robot to the wall as the final output color
+    vec4 color = robot * robot.a + wall * (1.0 - robot.a);
+    
+    // Output to screen
+    fragColor = color;
+    
+    // Define the center of the circle
+    vec2 center = vec2(0.52, 1.0 - 0.178);
+
+    // Calculate the distance from the current pixel to the center
+    float dist = distance(uv, center);
+
+    // Define the radius of the circle
+    float radius = 0.108;
+
+    // Use a step function to create a hard edge
+    float circle = 1.0 - step(radius, dist);
+
+    float brightnessAdjustment = 0.0  * 2.0; // Change this value to adjust brightness
+
+    // Calculate the adjusted color
+    vec4 adjustedColor = fragColor * vec4(vec3(brightnessAdjustment), 1.0);
+
+    // Blend the adjusted color with the existing color
+    fragColor = mix(fragColor, adjustedColor, circle);  
+}
+
 vec4 DrawLinePixel(const Rotoscope roto, vec2 uv, float polygonWidth) {
     vec4 pixel;
 
@@ -550,7 +638,8 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     {
         case 9: // Mechan 9 comms
             {
-                pixel = vec4(1.0, 1.0, 0.0, 1.0); // vec4(unpackUnorm4x8(roto.argb)).bgra;
+                //pixel = vec4(1.0, 1.0, 0.0, 1.0); // vec4(unpackUnorm4x8(roto.argb)).bgra;
+                drawMechan(pixel, vec2(subX, subY));
             }
             break;
         case 44: // Port-Pic Top 100 pixels
