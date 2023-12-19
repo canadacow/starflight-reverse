@@ -1992,6 +1992,10 @@ void GraphicsUpdate()
                     exit(-1);
                 }
 
+                commands.push_back(
+                    avk::sync::image_memory_barrier(alienImgs[i]->get_image(),
+                        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }));
+
                 sb->fill(image.data(), 0, 0, dataSize),
 
                 commands.push_back(
@@ -2000,15 +2004,12 @@ void GraphicsUpdate()
                         avk::access::auto_access >> avk::access::auto_access
                     ));
 
-                commands.push_back(
-                    avk::sync::image_memory_barrier(alienImgs[i]->get_image(),
-                        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::transfer_dst }));
-
                 commands.push_back(avk::copy_buffer_to_image(sb, alienImgs[i]->get_image(), avk::layout::transfer_dst));
 
                 commands.push_back(
                     avk::sync::image_memory_barrier(alienImgs[i]->get_image(),
                         avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }));
+
             }
             
             activeAlien = newAlien;
