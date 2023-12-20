@@ -163,15 +163,18 @@ void drawMechan( out vec4 fragColor, in vec2 uv )
 {
     float time = uniforms.iTime * 0.11;
 
-    float talkPos = float(uniforms.alienVar1) / 1000000.0;
+    float talkPos = float(uniforms.alienVar1) / 50000.0;
 
     float zoomFactor = 1.0 + noise(vec2(time)) * 0.05 - talkPos; // Adjust the 0.1 value to control the amount of zoom
 
     // Translate UV coordinates to center
     vec2 centeredUV = uv - vec2(0.5, 0.5);
 
-    // Scale (zoom)
-    centeredUV *= zoomFactor;
+    // Get depth before zooming
+    float depthRep = texture(AlienDepthTexture, uv).r;
+
+    // Scale (zoom) and reproject based on depth
+    centeredUV *= zoomFactor - (depthRep / 25.);
 
     // Translate back
     vec2 zoomedUV = centeredUV + vec2(0.5, 0.5);
