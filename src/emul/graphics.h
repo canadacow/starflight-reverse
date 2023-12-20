@@ -66,6 +66,7 @@ struct UniformBlock {
     // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
     // (3 = hyperspace, 4 = encounter, 5 = starport)
     uint32_t game_context; 
+    uint32_t alienVar1;
 };
 
 struct ShaderIcon {

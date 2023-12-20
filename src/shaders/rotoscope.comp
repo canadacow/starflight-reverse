@@ -114,6 +114,7 @@ layout(binding = 14) uniform UniformBlock {
     // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
     // (3 = hyperspace, 4 = encounter, 5 = starport)
     uint game_context; 
+    uint alienVar1;
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {
@@ -160,16 +161,29 @@ const uint EGAToCGA[16] = {0, 2, 1, 11, 4, 6, 8, 10, 5, 3, 9, 7, 14, 0, 13, 15};
 
 void drawMechan( out vec4 fragColor, in vec2 uv )
 {
-    // Sample the image from iChannel0
-    vec4 robot = texture(AlienColorTexture, uv);
+    float time = uniforms.iTime * 0.11;
+
+    float talkPos = float(uniforms.alienVar1) / 1000000.0;
+
+    float zoomFactor = 1.0 + noise(vec2(time)) * 0.05 - talkPos; // Adjust the 0.1 value to control the amount of zoom
+
+    // Translate UV coordinates to center
+    vec2 centeredUV = uv - vec2(0.5, 0.5);
+
+    // Scale (zoom)
+    centeredUV *= zoomFactor;
+
+    // Translate back
+    vec2 zoomedUV = centeredUV + vec2(0.5, 0.5);
+    vec4 robot = texture(AlienColorTexture, zoomedUV);
 
     // Define light position
-    vec3 lightPos = vec3(0.0, 0.0, -1.10);
+    vec3 lightPos = vec3(0.33 + talkPos, 0.33, -1.10 - talkPos);
     
     // Calculate the direction from the light to the robot
     vec2 lightDir = normalize(lightPos.xy - uv);
     
-    float depth = texture(AlienDepthTexture, uv).r;
+    float depth = texture(AlienDepthTexture, zoomedUV).r;
     
     if (depth < 0.4)
     {
@@ -237,7 +251,7 @@ void drawMechan( out vec4 fragColor, in vec2 uv )
     // Use a step function to create a hard edge
     float circle = 1.0 - step(radius, dist);
 
-    float brightnessAdjustment = 0.0  * 2.0; // Change this value to adjust brightness
+    float brightnessAdjustment = float(uniforms.alienVar1) / 1024.0; // Change this value to adjust brightness
 
     // Calculate the adjusted color
     vec4 adjustedColor = fragColor * vec4(vec3(brightnessAdjustment), 1.0);

@@ -17,12 +17,31 @@
 #include <mmsystem.h>
 #include <mmreg.h>
 
+extern void queue_speech(int16_t* voiceAudio, uint64_t length);
+
 #pragma comment(lib, "winmm.lib")
 
 struct VoiceToSpeak
 {
     std::string text;
     std::string voice;
+};
+
+// This is a simple struct representing the header of a WAV file.
+struct WavHeader {
+    char riff[4]; // Should always contain "RIFF"
+    uint32_t overall_size;
+    char wave[4]; // Should always contain "WAVE"
+    char fmt_chunk_marker[4]; // Should always contain "fmt "
+    uint32_t length_of_fmt;
+    uint16_t format_type;
+    uint16_t channels;
+    uint32_t sample_rate;
+    uint32_t byterate;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
+    char data_chunk_header[4]; // Should always contain "data"
+    uint32_t data_size;
 };
 
 static ISpVoice* pVoice = NULL;
@@ -43,6 +62,13 @@ static size_t curl_writeFunction(void* contents, size_t size, size_t nmemb, void
     auto* data = reinterpret_cast<std::vector<uint8_t>*>(userp);
     data->insert(data->end(), (uint8_t*)contents, (uint8_t*)contents + realSize);
     return realSize;
+}
+
+static std::pair<WavHeader, const uint8_t*> parseWavData(const std::vector<uint8_t>& wavData) {
+    WavHeader header;
+    memcpy(&header, wavData.data(), sizeof(WavHeader));
+    const uint8_t* audioData = wavData.data() + sizeof(WavHeader);
+    return {header, audioData};
 }
 
 void sayTextInternal(VoiceToSpeak voiceToSpeak)
@@ -74,7 +100,9 @@ void sayTextInternal(VoiceToSpeak voiceToSpeak)
 
     assert(wavData.size() > 0);
 
-    PlaySound((LPCSTR)wavData.data(), NULL, SND_MEMORY | SND_ASYNC);
+    auto [header, audioData] = parseWavData(wavData);
+
+    queue_speech((int16_t*)audioData, header.data_size / 2);
 }
 
 void InitTextToSpeech()

@@ -73,12 +73,13 @@ static SDL_Window *offscreenWindow = NULL;
 
 static SDL_AudioDeviceID audioDevice = 0;
 
-#define FREQUENCY 48000 // Samples per second
+#define FREQUENCY 44100 // Samples per second
 
 static double toneInHz = 440.0;
 
 static std::atomic<bool> s_useRotoscope = true;
 static std::atomic<bool> s_useEGA = true;
+static std::atomic<uint32_t> s_alienVar1 = 0;
 
 static std::mutex s_deadReckoningMutex;
 static vec2<int16_t> s_deadReckoning = {};
@@ -755,22 +756,69 @@ double square(double hz, unsigned long time) {
 	return sine > 0.0 ? 1.0 : -1.0;
 }
 
+std::mutex audioSource1Mutex;
+std::deque<Sint16> audioSource1;
+
+// All speech is single track 22050 hz mono.
+void queue_speech(int16_t* voiceAudio, uint64_t length)
+{
+    std::lock_guard<std::mutex> lock1(audioSource1Mutex);
+
+    for(int i = 0; i < length; ++i)
+    {
+        // Double the playback rate as the playback rate is 44100 hz
+        audioSource1.push_back((Sint16)voiceAudio[i]);
+        audioSource1.push_back((Sint16)voiceAudio[i]);
+    }
+}
+
 // This is the function that gets automatically called every time the audio device needs more data
 void play_buffer(void* userdata, unsigned char* stream, int len) {
 	SDL_memset(stream, spec.silence, len);
 
     static unsigned long time = 0;
     Sint16 *stream16 = (Sint16*)stream;
+
+    std::lock_guard<std::mutex> lock1(audioSource1Mutex);
+
+    int64_t alienSound = 0;
+
     for(int i = 0; i < len/2; i++, time++) {
-        if(s_audioPlaying)
-        {
-            stream16[i] = (Sint16)(square(toneInHz, time) * 5000);
+        Sint16 outSample = 0;
+        Sint16 squareWave = 0;
+        Sint16 speech = 0;
+
+        if(s_audioPlaying) {
+            squareWave = (Sint16)(square(toneInHz, time) * 2000.0);
         }
-        else
-        {
-            stream16[i] = spec.silence;
+
+        if (!audioSource1.empty()) {
+            speech = audioSource1.front();
+            audioSource1.pop_front();
+            alienSound += speech;
         }
-        
+
+        outSample = squareWave + speech;
+
+        // Avoid overflow
+        if (outSample > INT16_MAX) {
+            outSample = INT16_MAX;
+        } else if (outSample < INT16_MIN) {
+            outSample = INT16_MIN;
+        }
+
+        if(outSample == 0)
+        {
+            outSample = spec.silence;
+        }
+
+        stream16[i] = (Sint16)outSample;
+    }
+
+    if (len > 1)
+    {
+        alienSound /= (len / 2);
+        s_alienVar1 = (float)s_alienVar1 * 0.9f + abs(float(alienSound)) * 0.1f;
     }
 }
 
@@ -1956,6 +2004,7 @@ void GraphicsUpdate()
     uniform.useRotoscope = s_useRotoscope ? 1 : 0;
     uniform.iTime = std::chrono::duration<float>(std::chrono::system_clock::now() - s_gc.epoch).count();
     uniform.game_context = gameContext;
+    uniform.alienVar1 = s_alienVar1;
 
     bool hasNavigation = false;
     static uint32_t activeAlien = 0;
