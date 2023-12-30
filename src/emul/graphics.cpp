@@ -1317,9 +1317,9 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 11, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 12, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 13, 1u),
-        //avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
         avk::descriptor_binding<avk::buffer>(0, 14, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 16, 1u)
     );
 
     s_gc.navigationPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1876,29 +1876,73 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
     };
 }
 
-std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, IconUniform& iconUniform, const std::vector<RotoscopeShader>& shaderBackBuffer)
+std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, IconUniform& iconUniform, const std::vector<RotoscopeShader>& shaderBackBuffer, bool hasNavigation)
 {
-    return {
+    std::vector<avk::recorded_commands_t> res{};
+
+    res.push_back(
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }),
+        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
 
-        s_gc.buffers[inFlightIndex].rotoscope->fill(shaderBackBuffer.data(), 0, 0, shaderBackBuffer.size() * sizeof(RotoscopeShader)),
+    res.push_back(
+        s_gc.buffers[inFlightIndex].rotoscope->fill(shaderBackBuffer.data(), 0, 0, shaderBackBuffer.size() * sizeof(RotoscopeShader)));
 
+    res.push_back(
         avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].rotoscope.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
-        ),
+        ));
 
-        s_gc.buffers[inFlightIndex].uniform->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+    res.push_back(
+        s_gc.buffers[inFlightIndex].uniform->fill(&uniform, 0, 0, sizeof(UniformBlock)));
 
+    res.push_back(
         avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].rotoscope.as_reference(),
             avk::stage::auto_stage >> avk::stage::auto_stage,
             avk::access::auto_access >> avk::access::auto_access
-        ),
+        ));
 
-        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform)),
+    res.push_back(
+        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform)));
 
-        avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()),
+    if(hasNavigation)
+    {
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].navigation->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
+
+        res.push_back(
+            avk::command::bind_pipeline(s_gc.navigationPipeline.as_reference()));
+
+        res.push_back(
+            avk::command::bind_descriptors(s_gc.navigationPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
+                    avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].navigation->get_image_view()->as_storage_image(avk::layout::general)),
+                    avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
+                    avk::descriptor_binding(0, 2, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                    avk::descriptor_binding(0, 3, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                    avk::descriptor_binding(0, 4, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                    avk::descriptor_binding(0, 5, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
+                })));
+
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].navigation->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));     
+
+        uint32_t navWidth = (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
+        uint32_t navHeight = (uint32_t)ceilf((float(NagivationWindowHeight) / 200.0f) * (float)WINDOW_HEIGHT);                
+
+        res.push_back(
+            avk::command::dispatch((navWidth + 3) / 4u, (navHeight + 3) / 4u, 1));
+
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].navigation->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal }));                        
+    }
+
+    res.push_back(
+        avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()));
+
+    res.push_back(
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
                 avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
@@ -1914,15 +1958,19 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 11, s_gc.alienColorImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 12, s_gc.alienDepthImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 13, s_gc.alienBackgroundImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                //avk::descriptor_binding(0, 9, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 14, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
-                avk::descriptor_binding(0, 15, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
-            })),
-        avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1),
+                avk::descriptor_binding(0, 15, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer()),
+                avk::descriptor_binding(0, 16, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
+            })));
 
+    res.push_back(
+        avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1));
+
+    res.push_back(
         avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::present_src })
-    };
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::present_src }));
+
+    return res;
 }
 
 uint32_t IconUniform::IndexFromSeed(uint32_t seed)
@@ -2186,7 +2234,7 @@ void GraphicsUpdate()
 #else
 
         IconUniform ic(icons);
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer);
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, false);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
     }

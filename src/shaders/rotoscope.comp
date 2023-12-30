@@ -103,6 +103,8 @@ layout(binding = 15) uniform IconBlock {
     Icon icons[32];
 };
 
+layout(binding = 16) uniform sampler2D NavigationTexture;
+
 #include "tables.h"
 #include "noise.h"
 #include "distance.h"
