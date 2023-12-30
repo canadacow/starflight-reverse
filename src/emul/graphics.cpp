@@ -124,6 +124,7 @@ struct GraphicsContext
     avk::image_sampler alienBackgroundImage;
 
     avk::compute_pipeline rotoscopePipeline;
+    avk::compute_pipeline navigationPipeline;
     avk::compute_pipeline textPipeline;
 
     avk::descriptor_cache descriptorCache;
@@ -1244,8 +1245,8 @@ static int GraphicsInitThread(void *ptr)
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     // Navigation window is 72 x 120 pixels.
-    uint32_t navWidth = (uint32_t)ceilf((72.0f / 160.0f) * (float)WINDOW_WIDTH);
-    uint32_t navHeight = (uint32_t)ceilf((120.0f / 200.0f) * (float)WINDOW_HEIGHT);
+    uint32_t navWidth = (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
+    uint32_t navHeight = (uint32_t)ceilf((float(NagivationWindowHeight) / 200.0f) * (float)WINDOW_HEIGHT);
 
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
@@ -1319,6 +1320,16 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         //avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 9, 1u),
         avk::descriptor_binding<avk::buffer>(0, 14, s_gc.buffers[0].uniform),
         avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform)
+    );
+
+    s_gc.navigationPipeline = s_gc.vc.create_compute_pipeline_for(
+        "navigation.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(

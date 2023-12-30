@@ -329,6 +329,8 @@ struct Rotoscope
 
 static const int CGAToEGA[16] = {0, 2, 1, 9, 4, 8, 5, 11, 6, 10, 7, 3, 6, 14, 12, 15};
 static const int EGAToCGA[16] = {0, 2, 1, 11, 4, 6, 8, 10, 5, 3, 9, 7, 14, 0, 13, 15};
+static const int NagivationWindowWidth = 72;
+static const int NagivationWindowHeight = 120;
 
 extern uint32_t colortable[16];
 
