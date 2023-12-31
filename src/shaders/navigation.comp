@@ -317,9 +317,10 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+
     vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
     vec2 graphicSize = vec2(float(uniforms.GRAPHICS_MODE_WIDTH), float(uniforms.GRAPHICS_MODE_HEIGHT));
-    
+  
     vec2 uv = vec2(pixelPos) / windowSize;
 
     const float polygonWidth = uniforms.WINDOW_WIDTH / uniforms.GRAPHICS_MODE_WIDTH;
@@ -328,7 +329,10 @@ void main() {
     uvec2 src = uvec2(floor(uv * graphicSize));
 
     // Calculate the index in the smaller texture
-    uint srcIndex = src.y * uint(uniforms.GRAPHICS_MODE_WIDTH) + src.x;
+
+    uvec2 srcLookup = src + uvec2(4, 8);
+
+    uint srcIndex = srcLookup.y * uint(uniforms.GRAPHICS_MODE_WIDTH) + srcLookup.x;
 
     Rotoscope roto = rotoPixels[srcIndex];
 
@@ -337,31 +341,16 @@ void main() {
     // Pull the pixel from the smaller texture
     vec4 pixel = vec4(1.0, 0.0, 0.0, 1.0);
 
-    if(uniforms.useRotoscope != 0)
-    {
-        switch(roto.content) {
-            case NavigationalPixel:
-                if((uniforms.game_context == 2 || uniforms.game_context == 3))
-                {
-                    // System and hyperspace
-                    pixel = DrawNavigationPixel(roto, uv, subUv);
-                }
-                break;
-            default:
-                break;
-        }
-    }
-    else if(uniforms.useEGA == 0)
-    {
-        uint c = EGAToCGA[roto.EGAcolor];
-        if(subUv.x < 0.5f)
-        {
-            pixel = CGAPalette[(c >> 2) & 3];
-        }
-        else
-        {
-            pixel = CGAPalette[c & 3];
-        }
+    switch(roto.content) {
+        case NavigationalPixel:
+            if((uniforms.game_context == 2 || uniforms.game_context == 3))
+            {
+                // System and hyperspace
+                pixel = DrawNavigationPixel(roto, uv, subUv);
+            }
+            break;
+        default:
+            break;
     }
 
     // Place the pixel in the larger surface

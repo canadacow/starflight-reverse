@@ -381,6 +381,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 pixelPos = vec2(scrOffX, scrOffY);
 
     // Sample here from the navigation texture
+    pixel = texture(NavigationTexture, vec2(subX, subY));
    
     return pixel;
 }
