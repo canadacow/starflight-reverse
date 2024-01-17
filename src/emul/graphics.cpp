@@ -83,10 +83,12 @@ static std::atomic<uint32_t> s_alienVar1 = 0;
 
 static std::mutex s_deadReckoningMutex;
 static vec2<int16_t> s_deadReckoning = {};
+static vec2<int16_t> s_pastWorld = {};
 static std::chrono::time_point<std::chrono::system_clock> s_deadReckoningSet;
 
 static std::mutex s_frameCountMutex;
 static uint64_t s_frameCount;
+static uint64_t s_frameAccelCount;
 
 struct GraphicsContext
 {
@@ -642,8 +644,8 @@ public:
                     break;
                 case SDL_KEYUP:
                     {
-                        //std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
-                        //s_deadReckoning = { 0 , 0 };
+                        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+                        s_deadReckoning = { 0 , 0 };
                     }
                     break;
                 case SDL_WINDOWEVENT:
@@ -2258,9 +2260,35 @@ void GraphicsUpdate()
         std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
 
         // Will figure out navigation smooth scrolling eventually
-        //auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
-        //uniform.deadX = (float)s_deadReckoning.y / 4.0f * (float)s_frameCount;
-        //uniform.deadY = (float)-s_deadReckoning.x / 4.0f * (float)s_frameCount;
+        auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
+        uniform.deadX = (float)s_deadReckoning.y / 4.0f * (float)s_frameCount;
+        uniform.deadY = (float)-s_deadReckoning.x / 4.0f * (float)s_frameCount;
+
+        if (s_pastWorld != vec2<int16_t>(worldCoordsX, worldCoordsY))
+        {
+            s_frameAccelCount = 0;
+        }
+
+        int16_t cursorX = (int16_t)Read16(0xd9f6);
+        int16_t cursorY = (int16_t)Read16(0xd9fa);
+        int16_t espeed = (int16_t)Read16(0xda0a);
+        int16_t acc = (int16_t)Read16(0xe921);
+        int16_t keyinc = (int16_t)Read16(0xe925);
+        int16_t skey = (int16_t)Read16(0x5d76);
+
+        uint32_t keytimeLow = (int32_t)Read16(0x6174);
+        uint32_t keytimeHigh = (int32_t)Read16(0x6172);
+
+        uint32_t keytime = keytimeHigh << 16 | keytimeLow;
+
+        int16_t lkey = (int16_t)Read16(0x5c95);
+        int16_t forceptask = (int16_t)Read16(0x5ae7);
+
+        printf("Frame: x %d y %d, crs x %d, y %d, espeed %d acc %d fc %llu keyinc %d skey %d lkey %d %u fpt %d\n", worldCoordsX, worldCoordsY, cursorX, cursorY, espeed, acc, s_frameAccelCount, keyinc, skey, lkey, keytime, forceptask);
+
+        s_pastWorld = vec2<int16_t>(worldCoordsX, worldCoordsY);
+
+        ++s_frameAccelCount;
     }
 
     s_gc.vc.record(std::move(commands))

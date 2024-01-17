@@ -28,9 +28,16 @@ struct vec2 {
         };
     };
 
+	bool operator!=(const vec2& other) const {
+		return x != other.x || y != other.y;
+	}
+
 	vec2() : x(0), y(0) {}
 	vec2(T _x, T _y) : x(_x), y(_y) {}
 };
+
+
+
 
 class VulkanContext : public avk::root
 {

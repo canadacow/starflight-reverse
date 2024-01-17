@@ -354,36 +354,9 @@ vec4 DrawSDFSilhouette(const Rotoscope roto, vec2 subUv) {
 }
 
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
-    vec4 pixel = vec4(0.);
-
-    vec4 fragColor;
-    vec2 sub;
-
-    float iTime = uniforms.iTime;
-
-    float scrOffX = float(roto.blt_x) + subUv.x;
-    float scrOffY = float(roto.blt_y) + subUv.y;
-
-    scrOffX += uniforms.deadX;
-    scrOffY += uniforms.deadY;
-
-    float subX = scrOffX / float(roto.blt_w);
-    float subY = scrOffY / float(roto.blt_h);
-
-    // Split view -- helpful to debug
-    #if 0
-    if(subY > 0.5)
-    {
-        return vec4(unpackUnorm4x8(roto.argb)).bgra;
-    }
-    #endif
-
-    vec2 pixelPos = vec2(scrOffX, scrOffY);
-
-    // Sample here from the navigation texture
-    pixel = texture(NavigationTexture, vec2(subX, subY));
-   
-    return pixel;
+    float subX = (float(roto.blt_x) + subUv.x + uniforms.deadX) / float(roto.blt_w);
+    float subY = (float(roto.blt_y) + subUv.y + uniforms.deadY) / float(roto.blt_h);
+    return texture(NavigationTexture, vec2(subX, subY));
 }
 
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {

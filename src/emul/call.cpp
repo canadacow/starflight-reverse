@@ -1077,6 +1077,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     overlayName = GetOverlayName(ovidx);
     wordValue = bx + 2;
 
+    static auto lastTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime);
+
+    lastTime = currentTime;
+
+    printf("Word: %s %llu ms \n", wordName, (uint64_t)duration.count());
+
     {
         std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
         s_gameContext = Read16(0x5a5c);
@@ -1106,6 +1114,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int16_t worldXDelta = 0;
                 int16_t worldYDelta = 0;
 
+                int16_t setDest = 0;
+
                 if(nextInstr == 0xaf81)
                 {
                     //WaitForVBlank();
@@ -1115,6 +1125,45 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     s_recordedText = "";
                     s_shouldRecordText = true;
+                }
+
+                if (nextInstr == 0xe6f8) // MANEUVER
+                {
+                    printf("#NEWHEADXY\n");
+                }
+
+                if (nextInstr == 0xf003) // SETUP-MOV
+                {
+                    printf("SETUP-MOV\n");
+                }
+
+                if (nextInstr == 0xeec9) // FLY
+                {
+                    printf("FLY\n");
+                }
+
+                if(nextInstr == 0xeae3) // JMPSHP
+                {
+                    printf("JMPSHP\n");
+                }
+
+                if(nextInstr == 0xf125) // CHK-MOV
+                {
+                    printf("CHK-MOV\n");
+                }
+
+                if (nextInstr == 0xef37) // SET-DESTINATION
+                {
+                    int16_t worldCoordsX = (int16_t)Read16(0x5dae);
+                    int16_t worldCoordsY = (int16_t)Read16(0x5db9);
+
+                    int16_t cursorX = (int16_t)Read16(0xd9f6);
+                    int16_t cursorY = (int16_t)Read16(0xd9fa);
+
+                    setDest = Pop();
+                    Push(setDest);
+
+                    printf("SET-DESTINATION in %d, wrld %d,%d cursor %d, %d\n", setDest, worldCoordsX, worldCoordsY, cursorX, cursorY);
                 }
 
                 if (nextInstr == 0xb5aa) // HIMUS
@@ -1651,6 +1700,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     // Sleep
                     auto sleepInMs = Pop();
                     std::this_thread::sleep_for(std::chrono::milliseconds(sleepInMs));
+                    printf("Sleep ms: %d\n", sleepInMs);
                 }
                 else
                 {
@@ -1676,6 +1726,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     }
                 }
 
+                if (nextInstr == 0xef37) // SET-DESTINATION
+                {
+                    int16_t worldCoordsX = (int16_t)Read16(0x5dae);
+                    int16_t worldCoordsY = (int16_t)Read16(0x5db9);
+
+                    int16_t cursorX = (int16_t)Read16(0xd9f6);
+                    int16_t cursorY = (int16_t)Read16(0xd9fa);
+
+                    printf("SET-DESTINATION out %d, wrld %d,%d cursor %d, %d\n", setDest, worldCoordsX, worldCoordsY, cursorX, cursorY);
+                }
+
                 if (nextInstr == 0xe4fa) // (?NEWHEADXY)
                 {
                     Push(worldYDelta);
@@ -1699,7 +1760,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     if (s_recordedText.substr(0, 11) == "RECEIVING: ") // Check if s_recordedText starts with "RECEIVING: "
                     {
                         std::string recordedTextWithoutReceiving = s_recordedText.substr(11); // Remove "RECEIVING: " from the start
-                        SayText(recordedTextWithoutReceiving);
+                        SayText(recordedTextWithoutReceiving, 0);
                     }
 
                     s_recordedText = "";

@@ -303,6 +303,8 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp
 
 	regs16[REG_DI] = 0x78C; // always constant, points to WORD "OPERATOR"
 
+	uint16_t valStart = *(uint16_t*)&mem[0x192l * 16l + 0x5dael];
+
 	// Instruction execution loop. Terminates if CS:IP = 0:0
 	for (;;)
 	{
@@ -321,6 +323,13 @@ void Run8086(uint16_t cs, uint16_t ip, uint16_t ds, uint16_t ss, uint16_t *regSp
 			*regSp = regs16[REG_SP];
 			regbp = regs16[REG_BP];
 			regsi = regs16[REG_SI];
+
+			uint16_t valEnd = *(uint16_t*)&mem[0x192l * 16l + 0x5dael];
+			if (valEnd != valStart)
+			{
+				printf("");
+			}
+
 			break;
 		}
 

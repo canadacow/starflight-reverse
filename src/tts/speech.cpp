@@ -141,7 +141,7 @@ void StopSpeech()
     s_phrasesAvailable.release();
 }
 
-void SayText(std::string text)
+void SayText(std::string text, int raceNum)
 {
 #if !defined(USE_COQUI)
     std::wstring wText(text.begin(), text.end());
@@ -151,7 +151,16 @@ void SayText(std::string text)
         std::scoped_lock lock(s_phraseMutex);
         VoiceToSpeak voiceToSpeak;
         voiceToSpeak.text = text;
-        voiceToSpeak.voice = "borg.mp3";
+        switch(raceNum)
+        {
+            case 9:
+                voiceToSpeak.voice = "borg.mp3";
+                break;
+            default:
+                voiceToSpeak.voice = "picard.mp3";
+                break;
+        }
+        
         s_phrases.push_back(voiceToSpeak);
     }
     s_phrasesAvailable.release();
