@@ -527,9 +527,14 @@ void LXCHG8(unsigned short es, unsigned short bx, unsigned short ax)
 // 0x49d6: mov    es:[bx],cl
 }
 
+static std::stack<bool> s_disableForthMeasurements{};
+
 RETURNCODE ForthCall(uint16_t word)
 {
-    return Call(0x224c, word - 0x2);
+    s_disableForthMeasurements.push(true);
+    auto res = Call(0x224c, word - 0x2);
+    s_disableForthMeasurements.pop();
+    return res;
 }
 
 void ASMCall(uint16_t word)
@@ -1077,13 +1082,58 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     overlayName = GetOverlayName(ovidx);
     wordValue = bx + 2;
 
+    struct WordTime
+    {
+        std::string word;
+        std::chrono::high_resolution_clock::time_point start;
+    };
+
+    static std::deque<WordTime> wordDeque;
+    struct WordTracker
+    {
+        WordTracker(const std::string& word)
+        {
+            wordDeque.push_back({word, std::chrono::high_resolution_clock::now()});
+
+            if (word == "?TERMINAL")
+            {
+                uint32_t keytimeLow = (int32_t)Read16(0x6174);
+                uint32_t keytimeHigh = (int32_t)Read16(0x6172);
+
+                uint32_t keytime = keytimeHigh << 16 | keytimeLow;
+
+                auto now = std::chrono::high_resolution_clock::now();
+                auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+                printf("?TERMINAL delta keytime %lu\n", (uint32_t)(millis - keytime));
+            }
+        }
+        ~WordTracker()
+        {
+            auto end = std::chrono::high_resolution_clock::now();
+            auto time = std::chrono::duration_cast<std::chrono::microseconds>(end - wordDeque.back().start);
+
+            if(time.count() > 10 && s_disableForthMeasurements.size() == 0)
+            {
+                std::string penultimateWordInfo = "";
+                if(wordDeque.size() > 1)
+                {
+                    const auto& penultimateWord = wordDeque.at(wordDeque.size() - 2);
+                    auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
+                    penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
+                }
+                printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
+            }
+            wordDeque.pop_back();
+        }
+    };
+    WordTracker tracker(wordName);
+
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime);
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(currentTime - lastTime);
 
     lastTime = currentTime;
-
-    printf("Word: %s %llu ms \n", wordName, (uint64_t)duration.count());
 
     {
         std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
@@ -1150,6 +1200,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xf125) // CHK-MOV
                 {
                     printf("CHK-MOV\n");
+                }
+
+                if (nextInstr == 0xb0f1) // 'KEY-CASE
+                {
+                    printf("'KEY-CASE\n");
                 }
 
                 if (nextInstr == 0xef37) // SET-DESTINATION
@@ -1234,6 +1289,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     printf("Read file at %04x:%04x\n", ds, fileNum);
                 }
 
+                if (nextInstr == 0xe3f6) // .MVS
+                {
+                    GraphicsReportGameFrame();
+                }
+
                 if (nextInstr == 0xe4fa) // (?NEWHEADXY)
                 {
                     worldXDelta = (int16_t)Read16(0x5dae);
@@ -1242,8 +1302,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if (nextInstr == 0x9cfc) // .LOCAL-ICONS basically the screen update function
                 {
-                    GraphicsReportGameFrame();
-
                     uint16_t localCount = Read16(0x59f5); // ILOCAL?
                     printf("localCount %d\n", localCount);
 
@@ -2100,6 +2158,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             uint16_t key = GraphicsGetKey();
             Push(key);
 
+            printf("KEY %u\n", key);
+
             /*
             // 1. either low byte ascii, high byte 0
             // 2. or low byte scancode, high byte 1
@@ -2115,10 +2175,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
             if(GraphicsHasKey())
             {
+                printf("(?TERMINAL) 1\n");
                 Push(1);
             } 
             else
             {
+                printf("(?TERMINAL) 0\n");
                 Push(0);
             }
         break;

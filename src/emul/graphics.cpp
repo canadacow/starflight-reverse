@@ -569,6 +569,26 @@ private:
 public:
     SDLKeyboard() {}
 
+    bool areArrowKeysDown() {
+        const Uint8* state = SDL_GetKeyboardState(NULL);
+        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT];
+    }
+
+    unsigned short getArrowKeyDown() {
+        const Uint8* state = SDL_GetKeyboardState(NULL);
+        if (state[SDL_SCANCODE_UP]) {
+            return 328;
+        } else if (state[SDL_SCANCODE_DOWN]) {
+            return 336;
+        } else if (state[SDL_SCANCODE_LEFT]) {
+            return 331;
+        } else if (state[SDL_SCANCODE_RIGHT]) {
+            return 333;
+        } else {
+            return 0; // No arrow key down
+        }
+    }
+
     static unsigned short GetKey(int sym)
     {
         if (sym == SDLK_LEFT)
@@ -638,7 +658,11 @@ public:
                     }
                     else if(eventQueue.size() < 4)
                     {
-                        eventQueue.push_back(event);
+                        if (!(event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN ||
+                              event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT))
+                        {
+                            eventQueue.push_back(event);
+                        }
                     }
                     return true;
                     break;
@@ -858,7 +882,7 @@ void GraphicsReportGameFrame()
         s_frameCount = 0;
     }
 
-    printf("Drew %d frames between one game frame\n", framesDrawn);
+    printf("Drew %d frames between one game frame GraphicsReportGameFrame\n", framesDrawn);
 }
 
 RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
