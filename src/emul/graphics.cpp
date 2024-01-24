@@ -533,6 +533,8 @@ public:
     // Destructive read equivalent to Int 16 ah = 0
     virtual unsigned short getKeyStroke() = 0;
 
+    virtual void update() = 0;
+
     virtual ~DOSKeyboard() = default;
 };
 
@@ -566,14 +568,36 @@ public:
 
         return ret;
     }
+
+    void update() override {
+
+    }
 };
 
 class SDLKeyboard : public DOSKeyboard {
 private:
+    std::mutex eventQueueMutex;
     std::deque<SDL_Event> eventQueue{};
+    std::counting_semaphore<1024> availableKeys{0};
 
-public:
-    SDLKeyboard() {}
+    void pushEvent(const SDL_Event& event) {
+        std::lock_guard<std::mutex> lock(eventQueueMutex);
+        eventQueue.push_back(event);
+        availableKeys.release(); // Increment the count of available keys
+    }
+
+    SDL_Event popEvent() {
+        availableKeys.acquire(); // Wait until a key is available
+        std::lock_guard<std::mutex> lock(eventQueueMutex);
+        SDL_Event event = eventQueue.front();
+        eventQueue.pop_front();
+        return event;
+    }
+
+    bool keysAvailable() {
+        std::lock_guard<std::mutex> lock(eventQueueMutex);
+        return !eventQueue.empty();
+    }
 
     bool areArrowKeysDown() {
         const Uint8* state = (const Uint8*)s_keyboardState;
@@ -666,7 +690,10 @@ public:
         return sym;
     }
 
-    void update(bool blocking) {
+public:
+    SDLKeyboard() {}    
+
+    void update() override {
 
         auto handleEvent = [&](SDL_Event event) -> bool {
             switch (event.type) {
@@ -679,14 +706,14 @@ public:
                     {
                         s_useEGA = !s_useEGA;
                     }
-                    else if(eventQueue.size() < 4)
+                    else
                     {
                         if (!(event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN ||
                               event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT ||
                               event.key.keysym.sym == SDLK_KP_8 || event.key.keysym.sym == SDLK_KP_2 ||
                               event.key.keysym.sym == SDLK_KP_4 || event.key.keysym.sym == SDLK_KP_6))
                         {
-                            eventQueue.push_back(event);
+                            pushEvent(event);
                         }
                     }
                     return true;
@@ -728,33 +755,10 @@ public:
             return false;
         };
 
-        if(blocking)
+        SDL_Event event;
+        while(SDL_PollEvent(&event))
         {
-            SDL_Event event;
-            for(;;)
-            {
-                if(SDL_WaitEvent(&event))
-                {
-                    bool key = handleEvent(event);
-                    if(key)
-                        break;
-                }
-                else
-                {
-                    break;
-                }
-                std::this_thread::yield();
-            }
-            
-        }
-        else
-        {
-            SDL_Event event;
-            if(SDL_PollEvent(&event))
-            {
-                handleEvent(event);
-            }
-            std::this_thread::yield();
+            handleEvent(event);
         }
     }
 
@@ -764,9 +768,8 @@ public:
         {
             return true;
         }
-
-        update(false);
-        return !eventQueue.empty();
+       
+        return keysAvailable();
     }
 
     // Destructive read equivalent to Int 16 ah = 0
@@ -777,13 +780,7 @@ public:
             return arrow;
         }
 
-        while (eventQueue.empty())
-        {
-            update(true);
-        }
-
-        SDL_Event event = eventQueue.front();
-        eventQueue.pop_front();
+        SDL_Event event = popEvent();
         return GetKey(event.key.keysym.sym);
     }
 };
@@ -2374,6 +2371,7 @@ void GraphicsUpdate()
     memcpy(s_keyboardState, keys, numkeys);
 
     SDL_PumpEvents();
+    keyboard->update();
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     if(graphicsMode == SFGraphicsMode::Graphics)
