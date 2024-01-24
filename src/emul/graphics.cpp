@@ -34,6 +34,9 @@
     #undef PLANES
 #endif
 
+std::promise<void> initPromise;
+std::future<void> initFuture = initPromise.get_future();
+
 //#define USE_CPU_RASTERIZATION 1
 
 #define TEXT_MODE_WIDTH 640
@@ -221,11 +224,12 @@ Texture<2160, 392, 1> RaceDosPicTexture;
 
 enum SFGraphicsMode
 {
+    Unset = -1,
     Text = 0,
     Graphics = 1,
 };
 
-SFGraphicsMode graphicsMode = Text;
+SFGraphicsMode graphicsMode = Unset;
 
 uint32_t graphicsDisplayOffset = 0;// 100 * 160;
 std::mutex rotoscopePixelMutex;
@@ -520,6 +524,8 @@ static uint8_t vgafont8[256*8] =
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
+static uint8_t s_keyboardState[1024] = {};
+
 class DOSKeyboard {
 public:
     // Destructive read equivalent to Int 16 ah = 0
@@ -570,12 +576,13 @@ public:
     SDLKeyboard() {}
 
     bool areArrowKeysDown() {
-        const Uint8* state = SDL_GetKeyboardState(NULL);
-        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT];
+        const Uint8* state = (const Uint8*)s_keyboardState;
+        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
+               state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6];
     }
 
     unsigned short getArrowKeyDown() {
-        const Uint8* state = SDL_GetKeyboardState(NULL);
+        const Uint8* state = (const Uint8*)s_keyboardState;
         if (state[SDL_SCANCODE_UP]) {
             return 328;
         } else if (state[SDL_SCANCODE_DOWN]) {
@@ -584,6 +591,22 @@ public:
             return 331;
         } else if (state[SDL_SCANCODE_RIGHT]) {
             return 333;
+        } else if (state[SDL_SCANCODE_KP_8]) {
+            return 328; // Numpad 8
+        } else if (state[SDL_SCANCODE_KP_2]) {
+            return 336; // Numpad 2
+        } else if (state[SDL_SCANCODE_KP_4]) {
+            return 331; // Numpad 4
+        } else if (state[SDL_SCANCODE_KP_6]) {
+            return 333; // Numpad 6
+        } else if (state[SDL_SCANCODE_KP_7]) {
+            return 327; // Numpad 7
+        } else if (state[SDL_SCANCODE_KP_9]) {
+            return 329; // Numpad 9
+        } else if (state[SDL_SCANCODE_KP_1]) {
+            return 335; // Numpad 1
+        } else if (state[SDL_SCANCODE_KP_3]) {
+            return 337; // Numpad 3
         } else {
             return 0; // No arrow key down
         }
@@ -659,7 +682,9 @@ public:
                     else if(eventQueue.size() < 4)
                     {
                         if (!(event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN ||
-                              event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT))
+                              event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT ||
+                              event.key.keysym.sym == SDLK_KP_8 || event.key.keysym.sym == SDLK_KP_2 ||
+                              event.key.keysym.sym == SDLK_KP_4 || event.key.keysym.sym == SDLK_KP_6))
                         {
                             eventQueue.push_back(event);
                         }
@@ -735,12 +760,23 @@ public:
 
     // Non-destructive read equivalent to Int 16 ah = 1
     bool checkForKeyStroke() override {
+        if(areArrowKeysDown())
+        {
+            return true;
+        }
+
         update(false);
         return !eventQueue.empty();
     }
 
     // Destructive read equivalent to Int 16 ah = 0
     unsigned short getKeyStroke() override {
+        auto arrow = getArrowKeyDown();
+        if(arrow != 0)
+        {
+            return arrow;
+        }
+
         while (eventQueue.empty())
         {
             update(true);
@@ -1173,7 +1209,7 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
     s_gc.planetsDone.acquire();
 }
 
-static int GraphicsInitThread(void *ptr)
+static int GraphicsInitThread()
 {
     SDL_DisplayMode dm;
     if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
@@ -1392,6 +1428,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
+    initPromise.set_value();
+
     return 0;
 }
 
@@ -1410,8 +1448,6 @@ void GraphicsInit()
     FILE* file;
     file = freopen("stdout", "w", stdout); // redirects stdout
     file = freopen("stderr", "w", stderr); // redirects stderr
-
-    GraphicsInitThread(NULL);
 }
 
 uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth)
@@ -2022,6 +2058,9 @@ uint32_t IconUniform::IndexFromSeed(uint32_t seed)
 
 void GraphicsUpdate()
 {
+    static std::once_flag initFlag;
+    std::call_once(initFlag, GraphicsInitThread);
+    
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;
     const void* data = nullptr;
@@ -2329,6 +2368,11 @@ void GraphicsUpdate()
 
     s_gc.vc.render_frame();
 
+    int numkeys = 0;
+    auto keys = SDL_GetKeyboardState(&numkeys);
+    assert(numkeys < sizeof(s_keyboardState));
+    memcpy(s_keyboardState, keys, numkeys);
+
     SDL_PumpEvents();
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
@@ -2432,6 +2476,9 @@ void GraphicsText(char *s, int n)
 // 0 = text, 1 = ega graphics
 void GraphicsMode(int mode)
 {
+    if (mode == graphicsMode)
+        return;
+
     if(graphicsThread.joinable())
     {
         stopSemaphore.release();

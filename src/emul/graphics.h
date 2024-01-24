@@ -9,6 +9,11 @@
 #include <vector>
 #include <unordered_map>
 #include <map>
+#include <future>
+
+// Declare the promise and future as extern so they can be defined elsewhere
+extern std::promise<void> initPromise;
+extern std::future<void> initFuture;
 
 enum PixelContents
 {
