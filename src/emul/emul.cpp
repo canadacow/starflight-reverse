@@ -27,7 +27,6 @@ int main(int argc, char *argv[]) {
     InitEmulator(hash);
     GraphicsInit();
     InitTextToSpeech();
-    GraphicsMode(0);
 
     initFuture.wait();
 

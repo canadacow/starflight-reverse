@@ -229,7 +229,9 @@ enum SFGraphicsMode
     Graphics = 1,
 };
 
+SFGraphicsMode toSetGraphicsMode = Unset;
 SFGraphicsMode graphicsMode = Unset;
+std::counting_semaphore<1024> modeChangeComplete{ 0 };
 
 uint32_t graphicsDisplayOffset = 0;// 100 * 160;
 std::mutex rotoscopePixelMutex;
@@ -1208,6 +1210,8 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
 
 static int GraphicsInitThread()
 {
+    SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
+
     SDL_DisplayMode dm;
     if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
     {
@@ -1445,6 +1449,28 @@ void GraphicsInit()
     FILE* file;
     file = freopen("stdout", "w", stdout); // redirects stdout
     file = freopen("stderr", "w", stderr); // redirects stderr
+
+    graphicsThread = std::jthread([] {
+        GraphicsInitThread();
+
+        while (!stopSemaphore.try_acquire()) {
+            constexpr std::chrono::nanoseconds scanout_duration = std::chrono::nanoseconds(13340000); // 80% of 1/60th of a second
+            constexpr std::chrono::nanoseconds retrace_duration = std::chrono::nanoseconds(3330000); // 20% of 1/60th of a second
+
+            {
+                std::lock_guard<std::mutex> lg(graphicsRetrace);
+                GraphicsUpdate();
+
+#if defined(USE_CPU_RASTERIZATION)
+                std::this_thread::sleep_for(scanout_duration);
+#endif
+            }
+
+#if defined(USE_CPU_RASTERIZATION)
+            std::this_thread::sleep_for(retrace_duration);
+#endif
+        }
+    });
 }
 
 uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth)
@@ -2055,9 +2081,17 @@ uint32_t IconUniform::IndexFromSeed(uint32_t seed)
 
 void GraphicsUpdate()
 {
-    static std::once_flag initFlag;
-    std::call_once(initFlag, GraphicsInitThread);
-    
+    if (graphicsMode != toSetGraphicsMode)
+    {
+        graphicsMode = toSetGraphicsMode;
+
+        std::fill(graphicsPixels.begin(), graphicsPixels.end(), 0);
+        std::fill(textPixels.begin(), textPixels.end(), 0);
+        std::fill(rotoscopePixels.begin(), rotoscopePixels.end(), ClearPixel);
+
+        modeChangeComplete.release();
+    }
+
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;
     const void* data = nullptr;
@@ -2409,10 +2443,10 @@ void GraphicsQuit()
     {
         stopSemaphore.release();
 
+        s_gc.vc.device().waitIdle();
+
         graphicsThread.join();
     }
-
-    s_gc.vc.device().waitIdle();
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     SDL_DestroyRenderer(offscreenRenderer);
@@ -2440,7 +2474,12 @@ void GraphicsCarriageReturn()
 
 void GraphicsChar(unsigned char s)
 {
-    assert(graphicsMode == Text);
+    if (graphicsMode != Text)
+    {   
+        //assert(false);
+        return;
+    }
+    
     for(int jj=0; jj<8; jj++)
     {
         int offset = ((int)s)*8 + jj;
@@ -2474,41 +2513,12 @@ void GraphicsText(char *s, int n)
 // 0 = text, 1 = ega graphics
 void GraphicsMode(int mode)
 {
-    if (mode == graphicsMode)
+    if (toSetGraphicsMode == mode)
         return;
 
-    if(graphicsThread.joinable())
-    {
-        stopSemaphore.release();
+    toSetGraphicsMode = (SFGraphicsMode)mode;
 
-        graphicsThread.join();
-    }
-
-    graphicsMode = (SFGraphicsMode)mode;
-
-    std::fill(graphicsPixels.begin(), graphicsPixels.end(), 0);
-    std::fill(textPixels.begin(), textPixels.end(), 0);
-    std::fill(rotoscopePixels.begin(), rotoscopePixels.end(), ClearPixel);
-
-    graphicsThread = std::jthread([]{
-        while(!stopSemaphore.try_acquire()) {
-            constexpr std::chrono::nanoseconds scanout_duration = std::chrono::nanoseconds(13340000); // 80% of 1/60th of a second
-            constexpr std::chrono::nanoseconds retrace_duration = std::chrono::nanoseconds(3330000); // 20% of 1/60th of a second
-
-            {
-                std::lock_guard<std::mutex> lg(graphicsRetrace);
-                GraphicsUpdate();
-
-#if defined(USE_CPU_RASTERIZATION)
-                std::this_thread::sleep_for(scanout_duration);
-#endif
-            }
-
-#if defined(USE_CPU_RASTERIZATION)
-            std::this_thread::sleep_for(retrace_duration);
-#endif
-        }
-    });
+    modeChangeComplete.acquire();
 }
 
 void WaitForVBlank()
