@@ -69,6 +69,8 @@ set_source_files_properties(
     PROPERTIES LANGUAGE CXX
 )
 
+set_source_files_properties(src/cpu/8086emu.cpp PROPERTIES COMPILE_FLAGS -O3)
+
 set(HEADER_FILES
     src/emul/call.h
     src/cpu/cpu.h

@@ -233,6 +233,8 @@ SFGraphicsMode toSetGraphicsMode = Unset;
 SFGraphicsMode graphicsMode = Unset;
 std::counting_semaphore<1024> modeChangeComplete{ 0 };
 
+FrameSync frameSync{};
+
 uint32_t graphicsDisplayOffset = 0;// 100 * 160;
 std::mutex rotoscopePixelMutex;
 std::vector<Rotoscope> rotoscopePixels;
@@ -265,6 +267,8 @@ uint32_t colortable[16] =
 0xFFFF55,
 0xFFFFFF,
 };
+
+bool graphicsIsShutdown = false;
 
 static uint8_t vgafont8[256*8] =
 {
@@ -601,6 +605,30 @@ private:
         return !eventQueue.empty();
     }
 
+    static bool isArrowOrKeypadKey(const SDL_Event& event) {
+        if (event.type != SDL_KEYDOWN && event.type != SDL_KEYUP) {
+            return false;
+        }
+
+        switch (event.key.keysym.sym) {
+            case SDLK_UP:
+            case SDLK_DOWN:
+            case SDLK_LEFT:
+            case SDLK_RIGHT:
+            case SDLK_KP_8:
+            case SDLK_KP_2:
+            case SDLK_KP_4:
+            case SDLK_KP_6:
+            case SDLK_KP_7:
+            case SDLK_KP_9:
+            case SDLK_KP_1:
+            case SDLK_KP_3:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     bool areArrowKeysDown() {
         const Uint8* state = (const Uint8*)s_keyboardState;
         return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
@@ -710,10 +738,7 @@ public:
                     }
                     else
                     {
-                        if (!(event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN ||
-                              event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT ||
-                              event.key.keysym.sym == SDLK_KP_8 || event.key.keysym.sym == SDLK_KP_2 ||
-                              event.key.keysym.sym == SDLK_KP_4 || event.key.keysym.sym == SDLK_KP_6))
+                        if (!isArrowOrKeypadKey(event))
                         {
                             pushEvent(event);
                         }
@@ -732,9 +757,7 @@ public:
                         {
                             if(SDL_GetWindowFromID(event.window.windowID) == window)
                             {
-                                StopSpeech();
                                 GraphicsQuit();
-                                exit(0);
                             }
                             #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
                             if(SDL_GetWindowFromID(event.window.windowID) == offscreenWindow)
@@ -748,7 +771,6 @@ public:
                     break;
                 case SDL_QUIT:
                     GraphicsQuit();
-                    exit(0);
                     break;
                 default:
                     break;
@@ -1460,6 +1482,8 @@ void GraphicsInit()
             {
                 std::lock_guard<std::mutex> lg(graphicsRetrace);
                 GraphicsUpdate();
+                if (graphicsIsShutdown)
+                    return;
 
 #if defined(USE_CPU_RASTERIZATION)
                 std::this_thread::sleep_for(scanout_duration);
@@ -2355,8 +2379,8 @@ void GraphicsUpdate()
 
         // Will figure out navigation smooth scrolling eventually
         auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
-        uniform.deadX = (float)s_deadReckoning.y / 4.0f * (float)s_frameCount;
-        uniform.deadY = (float)-s_deadReckoning.x / 4.0f * (float)s_frameCount;
+        uniform.deadX = (float)s_deadReckoning.y * 4.0f * ((float)s_frameCount / 4.0f);
+        uniform.deadY = (float)-s_deadReckoning.x * 4.0f * ((float)s_frameCount / 4.0f);
 
         if (s_pastWorld != vec2<int16_t>(worldCoordsX, worldCoordsY))
         {
@@ -2367,18 +2391,8 @@ void GraphicsUpdate()
         int16_t cursorY = (int16_t)Read16(0xd9fa);
         int16_t espeed = (int16_t)Read16(0xda0a);
         int16_t acc = (int16_t)Read16(0xe921);
-        int16_t keyinc = (int16_t)Read16(0xe925);
-        int16_t skey = (int16_t)Read16(0x5d76);
 
-        uint32_t keytimeLow = (int32_t)Read16(0x6174);
-        uint32_t keytimeHigh = (int32_t)Read16(0x6172);
-
-        uint32_t keytime = keytimeHigh << 16 | keytimeLow;
-
-        int16_t lkey = (int16_t)Read16(0x5c95);
-        int16_t forceptask = (int16_t)Read16(0x5ae7);
-
-        printf("Frame: x %d y %d, crs x %d, y %d, espeed %d acc %d fc %llu keyinc %d skey %d lkey %d %u fpt %d\n", worldCoordsX, worldCoordsY, cursorX, cursorY, espeed, acc, s_frameAccelCount, keyinc, skey, lkey, keytime, forceptask);
+        printf("Frame: x %d y %d, crs x %d, y %d, espeed %d acc %d \n", worldCoordsX, worldCoordsY, cursorX, cursorY, espeed, acc );
 
         s_pastWorld = vec2<int16_t>(worldCoordsX, worldCoordsY);
 
@@ -2406,6 +2420,9 @@ void GraphicsUpdate()
 
     SDL_PumpEvents();
     keyboard->update();
+    if (graphicsIsShutdown)
+        return;
+
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
     if(graphicsMode == SFGraphicsMode::Graphics)
@@ -2420,6 +2437,12 @@ void GraphicsUpdate()
         SDL_RenderPresent(offscreenRenderer);
     }
 #endif
+
+    {
+        std::lock_guard<std::mutex> lock(frameSync.mutex);
+        frameSync.completedFrames++;
+    }
+    frameSync.frameCompleted.notify_one();
 }
 
 void GraphicsWait()
@@ -2439,13 +2462,21 @@ void GraphicsWait()
 
 void GraphicsQuit()
 {
-    if(graphicsThread.joinable())
+    if (graphicsIsShutdown)
+        return;
+
+    StopSpeech();
+
+    if(std::this_thread::get_id() != graphicsThread.get_id())
     {
-        stopSemaphore.release();
+        if(graphicsThread.joinable())
+        {
+            stopSemaphore.release();
 
-        s_gc.vc.device().waitIdle();
+            s_gc.vc.device().waitIdle();
 
-        graphicsThread.join();
+            graphicsThread.join();
+        }
     }
 
 #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
@@ -2458,6 +2489,8 @@ void GraphicsQuit()
     SDL_DestroyTexture(textTexture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+
+    graphicsIsShutdown = true;
 }
 
 void GraphicsSetCursor(int x, int y)

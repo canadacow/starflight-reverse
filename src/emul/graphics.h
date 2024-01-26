@@ -10,6 +10,16 @@
 #include <unordered_map>
 #include <map>
 #include <future>
+#include <mutex>
+#include <condition_variable>
+
+struct FrameSync {
+    std::mutex mutex;
+    std::condition_variable frameCompleted;
+    uint64_t completedFrames = 0;
+};
+
+extern FrameSync frameSync;
 
 // Declare the promise and future as extern so they can be defined elsewhere
 extern std::promise<void> initPromise;
@@ -338,6 +348,7 @@ static const int NagivationWindowWidth = 72;
 static const int NagivationWindowHeight = 120;
 
 extern uint32_t colortable[16];
+extern bool graphicsIsShutdown;
 
 void GraphicsInit();
 void GraphicsUpdate();

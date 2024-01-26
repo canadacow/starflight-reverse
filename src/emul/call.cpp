@@ -1002,7 +1002,11 @@ std::vector<Icon> s_localIconList;
 uint32_t          s_gameContext;
 
 static bool s_shouldRecordText = false;
+static bool s_maneuvering = false;
+static bool s_secondFlag = false;
 static std::string s_recordedText = "";
+
+uint64_t s_targetFrameKey = 0;
 
 std::vector<Icon> GetLocalIconList(uint32_t* gameContext)
 {
@@ -1071,6 +1075,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         remainder = 0;
     };
 
+    if (graphicsIsShutdown)
+    {
+        exit(0);
+    }
+
     const char* baseOverlay = "";
     const char* baseWord = "";
     const char* overlayName = baseOverlay;
@@ -1095,34 +1104,40 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             wordDeque.push_back({word, std::chrono::high_resolution_clock::now()});
 
-            if (word == "?TERMINAL")
+            if(s_maneuvering)
             {
-                uint32_t keytimeLow = (int32_t)Read16(0x6174);
-                uint32_t keytimeHigh = (int32_t)Read16(0x6172);
+                if (word == "?TERMINAL")
+                {
+                    uint32_t keytimeLow = (int32_t)Read16(0x6174);
+                    uint32_t keytimeHigh = (int32_t)Read16(0x6172);
 
-                uint32_t keytime = keytimeHigh << 16 | keytimeLow;
+                    uint32_t keytime = keytimeHigh << 16 | keytimeLow;
 
-                auto now = std::chrono::high_resolution_clock::now();
-                auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+                    auto now = std::chrono::high_resolution_clock::now();
+                    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
-                printf("?TERMINAL delta keytime %lu\n", (uint32_t)(millis - keytime));
+                    printf("?TERMINAL delta keytime %lu\n", (uint32_t)(millis - keytime));
+                }
             }
         }
         ~WordTracker()
         {
-            auto end = std::chrono::high_resolution_clock::now();
-            auto time = std::chrono::duration_cast<std::chrono::microseconds>(end - wordDeque.back().start);
-
-            if(time.count() > 10 && s_disableForthMeasurements.size() == 0)
+            if(s_maneuvering)
             {
-                std::string penultimateWordInfo = "";
-                if(wordDeque.size() > 1)
+                auto end = std::chrono::high_resolution_clock::now();
+                auto time = std::chrono::duration_cast<std::chrono::microseconds>(end - wordDeque.back().start);
+
+                if(time.count() > 10 && s_disableForthMeasurements.size() == 0)
                 {
-                    const auto& penultimateWord = wordDeque.at(wordDeque.size() - 2);
-                    auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
-                    penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
+                    std::string penultimateWordInfo = "";
+                    if(wordDeque.size() > 1)
+                    {
+                        const auto& penultimateWord = wordDeque.at(wordDeque.size() - 2);
+                        auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
+                        penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
+                    }
+                    printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
                 }
-                printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
             }
             wordDeque.pop_back();
         }
@@ -1169,6 +1184,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xaf81)
                 {
                     //WaitForVBlank();
+                }
+
+                if(nextInstr == 0xcbbf) // MANEUVER
+                {
+                    s_maneuvering = true;
                 }
 
                 if (nextInstr == 0xe4b6) // (PHRASE>CT)
@@ -1824,6 +1844,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     s_recordedText = "";
                     s_shouldRecordText = false;
                 }
+
+                if(nextInstr == 0xcbbf) // MANEUVER
+                {
+                    s_maneuvering = false;
+                }
+
             }
         break;
 
@@ -2175,8 +2201,28 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
             if(GraphicsHasKey())
             {
-                printf("(?TERMINAL) 1\n");
-                Push(1);
+                if (s_maneuvering)
+                {
+                    std::lock_guard<std::mutex> lg(frameSync.mutex);
+                    if (frameSync.completedFrames >= s_targetFrameKey) {
+                        printf("(?TERMINAL) 1 - 1\n");
+                        Push(1);
+                        s_targetFrameKey = frameSync.completedFrames + 4;
+                        s_secondFlag = true;
+                    } else if (s_secondFlag) {
+                        printf("(?TERMINAL) 1 - 1\n");
+                        Push(1);
+                        s_secondFlag = false;
+                    } else {
+                        printf("(?TERMINAL) 1 - 0\n");
+                        Push(0);
+                    }
+                }
+                else
+                {
+                    printf("(?TERMINAL) 1\n");
+                    Push(1);
+                }
             } 
             else
             {
