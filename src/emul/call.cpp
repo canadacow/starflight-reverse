@@ -31,6 +31,27 @@
 #include <zstd.h>
 #include <xxhash.h>
 
+template<typename T>
+struct vec2 {
+    union {
+        struct {
+            T x;
+            T y;
+        };
+        struct {
+            T u;
+            T v;
+        };
+    };
+
+    bool operator!=(const vec2& other) const {
+        return x != other.x || y != other.y;
+    }
+
+    vec2() : x(0), y(0) {}
+    vec2(T _x, T _y) : x(_x), y(_y) {}
+};
+
 unsigned int debuglevel = 0;
 
 const unsigned short cs = StarflightBaseSegment;
@@ -1539,7 +1560,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
 
-                        printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr);
+                        printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
 
                         s_localIconList.push_back(icon);
                     }
