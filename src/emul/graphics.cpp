@@ -2379,8 +2379,8 @@ void GraphicsUpdate()
 
         // Will figure out navigation smooth scrolling eventually
         auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
-        uniform.deadX = (float)s_deadReckoning.y * 4.0f * ((float)s_frameCount / 4.0f);
-        uniform.deadY = (float)-s_deadReckoning.x * 4.0f * ((float)s_frameCount / 4.0f);
+        uniform.deadX = (float)s_deadReckoning.y * 1.0f * ((float)s_frameCount / 4.0f);
+        uniform.deadY = (float)-s_deadReckoning.x * 1.0f * ((float)s_frameCount / 4.0f);
 
         if (s_pastWorld != vec2<int16_t>(worldCoordsX, worldCoordsY))
         {

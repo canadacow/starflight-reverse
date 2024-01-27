@@ -1358,6 +1358,63 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     auto currentCI = ForthGetCurrent();
 
+                    {
+                        auto WLD_to_SCR = [](vec2<int16_t> input) {
+                            vec2<int16_t> output;
+
+                            output.y = input.y - static_cast<int16_t>(Read16(0x5B31)); // BVIS
+                            output.y *= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
+                            output.y /= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
+                            output.y += static_cast<int16_t>(Read16(0x596B)); // YLLDEST
+
+                            output.x = input.x - static_cast<int16_t>(Read16(0x5B3C)); // LVIS
+                            output.x *= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
+                            output.x /= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
+                            output.x += static_cast<int16_t>(Read16(0x595D)); // XLLDEST
+
+                            return output;
+                        };
+
+                        auto SCR_to_BLT = [](vec2<int16_t> input) {
+                            vec2<int16_t> output;
+
+                            output.x = input.x + 7 - static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
+                            output.y = input.y - static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
+
+                            return output;
+                        };
+
+                        int32_t bltInScreenX[2];
+                        int32_t bltInScreenY[2];
+                        
+                        Push(0);
+                        Push(0);
+                        ASMCall(0x9970); // WLD>SCR
+                        int32_t worldInScreenY = (int32_t)(int16_t)Pop();
+                        int32_t worldInScreenX = (int32_t)(int16_t)Pop();
+
+                        Push(worldInScreenX);
+                        Push(worldInScreenY);
+                        ASMCall(0x99b4); // SCR>BLT
+                        bltInScreenY[1] = 120 - (int32_t)(int16_t)Pop();
+                        bltInScreenX[1] = (int32_t)(int16_t)Pop();
+
+                        Push(1);
+                        Push(1);
+                        ASMCall(0x9970); // WLD>SCR
+                        worldInScreenY = (int32_t)(int16_t)Pop();
+                        worldInScreenX = (int32_t)(int16_t)Pop();
+
+                        Push(worldInScreenX);
+                        Push(worldInScreenY);
+                        ASMCall(0x99b4); // SCR>BLT
+                        bltInScreenY[1] = 120 - (int32_t)(int16_t)Pop();
+                        bltInScreenX[1] = (int32_t)(int16_t)Pop();
+
+                        printf("World to blit x %d y %d\n", bltInScreenX[1] - bltInScreenX[0], bltInScreenY[1] - bltInScreenY[0]);
+                    }
+
+
                     for (uint16_t i = 0; i < localCount; ++i)
                     {
                         bool found = false;
@@ -1482,7 +1539,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
 
-                        //printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u, IADDR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr, (icon.hi_iaddr << 16) | icon.lo_iaddr);
+                        printf("Locus %d of %d index %d, X: %d (%d), Y: %d (%d), ID: %u, CLR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.y, icon.screenY, icon.id, icon.clr);
 
                         s_localIconList.push_back(icon);
                     }
