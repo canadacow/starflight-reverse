@@ -137,9 +137,9 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 pixelPos = vec2(scrOffX, scrOffY);
 
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
-    vec2 fragCoord = vec2(subX * iResolution.x, subY * iResolution.y);
+    vec2 fragCoord = shipPos;
 
-    vec2 worldCoords = vec2(uniforms.worldX, uniforms.worldY);
+    vec2 worldCoords = vec2((uniforms.worldX + uniforms.deadX) / 1000.0, (uniforms.worldY + uniforms.deadY) / -1000.0);
 
     vec4 starPixel = vec4(0.);
     vec4 sunPixel = vec4(0.);

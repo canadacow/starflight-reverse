@@ -2378,8 +2378,8 @@ void GraphicsUpdate()
         uniform.deadX = (float)s_deadReckoning.x * ((float)s_frameCount / 4.0f);
         uniform.deadY = (float)s_deadReckoning.y * ((float)s_frameCount / 4.0f);
 
-        uniform.worldX = (float)(worldCoordsX + uniform.deadX) / 1000.0f;
-        uniform.worldY = (float)(worldCoordsY + uniform.deadY) / -1000.0f;
+        uniform.worldX = (float)worldCoordsX;
+        uniform.worldY = (float)worldCoordsY;
 
         if (s_pastWorld != vec2<int16_t>(worldCoordsX, worldCoordsY))
         {
