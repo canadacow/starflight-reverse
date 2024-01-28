@@ -1143,7 +1143,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     auto now = std::chrono::high_resolution_clock::now();
                     auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
-                    printf("?TERMINAL delta keytime %lu\n", (uint32_t)(millis - keytime));
+                    //printf("?TERMINAL delta keytime %lu\n", (uint32_t)(millis - keytime));
                 }
             }
         }
@@ -1350,7 +1350,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if (nextInstr == 0x9cfc) // .LOCAL-ICONS basically the screen update function
                 {
                     uint16_t localCount = Read16(0x59f5); // ILOCAL?
-                    printf("localCount %d\n", localCount);
+                    //printf("localCount %d\n", localCount);
 
                     auto getIcon = [](uint16_t index) -> Icon {
                         uint16_t IXSEG = Read16(0x59be);
@@ -1526,7 +1526,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         {
                             auto ss = systemIt->second;
 
-                            printf("Object at index %d is star system at %d x %d\n", i, ss.x, ss.y);
+                            //printf("Object at index %d is star system at %d x %d\n", i, ss.x, ss.y);
 
                             found = true;
                         }
@@ -1537,7 +1537,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         {
                             auto p = planetIt->second;
 
-                            printf("Object at index %d is star system at %d x %d in orbit %d seed 0x%x\n", i, p.x, p.y, p.orbit, p.seed);
+                            //printf("Object at index %d is star system at %d x %d in orbit %d seed 0x%x\n", i, p.x, p.y, p.orbit, p.seed);
 
                             icon.seed = p.seed;
 
@@ -1573,7 +1573,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             found = true;
                         }
 
-                        printf("Object at index %d is %s, iaddr 0x%x found? %d\n", i, it->second.c_str(), current_iaddr, found);
+                        //printf("Object at index %d is %s, iaddr 0x%x found? %d\n", i, it->second.c_str(), current_iaddr, found);
 
                         if(!found)
                         {

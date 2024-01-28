@@ -539,6 +539,8 @@ public:
     // Destructive read equivalent to Int 16 ah = 0
     virtual unsigned short getKeyStroke() = 0;
 
+    virtual bool areArrowKeysDown() { return false; }
+
     virtual void update() = 0;
 
     virtual ~DOSKeyboard() = default;
@@ -629,13 +631,6 @@ private:
         }
     }
 
-    bool areArrowKeysDown() {
-        const Uint8* state = (const Uint8*)s_keyboardState;
-        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
-               state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6] ||
-               state[SDL_SCANCODE_KP_7] || state[SDL_SCANCODE_KP_9] || state[SDL_SCANCODE_KP_1] || state[SDL_SCANCODE_KP_3];
-    }
-
     unsigned short getArrowKeyDown() {
         const Uint8* state = (const Uint8*)s_keyboardState;
         if (state[SDL_SCANCODE_UP]) {
@@ -724,6 +719,13 @@ private:
 public:
     SDLKeyboard() {}    
 
+    bool areArrowKeysDown() override {
+        const Uint8* state = (const Uint8*)s_keyboardState;
+        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
+            state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6] ||
+            state[SDL_SCANCODE_KP_7] || state[SDL_SCANCODE_KP_9] || state[SDL_SCANCODE_KP_1] || state[SDL_SCANCODE_KP_3];
+    }
+
     void update() override {
 
         auto handleEvent = [&](SDL_Event event) -> bool {
@@ -748,8 +750,8 @@ public:
                     break;
                 case SDL_KEYUP:
                     {
-                        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
-                        s_deadReckoning = { 0 , 0 };
+                        //std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+                        //s_deadReckoning = { 0 , 0 };
                     }
                     break;
                 case SDL_WINDOWEVENT:
@@ -2422,6 +2424,13 @@ void GraphicsUpdate()
 
     SDL_PumpEvents();
     keyboard->update();
+
+    if (!keyboard->areArrowKeysDown())
+    {
+        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+        s_deadReckoning = { 0, 0 };
+    }
+
     if (graphicsIsShutdown)
         return;
 

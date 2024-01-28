@@ -224,6 +224,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                     if(dist < basesize * 1.0)
                     {
+                        planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
                         planetPixel.a = 1.0;
                     }
                     else
