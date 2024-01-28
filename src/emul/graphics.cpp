@@ -632,7 +632,8 @@ private:
     bool areArrowKeysDown() {
         const Uint8* state = (const Uint8*)s_keyboardState;
         return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
-               state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6];
+               state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6] ||
+               state[SDL_SCANCODE_KP_7] || state[SDL_SCANCODE_KP_9] || state[SDL_SCANCODE_KP_1] || state[SDL_SCANCODE_KP_3];
     }
 
     unsigned short getArrowKeyDown() {
@@ -790,7 +791,6 @@ public:
     bool checkForKeyStroke() override {
         if(areArrowKeysDown())
         {
-            //s_deadReckoning = { 0, 0 };
             return true;
         }
        

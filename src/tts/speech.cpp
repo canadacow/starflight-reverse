@@ -46,7 +46,7 @@ struct WavHeader {
 
 static ISpVoice* pVoice = NULL;
 
-#define USE_COQUI 1
+//#define USE_COQUI 1
 
 static std::mutex s_phraseMutex;
 static std::counting_semaphore<100> s_phrasesAvailable{0};
