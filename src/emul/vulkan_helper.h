@@ -265,7 +265,7 @@ public:
 
 	vk::PresentModeKHR get_config_presentation_mode(const vk::SurfaceKHR & aSurface)
 	{
-		return vk::PresentModeKHR::eMailbox;
+		return vk::PresentModeKHR::eFifo;
 	}
 
 	uint32_t get_config_number_of_presentable_images()

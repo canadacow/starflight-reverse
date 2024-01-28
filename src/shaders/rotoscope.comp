@@ -354,8 +354,8 @@ vec4 DrawSDFSilhouette(const Rotoscope roto, vec2 subUv) {
 }
 
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
-    float subX = (float(roto.blt_x) + subUv.x + uniforms.deadX) / float(roto.blt_w);
-    float subY = (float(roto.blt_y) + subUv.y + uniforms.deadY) / float(roto.blt_h);
+    float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
+    float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
     return texture(NavigationTexture, vec2(subX, subY));
 }
 

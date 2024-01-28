@@ -48,6 +48,12 @@ struct vec2 {
         return x != other.x || y != other.y;
     }
 
+    vec2& operator+=(const vec2& other) {
+        x += other.x;
+        y += other.y;
+        return *this;
+    }
+
     vec2() : x(0), y(0) {}
     vec2(T _x, T _y) : x(_x), y(_y) {}
 };
@@ -1157,7 +1163,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
                         penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
                     }
-                    printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
+                    //printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
                 }
             }
             wordDeque.pop_back();
@@ -1379,70 +1385,104 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     auto currentCI = ForthGetCurrent();
 
+#if 0
                     {
-                        auto WLD_to_SCR = [](vec2<int16_t> input) {
-                            vec2<int16_t> output;
+                        bool found = false;
+                        Icon icon{};
+                        for (uint16_t i = 0; i < localCount; ++i)
+                        {
+                            icon = getIcon(i);
 
-                            output.y = input.y - static_cast<int16_t>(Read16(0x5B31)); // BVIS
-                            output.y *= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
-                            output.y /= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
-                            output.y += static_cast<int16_t>(Read16(0x596B)); // YLLDEST
+                            ForthPushCurrent(icon.iaddr);
+                            auto instType = GetInstanceClass();
+                            ForthPopCurrent();
+                            
+                            auto it = InstanceTypes.find(instType);
+                            assert(it != InstanceTypes.end());
 
-                            output.x = input.x - static_cast<int16_t>(Read16(0x5B3C)); // LVIS
-                            output.x *= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
-                            output.x /= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
-                            output.x += static_cast<int16_t>(Read16(0x595D)); // XLLDEST
+                            if (it->second == "SHIP")
+                            {
+                                found = true;
+                                break;
+                            }
+                        }
 
-                            return output;
-                        };
+                        if(found)
+                        {
+                            auto WLD_to_SCR = [](vec2<int16_t> input) {
+                                vec2<int16_t> output;
 
-                        auto SCR_to_BLT = [](vec2<int16_t> input) {
-                            vec2<int16_t> output;
+                                output.y = input.y - static_cast<int16_t>(Read16(0x5B31)); // BVIS
+                                output.y *= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
+                                output.y /= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
+                                output.y += static_cast<int16_t>(Read16(0x596B)); // YLLDEST
 
-                            output.x = input.x + 7 - static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
-                            output.y = input.y - static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
+                                output.x = input.x - static_cast<int16_t>(Read16(0x5B3C)); // LVIS
+                                output.x *= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
+                                output.x /= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
+                                output.x += static_cast<int16_t>(Read16(0x595D)); // XLLDEST
 
-                            return output;
-                        };
+                                return output;
+                            };
 
-                        int32_t bltInScreenX[2];
-                        int32_t bltInScreenY[2];
-                        
-                        Push(0);
-                        Push(0);
-                        ASMCall(0x9970); // WLD>SCR
-                        int32_t worldInScreenY = (int32_t)(int16_t)Pop();
-                        int32_t worldInScreenX = (int32_t)(int16_t)Pop();
+                            auto SCR_to_BLT = [](vec2<int16_t> input) {
+                                vec2<int16_t> output;
 
-                        Push(worldInScreenX);
-                        Push(worldInScreenY);
-                        ASMCall(0x99b4); // SCR>BLT
-                        bltInScreenY[1] = 120 - (int32_t)(int16_t)Pop();
-                        bltInScreenX[1] = (int32_t)(int16_t)Pop();
+                                output.x = input.x - static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
+                                output.y = input.y + 7 - static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
 
-                        Push(1);
-                        Push(1);
-                        ASMCall(0x9970); // WLD>SCR
-                        worldInScreenY = (int32_t)(int16_t)Pop();
-                        worldInScreenX = (int32_t)(int16_t)Pop();
+                                return output;
+                            };
 
-                        Push(worldInScreenX);
-                        Push(worldInScreenY);
-                        ASMCall(0x99b4); // SCR>BLT
-                        bltInScreenY[1] = 120 - (int32_t)(int16_t)Pop();
-                        bltInScreenX[1] = (int32_t)(int16_t)Pop();
+                            auto BLT_to_WLD = [](vec2<int16_t> input) {
+                                vec2<int16_t> output;
 
-                        printf("World to blit x %d y %d\n", bltInScreenX[1] - bltInScreenX[0], bltInScreenY[1] - bltInScreenY[0]);
+                                
+                                output.x = input.x + static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
+                                output.x *= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
+                                output.x /= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
+                                output.x += static_cast<int16_t>(Read16(0x5B3C)); // LVIS
+
+                                output.y = input.y - 7 + static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
+                                output.y *= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
+                                output.y /= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
+                                output.y += static_cast<int16_t>(Read16(0x5B31)); // BVIS
+
+                                return output;
+                            };
+
+                            auto WLD_TO_BLT = [SCR_to_BLT, WLD_to_SCR](vec2<int16_t> input) {
+                                return SCR_to_BLT(WLD_to_SCR(input));
+                            };
+
+                            vec2<int16_t> worldCoords = {(int16_t)icon.x, (int16_t)icon.y};
+                            vec2<int16_t> screenCoords = WLD_to_SCR(worldCoords);
+                            vec2<int16_t> bltCoords = SCR_to_BLT(screenCoords);
+
+                            // 32x61 when in solar system
+
+                            vec2<int16_t> testBltToWorldCoords = BLT_to_WLD(bltCoords);
+                            assert(testBltToWorldCoords.x == worldCoords.x && testBltToWorldCoords.y == worldCoords.y);
+
+                            assert(bltCoords.x == 32 && bltCoords.y == 61);
+
+                            vec2<int16_t> centerBlt = { (int16_t)32, (int16_t)61 };
+                            vec2<int16_t> centerWorldCoords = BLT_to_WLD(centerBlt);
+                            centerWorldCoords += { (int16_t)10, (int16_t)10 };
+                            vec2<int16_t> offsetBlt = WLD_TO_BLT(centerWorldCoords);
+
+                            // OFFSET World to blit x 4 y 6, e.g. one 1x1 world coordinate translates to 4x6 world coordinates
+
+                            printf("OFFSET World to blit x %d y %d\n", offsetBlt.x - centerBlt.x, offsetBlt.y - centerBlt.y);
+                        }
                     }
-
+#endif
 
                     for (uint16_t i = 0; i < localCount; ++i)
                     {
                         bool found = false;
 
-                        uint16_t index = i;
-
-                        Icon icon = getIcon(index);
+                        Icon icon = getIcon(i);
 
                         Push(icon.x);
                         Push(icon.y);
@@ -1560,7 +1600,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
 
-                        printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, index, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
+                        //printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, i, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
 
                         s_localIconList.push_back(icon);
                     }
@@ -1895,19 +1935,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if (nextInstr == 0xe4fa) // (?NEWHEADXY)
                 {
-                    Push(worldYDelta);
-                    Push(worldXDelta);
-                    ASMCall(0x9970); // WLD>SCR
-                    int16_t oldY = (int16_t)(int16_t)Pop();
-                    int16_t oldX = (int32_t)(int16_t)Pop();
+                    int16_t newWorldX = (int16_t)Read16(0x5dae);
+                    int16_t newWorldY = (int16_t)Read16(0x5db9);
 
-                    Push(Read16(0x5db9));
-                    Push(Read16(0x5dae));
-                    ASMCall(0x9970); // WLD>SCR
-                    int16_t newY = (int16_t)(int16_t)Pop();
-                    int16_t newX = (int16_t)(int16_t)Pop();
+                    newWorldX = newWorldX - worldXDelta;
+                    newWorldY = newWorldY - worldYDelta;
 
-                    GraphicsSetDeadReckoning(newX - oldX, newY - oldY);
+                    GraphicsSetDeadReckoning(newWorldX, newWorldY);
+                    printf("(?NEWHEADXY) - %d %d\n", newWorldX, newWorldY);
                 }
 
                 if (nextInstr == 0xe4b6) // (PHRASE>CT)
@@ -2283,28 +2318,28 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     std::lock_guard<std::mutex> lg(frameSync.mutex);
                     if (frameSync.completedFrames >= s_targetFrameKey) {
-                        printf("(?TERMINAL) 1 - 1\n");
+                        //printf("(?TERMINAL) 1 - 1\n");
                         Push(1);
                         s_targetFrameKey = frameSync.completedFrames + 4;
                         s_secondFlag = true;
                     } else if (s_secondFlag) {
-                        printf("(?TERMINAL) 1 - 1\n");
+                        //printf("(?TERMINAL) 1 - 1\n");
                         Push(1);
                         s_secondFlag = false;
                     } else {
-                        printf("(?TERMINAL) 1 - 0\n");
+                        //printf("(?TERMINAL) 1 - 0\n");
                         Push(0);
                     }
                 }
                 else
                 {
-                    printf("(?TERMINAL) 1\n");
+                    //printf("(?TERMINAL) 1\n");
                     Push(1);
                 }
             } 
             else
             {
-                printf("(?TERMINAL) 0\n");
+                //printf("(?TERMINAL) 0\n");
                 Push(0);
             }
         break;

@@ -118,8 +118,10 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     float scrOffX = float(roto.blt_x) + subUv.x;
     float scrOffY = float(roto.blt_y) + subUv.y;
 
-    scrOffX += uniforms.deadX;
-    scrOffY += uniforms.deadY;
+    vec2 shipPos = vec2(scrOffX, scrOffY);
+
+    scrOffX += uniforms.deadX * 4.0;
+    scrOffY -= uniforms.deadY * 6.0;
 
     float subX = scrOffX / float(roto.blt_w);
     float subY = scrOffY / float(roto.blt_h);
@@ -165,8 +167,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         // 34 is DOWN to the RIGHT
         if(icon.id >= 27 && icon.id <= 34) {
             float distance = 4.0;
-            if(calculateBoundingBoxDistanceIcon(bltPos, pixelPos) < distance) {
-                vec2 normUV = calculateNormalizedUVIcon(bltPos, pixelPos, distance * 2.0);
+            if(calculateBoundingBoxDistanceIcon(bltPos, shipPos) < distance) {
+                vec2 normUV = calculateNormalizedUVIcon(bltPos, shipPos, distance * 2.0);
 
                 normUV -= 0.5;
                 // Rotate the normUVs to match the icon.id orientation

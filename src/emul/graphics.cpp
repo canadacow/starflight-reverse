@@ -790,6 +790,7 @@ public:
     bool checkForKeyStroke() override {
         if(areArrowKeysDown())
         {
+            //s_deadReckoning = { 0, 0 };
             return true;
         }
        
@@ -927,19 +928,16 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y)
     std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
     s_deadReckoning = { x , y };
     s_deadReckoningSet = std::chrono::system_clock::now();
+
+    uint64_t framesDrawn = s_frameCount;
+    s_frameCount = 0;
+
+    printf("Drew %d frames between one game frame GraphicsReportGameFrame\n", framesDrawn);
 }
 
 void GraphicsReportGameFrame()
 {
-    uint64_t framesDrawn = 0;
-    {
-        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
 
-        framesDrawn = s_frameCount;
-        s_frameCount = 0;
-    }
-
-    printf("Drew %d frames between one game frame GraphicsReportGameFrame\n", framesDrawn);
 }
 
 RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
@@ -2371,16 +2369,17 @@ void GraphicsUpdate()
         int16_t worldCoordsY = (int16_t)Read16(0x5db9);
         int16_t heading = (int16_t)Read16(0x5dc7);
 
-        uniform.worldX = (float)worldCoordsX / 1000.0f;
-        uniform.worldY = (float)worldCoordsY / -1000.0f;
         uniform.heading = (float)heading;
 
         std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
 
         // Will figure out navigation smooth scrolling eventually
         auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
-        uniform.deadX = (float)s_deadReckoning.y * 1.0f * ((float)s_frameCount / 4.0f);
-        uniform.deadY = (float)-s_deadReckoning.x * 1.0f * ((float)s_frameCount / 4.0f);
+        uniform.deadX = (float)s_deadReckoning.x * ((float)s_frameCount / 4.0f);
+        uniform.deadY = (float)s_deadReckoning.y * ((float)s_frameCount / 4.0f);
+
+        uniform.worldX = (float)(worldCoordsX + uniform.deadX) / 1000.0f;
+        uniform.worldY = (float)(worldCoordsY + uniform.deadY) / -1000.0f;
 
         if (s_pastWorld != vec2<int16_t>(worldCoordsX, worldCoordsY))
         {
@@ -2392,7 +2391,10 @@ void GraphicsUpdate()
         int16_t espeed = (int16_t)Read16(0xda0a);
         int16_t acc = (int16_t)Read16(0xe921);
 
-        printf("Frame: x %d y %d, crs x %d, y %d, espeed %d acc %d \n", worldCoordsX, worldCoordsY, cursorX, cursorY, espeed, acc );
+        printf("Frame: x %d y %d, crs x %d, y %d, espeed %d acc %d deadx %f deady %f xd %f yd %f\n", worldCoordsX, worldCoordsY, cursorX, cursorY, espeed, acc, 
+            uniform.deadX, uniform.deadY,
+            uniform.worldX,
+            uniform.worldY);
 
         s_pastWorld = vec2<int16_t>(worldCoordsX, worldCoordsY);
 
