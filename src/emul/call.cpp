@@ -2302,6 +2302,20 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             } 
             else
             {
+                if (frameSync.maneuvering)
+                {
+                    bool needsIdleFrame = false;
+                    {
+                        std::lock_guard<std::mutex> lg(frameSync.mutex);
+                        needsIdleFrame = frameSync.framesToRender.size() < 2;
+                    }
+
+                    if(needsIdleFrame)
+                    {
+                        GraphicsSetDeadReckoning(0, 0, s_currentIconList);
+                    }
+                }
+
                 //printf("(?TERMINAL) 0\n");
                 Push(0);
                 //printf("frameSync.frameLimiter.releaseAll - nk\n");
