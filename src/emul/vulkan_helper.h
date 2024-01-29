@@ -15,29 +15,7 @@
 	#include <vulkan/vulkan_xcb.h>
 #endif
 
-template<typename T>
-struct vec2 {
-    union {
-        struct {
-            T x;
-            T y;
-        };
-        struct {
-            T u;
-            T v;
-        };
-    };
-
-	bool operator!=(const vec2& other) const {
-		return x != other.x || y != other.y;
-	}
-
-	vec2() : x(0), y(0) {}
-	vec2(T _x, T _y) : x(_x), y(_y) {}
-};
-
-
-
+#include <utility>
 
 class VulkanContext : public avk::root
 {
@@ -283,11 +261,11 @@ public:
 		return get_config_number_of_presentable_images();
 	}
 
-	vec2<uint32_t> get_resolution_for_window()
+	std::pair<uint32_t, uint32_t> get_resolution_for_window()
 	{
 		assert(mSwapChainExtent.width != 0);
 		assert(mSwapChainExtent.height != 0);
-		return {mSwapChainExtent.width, mSwapChainExtent.height};
+		return std::make_pair(mSwapChainExtent.width, mSwapChainExtent.height);
 	}
 
 	std::vector<avk::attachment> get_additional_back_buffer_attachments()

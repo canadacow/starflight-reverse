@@ -12,18 +12,73 @@
 #include <future>
 #include <mutex>
 #include <condition_variable>
+#include <semaphore>
+#include <deque>
 
-struct FrameSync {
-    std::mutex mutex;
-    std::condition_variable frameCompleted;
-    uint64_t completedFrames = 0;
+template<typename T>
+struct vec2 {
+    union {
+        struct {
+            T x;
+            T y;
+        };
+        struct {
+            T u;
+            T v;
+        };
+    };
+
+    bool operator!=(const vec2& other) const {
+        return x != other.x || y != other.y;
+    }
+
+    vec2& operator+=(const vec2& other) {
+        x += other.x;
+        y += other.y;
+        return *this;
+    }
+
+    vec2() : x(0), y(0) {}
+    vec2(T _x, T _y) : x(_x), y(_y) {}
 };
 
-extern FrameSync frameSync;
 
-// Declare the promise and future as extern so they can be defined elsewhere
-extern std::promise<void> initPromise;
-extern std::future<void> initFuture;
+class CountingSemaphore {
+public:
+    CountingSemaphore(int maxCount) : maxCount(maxCount), count(0) {}
+
+    int acquire() {
+        std::unique_lock<std::mutex> lock(mtx);
+        while(count == 0) {
+            cv.wait(lock);
+        }
+        --count;
+
+        printf("CountingSemaphore: count %d\n", count);
+
+        return count;
+    }
+
+    void release() {
+        std::unique_lock<std::mutex> lock(mtx);
+        if(count < maxCount) {
+            ++count;
+        }
+        cv.notify_one();
+    }
+
+    void releaseAll() {
+        std::unique_lock<std::mutex> lock(mtx);
+        count = maxCount;
+        cv.notify_all();
+    }
+
+private:
+    std::mutex mtx;
+    std::condition_variable cv;
+    int maxCount;
+    int count;
+};
 
 enum PixelContents
 {
@@ -342,6 +397,33 @@ struct Rotoscope
     }
 };
 
+struct FrameToRender
+{
+    std::vector<Icon> iconList;
+    vec2<int16_t> worldCoord;
+    vec2<int16_t> deadReckoning;
+    int16_t heading;
+    uint32_t renderCount;
+};
+
+struct FrameSync {
+    std::mutex mutex;
+    std::condition_variable frameCompleted;
+    uint64_t completedFrames = 0;
+
+    uint32_t gameContext = 0;
+
+    bool maneuvering = false;
+
+    std::deque<FrameToRender> framesToRender;
+};
+
+extern FrameSync frameSync;
+
+// Declare the promise and future as extern so they can be defined elsewhere
+extern std::promise<void> initPromise;
+extern std::future<void> initFuture;
+
 static const int CGAToEGA[16] = {0, 2, 1, 9, 4, 8, 5, 11, 6, 10, 7, 3, 6, 14, 12, 15};
 static const int EGAToCGA[16] = {0, 2, 1, 11, 4, 6, 8, 10, 5, 3, 9, 7, 14, 0, 13, 15};
 static const int NagivationWindowWidth = 72;
@@ -370,7 +452,7 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
 void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
 void GraphicsSave(char *filename);
 
-void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY);
+void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, const std::vector<Icon>& iconList);
 void GraphicsReportGameFrame();
 
 void GraphicsSplash(uint16_t seg, uint16_t fileNum);

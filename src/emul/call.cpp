@@ -31,33 +31,6 @@
 #include <zstd.h>
 #include <xxhash.h>
 
-template<typename T>
-struct vec2 {
-    union {
-        struct {
-            T x;
-            T y;
-        };
-        struct {
-            T u;
-            T v;
-        };
-    };
-
-    bool operator!=(const vec2& other) const {
-        return x != other.x || y != other.y;
-    }
-
-    vec2& operator+=(const vec2& other) {
-        x += other.x;
-        y += other.y;
-        return *this;
-    }
-
-    vec2() : x(0), y(0) {}
-    vec2(T _x, T _y) : x(_x), y(_y) {}
-};
-
 unsigned int debuglevel = 0;
 
 const unsigned short cs = StarflightBaseSegment;
@@ -1024,23 +997,12 @@ uint8_t frequencyLookupTable[] = {
 extern unsigned short regbx;
 uint16_t nparmsStackSi = 0;
 
-static std::recursive_mutex s_localIconListMutex;
-std::vector<Icon> s_localIconList;
-uint32_t          s_gameContext;
-
 static bool s_shouldRecordText = false;
-static bool s_maneuvering = false;
 static bool s_secondFlag = false;
 static std::string s_recordedText = "";
+static std::vector<Icon> s_currentIconList;
 
 uint64_t s_targetFrameKey = 0;
-
-std::vector<Icon> GetLocalIconList(uint32_t* gameContext)
-{
-    std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
-    *gameContext = s_gameContext;
-    return s_localIconList;
-}
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
@@ -1131,7 +1093,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         {
             wordDeque.push_back({word, std::chrono::high_resolution_clock::now()});
 
-            if(s_maneuvering)
+            if(frameSync.maneuvering)
             {
                 if (word == "?TERMINAL")
                 {
@@ -1149,7 +1111,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         }
         ~WordTracker()
         {
-            if(s_maneuvering)
+            if(frameSync.maneuvering)
             {
                 auto end = std::chrono::high_resolution_clock::now();
                 auto time = std::chrono::duration_cast<std::chrono::microseconds>(end - wordDeque.back().start);
@@ -1178,8 +1140,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     lastTime = currentTime;
 
     {
-        std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
-        s_gameContext = Read16(0x5a5c);
+        frameSync.gameContext = Read16(0x5a5c);
     }
 
     // bx contains pointer to WORD
@@ -1215,7 +1176,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xcbbf) // MANEUVER
                 {
-                    s_maneuvering = true;
+                    frameSync.maneuvering = true;
+                    printf("frameSync.maneuvering = true\n");
                 }
 
                 if (nextInstr == 0xe4b6) // (PHRASE>CT)
@@ -1375,8 +1337,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         return icon;
                     };
 
-                    std::lock_guard<std::recursive_mutex> lg(s_localIconListMutex);
-                    s_localIconList.clear();
+                    s_currentIconList.clear();
 
                     //ASMCall(0x7577); // CI
                     //uint16_t hi_iaddr = Pop();
@@ -1602,14 +1563,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         //printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, i, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
 
-                        s_localIconList.push_back(icon);
+                        s_currentIconList.push_back(icon);
                     }
 
                     // Second pass to find the sun if we're in a solar system
                     bool inSolarSystem = false;
                     int32_t sunLocationX = 0;
                     int32_t sunLocationY = 0;
-                    for (auto icon : s_localIconList)
+                    for (auto icon : s_currentIconList)
                     {
                         if (icon.icon_type == IconType::Sun)
                         {
@@ -1624,7 +1585,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     if (inSolarSystem)
                     {
                         // Place the Sun at the center and compute planets relative to the sun.
-                        for (auto& icon : s_localIconList)
+                        for (auto& icon : s_currentIconList)
                         {
                             if (icon.icon_type == IconType::Planet)
                             {
@@ -1848,7 +1809,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     bool hasShip = false;
                     int32_t shipScreenX = 0;
                     int32_t shipScreenY = 0;
-                    for (auto icon : s_localIconList)
+                    for (auto icon : s_currentIconList)
                     {
                         if (icon.icon_type == IconType::Ship)
                         {
@@ -1862,7 +1823,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     bool inNebula = false;
                     if (hasShip)
                     {
-                        for (auto icon : s_localIconList)
+                        for (auto icon : s_currentIconList)
                         {
                             if (icon.icon_type == IconType::Nebula)
                             {
@@ -1941,7 +1902,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     newWorldX = newWorldX - worldXDelta;
                     newWorldY = newWorldY - worldYDelta;
 
-                    GraphicsSetDeadReckoning(newWorldX, newWorldY);
+                    GraphicsSetDeadReckoning(newWorldX, newWorldY, s_currentIconList);
                     printf("(?NEWHEADXY) - %d %d\n", newWorldX, newWorldY);
                 }
 
@@ -1960,7 +1921,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xcbbf) // MANEUVER
                 {
-                    s_maneuvering = false;
+                    frameSync.maneuvering = false;
+                    printf("frameSync.maneuvering = false\n");
                 }
 
             }
@@ -2314,14 +2276,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
             if(GraphicsHasKey())
             {
-                if (s_maneuvering)
+                if (frameSync.maneuvering)
                 {
                     std::lock_guard<std::mutex> lg(frameSync.mutex);
-                    if (frameSync.completedFrames >= s_targetFrameKey) {
-                        //printf("(?TERMINAL) 1 - 1\n");
+                    if (frameSync.framesToRender.size() < 2) {
+                        //printf("frameSync.frameLimiter.releaseAll - m\n");
                         Push(1);
-                        s_targetFrameKey = frameSync.completedFrames + 4;
                         s_secondFlag = true;
+                        //frameSync.frameLimiter.releaseAll();
                     } else if (s_secondFlag) {
                         //printf("(?TERMINAL) 1 - 1\n");
                         Push(1);
@@ -2335,12 +2297,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     //printf("(?TERMINAL) 1\n");
                     Push(1);
+                    //printf("frameSync.frameLimiter.releaseAll - nm\n");
                 }
             } 
             else
             {
                 //printf("(?TERMINAL) 0\n");
                 Push(0);
+                //printf("frameSync.frameLimiter.releaseAll - nk\n");
             }
         break;
 

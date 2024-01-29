@@ -117,7 +117,7 @@ void VulkanContext::construct_swap_chain_creation_info(swapchain_creation_mode a
     auto extent = get_resolution_for_window();
     auto surfaceFormat = get_config_surface_format(surface());
     if (aCreationMode == swapchain_creation_mode::update_existing_swapchain) {
-        mImageCreateInfoSwapChain.setExtent(vk::Extent3D(extent.x, extent.y, 1u));
+        mImageCreateInfoSwapChain.setExtent(vk::Extent3D(extent.first, extent.second, 1u));
         if (mResourceRecreationDeterminator.is_recreation_required_for(recreation_determinator::reason::image_format_or_properties_changed)) {
             auto imageUsageProperties = get_config_image_usage_properties();
             auto [imageUsage, imageTiling, createFlags] = avk::to_vk_image_properties(imageUsageProperties);
@@ -136,7 +136,7 @@ void VulkanContext::construct_swap_chain_creation_info(swapchain_creation_mode a
         mImageCreateInfoSwapChain = vk::ImageCreateInfo{}
             .setImageType(vk::ImageType::e2D)
             .setFormat(surfaceFormat.format)
-            .setExtent(vk::Extent3D(extent.x, extent.y, 1u))
+            .setExtent(vk::Extent3D(extent.first, extent.second, 1u))
             .setMipLevels(1)
             .setArrayLayers(1)
             .setSamples(vk::SampleCountFlagBits::e1)
@@ -204,8 +204,8 @@ void VulkanContext::construct_backbuffers(swapchain_creation_mode aCreationMode)
     auto extent = get_resolution_for_window();
     auto imageResize = [&extent](avk::image_t& aPreparedImage) {
         if (aPreparedImage.depth() == 1u) {
-            aPreparedImage.create_info().extent.width = extent.x;
-            aPreparedImage.create_info().extent.height = extent.y;
+            aPreparedImage.create_info().extent.width = extent.first;
+            aPreparedImage.create_info().extent.height = extent.second;
         }
         else {
             printf("WARNING: No idea how to update a 3D image with dimensions %dx%dx%d\n", aPreparedImage.width(), aPreparedImage.height(), aPreparedImage.depth());
@@ -282,7 +282,7 @@ void VulkanContext::construct_backbuffers(swapchain_creation_mode aCreationMode)
                 }
             }
         }
-        auto& ref = newBuffers.emplace_back(create_framebuffer(mBackBufferRenderpass, std::move(imageViews), extent.x, extent.y));
+        auto& ref = newBuffers.emplace_back(create_framebuffer(mBackBufferRenderpass, std::move(imageViews), extent.first, extent.second));
         ref.enable_shared_ownership();
     }
 

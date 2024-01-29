@@ -85,12 +85,10 @@ static std::atomic<bool> s_useEGA = true;
 static std::atomic<uint32_t> s_alienVar1 = 0;
 
 static std::mutex s_deadReckoningMutex;
-static vec2<int16_t> s_deadReckoning = {};
+
 static vec2<int16_t> s_pastWorld = {};
 static std::chrono::time_point<std::chrono::system_clock> s_deadReckoningSet;
 
-static std::mutex s_frameCountMutex;
-static uint64_t s_frameCount;
 static uint64_t s_frameAccelCount;
 
 struct GraphicsContext
@@ -925,15 +923,29 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
-void GraphicsSetDeadReckoning(int16_t x, int16_t y)
+void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList)
 {
-    std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
-    s_deadReckoning = { x , y };
-    s_deadReckoningSet = std::chrono::system_clock::now();
+    FrameToRender ftr{};
 
-    uint64_t framesDrawn = s_frameCount;
-    s_frameCount = 0;
+    ftr.deadReckoning = { x , y };
+    ftr.iconList = iconList;
+    ftr.renderCount = 0;
+    ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
+    ftr.heading = (int16_t)Read16(0x5dc7);
 
+    std::unique_lock<std::mutex> lock(frameSync.mutex);
+
+    while(frameSync.framesToRender.size() >= 2)
+    {
+        frameSync.frameCompleted.wait(lock);
+    }
+
+    frameSync.framesToRender.push_back(ftr);
+    uint64_t framesDrawn = frameSync.completedFrames;
+    frameSync.completedFrames = 0;
+
+    frameSync.frameCompleted.notify_one();
+   
     printf("Drew %d frames between one game frame GraphicsReportGameFrame\n", framesDrawn);
 }
 
@@ -2116,6 +2128,30 @@ void GraphicsUpdate()
         modeChangeComplete.release();
     }
 
+    int semCount = INT32_MAX;
+
+    uint32_t gameContext = frameSync.gameContext;
+    FrameToRender ftr{};
+
+    if (frameSync.maneuvering)
+    {
+       std::unique_lock<std::mutex> lock(frameSync.mutex);
+
+       while(frameSync.framesToRender.size() == 0)
+       {
+            frameSync.frameCompleted.wait(lock);
+       }
+
+       ftr = frameSync.framesToRender.front();
+
+       ++frameSync.framesToRender.front().renderCount;
+
+       if(frameSync.framesToRender.front().renderCount >= 4)
+       {
+            frameSync.framesToRender.pop_front();
+       }
+    }    
+
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;
     const void* data = nullptr;
@@ -2169,9 +2205,6 @@ void GraphicsUpdate()
         s_gc.shouldInitPlanets = false;
         s_gc.planetsDone.release();
     }
-
-    uint32_t gameContext;
-    std::vector<Icon> icons = GetLocalIconList(&gameContext);
 
     if (fullRes.size() == 0)
     {
@@ -2359,7 +2392,7 @@ void GraphicsUpdate()
         commands.insert(commands.end(), cpuCommands.begin(), cpuCommands.end());
 #else
 
-        IconUniform ic(icons);
+        IconUniform ic(ftr.iconList);
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, hasNavigation);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
@@ -2367,40 +2400,19 @@ void GraphicsUpdate()
 
     if (hasNavigation)
     {
-        int16_t worldCoordsX = (int16_t)Read16(0x5dae);
-        int16_t worldCoordsY = (int16_t)Read16(0x5db9);
-        int16_t heading = (int16_t)Read16(0x5dc7);
+        uniform.heading = (float)ftr.heading;
 
-        uniform.heading = (float)heading;
+        uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
+        uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);
 
-        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+        uniform.worldX = (float)ftr.worldCoord.x;
+        uniform.worldY = (float)ftr.worldCoord.y;
 
-        // Will figure out navigation smooth scrolling eventually
-        auto deadSet = std::chrono::duration<float>(std::chrono::system_clock::now() - s_deadReckoningSet).count();
-        uniform.deadX = (float)s_deadReckoning.x * ((float)s_frameCount / 4.0f);
-        uniform.deadY = (float)s_deadReckoning.y * ((float)s_frameCount / 4.0f);
-
-        uniform.worldX = (float)worldCoordsX;
-        uniform.worldY = (float)worldCoordsY;
-
-        if (s_pastWorld != vec2<int16_t>(worldCoordsX, worldCoordsY))
-        {
-            s_frameAccelCount = 0;
-        }
-
-        int16_t cursorX = (int16_t)Read16(0xd9f6);
-        int16_t cursorY = (int16_t)Read16(0xd9fa);
-        int16_t espeed = (int16_t)Read16(0xda0a);
-        int16_t acc = (int16_t)Read16(0xe921);
-
-        printf("Frame: x %d y %d, crs x %d, y %d, espeed %d acc %d deadx %f deady %f xd %f yd %f\n", worldCoordsX, worldCoordsY, cursorX, cursorY, espeed, acc, 
+        printf("Frame: x %d y %d, deadx %f deady %f xd %f yd %f\n", ftr.worldCoord.x, ftr.worldCoord.y,
             uniform.deadX, uniform.deadY,
             uniform.worldX,
             uniform.worldY);
 
-        s_pastWorld = vec2<int16_t>(worldCoordsX, worldCoordsY);
-
-        ++s_frameAccelCount;
     }
 
     s_gc.vc.record(std::move(commands))
@@ -2409,11 +2421,6 @@ void GraphicsUpdate()
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
     .submit();
-
-    {
-        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
-        ++s_frameCount;
-    }
 
     s_gc.vc.render_frame();
 
@@ -2425,11 +2432,11 @@ void GraphicsUpdate()
     SDL_PumpEvents();
     keyboard->update();
 
-    if (!keyboard->areArrowKeysDown())
-    {
-        std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
-        s_deadReckoning = { 0, 0 };
-    }
+    //if (!keyboard->areArrowKeysDown())
+    //{
+    //    std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
+    //    s_deadReckoning = { 0, 0 };
+    //}
 
     if (graphicsIsShutdown)
         return;
@@ -2453,7 +2460,6 @@ void GraphicsUpdate()
         std::lock_guard<std::mutex> lock(frameSync.mutex);
         frameSync.completedFrames++;
     }
-    frameSync.frameCompleted.notify_one();
 }
 
 void GraphicsWait()
