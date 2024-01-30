@@ -121,7 +121,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 shipPos = vec2(scrOffX, scrOffY);
 
     scrOffX += uniforms.deadX * 4.0;
-    scrOffY -= uniforms.deadY * 6.0;
+    scrOffY += uniforms.deadY * 6.0;
 
     float subX = scrOffX / float(roto.blt_w);
     float subY = scrOffY / float(roto.blt_h);
@@ -139,7 +139,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
     vec2 fragCoord = shipPos;
 
-    vec2 worldCoords = vec2((uniforms.worldX + uniforms.deadX) / 1000.0, (uniforms.worldY + uniforms.deadY) / -1000.0);
+    vec2 worldCoords = vec2((uniforms.worldX) / 1000.0, (uniforms.worldY) / -1000.0);
 
     vec4 starPixel = vec4(0.);
     vec4 sunPixel = vec4(0.);
@@ -297,6 +297,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     }
 
     hyperspaceRender(pixel, fragCoord, iTime, iResolution, worldCoords + vec2(1000.0, 1000.0));
+
+    //pixel = vec4(subUv.xy, 0.0, 1.0);
 
     if(nebulaPixel > 0.0)
     {

@@ -2405,8 +2405,8 @@ void GraphicsUpdate()
         uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
         uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);
 
-        uniform.worldX = (float)ftr.worldCoord.x;
-        uniform.worldY = (float)ftr.worldCoord.y;
+        uniform.worldX = (float)ftr.worldCoord.x + uniform.deadX;
+        uniform.worldY = (float)ftr.worldCoord.y + uniform.deadY;
 
         printf("Frame: x %d y %d, deadx %f deady %f xd %f yd %f\n", ftr.worldCoord.x, ftr.worldCoord.y,
             uniform.deadX, uniform.deadY,
