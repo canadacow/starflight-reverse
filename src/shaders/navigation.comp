@@ -120,8 +120,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
     vec2 shipPos = vec2(scrOffX, scrOffY);
 
-    scrOffX += uniforms.deadX * 4.0;
-    scrOffY += uniforms.deadY * 6.0;
+    //scrOffX += uniforms.deadX * 4.0;
+    //scrOffY += uniforms.deadY * 6.0;
 
     float subX = scrOffX / float(roto.blt_w);
     float subY = scrOffY / float(roto.blt_h);
@@ -134,7 +134,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     }
     #endif
 
-    vec2 pixelPos = vec2(scrOffX, scrOffY);
+    vec2 pixelPos = shipPos; //vec2(scrOffX, scrOffY);
 
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
     vec2 fragCoord = shipPos;
@@ -224,7 +224,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                     if(dist < basesize * 1.0)
                     {
-                        planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
+                        //planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
                         planetPixel.a = 1.0;
                     }
                     else
