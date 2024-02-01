@@ -925,28 +925,29 @@ void BeepOff()
 
 void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList)
 {
-    FrameToRender ftr{};
-
-    ftr.deadReckoning = { x , y };
-    ftr.iconList = iconList;
-    ftr.renderCount = 0;
-    ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
-    ftr.heading = (int16_t)Read16(0x5dc7);
-
-    std::unique_lock<std::mutex> lock(frameSync.mutex);
-
-    while(frameSync.framesToRender.size() >= 2)
+    if(frameSync.maneuvering)
     {
-        frameSync.frameCompleted.wait(lock);
+        FrameToRender ftr{};
+
+        ftr.deadReckoning = { x , y };
+        ftr.iconList = iconList;
+        ftr.renderCount = 0;
+        ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
+        ftr.heading = (int16_t)Read16(0x5dc7);
+
+        std::unique_lock<std::mutex> lock(frameSync.mutex);
+
+        if (frameSync.framesToRender.size() < 2)
+        {
+            frameSync.framesToRender.push_back(ftr);
+            uint64_t framesDrawn = frameSync.completedFrames;
+            frameSync.completedFrames = 0;
+
+            printf("GSDR Drew %d frames between one game frame GraphicsReportGameFrame - framesync cnt %d\n", framesDrawn, frameSync.framesToRender.size());
+
+            frameSync.frameCompleted.notify_one();
+        }
     }
-
-    frameSync.framesToRender.push_back(ftr);
-    uint64_t framesDrawn = frameSync.completedFrames;
-    frameSync.completedFrames = 0;
-
-    frameSync.frameCompleted.notify_one();
-   
-    printf("Drew %d frames between one game frame GraphicsReportGameFrame\n", framesDrawn);
 }
 
 void GraphicsReportGameFrame()
@@ -2148,9 +2149,16 @@ void GraphicsUpdate()
 
        if(frameSync.framesToRender.front().renderCount >= 4)
        {
+            frameSync.stoppedFrame = frameSync.framesToRender.front();
             frameSync.framesToRender.pop_front();
+            frameSync.gameTickTimer = 0;
        }
-    }    
+    }
+    else
+    {
+        ftr = frameSync.stoppedFrame;
+    }
+    
 
     SDL_Texture* currentTexture = NULL;
     uint32_t stride = 0;

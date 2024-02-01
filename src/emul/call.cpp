@@ -1001,6 +1001,7 @@ static bool s_shouldRecordText = false;
 static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
+static vec2<int16_t> s_heading;
 
 uint64_t s_targetFrameKey = 0;
 
@@ -1902,7 +1903,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     newWorldX = newWorldX - worldXDelta;
                     newWorldY = newWorldY - worldYDelta;
 
-                    GraphicsSetDeadReckoning(newWorldX, newWorldY, s_currentIconList);
+                    s_heading = { newWorldX, newWorldY };
+                    
                     printf("(?NEWHEADXY) - %d %d\n", newWorldX, newWorldY);
                 }
 
@@ -1917,6 +1919,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     s_recordedText = "";
                     s_shouldRecordText = false;
+                }
+
+                if(nextInstr == 0xb0bd) // PARALLEL-TASKS
+                {
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList);
                 }
 
                 if(nextInstr == 0xcbbf) // MANEUVER
@@ -2274,51 +2281,38 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
-            if(GraphicsHasKey())
+            if (frameSync.maneuvering)
             {
-                if (frameSync.maneuvering)
+                if (GraphicsHasKey())
                 {
                     std::lock_guard<std::mutex> lg(frameSync.mutex);
-                    if (frameSync.framesToRender.size() < 2) {
-                        //printf("frameSync.frameLimiter.releaseAll - m\n");
+                    if (frameSync.gameTickTimer < 2)
+                    {
                         Push(1);
-                        s_secondFlag = true;
-                        //frameSync.frameLimiter.releaseAll();
-                    } else if (s_secondFlag) {
-                        //printf("(?TERMINAL) 1 - 1\n");
-                        Push(1);
-                        s_secondFlag = false;
-                    } else {
-                        //printf("(?TERMINAL) 1 - 0\n");
+                    }
+                    else
+                    {
                         Push(0);
                     }
+
+                    ++frameSync.gameTickTimer;
                 }
                 else
                 {
-                    //printf("(?TERMINAL) 1\n");
-                    Push(1);
-                    //printf("frameSync.frameLimiter.releaseAll - nm\n");
+                    s_heading = { 0, 0 };
+                    Push(0);
                 }
-            } 
+            }
             else
             {
-                if (frameSync.maneuvering)
+                if (GraphicsHasKey())
                 {
-                    bool needsIdleFrame = false;
-                    {
-                        std::lock_guard<std::mutex> lg(frameSync.mutex);
-                        needsIdleFrame = frameSync.framesToRender.size() < 2;
-                    }
-
-                    if(needsIdleFrame)
-                    {
-                        GraphicsSetDeadReckoning(0, 0, s_currentIconList);
-                    }
+                    Push(1);
                 }
-
-                //printf("(?TERMINAL) 0\n");
-                Push(0);
-                //printf("frameSync.frameLimiter.releaseAll - nk\n");
+                else
+                {
+                    Push(0);
+                }
             }
         break;
 

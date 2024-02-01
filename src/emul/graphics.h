@@ -415,7 +415,11 @@ struct FrameSync {
 
     bool maneuvering = false;
 
+    int32_t gameTickTimer = 0;
+
     std::deque<FrameToRender> framesToRender;
+
+    FrameToRender stoppedFrame;
 };
 
 extern FrameSync frameSync;
