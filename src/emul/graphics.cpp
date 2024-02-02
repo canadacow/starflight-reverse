@@ -2388,23 +2388,6 @@ void GraphicsUpdate()
 
     s_gc.buffers[inFlightIndex].command->reset();
 
-    if (graphicsMode == SFGraphicsMode::Text)
-    {
-        auto textCommands = TextPass(inFlightIndex, uniform, data, dataSize);
-        commands.insert(commands.end(), textCommands.begin(), textCommands.end());
-    }
-    else
-    {
-#if defined(USE_CPU_RASTERIZATION)
-        auto cpuCommands = CPUCopyPass(inFlightIndex, data, dataSize);
-        commands.insert(commands.end(), cpuCommands.begin(), cpuCommands.end());
-#else
-
-        IconUniform ic(ftr.iconList);
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, hasNavigation);
-        commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
-#endif
-    }
 
     if (hasNavigation)
     {
@@ -2422,6 +2405,43 @@ void GraphicsUpdate()
             uniform.worldY);
 
     }
+
+    if (graphicsMode == SFGraphicsMode::Text)
+    {
+        auto textCommands = TextPass(inFlightIndex, uniform, data, dataSize);
+        commands.insert(commands.end(), textCommands.begin(), textCommands.end());
+    }
+    else
+    {
+#if defined(USE_CPU_RASTERIZATION)
+        auto cpuCommands = CPUCopyPass(inFlightIndex, data, dataSize);
+        commands.insert(commands.end(), cpuCommands.begin(), cpuCommands.end());
+#else
+
+        IconUniform ic(ftr.iconList);
+        for (int i = 0; i < 32; ++i)
+        {
+            if (ic.icons[i].isActive)
+            {
+                ShaderIcon& si = ic.icons[i];
+
+                if (si.id >= 27 && si.id <= 34)
+                    continue;
+
+                si.screenX -= uniform.deadX * 4.0f;
+                si.screenY += uniform.deadY * 6.0f;
+
+                si.bltX -= uniform.deadX * 4.0f;
+                si.bltY += uniform.deadY * 6.0f;
+            }
+        }
+
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, hasNavigation);
+        commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
+#endif
+    }
+
+
 
     s_gc.vc.record(std::move(commands))
     .into_command_buffer(s_gc.buffers[inFlightIndex].command)

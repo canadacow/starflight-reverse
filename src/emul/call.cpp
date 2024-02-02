@@ -1387,6 +1387,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 return output;
                             };
 
+                            auto SCR_to_WLD = [](vec2<int16_t> input) {
+                                vec2<int16_t> output;
+
+                                output.y = input.y - static_cast<int16_t>(Read16(0x596B)); // YLLDEST
+                                output.y *= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
+                                output.y /= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
+                                output.y += static_cast<int16_t>(Read16(0x5B31)); // BVIS
+
+                                output.x = input.x - static_cast<int16_t>(Read16(0x595D)); // XLLDEST
+                                output.x *= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
+                                output.x /= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
+                                output.x += static_cast<int16_t>(Read16(0x5B3C)); // LVIS
+
+                                return output;
+                            };
+
                             auto SCR_to_BLT = [](vec2<int16_t> input) {
                                 vec2<int16_t> output;
 
@@ -1398,7 +1414,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                             auto BLT_to_WLD = [](vec2<int16_t> input) {
                                 vec2<int16_t> output;
-
                                 
                                 output.x = input.x + static_cast<int16_t>(Read16(0x5A4E)); // CENTERADJUST
                                 output.x *= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
@@ -1426,16 +1441,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             vec2<int16_t> testBltToWorldCoords = BLT_to_WLD(bltCoords);
                             assert(testBltToWorldCoords.x == worldCoords.x && testBltToWorldCoords.y == worldCoords.y);
 
-                            assert(bltCoords.x == 32 && bltCoords.y == 61);
+                            assert(screenCoords.x == 32 && screenCoords.y == 54);
 
-                            vec2<int16_t> centerBlt = { (int16_t)32, (int16_t)61 };
-                            vec2<int16_t> centerWorldCoords = BLT_to_WLD(centerBlt);
-                            centerWorldCoords += { (int16_t)10, (int16_t)10 };
-                            vec2<int16_t> offsetBlt = WLD_TO_BLT(centerWorldCoords);
+                            vec2<int16_t> centerScreen = { (int16_t)32, (int16_t)54 };
+                            vec2<int16_t> centerWorldCoords = SCR_to_WLD(centerScreen);
+                            centerWorldCoords += { (int16_t)1, (int16_t)1 };
+                            vec2<int16_t> offsetScr = WLD_to_SCR(centerWorldCoords);
 
                             // OFFSET World to blit x 4 y 6, e.g. one 1x1 world coordinate translates to 4x6 world coordinates
 
-                            printf("OFFSET World to blit x %d y %d\n", offsetBlt.x - centerBlt.x, offsetBlt.y - centerBlt.y);
+                            printf("OFFSET World to screen x %d y %d\n", offsetScr.x - centerScreen.x, offsetScr.y - centerScreen.y);
                         }
                     }
 #endif
