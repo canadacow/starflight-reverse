@@ -137,6 +137,9 @@ struct UniformBlock {
     // (3 = hyperspace, 4 = encounter, 5 = starport)
     uint32_t game_context; 
     uint32_t alienVar1;
+    float screenX;
+    float screenY;
+    float adjust;
 };
 
 struct ShaderIcon {
@@ -401,6 +404,7 @@ struct FrameToRender
 {
     std::vector<Icon> iconList;
     vec2<int16_t> worldCoord;
+    vec2<int16_t> screenCoord;
     vec2<int16_t> deadReckoning;
     int16_t heading;
     uint32_t renderCount;

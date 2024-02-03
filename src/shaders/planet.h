@@ -92,11 +92,8 @@ vec3 getCameraRayDir(vec2 uv, vec3 camPos, vec3 camTarget)
 }
 
 
-void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir, in uint planetIndex)
+void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir, in uint planetIndex, vec3 camPos)
 {
-
-    // Side perspective
-    vec3 camPos = vec3(0, 0, 1);
     vec3 camTarget = vec3(0, 0, 0);
     vec3 rayDir = getCameraRayDir(uv, camPos, camTarget);
 

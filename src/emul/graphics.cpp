@@ -83,6 +83,7 @@ static double toneInHz = 440.0;
 static std::atomic<bool> s_useRotoscope = true;
 static std::atomic<bool> s_useEGA = true;
 static std::atomic<uint32_t> s_alienVar1 = 0;
+static float s_adjust = 0.0f;
 
 static std::mutex s_deadReckoningMutex;
 
@@ -737,6 +738,16 @@ public:
                     {
                         s_useEGA = !s_useEGA;
                     }
+                    else if (event.key.keysym.sym == SDLK_F3)
+                    {
+                        s_adjust -= 0.10f;
+                        printf("ADJUST %f\n", s_adjust);
+                    }
+                    else if (event.key.keysym.sym == SDLK_F4)
+                    {
+                        s_adjust += 0.10f;
+                        printf("ADJUST %f\n", s_adjust);
+                    }
                     else
                     {
                         if (!isArrowOrKeypadKey(event))
@@ -925,6 +936,22 @@ void BeepOff()
 
 void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList)
 {
+    auto WLD_to_SCR = [](vec2<int16_t> input) {
+        vec2<int16_t> output;
+
+        output.y = input.y - static_cast<int16_t>(Read16(0x5B31)); // BVIS
+        output.y *= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
+        output.y /= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
+        output.y += static_cast<int16_t>(Read16(0x596B)); // YLLDEST
+
+        output.x = input.x - static_cast<int16_t>(Read16(0x5B3C)); // LVIS
+        output.x *= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
+        output.x /= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
+        output.x += static_cast<int16_t>(Read16(0x595D)); // XLLDEST
+
+        return output;
+    };
+
     if(frameSync.maneuvering)
     {
         FrameToRender ftr{};
@@ -933,6 +960,7 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
         ftr.iconList = iconList;
         ftr.renderCount = 0;
         ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
+        ftr.screenCoord = WLD_to_SCR(ftr.worldCoord);
         ftr.heading = (int16_t)Read16(0x5dc7);
 
         std::unique_lock<std::mutex> lock(frameSync.mutex);
@@ -2231,6 +2259,7 @@ void GraphicsUpdate()
     uniform.iTime = std::chrono::duration<float>(std::chrono::system_clock::now() - s_gc.epoch).count();
     uniform.game_context = gameContext;
     uniform.alienVar1 = s_alienVar1;
+    uniform.adjust = s_adjust;
 
     bool hasNavigation = false;
     static uint32_t activeAlien = 0;
@@ -2398,6 +2427,9 @@ void GraphicsUpdate()
 
         uniform.worldX = (float)ftr.worldCoord.x + uniform.deadX;
         uniform.worldY = (float)ftr.worldCoord.y + uniform.deadY;
+
+        uniform.screenX = (float)ftr.screenCoord.x;
+        uniform.screenY = (float)ftr.screenCoord.y;
 
         printf("Frame: x %d y %d, deadx %f deady %f xd %f yd %f\n", ftr.worldCoord.x, ftr.worldCoord.y,
             uniform.deadX, uniform.deadY,

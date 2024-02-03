@@ -97,6 +97,9 @@ layout(binding = 14) uniform UniformBlock {
     // (3 = hyperspace, 4 = encounter, 5 = starport)
     uint game_context; 
     uint alienVar1;
+    float screenX;
+    float screenY;
+    float adjust;
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {

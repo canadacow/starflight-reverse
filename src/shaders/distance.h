@@ -25,3 +25,14 @@ vec2 calculateNormalizedUVIcon(vec2 point1, vec2 point2, float width) {
     vec2 uv = vec2((point2.x - point1.x) / width, 0.60f * (point2.y - point1.y) / width) + vec2(0.5, 0.5);
     return uv;
 }
+
+vec3 slerp(vec3 start, vec3 end, float t) {
+    // Dot product - the cosine of the angle between the vectors
+    float dot = max(min(dot(start, end), 1.0), -1.0); // Clamp to avoid floating point errors
+    float theta = acos(dot) * t; // Angle between start and end, scaled by t
+
+    // Relative vector from start to end with start's influence removed
+    vec3 relativeVec = normalize(end - start * dot);
+    // Spherical interpolation formula
+    return start * cos(theta) + relativeVec * sin(theta);
+}
