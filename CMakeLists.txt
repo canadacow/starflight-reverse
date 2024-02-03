@@ -27,6 +27,11 @@ set(SHADER_LIST
 # Path to the Vulkan SDK's glslc shader compiler
 set(GLSL_COMPILER "$ENV{VULKAN_SDK}/bin/glslc")
 
+set(DUMMY_FILE "${CMAKE_CURRENT_BINARY_DIR}/always_rebuild")
+add_custom_target(AlwaysRebuild ALL
+    COMMAND ${CMAKE_COMMAND} -E touch ${DUMMY_FILE}
+)
+
 foreach(SHADER ${SHADER_LIST})
     # Path to the shader source file
     set(SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/${SHADER}")
@@ -38,7 +43,7 @@ foreach(SHADER ${SHADER_LIST})
     add_custom_command(
         OUTPUT ${SHADER_BINARY}
         COMMAND ${GLSL_COMPILER} ${SHADER_SOURCE} -g -o ${SHADER_BINARY}
-        DEPENDS ${SHADER_SOURCE}
+        DEPENDS ${SHADER_SOURCE} ${DUMMY_FILE} 
         COMMENT "Compiling shader ${SHADER_SOURCE}"
     )
 

@@ -2441,8 +2441,6 @@ void GraphicsUpdate()
 #endif
     }
 
-
-
     s_gc.vc.record(std::move(commands))
     .into_command_buffer(s_gc.buffers[inFlightIndex].command)
     .then_submit_to(*s_gc.mQueue)
