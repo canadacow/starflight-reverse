@@ -741,12 +741,12 @@ public:
                     }
                     else if (event.key.keysym.sym == SDLK_F3)
                     {
-                        s_adjust -= 0.10f;
+                        s_adjust -= 1.0f;
                         printf("ADJUST %f\n", s_adjust);
                     }
                     else if (event.key.keysym.sym == SDLK_F4)
                     {
-                        s_adjust += 0.10f;
+                        s_adjust += 1.00f;
                         printf("ADJUST %f\n", s_adjust);
                     }
                     else
@@ -2503,10 +2503,10 @@ void GraphicsUpdate()
                 if(i.seed == frameSync.currentPlanet)
                 {
                     ic = IconUniform(i);
-                    ic.icons[0].screenX = 32;
-                    ic.icons[0].screenY = 54;
-                    ic.icons[0].bltX = 32;
-                    ic.icons[0].bltY = 59;
+                    ic.icons[0].screenX = 36;
+                    ic.icons[0].screenY = 61;
+                    ic.icons[0].bltX = 36;
+                    ic.icons[0].bltY = 66;
 
                     break;
                 }
