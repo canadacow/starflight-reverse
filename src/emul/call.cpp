@@ -1126,7 +1126,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
                         penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
                     }
-                    //printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
+                    printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
                 }
             }
             wordDeque.pop_back();
@@ -1577,7 +1577,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
 
-                        //printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, i, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
+                        printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, i, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
 
                         s_currentIconList.push_back(icon);
                     }
@@ -1945,8 +1945,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     frameSync.maneuvering = false;
                     printf("frameSync.maneuvering = false\n");
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList);
                 }
 
+                if (nextInstr == 0xca2f) // OSET
+                {
+                    uint32_t lo_iaddr = Read16(0x62bf);
+                    uint32_t hi_iaddr = Read8(0x62bf + 2);
+
+                    uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
+
+                    frameSync.currentPlanet = iaddr;
+                }
             }
         break;
 

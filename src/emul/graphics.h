@@ -140,6 +140,7 @@ struct UniformBlock {
     float screenX;
     float screenY;
     float adjust;
+    uint32_t planet;
 };
 
 struct ShaderIcon {
@@ -188,6 +189,25 @@ extern std::vector<Icon> GetLocalIconList(uint32_t* gameContext);
 struct IconUniform {
     ShaderIcon icons[32];
 
+    static void ConvertIconToShaderIcon(const Icon& icon, ShaderIcon& shaderIcon)
+    {
+        shaderIcon.x = icon.x;
+        shaderIcon.y = icon.y;
+        shaderIcon.screenX = icon.screenX;
+        shaderIcon.screenY = icon.screenY;
+        shaderIcon.bltX = icon.bltX;
+        shaderIcon.bltY = icon.bltY;
+        shaderIcon.id = icon.id;
+        shaderIcon.clr = icon.clr;
+        shaderIcon.icon_type = icon.icon_type;
+        shaderIcon.planet_to_sunX = icon.planet_to_sunX;
+        shaderIcon.planet_to_sunY = icon.planet_to_sunY;
+        shaderIcon.planetIndex = IndexFromSeed(icon.seed);
+        shaderIcon.isActive = 1; // Assuming the icon is active when converted
+    }
+
+    IconUniform() : icons{}  {}
+
     IconUniform(std::vector<Icon> _icons)
     {
         assert(_icons.size() < _countof(icons));
@@ -196,24 +216,7 @@ struct IconUniform {
         {
             if(i < _icons.size())
             {
-                auto& from = _icons.at(i);
-                auto& to = icons[i];
-
-                to.x = from.x;
-                to.y = from.y;
-                to.screenX = from.screenX;
-                to.screenY = from.screenY;
-                to.bltX = from.bltX;
-                to.bltY = from.bltY;
-                to.id = from.id;
-                to.clr = from.clr;
-                to.icon_type = from.icon_type;
-                to.planet_to_sunX = from.planet_to_sunX;
-                to.planet_to_sunY = from.planet_to_sunY;
-
-                to.planetIndex = IndexFromSeed(from.seed);
-
-                to.isActive = 1;
+                ConvertIconToShaderIcon(_icons.at(i), icons[i]);
             }
             else
             {
@@ -222,7 +225,17 @@ struct IconUniform {
         }
     }
 
-    uint32_t IndexFromSeed(uint32_t seed);
+    IconUniform(Icon planet)
+    {
+        for(int i = 0; i < _countof(icons); ++i)
+        {
+            icons[i].isActive = 0;
+        }
+
+        ConvertIconToShaderIcon(planet, icons[0]);
+    }
+
+    static uint32_t IndexFromSeed(uint32_t seed);
 };
 
 // Equivalent of TextData struct
@@ -416,6 +429,7 @@ struct FrameSync {
     uint64_t completedFrames = 0;
 
     uint32_t gameContext = 0;
+    uint32_t currentPlanet;
 
     bool maneuvering = false;
 

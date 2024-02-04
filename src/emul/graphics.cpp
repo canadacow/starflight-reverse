@@ -129,6 +129,7 @@ struct GraphicsContext
 
     avk::compute_pipeline rotoscopePipeline;
     avk::compute_pipeline navigationPipeline;
+    avk::compute_pipeline orbitPipeline;
     avk::compute_pipeline textPipeline;
 
     avk::descriptor_cache descriptorCache;
@@ -976,6 +977,10 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
             frameSync.frameCompleted.notify_one();
         }
     }
+    else
+    {
+        frameSync.frameCompleted.notify_one();
+    }
 }
 
 void GraphicsReportGameFrame()
@@ -1450,6 +1455,16 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
     s_gc.navigationPipeline = s_gc.vc.create_compute_pipeline_for(
         "navigation.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
+    );
+
+    s_gc.orbitPipeline = s_gc.vc.create_compute_pipeline_for(
+        "orbit.comp",
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
         avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
@@ -2026,7 +2041,7 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
     };
 }
 
-std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, IconUniform& iconUniform, const std::vector<RotoscopeShader>& shaderBackBuffer, bool hasNavigation)
+std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, IconUniform& iconUniform, const std::vector<RotoscopeShader>& shaderBackBuffer, avk::compute_pipeline navPipeline)
 {
     std::vector<avk::recorded_commands_t> res{};
 
@@ -2055,17 +2070,17 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     res.push_back(
         s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform)));
 
-    if(hasNavigation)
+    if(navPipeline.has_value())
     {
         res.push_back(
             avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].navigation->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
 
         res.push_back(
-            avk::command::bind_pipeline(s_gc.navigationPipeline.as_reference()));
+            avk::command::bind_pipeline(navPipeline.as_reference()));
 
         res.push_back(
-            avk::command::bind_descriptors(s_gc.navigationPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
+            avk::command::bind_descriptors(navPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
                     avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].navigation->get_image_view()->as_storage_image(avk::layout::general)),
                     avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
                     avk::descriptor_binding(0, 2, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
@@ -2166,20 +2181,27 @@ void GraphicsUpdate()
     {
        std::unique_lock<std::mutex> lock(frameSync.mutex);
 
-       while(frameSync.framesToRender.size() == 0)
+       while(frameSync.framesToRender.size() == 0 && frameSync.maneuvering)
        {
             frameSync.frameCompleted.wait(lock);
        }
 
-       ftr = frameSync.framesToRender.front();
-
-       ++frameSync.framesToRender.front().renderCount;
-
-       if(frameSync.framesToRender.front().renderCount >= 4)
+       if (frameSync.maneuvering)
        {
-            frameSync.stoppedFrame = frameSync.framesToRender.front();
-            frameSync.framesToRender.pop_front();
-            frameSync.gameTickTimer = 0;
+           ftr = frameSync.framesToRender.front();
+
+           ++frameSync.framesToRender.front().renderCount;
+
+           if (frameSync.framesToRender.front().renderCount >= 4)
+           {
+               frameSync.stoppedFrame = frameSync.framesToRender.front();
+               frameSync.framesToRender.pop_front();
+               frameSync.gameTickTimer = 0;
+           }
+       }
+       else
+       {
+           ftr = frameSync.stoppedFrame;
        }
     }
     else
@@ -2449,26 +2471,51 @@ void GraphicsUpdate()
         auto cpuCommands = CPUCopyPass(inFlightIndex, data, dataSize);
         commands.insert(commands.end(), cpuCommands.begin(), cpuCommands.end());
 #else
+        avk::compute_pipeline navPipeline{};
 
-        IconUniform ic(ftr.iconList);
-        for (int i = 0; i < 32; ++i)
+        IconUniform ic{};
+        if(frameSync.gameContext != 1)
         {
-            if (ic.icons[i].isActive)
+            ic = IconUniform(ftr.iconList);
+            for (int i = 0; i < 32; ++i)
             {
-                ShaderIcon& si = ic.icons[i];
+                if (ic.icons[i].isActive)
+                {
+                    ShaderIcon& si = ic.icons[i];
 
-                if (si.id >= 27 && si.id <= 34)
-                    continue;
+                    if (si.id >= 27 && si.id <= 34)
+                        continue;
 
-                si.screenX -= uniform.deadX * 4.0f;
-                si.screenY += uniform.deadY * 6.0f;
+                    si.screenX -= uniform.deadX * 4.0f;
+                    si.screenY += uniform.deadY * 6.0f;
 
-                si.bltX -= uniform.deadX * 4.0f;
-                si.bltY += uniform.deadY * 6.0f;
+                    si.bltX -= uniform.deadX * 4.0f;
+                    si.bltY += uniform.deadY * 6.0f;
+                }
             }
+
+            navPipeline = s_gc.navigationPipeline;
+        }
+        else
+        {
+            for(auto& i : ftr.iconList)
+            {
+                if(i.seed == frameSync.currentPlanet)
+                {
+                    ic = IconUniform(i);
+                    ic.icons[0].screenX = 32;
+                    ic.icons[0].screenY = 54;
+                    ic.icons[0].bltX = 32;
+                    ic.icons[0].bltY = 59;
+
+                    break;
+                }
+            }
+
+            navPipeline = s_gc.orbitPipeline;
         }
 
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, hasNavigation);
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, navPipeline);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
     }

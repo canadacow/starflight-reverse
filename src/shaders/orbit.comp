@@ -1,0 +1,243 @@
+// GLSL Compute Shader
+#version 450
+
+#extension GL_GOOGLE_include_directive : enable
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+#define Icon_Other  0
+#define Icon_Sun    1
+#define Icon_Planet 2
+#define Icon_Nebula 3
+
+struct Icon {
+    uint isActive;
+    int x;
+    int y;
+    int screenX;
+
+    int screenY;
+    int bltX;
+    int bltY;
+    uint id;
+
+    uint clr;
+    uint icon_type;
+    int planet_to_sunX;
+    int planet_to_sunY;
+
+    uint planetIndex;
+};
+
+// Equivalent of TextData struct
+struct TextData {
+    uint character;
+    uint xormode;
+    uint fontNum;
+};
+
+// Equivalent of LineData struct
+struct LineData {
+    uint x0;
+    uint y0;
+    uint x1;
+    uint y1;
+    uint n;
+    uint total;
+};
+
+struct RunBitData {
+    uint tag;
+};
+
+// Equivalent of Rotoscope struct
+struct Rotoscope {
+    uint content;
+    uint EGAcolor;
+    uint argb;
+    int blt_x;
+    int blt_y;
+    int blt_w;
+    int blt_h;
+    uint bgColor;
+    uint fgColor;
+    TextData textData;
+    LineData lineData;
+    RunBitData runBitData;
+};
+
+layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
+
+layout(std430, binding = 1) buffer RotoBuffer {
+    Rotoscope rotoPixels[];
+};
+
+layout(binding = 2) uniform sampler2D ShipTexture;
+layout(binding = 3) uniform sampler2DArray PlanetTextures;
+
+layout(binding = 4) uniform UniformBlock {
+    int GRAPHICS_MODE_WIDTH;
+    int GRAPHICS_MODE_HEIGHT;
+    int WINDOW_WIDTH;
+    int WINDOW_HEIGHT;
+    uint useRotoscope;
+    uint useEGA;
+    float iTime;
+    float worldX;
+    float worldY;
+    float heading;
+    float deadX;
+    float deadY;
+    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+    // (3 = hyperspace, 4 = encounter, 5 = starport)
+    uint game_context; 
+    uint alienVar1;
+    float screenX;
+    float screenY;
+    float adjust;
+    uint planet;
+} uniforms;
+
+layout(binding = 5) uniform IconBlock {
+    Icon icons[32];
+};
+
+#include "tables.h"
+#include "noise.h"
+#include "distance.h"
+#include "hyperspace_stars.h"
+#include "starburst.h"
+#include "nebula.h"
+#include "sun.h"
+#include "planet.h"
+
+vec4 DrawPlanetPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
+    vec4 pixel = vec4(0.);
+
+    vec4 fragColor;
+    vec2 sub;
+
+    float iTime = uniforms.iTime;
+
+    float scrOffX = float(roto.blt_x) + subUv.x;
+    float scrOffY = float(roto.blt_y) + subUv.y;
+
+    vec2 pixelPos = vec2(scrOffX, scrOffY);
+
+    float subX = scrOffX / float(roto.blt_w);
+    float subY = scrOffY / float(roto.blt_h);
+
+    // Split view -- helpful to debug
+    #if 0
+    if(subY > 0.5)
+    {
+        return vec4(unpackUnorm4x8(roto.argb)).bgra;
+    }
+    #endif
+
+    vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
+    vec2 fragCoord = pixelPos;
+
+    vec2 worldCoords = vec2((uniforms.worldX) / 1000.0, (uniforms.worldY) / -1000.0);
+
+    vec4 starPixel = vec4(0.);
+    vec4 sunPixel = vec4(0.);
+    vec4 iconPixel = vec4(0.);
+    vec4 shipPixel = vec4(0.);
+    vec4 planetPixel = vec4(0.);
+    float nebulaPixel = 0.0;
+
+    Icon icon = icons[0];
+
+    float basesize = 29.0f * float(icon.id - 50);
+
+    vec2 iconPos = vec2(float(icon.screenX), float(icon.screenY));
+    vec2 bltPos = vec2(float(icon.bltX) + 3.0, float(icon.bltY) + 3.0);
+
+    float dist = calculateDistance(iconPos, pixelPos);
+
+    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 1.00);
+
+    vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
+    vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
+
+    vec3 sidePerspective = planet_to_sun_norm; //normalize(vec3(0, -1, 0.001));    
+                
+    vec3 camPos = sidePerspective;
+
+    draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex, camPos);
+
+    if(dist < basesize * 1.0)
+    {
+        //planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
+        planetPixel.a = 1.0;
+    }
+    else
+    {
+        float luma = 0.299 * planetPixel.r + 0.587 * planetPixel.g + 0.114 * planetPixel.b;
+        planetPixel.a = luma;
+        planetPixel.rgb *= planetPixel.a;
+    }
+
+    hyperspaceRender(pixel, fragCoord, iTime, iResolution, worldCoords + vec2(1000.0, 1000.0));
+
+    //pixel = vec4(subUv.xy, 0.0, 1.0);
+
+    if(nebulaPixel > 0.0)
+    {
+        vec4 p;
+
+        nebulaPixel = min(nebulaPixel / 8.0, 1.0);
+
+        vec2 uv=fragCoord.xy/iResolution.xy-.5;
+        nebula(p, uv + (worldCoords * 50.0), iTime);
+        pixel += p * nebulaPixel;
+    }
+
+    pixel += starPixel;
+    pixel = sunPixel  + (pixel * (1 - sunPixel.a));
+    pixel = planetPixel + (pixel * (1 - planetPixel.a));
+    pixel = iconPixel + (pixel * (1 - iconPixel.a));
+    pixel = shipPixel + (pixel * (1 - shipPixel.a));
+    
+    return pixel;
+}
+
+void main() {
+    ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+
+    vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
+    vec2 graphicSize = vec2(float(uniforms.GRAPHICS_MODE_WIDTH), float(uniforms.GRAPHICS_MODE_HEIGHT));
+  
+    vec2 uv = vec2(pixelPos) / windowSize;
+
+    const float polygonWidth = uniforms.WINDOW_WIDTH / uniforms.GRAPHICS_MODE_WIDTH;
+
+    // Calculate the corresponding position in the smaller texture
+    uvec2 src = uvec2(floor(uv * graphicSize));
+
+    // Calculate the index in the smaller texture
+
+    uvec2 srcLookup = src + uvec2(4, 8);
+
+    uint srcIndex = srcLookup.y * uint(uniforms.GRAPHICS_MODE_WIDTH) + srcLookup.x;
+
+    Rotoscope roto = rotoPixels[srcIndex];
+
+    vec2 subUv = (uv * graphicSize) - vec2(src);
+
+    // Pull the pixel from the smaller texture
+    vec4 pixel = vec4(1.0, 0.0, 0.0, 1.0);
+
+    if(roto.content == NavigationalPixel)
+    {
+        if(uniforms.game_context == 1)
+        {
+            // System and hyperspace
+            pixel = DrawPlanetPixel(roto, uv, subUv);
+        }
+    }
+
+    // Place the pixel in the larger surface
+    imageStore(imgOutput, pixelPos, pixel);
+}

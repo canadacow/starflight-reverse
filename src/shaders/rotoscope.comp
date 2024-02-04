@@ -100,6 +100,7 @@ layout(binding = 14) uniform UniformBlock {
     float screenX;
     float screenY;
     float adjust;
+    uint planet;
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {
@@ -468,7 +469,7 @@ void main() {
                 pixel = DrawRunBitPixel(roto, uv, subUv);
                 break;
             case NavigationalPixel:
-                if((uniforms.game_context == 2 || uniforms.game_context == 3))
+                if(uniforms.game_context == 1 || uniforms.game_context == 2 || uniforms.game_context == 3)
                 {
                     // System and hyperspace
                     pixel = DrawNavigationPixel(roto, uv, subUv);

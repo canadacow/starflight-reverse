@@ -95,6 +95,7 @@ layout(binding = 4) uniform UniformBlock {
     float screenX;
     float screenY;
     float adjust;
+    uint planet;
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {
