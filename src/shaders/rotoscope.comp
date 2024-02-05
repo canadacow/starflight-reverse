@@ -9,11 +9,11 @@ struct Icon {
     uint isActive;
     int x;
     int y;
-    int screenX;
+    float screenX;
 
-    int screenY;
-    int bltX;
-    int bltY;
+    float screenY;
+    float bltX;
+    float bltY;
     uint id;
 
     uint clr;
@@ -100,7 +100,7 @@ layout(binding = 14) uniform UniformBlock {
     float screenX;
     float screenY;
     float adjust;
-    uint planet;
+    float planetSize;
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {

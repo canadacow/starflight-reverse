@@ -529,6 +529,14 @@ void LXCHG8(unsigned short es, unsigned short bx, unsigned short ax)
 
 static std::stack<bool> s_disableForthMeasurements{};
 
+RETURNCODE LoadData(uint16_t word)
+{
+    s_disableForthMeasurements.push(true);
+    auto res = Call(0x73ea, word - 0x2);
+    s_disableForthMeasurements.pop();
+    return res;
+}
+
 RETURNCODE ForthCall(uint16_t word)
 {
     s_disableForthMeasurements.push(true);
@@ -1126,7 +1134,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
                         penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
                     }
-                    printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
+                    //printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
                 }
             }
             wordDeque.pop_back();
@@ -1215,6 +1223,26 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if (nextInstr == 0xb0f1) // 'KEY-CASE
                 {
                     printf("'KEY-CASE\n");
+                }
+
+                if (nextInstr == 0xf3cb && (std::string(overlayName) == "ORBIT-OV")) // WF3CB, as part of INIT-ORBIT
+                {
+                    uint16_t lo_iaddr = Read16(0x62bf); // (PLANET)
+                    uint16_t hi_iaddr = Read8(0x62bf + 2);
+                    Push(lo_iaddr);
+                    Push(hi_iaddr);
+                    ForthCall(0x79f4); // >C+S
+                    LoadData(0xDCDC); // from 'PLANET'
+
+                    auto res = Pop();
+                    uint16_t value = Read16(res);
+                    frameSync.currentPlanetMass = value;
+
+                    value = value / 3; // Divide by 3
+                    value = std::max<unsigned short>(value, 20);
+                    value = std::min<unsigned short>(value, 120);
+
+                    frameSync.currentPlanetSphereSize = value;
                 }
 
                 if (nextInstr == 0xef37) // SET-DESTINATION

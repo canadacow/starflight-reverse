@@ -2282,6 +2282,7 @@ void GraphicsUpdate()
     uniform.game_context = gameContext;
     uniform.alienVar1 = s_alienVar1;
     uniform.adjust = s_adjust;
+    uniform.planetSize = frameSync.currentPlanetSphereSize;
 
     bool hasNavigation = false;
     static uint32_t activeAlien = 0;

@@ -140,18 +140,18 @@ struct UniformBlock {
     float screenX;
     float screenY;
     float adjust;
-    uint32_t planet;
+    float planetSize;
 };
 
 struct ShaderIcon {
     uint32_t isActive;
     int32_t x;
     int32_t y;
-    int32_t screenX;
+    float screenX;
 
-    int32_t screenY;
-    int32_t bltX;
-    int32_t bltY;
+    float screenY;
+    float bltX;
+    float bltY;
     uint32_t id;
 
     uint32_t clr;
@@ -430,6 +430,8 @@ struct FrameSync {
 
     uint32_t gameContext = 0;
     uint32_t currentPlanet;
+    uint32_t currentPlanetMass;
+    uint32_t currentPlanetSphereSize;
 
     bool maneuvering = false;
 
