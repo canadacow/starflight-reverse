@@ -2451,8 +2451,8 @@ void GraphicsUpdate()
         uniform.worldX = (float)ftr.worldCoord.x + uniform.deadX;
         uniform.worldY = (float)ftr.worldCoord.y + uniform.deadY;
 
-        uniform.screenX = (float)ftr.screenCoord.x;
-        uniform.screenY = (float)ftr.screenCoord.y;
+        uniform.screenX = ftr.screenCoord.x;
+        uniform.screenY = ftr.screenCoord.y;
 
         printf("Frame: x %d y %d, deadx %f deady %f xd %f yd %f\n", ftr.worldCoord.x, ftr.worldCoord.y,
             uniform.deadX, uniform.deadY,

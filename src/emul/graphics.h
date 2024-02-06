@@ -147,11 +147,11 @@ struct ShaderIcon {
     uint32_t isActive;
     int32_t x;
     int32_t y;
-    float screenX;
+    int32_t screenX;
 
-    float screenY;
-    float bltX;
-    float bltY;
+    int32_t screenY;
+    int32_t bltX;
+    int32_t bltY;
     uint32_t id;
 
     uint32_t clr;
