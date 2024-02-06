@@ -1243,6 +1243,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     value = std::min<unsigned short>(value, 120);
 
                     frameSync.currentPlanetSphereSize = value;
+
+                    GraphicsSetOrbitState(OrbitState::Insertion, vec3<float>(0.8f, 0.0f, 0.6f));
                 }
 
                 if (nextInstr == 0xef37) // SET-DESTINATION
@@ -1976,7 +1978,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsSetDeadReckoning(0, 0, s_currentIconList);
                 }
 
-                if (nextInstr == 0xca2f) // OSET
+                if (nextInstr == 0xdb04) // ORBSETUP
                 {
                     uint32_t lo_iaddr = Read16(0x62bf);
                     uint32_t hi_iaddr = Read8(0x62bf + 2);
@@ -1984,6 +1986,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
 
                     frameSync.currentPlanet = iaddr;
+                    frameSync.currentPlanetSphereSize = 100;
+
+                    GraphicsSetOrbitState(OrbitState::Holding);
                 }
             }
         break;

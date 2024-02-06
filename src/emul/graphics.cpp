@@ -983,6 +983,12 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
     }
 }
 
+void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt)
+{
+    std::unique_lock<std::mutex> lock(mutex);
+    frameSync.SetOrbitState(state, optionalCamPos);
+}
+
 void GraphicsReportGameFrame()
 {
 
@@ -2514,6 +2520,7 @@ void GraphicsUpdate()
             }
 
             navPipeline = s_gc.orbitPipeline;
+            auto status = frameSync.GetOrbitStatus();
         }
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, navPipeline);
