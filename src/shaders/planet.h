@@ -112,18 +112,20 @@ void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir,
     float fresnelFactor;
     float diffuse = 0.0;
 
-    vec3 viewDir = normalize(camPos - point);
+    vec3 viewDir;
     float fresnelExponent = 2.0; // Adjust this to change the strength of the Fresnel effect
 
     if (discriminant < 0.0) {
         color = vec3(0.); // Background color
         point = camPos * rayDir;
         rayNormal = normalize(point - sphereCenter);
+        viewDir = normalize(camPos - point);
     }
     else {
         // Calculate the intersection point
         float t = (-b - sqrt(discriminant)) / (2.0 * a);
         point = camPos + t * rayDir;
+        viewDir = normalize(camPos - point);
 
         // Calculate the normal at the intersection point
         rayNormal = normalize(point - sphereCenter);
@@ -160,23 +162,25 @@ void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir,
         vec3 cloudColor = vec3(1.3) * cloudIntensity;
 
         // Add clouds to the color
-        //color += cloudColor * diffuse;
+        color += cloudColor * diffuse;
 
         fresnelFactor = pow(1.0 - max(dot(viewDir, rayNormal), 0.0), fresnelExponent);
         color += fresnelFactor * color;
 
         // Perturb the normal for the specular calculation
         vec3 perturbedNormal = normalize(rayNormal + vec3(noise / 10.0));
+        vec3 reflectDir;
+        float spec;
 
         // Add specular lighting for blue parts
         if (albedo.b > albedo.r && albedo.b > albedo.g) { // If blue is the dominant color
-            vec3 reflectDir = reflect(-sunDir, perturbedNormal);
-            float spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
+            reflectDir = reflect(-sunDir, perturbedNormal);
+            spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
             color += vec3(1.0, 1.0, 1.0) * spec * SPECULAR_INTENSITY;
         }
         else { // For land
-            vec3 reflectDir = reflect(-sunDir, perturbedNormal);
-            float spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
+            reflectDir = reflect(-sunDir, perturbedNormal);
+            spec = pow(max(dot(viewDir, reflectDir), 0.0), SPECULAR_POWER);
             color += vec3(1.0, 1.0, 1.0) * spec * (SPECULAR_INTENSITY * 0.25); // 25% of the specular intensity for water
         }
     }
