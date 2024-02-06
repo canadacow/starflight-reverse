@@ -96,6 +96,11 @@ layout(binding = 4) uniform UniformBlock {
     float screenY;
     float adjust;
     float planetSize;
+
+    float orbitCamX;
+    float orbitCamY;
+    float orbitCamZ;
+
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {
@@ -163,7 +168,7 @@ vec4 DrawPlanetPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
     vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
 
-    vec3 camPos = planet_to_sun_norm;
+    vec3 camPos = normalize(vec3(uniforms.orbitCamX, uniforms.orbitCamY, uniforms.orbitCamZ));
 
     draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex, camPos);
 

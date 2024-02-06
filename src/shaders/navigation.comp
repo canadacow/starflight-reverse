@@ -96,6 +96,11 @@ layout(binding = 4) uniform UniformBlock {
     float screenY;
     float adjust;
     float planetSize;
+
+    float orbitCamX;
+    float orbitCamY;
+    float orbitCamZ;
+
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {

@@ -60,20 +60,20 @@ struct vec3 {
 
     static vec3 slerp(const vec3& start, const vec3& end, float t) {
         T dot = start.x * end.x + start.y * end.y + start.z * end.z;
-        const T THRESHOLD = 0.9995;
+        const T THRESHOLD = static_cast<T>(0.9995);
         if (dot > THRESHOLD) {
             vec3<T> result = start + (end - start) * t;
             result.x = result.x + (end.x - start.x) * t;
             result.y = result.y + (end.y - start.y) * t;
             result.z = result.z + (end.z - start.z) * t;
-            T invLen = 1.0 / sqrt(result.x * result.x + result.y * result.y + result.z * result.z);
+            T invLen = static_cast<T>(1.0) / sqrt(result.x * result.x + result.y * result.y + result.z * result.z);
             result.x *= invLen;
             result.y *= invLen;
             result.z *= invLen;
             return result;
         }
 
-        dot = std::clamp(dot, -1.0f, 1.0f);
+        dot = std::clamp(dot, static_cast<T>(-1.0), static_cast<T>(1.0));
         T theta_0 = acos(dot);
         T theta = theta_0 * t;
         T sin_theta = sin(theta);
@@ -91,6 +91,29 @@ struct vec3 {
         // Avoid division by zero
         if (len == 0) return vec3(0, 0, 0);
         return vec3(v.x / len, v.y / len, v.z / len);
+    }
+
+    vec3 normalize() const {
+        T len = sqrt(x * x + y * y + z * z);
+        // Avoid division by zero
+        if (len == 0) return vec3(0, 0, 0);
+        return vec3(x / len, y / len, z / len);
+    }
+
+    vec3 operator-(const vec3& other) const {
+        return vec3(x - other.x, y - other.y, z - other.z);
+    }
+
+    vec3 operator+(const vec3& other) const {
+        return vec3(x + other.x, y + other.y, z + other.z);
+    }
+
+    vec3 operator*(T scalar) const {
+        return vec3(x * scalar, y * scalar, z * scalar);
+    }
+
+    vec3 operator*(const vec3& other) const {
+        return vec3(x * other.x, y * other.y, z * other.z);
     }
 };
 
@@ -192,6 +215,10 @@ struct UniformBlock {
     float screenY;
     float adjust;
     float planetSize;
+
+    float orbitCamX;
+    float orbitCamY;
+    float orbitCamZ;
 };
 
 struct ShaderIcon {
@@ -485,7 +512,7 @@ enum class OrbitState {
 struct OrbitStatus {
     vec3<float> camPos;
     float apparentSphereSize;
-}
+};
 
 struct FrameSync {
     std::mutex mutex;
@@ -505,7 +532,7 @@ struct FrameSync {
 
     FrameToRender stoppedFrame;
 
-    OrbitState orbitState = Holding;
+    OrbitState orbitState = OrbitState::Holding;
     std::chrono::steady_clock::time_point orbitTimestamp;
     std::optional<vec3<float>> orbitCamPos = std::nullopt;
 
@@ -523,33 +550,33 @@ struct FrameSync {
 
         switch(orbitState)
         {
-            case Holding:
-                return { vec3<float>(0.0f, -1.0f, .001.0), 100.0f };
-            case Insertion:
+            case OrbitState::Holding:
+                return { vec3<float>(0.0f, -1.0f, .001f), 100.0f };
+            case OrbitState::Insertion:
                 {
                     vec3<float> northpole(0.0f, 1.0f, 0.001f);
 
                     float t = std::min(1.0f, elapsed / 3000.0f); // Normalize elapsed time to 3 seconds
-                    auto camPos = vec3<float>::slerp(northpole->normalize(), orbitCamPos->normalize(), t);
+                    auto camPos = vec3<float>::slerp(northpole.normalize(), orbitCamPos->normalize(), t);
                     float apparentSphereSize = std::lerp(100.0f, (float)currentPlanetSphereSize, t);
 
                     if (t >= 3.0f) {
-                        SetOrbitState(Orbiting);
+                        SetOrbitState(OrbitState::Orbiting);
                     }
 
                     return { camPos, apparentSphereSize };
                 }
                 break;
-            case Orbiting:
-            case Landing:
-            case Takeoff:
-                return { orbitCamPos, (float)currentPlanetSphereSize };
+            case OrbitState::Orbiting:
+            case OrbitState::Landing:
+            case OrbitState::Takeoff:
+                return { orbitCamPos.value(), (float)currentPlanetSphereSize};
             default:
                 assert(false);
         }
 
         assert(false);
-        return { vec3<float>(), 100.0f }
+        return { vec3<float>(), 100.0f };
     }
 };
 

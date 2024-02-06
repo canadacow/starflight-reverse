@@ -983,9 +983,9 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
     }
 }
 
-void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt)
+void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos)
 {
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::mutex> lock(frameSync.mutex);
     frameSync.SetOrbitState(state, optionalCamPos);
 }
 
