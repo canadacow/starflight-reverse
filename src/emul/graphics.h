@@ -554,7 +554,7 @@ struct FrameSync {
                 return { vec3<float>(0.0f, -1.0f, .001f), 100.0f };
             case OrbitState::Insertion:
                 {
-                    vec3<float> northpole(0.0f, 1.0f, 0.001f);
+                    vec3<float> northpole(0.0f, -1.0f, 0.001f);
 
                     float t = std::min(1.0f, elapsed / 3000.0f); // Normalize elapsed time to 3 seconds
                     auto camPos = vec3<float>::slerp(northpole.normalize(), orbitCamPos->normalize(), t);

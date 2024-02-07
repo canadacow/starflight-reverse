@@ -1244,7 +1244,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     frameSync.currentPlanetSphereSize = value;
 
-                    GraphicsSetOrbitState(OrbitState::Insertion, vec3<float>(0.8f, 0.0f, 0.6f));
+                    vec3<float> sunPosition;
+                    for (const auto& icon : s_currentIconList) {
+                        if (icon.seed == lo_iaddr) {
+                            sunPosition = vec3<float>(icon.planet_to_sunX, 0.0f, icon.planet_to_sunY);
+                            sunPosition = sunPosition.normalize();
+                            break;
+                        }
+                    }
+
+                    GraphicsSetOrbitState(OrbitState::Insertion, sunPosition);
                 }
 
                 if (nextInstr == 0xef37) // SET-DESTINATION

@@ -2521,6 +2521,11 @@ void GraphicsUpdate()
 
             navPipeline = s_gc.orbitPipeline;
             auto status = frameSync.GetOrbitStatus();
+
+            uniform.planetSize = status.apparentSphereSize;
+            uniform.orbitCamX = status.camPos.x;
+            uniform.orbitCamY = status.camPos.y;
+            uniform.orbitCamZ = status.camPos.z;
         }
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, navPipeline);
