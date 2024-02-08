@@ -530,6 +530,74 @@ static uint8_t vgafont8[256*8] =
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
+void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos)
+{
+    orbitState = state;
+
+    if(state == OrbitState::Insertion)
+    {
+        auto pole = Magnum::Vector3( 0.0f, -1.0f, 0.001f );
+        auto equator = Magnum::Vector3( 0.0f, 0.0f, 1.000f );
+        auto dest = Magnum::Vector3( optionalCamPos->x, optionalCamPos->y, optionalCamPos->z );
+
+        positionTrack = {{
+            {0.0f, pole}, // Initial position at t=0
+            {1.5f, equator}, 
+            {3.0f, dest} // Final position at t=3
+        }, Magnum::Math::lerp};
+
+        // Scale keyframes
+        scaleTrack = {{
+            {0.0f, 100.0f}, // Initial scale at t=0
+            {3.0f, (float)currentPlanetSphereSize} // Final scale at t=3
+        }, Magnum::Math::lerp};
+    }
+
+    orbitTimestamp = std::chrono::steady_clock::now();
+
+    if (optionalCamPos.has_value())
+    {
+        orbitCamPos = optionalCamPos;
+    }
+}
+
+
+OrbitStatus FrameSync::GetOrbitStatus()
+{
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - orbitTimestamp).count();
+
+    switch (orbitState)
+    {
+    case OrbitState::Holding:
+        return { vec3<float>(0.0f, -1.0f, .001f), 100.0f };
+    case OrbitState::Insertion:
+    {
+        float t = (float)elapsed / 1000.0f;
+
+        auto pos = positionTrack.at(t);
+        auto s = scaleTrack.at(t);
+
+        if (t >= 3.0f) {
+            SetOrbitState(OrbitState::Orbiting);
+        }
+
+        return { {pos.x(), pos.y(), pos.z() }, s};
+    }
+    break;
+    case OrbitState::Orbiting:
+    case OrbitState::Landing:
+    case OrbitState::Takeoff:
+        return { orbitCamPos.value(), (float)currentPlanetSphereSize };
+    default:
+        assert(false);
+    }
+
+    assert(false);
+    return { vec3<float>(), 100.0f };
+}
+
+
 static uint8_t s_keyboardState[1024] = {};
 
 class DOSKeyboard {

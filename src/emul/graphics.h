@@ -1,6 +1,11 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
+#include <Magnum/Animation/Player.h>
+#include <Magnum/Math/Vector3.h>
+#include <Magnum/Math/Quaternion.h>
+#include <Magnum/Math/Complex.h>
+
 #include <stdint.h>
 #include <assert.h>
 
@@ -536,48 +541,17 @@ struct FrameSync {
     std::chrono::steady_clock::time_point orbitTimestamp;
     std::optional<vec3<float>> orbitCamPos = std::nullopt;
 
-    void SetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt)
-    {
-        orbitState = state;
-        orbitTimestamp = std::chrono::steady_clock::now();
-        orbitCamPos = optionalCamPos;
-    }
+    Magnum::Animation::Track<Magnum::Float, Magnum::Vector3> positionTrack{};
 
-    OrbitStatus GetOrbitStatus()
-    {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - orbitTimestamp).count();
+    Magnum::Animation::Track<Magnum::Float, Magnum::Float> xTrack{};
+    Magnum::Animation::Track<Magnum::Float, Magnum::Float> yTrack{};
+    Magnum::Animation::Track<Magnum::Float, Magnum::Float> zTrack{};
 
-        switch(orbitState)
-        {
-            case OrbitState::Holding:
-                return { vec3<float>(0.0f, -1.0f, .001f), 100.0f };
-            case OrbitState::Insertion:
-                {
-                    vec3<float> northpole(0.0f, -1.0f, 0.001f);
+    Magnum::Animation::Track<Magnum::Float, Magnum::Float> scaleTrack{};
 
-                    float t = std::min(1.0f, elapsed / 3000.0f); // Normalize elapsed time to 3 seconds
-                    auto camPos = vec3<float>::slerp(northpole.normalize(), orbitCamPos->normalize(), t);
-                    float apparentSphereSize = std::lerp(100.0f, (float)currentPlanetSphereSize, t);
+    void SetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);
+    OrbitStatus GetOrbitStatus();
 
-                    if (t >= 3.0f) {
-                        SetOrbitState(OrbitState::Orbiting);
-                    }
-
-                    return { camPos, apparentSphereSize };
-                }
-                break;
-            case OrbitState::Orbiting:
-            case OrbitState::Landing:
-            case OrbitState::Takeoff:
-                return { orbitCamPos.value(), (float)currentPlanetSphereSize};
-            default:
-                assert(false);
-        }
-
-        assert(false);
-        return { vec3<float>(), 100.0f };
-    }
 };
 
 extern FrameSync frameSync;
