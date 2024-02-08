@@ -537,6 +537,8 @@ struct FrameSync {
 
     FrameToRender stoppedFrame;
 
+    std::chrono::steady_clock::time_point lastNonMovingArrowKey;
+
     OrbitState orbitState = OrbitState::Holding;
     std::chrono::steady_clock::time_point orbitTimestamp;
     std::optional<vec3<float>> orbitCamPos = std::nullopt;

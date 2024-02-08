@@ -871,6 +871,16 @@ public:
     bool checkForKeyStroke() override {
         if(areArrowKeysDown())
         {
+            if (!frameSync.maneuvering)
+            {
+                auto now = std::chrono::steady_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - frameSync.lastNonMovingArrowKey).count();
+                if(duration < 100)
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
        
@@ -882,6 +892,11 @@ public:
         auto arrow = getArrowKeyDown();
         if(arrow != 0)
         {
+            if(!frameSync.maneuvering)
+            {
+                frameSync.lastNonMovingArrowKey = std::chrono::steady_clock::now();
+            }
+
             return arrow;
         }
 
