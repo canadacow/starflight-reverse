@@ -1134,7 +1134,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
                         penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
                     }
-                    //printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
+                     printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
                 }
             }
             wordDeque.pop_back();
@@ -1336,6 +1336,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     }
 
                     printf("Read file at %04x:%04x\n", ds, fileNum);
+                }
+
+                if(nextInstr == 0xe6dc || nextInstr == 0xec65) // WE6DC - Orbit screen copy routine of landing or grid
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
 
                 if (nextInstr == 0xe3f6) // .MVS

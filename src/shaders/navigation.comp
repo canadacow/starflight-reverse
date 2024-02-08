@@ -224,12 +224,13 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
                     vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
 
-                    vec3 northPole = normalize(vec3(0, -1, .001));
+                    //vec3 northPole = normalize(vec3(0, -1, .001));
+                    vec3 sidePole = normalize(vec3(0, -0.75, .75));
                     vec3 sidePerspective = normalize(vec3(0, 0, 1));    
 
                     float ydist = (abs(uniforms.screenY - iconPos.y)) / 120.0;
                 
-                    vec3 camPos = northPole; //slerp(sidePerspective, northPole, ydist);
+                    vec3 camPos = sidePole; //slerp(sidePerspective, northPole, ydist);
 
                     draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex, camPos);
 
