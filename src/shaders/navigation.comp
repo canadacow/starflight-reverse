@@ -225,7 +225,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
 
                     //vec3 northPole = normalize(vec3(0, -1, .001));
-                    vec3 sidePole = normalize(vec3(0, -0.75, .75));
+                    vec3 sidePole = normalize(vec3(0, -0.918, 0.397));
                     vec3 sidePerspective = normalize(vec3(0, 0, 1));    
 
                     float ydist = (abs(uniforms.screenY - iconPos.y)) / 120.0;

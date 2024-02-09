@@ -88,7 +88,7 @@ static float s_adjust = 0.0f;
 static std::mutex s_deadReckoningMutex;
 
 static vec2<int16_t> s_pastWorld = {};
-static std::chrono::time_point<std::chrono::system_clock> s_deadReckoningSet;
+static std::chrono::time_point<std::chrono::steady_clock> s_deadReckoningSet;
 
 static uint64_t s_frameAccelCount;
 
@@ -134,7 +134,7 @@ struct GraphicsContext
 
     avk::descriptor_cache descriptorCache;
 
-    std::chrono::time_point<std::chrono::system_clock> epoch;
+    std::chrono::time_point<std::chrono::steady_clock> epoch;
 
     std::unordered_map<uint32_t, PlanetSurface> surfaceData{};
 
@@ -536,20 +536,34 @@ void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optio
 
     if(state == OrbitState::Insertion)
     {
-        auto pole = Magnum::Vector3( 0.0f, -1.0f, 0.001f );
+        auto pole = Magnum::Vector3( 0.0f, -0.918f, 0.397f );
         auto equator = Magnum::Vector3( 0.0f, 0.0f, 1.000f );
         auto dest = Magnum::Vector3( optionalCamPos->x, optionalCamPos->y, optionalCamPos->z );
 
         positionTrack = {{
             {0.0f, pole}, // Initial position at t=0
-            {1.5f, equator}, 
             {3.0f, dest} // Final position at t=3
         }, Magnum::Math::lerp};
 
-        // Scale keyframes
         scaleTrack = {{
             {0.0f, 100.0f}, // Initial scale at t=0
             {3.0f, (float)currentPlanetSphereSize} // Final scale at t=3
+        }, Magnum::Math::lerp};
+    }
+
+    if(state == OrbitState::Landing)
+    {
+        auto start = Magnum::Vector3( orbitCamPos->x, orbitCamPos->y, orbitCamPos->z );
+        auto end = Magnum::Vector3(0.0f, 1.0f, 0.0f);
+
+        positionTrack = {{
+            {0.0f, start},
+            {3.0f, end}
+        }, Magnum::Math::lerp};
+
+        scaleTrack = {{
+            {0.0f, (float)currentPlanetSphereSize},
+            {3.0f, 1000.0f} // Final scale at t=3
         }, Magnum::Math::lerp};
     }
 
@@ -570,24 +584,40 @@ OrbitStatus FrameSync::GetOrbitStatus()
     switch (orbitState)
     {
     case OrbitState::Holding:
-        return { vec3<float>(0.0f, -1.0f, .001f), 100.0f };
+        return { vec3<float>(0.0f, -0.918f, 0.397f), 100.0f };
     case OrbitState::Insertion:
-    {
-        float t = (float)elapsed / 1000.0f;
+        {
+            float t = (float)elapsed / 1000.0f;
 
-        auto pos = positionTrack.at(t);
-        auto s = scaleTrack.at(t);
+            auto pos = positionTrack.at(t);
+            auto s = scaleTrack.at(t);
 
-        if (t >= 3.0f) {
-            SetOrbitState(OrbitState::Orbiting);
+            if (t >= 3.0f) {
+                SetOrbitState(OrbitState::Orbiting);
+            }
+
+            return { {pos.x(), pos.y(), pos.z() }, s};
         }
-
-        return { {pos.x(), pos.y(), pos.z() }, s};
-    }
-    break;
-    case OrbitState::Orbiting:
+        break;
     case OrbitState::Landing:
+        {
+            float t = (float)elapsed / 1000.0f;
+
+            auto pos = positionTrack.at(t);
+            auto s = scaleTrack.at(t);
+
+            if (t >= 3.0f) {
+                SetOrbitState(OrbitState::Landed);
+
+            }
+
+            return { {pos.x(), pos.y(), pos.z() }, s };
+        }
+        break;
+    case OrbitState::Landed:
+        return { {0.0f, 1.0f, 0.0f}, 1000.0f };
     case OrbitState::Takeoff:
+    case OrbitState::Orbiting:
         return { orbitCamPos.value(), (float)currentPlanetSphereSize };
     default:
         assert(false);
@@ -1583,7 +1613,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         s_gc.vc.create_sampler(avk::filter_mode::nearest_neighbor, avk::border_handling_mode::clamp_to_edge)
     );
 
-    s_gc.epoch = std::chrono::system_clock::now();
+    s_gc.epoch = std::chrono::steady_clock::now();
 
     keyboard = std::make_unique<SDLKeyboard>();
 
@@ -1603,7 +1633,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
 void GraphicsSplash(uint16_t seg, uint16_t fileNum)
 {
-    s_gc.epoch = std::chrono::system_clock::now();
+    s_gc.epoch = std::chrono::steady_clock::now();
 }
 
 void GraphicsInit()
@@ -2367,7 +2397,7 @@ void GraphicsUpdate()
 
     uniform.useEGA = s_useEGA ? 1 : 0;
     uniform.useRotoscope = s_useRotoscope ? 1 : 0;
-    uniform.iTime = std::chrono::duration<float>(std::chrono::system_clock::now() - s_gc.epoch).count();
+    uniform.iTime = std::chrono::duration<float>(std::chrono::steady_clock::now() - s_gc.epoch).count();
     uniform.game_context = gameContext;
     uniform.alienVar1 = s_alienVar1;
     uniform.adjust = s_adjust;
@@ -2609,6 +2639,12 @@ void GraphicsUpdate()
             uniform.orbitCamX = status.camPos.x;
             uniform.orbitCamY = status.camPos.y;
             uniform.orbitCamZ = status.camPos.z;
+
+            if (frameSync.orbitState == OrbitState::Landing)
+            {
+                // Freeze time
+                uniform.iTime = std::chrono::duration<float>(frameSync.orbitTimestamp - s_gc.epoch).count();
+            }
         }
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, navPipeline);

@@ -511,6 +511,7 @@ enum class OrbitState {
     Insertion,
     Orbiting,
     Landing,
+    Landed,
     Takeoff
 };
 

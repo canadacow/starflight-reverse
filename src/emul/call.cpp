@@ -1343,6 +1343,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
 
+                if(nextInstr == 0xc3a7) // DESCEND
+                {
+                    GraphicsSetOrbitState(OrbitState::Landing);
+                }
+
+                if(nextInstr == 0xc3ba) // ASCEND
+                {
+                    GraphicsSetOrbitState(OrbitState::Takeoff);
+                }
+
                 if (nextInstr == 0xe3f6) // .MVS
                 {
                     GraphicsReportGameFrame();
