@@ -536,8 +536,7 @@ void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optio
 
     if(state == OrbitState::Insertion)
     {
-        auto pole = Magnum::Vector3( 0.0f, -0.918f, 0.397f );
-        auto equator = Magnum::Vector3( 0.0f, 0.0f, 1.000f );
+        auto pole = Magnum::Vector3( frameSync.staringPos.x, frameSync.staringPos.y, frameSync.staringPos.z );
         auto dest = Magnum::Vector3( optionalCamPos->x, optionalCamPos->y, optionalCamPos->z );
 
         positionTrack = {{
@@ -581,10 +580,11 @@ OrbitStatus FrameSync::GetOrbitStatus()
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - orbitTimestamp).count();
 
+    
     switch (orbitState)
     {
     case OrbitState::Holding:
-        return { vec3<float>(0.0f, -0.918f, 0.397f), 100.0f };
+        return { frameSync.staringPos, 100.0f };
     case OrbitState::Insertion:
         {
             float t = (float)elapsed / 1000.0f;
@@ -2296,7 +2296,7 @@ void GraphicsUpdate()
     uint32_t gameContext = frameSync.gameContext;
     FrameToRender ftr{};
 
-    if (frameSync.maneuvering)
+    if (frameSync.maneuvering && !frameSync.inGameOps)
     {
        std::unique_lock<std::mutex> lock(frameSync.mutex);
 
@@ -2639,6 +2639,12 @@ void GraphicsUpdate()
             uniform.orbitCamX = status.camPos.x;
             uniform.orbitCamY = status.camPos.y;
             uniform.orbitCamZ = status.camPos.z;
+
+            if (frameSync.orbitState == OrbitState::Insertion || frameSync.orbitState == OrbitState::Orbiting || frameSync.orbitState == OrbitState::Landing)
+            {
+                uniform.worldX -= (status.camPos.x - frameSync.staringPos.x) * 2.0f;
+                uniform.worldY -= (status.camPos.y - frameSync.staringPos.y) * 2.0f;
+            }
 
             if (frameSync.orbitState == OrbitState::Landing)
             {

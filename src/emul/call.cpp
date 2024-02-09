@@ -1189,6 +1189,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     printf("frameSync.maneuvering = true\n");
                 }
 
+                if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
+                {
+                    frameSync.inGameOps = true;
+                }
+
                 if (nextInstr == 0xe4b6) // (PHRASE>CT)
                 {
                     s_recordedText = "";
@@ -1229,6 +1234,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     uint16_t lo_iaddr = Read16(0x62bf); // (PLANET)
                     uint16_t hi_iaddr = Read8(0x62bf + 2);
+                    uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
+
                     Push(lo_iaddr);
                     Push(hi_iaddr);
                     ForthCall(0x79f4); // >C+S
@@ -1244,9 +1251,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     frameSync.currentPlanetSphereSize = value;
 
+                    auto planetIt = planets.find(iaddr);
+                    assert(planetIt != planets.end());
+
                     vec3<float> sunPosition;
                     for (const auto& icon : s_currentIconList) {
-                        if (icon.seed == lo_iaddr) {
+                        if (icon.seed == planetIt->second.seed) {
                             sunPosition = vec3<float>(icon.planet_to_sunX, 0.0f, icon.planet_to_sunY);
                             sunPosition = sunPosition.normalize();
                             break;
@@ -2002,6 +2012,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsSetDeadReckoning(0, 0, s_currentIconList);
                 }
 
+                if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 
+                {
+                    frameSync.inGameOps = false;
+                }
+
                 if (nextInstr == 0xdb04) // ORBSETUP
                 {
                     uint32_t lo_iaddr = Read16(0x62bf);
@@ -2009,7 +2024,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
 
-                    frameSync.currentPlanet = iaddr;
+                    auto planetIt = planets.find(iaddr);
+                    assert(planetIt != planets.end());
+
+                    frameSync.currentPlanet = planetIt->second.seed;
                     frameSync.currentPlanetSphereSize = 100;
 
                     GraphicsSetOrbitState(OrbitState::Holding);

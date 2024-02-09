@@ -531,6 +531,9 @@ struct FrameSync {
     uint32_t currentPlanetSphereSize;
 
     bool maneuvering = false;
+    bool inGameOps = false;
+
+    inline static const vec3<float> staringPos = { 0.0f, -0.918f, 0.397f };
 
     int32_t gameTickTimer = 0;
 
