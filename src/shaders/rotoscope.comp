@@ -106,6 +106,9 @@ layout(binding = 14) uniform UniformBlock {
     float orbitCamY;
     float orbitCamZ;
 
+    float nebulaBase;
+    float nebulaMultiplyer;
+
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {

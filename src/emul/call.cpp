@@ -1134,7 +1134,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         auto penultimateTime = std::chrono::duration_cast<std::chrono::microseconds>(end - penultimateWord.start);
                         penultimateWordInfo = "Penultimate Word: " + penultimateWord.word + ", Time Spent: " + std::to_string((uint64_t)penultimateTime.count()) + " us ";
                     }
-                     printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
+                    //printf("%sPop Word: %s, Time Spent: %llu us \n", penultimateWordInfo.c_str(), wordDeque.back().word.c_str(), (uint64_t)time.count());
                 }
             }
             wordDeque.pop_back();
@@ -1931,6 +1931,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     {
                         Push(0);
                     }
+
+                    frameSync.inNebula = inNebula;
                 }
                 else if (nextInstr == 0x2af1)
                 {

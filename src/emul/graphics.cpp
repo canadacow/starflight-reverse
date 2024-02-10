@@ -2402,6 +2402,15 @@ void GraphicsUpdate()
     uniform.alienVar1 = s_alienVar1;
     uniform.adjust = s_adjust;
     uniform.planetSize = frameSync.currentPlanetSphereSize;
+    uniform.nebulaBase = 0.0f;
+    uniform.nebulaMultiplier = 50.0f;
+    
+    // If we're in a system, nebulas behave a little differently
+    if (uniform.game_context == 1 || uniform.game_context == 2)
+    {
+        uniform.nebulaBase = frameSync.inNebula ? 2.0f : 0.0f;
+        uniform.nebulaMultiplier = 5.0f;
+    }
 
     bool hasNavigation = false;
     static uint32_t activeAlien = 0;
@@ -2643,7 +2652,7 @@ void GraphicsUpdate()
             if (frameSync.orbitState == OrbitState::Insertion || frameSync.orbitState == OrbitState::Orbiting || frameSync.orbitState == OrbitState::Landing)
             {
                 uniform.worldX -= (status.camPos.x - frameSync.staringPos.x) * 2.0f;
-                uniform.worldY -= (status.camPos.y - frameSync.staringPos.y) * 2.0f;
+                uniform.worldY -= (status.camPos.y - frameSync.staringPos.y) * 10.0f;
             }
 
             if (frameSync.orbitState == OrbitState::Landing)

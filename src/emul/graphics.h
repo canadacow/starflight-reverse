@@ -224,6 +224,9 @@ struct UniformBlock {
     float orbitCamX;
     float orbitCamY;
     float orbitCamZ;
+
+    float nebulaBase;
+    float nebulaMultiplier;
 };
 
 struct ShaderIcon {
@@ -525,13 +528,17 @@ struct FrameSync {
     std::condition_variable frameCompleted;
     uint64_t completedFrames = 0;
 
+    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+    // (3 = hyperspace, 4 = encounter, 5 = starport)
     uint32_t gameContext = 0;
+
     uint32_t currentPlanet;
     uint32_t currentPlanetMass;
     uint32_t currentPlanetSphereSize;
 
     bool maneuvering = false;
     bool inGameOps = false;
+    bool inNebula = false;
 
     inline static const vec3<float> staringPos = { 0.0f, -0.918f, 0.397f };
 
