@@ -494,9 +494,16 @@ void main() {
 
         if(blendFactor > 0.0)
         {
-            vec4 chromaKeyColor = vec4(unpackUnorm4x8(roto.chromaKey)).bgra;
+            if((roto.navMask >> 8) > 0)
+            {
+                vec4 chromaKeyColor = vec4(unpackUnorm4x8(roto.chromaKey)).bgra;
 
-            if(colorDistance(pixel, chromaKeyColor) < 0.05) {
+                if(colorDistance(pixel, chromaKeyColor) < 0.05) {
+                    pixel = mix(pixel, navigationPixel, blendFactor);
+                }
+            }
+            else
+            {
                 pixel = mix(pixel, navigationPixel, blendFactor);
             }
         }

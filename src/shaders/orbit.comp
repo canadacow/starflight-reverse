@@ -244,14 +244,8 @@ void main() {
     // Pull the pixel from the smaller texture
     vec4 pixel = vec4(1.0, 0.0, 0.0, 1.0);
 
-    if(roto.content == NavigationalPixel)
-    {
-        if(uniforms.game_context == 1)
-        {
-            // System and hyperspace
-            pixel = DrawPlanetPixel(roto, uv, subUv);
-        }
-    }
+    // System and hyperspace
+    pixel = DrawPlanetPixel(roto, uv, subUv);
 
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);

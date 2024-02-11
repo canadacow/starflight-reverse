@@ -2503,6 +2503,7 @@ void GraphicsUpdate()
                 if (rotoscopePixels[i].content == NavigationalPixel)
                 {
                     hasNavigation = true;
+                    shaderBackBuffer[i].navMask = 0xff;
                 }
 
                 if(rotoscopePixels[i].content == RunBitPixel)
