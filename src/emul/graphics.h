@@ -543,6 +543,9 @@ struct FrameSync {
     uint32_t currentPlanetSphereSize;
 
     bool maneuvering = false;
+    std::chrono::steady_clock::time_point maneuveringStartTime;
+    std::chrono::steady_clock::time_point maneuveringEndTime;
+
     bool inGameOps = false;
     bool inNebula = false;
 

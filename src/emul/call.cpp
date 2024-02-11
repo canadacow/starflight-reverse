@@ -1186,7 +1186,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xcbbf) // MANEUVER
                 {
                     frameSync.maneuvering = true;
+                    frameSync.maneuveringStartTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = true\n");
+
                 }
 
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
@@ -2010,6 +2012,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xcbbf) // MANEUVER
                 {
                     frameSync.maneuvering = false;
+                    frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
                     GraphicsSetDeadReckoning(0, 0, s_currentIconList);
                 }

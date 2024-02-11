@@ -579,7 +579,6 @@ OrbitStatus FrameSync::GetOrbitStatus()
 {
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - orbitTimestamp).count();
-
     
     switch (orbitState)
     {
@@ -2570,14 +2569,36 @@ void GraphicsUpdate()
 
     s_gc.buffers[inFlightIndex].command->reset();
 
-
     if (hasNavigation)
     {
-        if (frameSync.maneuvering)
+        float secondsElapsedIn = (std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - frameSync.maneuveringStartTime
+        ).count()) / 1000.0f;
+
+        float secondsElapsedOut = (std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - frameSync.maneuveringEndTime
+        ).count()) / 1000.0f;
+
+        if (frameSync.maneuvering || secondsElapsedOut < 1.0f)
         {
+            uint8_t navMaskValue = 0xff;
+            if (secondsElapsedIn <= 1.0) {
+                navMaskValue = static_cast<uint8_t>(secondsElapsedIn * 255);
+            } else if (secondsElapsedOut <= 1.0) {
+                // Ensure that secondsElapsedOut is used only after secondsElapsedIn exceeds 1.0
+                navMaskValue = static_cast<uint8_t>((1.0f - secondsElapsedOut) * 255);
+            }
+
             for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i)
             {
-                shaderBackBuffer[i].navMask = 0xff;
+                if (rotoscopePixels[i].content == NavigationalPixel)
+                {
+                    shaderBackBuffer[i].navMask = 0xff;
+                }
+                else
+                {
+                    shaderBackBuffer[i].navMask = navMaskValue;
+                }
             }
 
             struct SolidRect
