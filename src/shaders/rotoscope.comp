@@ -60,6 +60,7 @@ struct Rotoscope {
     LineData lineData;
     RunBitData runBitData;
     uint navMask;
+    uint chromaKey;
 };
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
@@ -439,6 +440,11 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     return pixel;
 }
 
+float colorDistance(vec4 color1, vec4 color2) {
+    vec3 diff = color1.rgb - color2.rgb;
+    return length(diff);
+}
+
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
     vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
@@ -484,18 +490,15 @@ void main() {
                 break;
         }
 
-        float blendFactor = (roto.navMask & 0xFF) / 255.0;
-        if ((roto.navMask >> 8) != 0) {
-            if(pixel.r + pixel.g + pixel.b == 0.0)
-            {
-                pixel = navigationPixel;
-            }
-            else
-            {
+        float blendFactor = (roto.navMask & 0xff) / 255.0;
+
+        if(blendFactor > 0.0)
+        {
+            vec4 chromaKeyColor = vec4(unpackUnorm4x8(roto.chromaKey)).bgra;
+
+            if(colorDistance(pixel, chromaKeyColor) < 0.05) {
                 pixel = mix(pixel, navigationPixel, blendFactor);
             }
-        } else {
-            pixel = mix(pixel, navigationPixel, blendFactor);
         }
     }
     else if(uniforms.useEGA == 0)

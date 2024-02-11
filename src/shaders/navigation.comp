@@ -65,6 +65,7 @@ struct Rotoscope {
     LineData lineData;
     RunBitData runBitData;
     uint navMask;
+    uint chromaKey;
 };
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
@@ -357,19 +358,18 @@ void main() {
 
     Rotoscope roto = rotoPixels[srcIndex];
 
+    roto.blt_x = int(src.x) - 4;
+    roto.blt_y = int(src.y) - 8;
+    roto.blt_w = 72;
+    roto.blt_h = 120;
+
     vec2 subUv = (uv * graphicSize) - vec2(src);
 
     // Pull the pixel from the smaller texture
     vec4 pixel = vec4(1.0, 0.0, 0.0, 1.0);
 
-    if(roto.content == NavigationalPixel)
-    {
-        if((uniforms.game_context == 2 || uniforms.game_context == 3))
-        {
-            // System and hyperspace
-            pixel = DrawNavigationPixel(roto, uv, subUv);
-        }
-    }
+    // System and hyperspace
+    pixel = DrawNavigationPixel(roto, uv, subUv);
 
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);

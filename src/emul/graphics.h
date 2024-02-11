@@ -366,6 +366,7 @@ struct RotoscopeShader {
     LineData lineData;
     RunBitData runBitData;
     uint32_t navMask;
+    uint32_t chromaKey;
 
     RotoscopeShader& operator=(const Rotoscope& other);
 };

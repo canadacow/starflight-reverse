@@ -1117,7 +1117,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     blt_h = other.blt_h;
     bgColor = other.bgColor;
     fgColor = other.fgColor;
-    navMask = 0;
+    navMask = 0x00;
 
     switch(other.content)
     {
@@ -1496,8 +1496,8 @@ static int GraphicsInitThread()
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     // Navigation window is 72 x 120 pixels.
-    uint32_t navWidth = (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
-    uint32_t navHeight = (uint32_t)ceilf((float(NagivationWindowHeight) / 200.0f) * (float)WINDOW_HEIGHT);
+    uint32_t navWidth = WINDOW_WIDTH; // (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
+    uint32_t navHeight = WINDOW_HEIGHT; // (uint32_t)ceilf((float(NagivationWindowHeight) / 200.0f) * (float)WINDOW_HEIGHT);
 
     for (int i = 0; i < s_gc.vc.number_of_frames_in_flight(); ++i)
     {
@@ -2217,7 +2217,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         uint32_t navHeight = (uint32_t)ceilf((float(NagivationWindowHeight) / 200.0f) * (float)WINDOW_HEIGHT);                
 
         res.push_back(
-            avk::command::dispatch((navWidth + 3) / 4u, (navHeight + 3) / 4u, 1));
+            avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1));
 
         res.push_back(
             avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].navigation->get_image(),
@@ -2503,7 +2503,6 @@ void GraphicsUpdate()
                 if (rotoscopePixels[i].content == NavigationalPixel)
                 {
                     hasNavigation = true;
-                    shaderBackBuffer[i].navMask = 0xff;
                 }
 
                 if(rotoscopePixels[i].content == RunBitPixel)
@@ -2573,6 +2572,41 @@ void GraphicsUpdate()
 
     if (hasNavigation)
     {
+        if (frameSync.maneuvering)
+        {
+            for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i)
+            {
+                shaderBackBuffer[i].navMask = 0xff;
+            }
+
+            struct SolidRect
+            {
+                int x0;
+                int y0;
+                int x1;
+                int y1;
+
+                uint32_t chromaKey;
+            };
+
+            const std::vector<SolidRect> rects = {
+                { 12, 0, 68, 7, 0xaaaaaa },
+                { 84, 2, 154, 74, 0x0 },
+                { 3, 148,157, 198, 0x0 },
+            };
+
+            for (auto& rect : rects)
+            {
+                for (int y = rect.y0; y < rect.y1; ++y) {
+                    for (int x = rect.x0; x < rect.x1; ++x) {
+                        int index = y * GRAPHICS_MODE_WIDTH + x;
+                        shaderBackBuffer[index].navMask = 0xffff;
+                        shaderBackBuffer[index].chromaKey = rect.chromaKey;
+                    }
+                }
+            }
+        }
+
         uniform.heading = (float)ftr.heading;
 
         uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
