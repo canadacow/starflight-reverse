@@ -64,6 +64,7 @@ struct Rotoscope {
     TextData textData;
     LineData lineData;
     RunBitData runBitData;
+    uint navMask;
 };
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;

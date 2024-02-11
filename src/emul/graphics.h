@@ -337,6 +337,7 @@ struct LineData {
     uint32_t y0;
     uint32_t x1;
     uint32_t y1;
+
     uint32_t n;
     uint32_t total;
 };
@@ -353,14 +354,18 @@ struct RotoscopeShader {
     uint32_t EGAcolor;
     uint32_t argb;
     int32_t blt_x;
+
     int32_t blt_y;
     int32_t blt_w;
     int32_t blt_h;
     uint32_t bgColor;
+
     uint32_t fgColor;
     TextData textData;
+
     LineData lineData;
     RunBitData runBitData;
+    uint32_t navMask;
 
     RotoscopeShader& operator=(const Rotoscope& other);
 };

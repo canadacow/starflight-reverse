@@ -1,4 +1,4 @@
-// GLSL Compute Shader
+  // GLSL Compute Shader
 #version 450
 
 #extension GL_GOOGLE_include_directive : enable
@@ -59,6 +59,7 @@ struct Rotoscope {
     TextData textData;
     LineData lineData;
     RunBitData runBitData;
+    uint navMask;
 };
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
@@ -115,7 +116,7 @@ layout(binding = 15) uniform IconBlock {
     Icon icons[32];
 };
 
-layout(binding = 16) uniform sampler2D NavigationTexture;
+layout(rgba8, binding = 16) readonly uniform image2D NavigationTexture;
 
 #include "tables.h"
 #include "noise.h"
@@ -365,10 +366,8 @@ vec4 DrawSDFSilhouette(const Rotoscope roto, vec2 subUv) {
     }
 }
 
-vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
-    float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
-    float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
-    return texture(NavigationTexture, vec2(subX, subY));
+vec4 DrawNavigationPixel(ivec2 pixelPos) {
+    return imageLoad(NavigationTexture, pixelPos);
 }
 
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
@@ -461,9 +460,12 @@ void main() {
 
     // Pull the pixel from the smaller texture
     vec4 pixel = vec4(unpackUnorm4x8(roto.argb)).bgra;
+    vec4 navigationPixel = vec4(0.0); 
 
     if(uniforms.useRotoscope != 0)
     {
+        navigationPixel = DrawNavigationPixel(pixelPos);
+
         switch(roto.content) {
             #if 0 
             case LinePixel:
@@ -477,14 +479,23 @@ void main() {
                 pixel = DrawRunBitPixel(roto, uv, subUv);
                 break;
             case NavigationalPixel:
-                if(uniforms.game_context == 1 || uniforms.game_context == 2 || uniforms.game_context == 3)
-                {
-                    // System and hyperspace
-                    pixel = DrawNavigationPixel(roto, uv, subUv);
-                }
                 break;
             default:
                 break;
+        }
+
+        float blendFactor = (roto.navMask & 0xFF) / 255.0;
+        if ((roto.navMask >> 8) != 0) {
+            if(pixel.r + pixel.g + pixel.b == 0.0)
+            {
+                pixel = navigationPixel;
+            }
+            else
+            {
+                pixel = mix(pixel, navigationPixel, blendFactor);
+            }
+        } else {
+            pixel = mix(pixel, navigationPixel, blendFactor);
         }
     }
     else if(uniforms.useEGA == 0)
@@ -499,6 +510,8 @@ void main() {
             pixel = CGAPalette[c & 3];
         }
     }
+
+    pixel.a = 1.0;
 
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);

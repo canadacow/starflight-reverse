@@ -1117,6 +1117,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     blt_h = other.blt_h;
     bgColor = other.bgColor;
     fgColor = other.fgColor;
+    navMask = 0;
 
     switch(other.content)
     {
@@ -2502,6 +2503,7 @@ void GraphicsUpdate()
                 if (rotoscopePixels[i].content == NavigationalPixel)
                 {
                     hasNavigation = true;
+                    shaderBackBuffer[i].navMask = 0xff;
                 }
 
                 if(rotoscopePixels[i].content == RunBitPixel)
