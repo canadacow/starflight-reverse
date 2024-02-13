@@ -1009,6 +1009,7 @@ static bool s_shouldRecordText = false;
 static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
+static std::vector<Icon> s_currentSolarSystem;
 static vec2<int16_t> s_heading;
 
 uint64_t s_targetFrameKey = 0;
@@ -2006,7 +2007,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xb0bd) // PARALLEL-TASKS
                 {
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem);
                 }
 
                 if(nextInstr == 0xcbbf) // MANEUVER
@@ -2014,7 +2015,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem);
                 }
 
                 if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 
@@ -2036,6 +2037,80 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.currentPlanetSphereSize = 100;
 
                     GraphicsSetOrbitState(OrbitState::Holding);
+                }
+
+                if(nextInstr == 0xe0a3) // .AUXSYS
+                {
+                    uint32_t lo_iaddr = Read16(0x629f);
+                    uint32_t hi_iaddr = Read8(0x629f + 2);
+
+                    uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
+
+                    std::vector<Icon> miniIcons;
+
+                    Icon sun{};
+
+                    ForthPushCurrent(iaddr);
+                    uint16_t orbitMask = Read16(0x63ef + 0x11);
+                    ForthCall(0x7a14); // IOPEN
+
+                    sun.id = 52;
+                    sun.clr = 14;
+                    sun.icon_type = IconType::Sun;
+                    sun.iaddr = iaddr;
+
+                    miniIcons.push_back(sun);
+
+                    ForthCall(0x7a86); // INEXT 
+
+                    auto systemIt = starsystem.find(iaddr);
+                    assert(systemIt != starsystem.end());
+
+                    for(int i = 0; i <= 7; ++i)
+                    {
+                        if (!(orbitMask & (1 << i))) 
+                            continue;
+
+                        for (;;)
+                        {
+                            auto instType = GetInstanceClass();
+                            if (instType != 11)
+                            {
+                                ForthCall(0x7a86); // INEXT
+                                continue;
+                            }
+
+                            auto instOff = GetInstanceOffset();
+                            ForthCall(0xda72); // GetCOORDS
+                            Icon mi;
+                            mi.y = (int16_t)Pop();
+                            mi.x = (int16_t)Pop();
+                            mi.iaddr = instOff;
+
+                            mi.id = 51;
+                            mi.clr = 0xf;
+
+                            mi.icon_type = IconType::Planet;
+
+                            auto planetIt = planets.find(instOff);
+                            assert(planetIt != planets.end());
+
+                            mi.planet_to_sunX = mi.x;
+                            mi.planet_to_sunY = -mi.y;
+
+                            mi.seed = planetIt->second.seed;
+
+                            miniIcons.push_back(mi);
+
+                            ForthCall(0x7a86); // INEXT
+                            break;
+                        }
+                    }
+
+                    s_currentSolarSystem = miniIcons;
+
+                    ForthCall(0x79cb); // ICLOSE
+                    ForthPopCurrent();
                 }
             }
         break;

@@ -118,6 +118,7 @@ layout(binding = 15) uniform IconBlock {
 };
 
 layout(rgba8, binding = 16) readonly uniform image2D NavigationTexture;
+layout(binding = 17) uniform sampler2D OrreryTexture;
 
 #include "tables.h"
 #include "noise.h"
@@ -519,6 +520,13 @@ void main() {
         {
             pixel = CGAPalette[c & 3];
         }
+    }
+
+    if(uv.x >= 0.5 && uv.y >= 0.5)
+    {
+        vec2 ouv = (uv - vec2(0.5, 0.5)) * vec2(2.0, 2.0);
+        vec4 orreryPixel = texture(OrreryTexture, ouv);
+        pixel.rgb = orreryPixel.rgb;
     }
 
     pixel.a = 1.0;

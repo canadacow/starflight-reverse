@@ -102,8 +102,10 @@ struct GraphicsContext
         avk::buffer rotoscope;
         avk::buffer uniform;
         avk::buffer iconUniform;
+        avk::buffer orreryUniform;
         avk::command_buffer command;
         avk::image_sampler navigation;
+        avk::image_sampler orrery;
     };
     
     std::vector<BufferData> buffers;
@@ -130,6 +132,7 @@ struct GraphicsContext
     avk::compute_pipeline rotoscopePipeline;
     avk::compute_pipeline navigationPipeline;
     avk::compute_pipeline orbitPipeline;
+    avk::compute_pipeline orreryPipeline;
     avk::compute_pipeline textPipeline;
 
     avk::descriptor_cache descriptorCache;
@@ -1047,7 +1050,7 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
-void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList)
+void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1071,6 +1074,7 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
 
         ftr.deadReckoning = { x , y };
         ftr.iconList = iconList;
+        ftr.solarSystem = system;
         ftr.renderCount = 0;
         ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
         ftr.screenCoord = WLD_to_SCR(ftr.worldCoord);
@@ -1529,11 +1533,23 @@ static int GraphicsInitThread()
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
+        bd.orrery = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(2000, 2000, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
+
         bd.iconUniform =
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
                 avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform)));
+
+        bd.orreryUniform =
+            s_gc.vc.create_buffer(
+                avk::memory_usage::host_coherent,
+                vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform)));                
 
         s_gc.buffers.push_back(std::move(bd));
     }
@@ -1569,7 +1585,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 13, 1u),
         avk::descriptor_binding<avk::buffer>(0, 14, s_gc.buffers[0].uniform),
         avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform),
-        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 16, 1u)
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 16, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 17, 1u)
     );
 
     s_gc.navigationPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1590,6 +1607,16 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
         avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
         avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
+    );
+
+    s_gc.orreryPipeline = s_gc.vc.create_compute_pipeline_for(
+        "orrery.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].orreryUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -2160,7 +2187,13 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
     };
 }
 
-std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform, IconUniform& iconUniform, const std::vector<RotoscopeShader>& shaderBackBuffer, avk::compute_pipeline navPipeline)
+std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, 
+    UniformBlock& uniform, 
+    IconUniform& iconUniform,
+    IconUniform& orreryUniform,
+    const std::vector<RotoscopeShader>& shaderBackBuffer, 
+    avk::compute_pipeline navPipeline,
+    avk::compute_pipeline orreryPipeline)
 {
     std::vector<avk::recorded_commands_t> res{};
 
@@ -2188,6 +2221,40 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
 
     res.push_back(
         s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform)));
+
+    res.push_back(
+        s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform)));        
+
+    if (orreryPipeline.has_value())
+    {
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].orrery->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
+
+        res.push_back(
+            avk::command::bind_pipeline(orreryPipeline.as_reference()));
+
+        res.push_back(
+            avk::command::bind_descriptors(orreryPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
+                    avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].orrery->get_image_view()->as_storage_image(avk::layout::general)),
+                    avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
+                    avk::descriptor_binding(0, 2, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                    avk::descriptor_binding(0, 3, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                    avk::descriptor_binding(0, 4, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                    avk::descriptor_binding(0, 5, s_gc.buffers[inFlightIndex].orreryUniform->as_uniform_buffer())
+                })));
+
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].orrery->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
+
+        res.push_back(
+            avk::command::dispatch((2000 + 3) / 4u, (2000 + 3) / 4u, 1));
+
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].orrery->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal }));
+    }
 
     if(navPipeline.has_value())
     {
@@ -2250,7 +2317,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 13, s_gc.alienBackgroundImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 14, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
                 avk::descriptor_binding(0, 15, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer()),
-                avk::descriptor_binding(0, 16, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
+                avk::descriptor_binding(0, 16, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 17, s_gc.buffers[inFlightIndex].orrery->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
             })));
 
     res.push_back(
@@ -2659,8 +2727,11 @@ void GraphicsUpdate()
         commands.insert(commands.end(), cpuCommands.begin(), cpuCommands.end());
 #else
         avk::compute_pipeline navPipeline{};
+        avk::compute_pipeline orreryPipeline{};
 
         IconUniform ic{};
+        IconUniform orrery{};
+
         if(frameSync.gameContext != 1)
         {
             ic = IconUniform(ftr.iconList);
@@ -2679,6 +2750,13 @@ void GraphicsUpdate()
                     si.bltX -= uniform.deadX * 4.0f;
                     si.bltY += uniform.deadY * 6.0f;
                 }
+            }
+
+            if (frameSync.gameContext == 2)
+            {
+                // Solar system orrery
+                orreryPipeline = s_gc.orreryPipeline;
+                orrery = IconUniform(ftr.solarSystem);
             }
 
             navPipeline = s_gc.navigationPipeline;
@@ -2720,7 +2798,7 @@ void GraphicsUpdate()
             }
         }
 
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, shaderBackBuffer, navPipeline);
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, shaderBackBuffer, navPipeline, orreryPipeline);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
     }

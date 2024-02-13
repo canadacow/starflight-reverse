@@ -1,0 +1,249 @@
+// GLSL Compute Shader
+#version 450
+
+#extension GL_GOOGLE_include_directive : enable
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+#define Icon_Other  0
+#define Icon_Sun    1
+#define Icon_Planet 2
+#define Icon_Nebula 3
+
+struct Icon {
+    uint isActive;
+    int x;
+    int y;
+    int screenX;
+
+    int screenY;
+    int bltX;
+    int bltY;
+    uint id;
+
+    uint clr;
+    uint icon_type;
+    int planet_to_sunX;
+    int planet_to_sunY;
+
+    uint planetIndex;
+};
+
+// Equivalent of TextData struct
+struct TextData {
+    uint character;
+    uint xormode;
+    uint fontNum;
+};
+
+// Equivalent of LineData struct
+struct LineData {
+    uint x0;
+    uint y0;
+    uint x1;
+    uint y1;
+    uint n;
+    uint total;
+};
+
+struct RunBitData {
+    uint tag;
+};
+
+// Equivalent of Rotoscope struct
+struct Rotoscope {
+    uint content;
+    uint EGAcolor;
+    uint argb;
+    int blt_x;
+    int blt_y;
+    int blt_w;
+    int blt_h;
+    uint bgColor;
+    uint fgColor;
+    TextData textData;
+    LineData lineData;
+    RunBitData runBitData;
+    uint navMask;
+    uint chromaKey;
+};
+
+layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
+
+layout(std430, binding = 1) buffer RotoBuffer {
+    Rotoscope rotoPixels[];
+};
+
+layout(binding = 2) uniform sampler2D ShipTexture;
+layout(binding = 3) uniform sampler2DArray PlanetTextures;
+
+layout(binding = 4) uniform UniformBlock {
+    int GRAPHICS_MODE_WIDTH;
+    int GRAPHICS_MODE_HEIGHT;
+    int WINDOW_WIDTH;
+    int WINDOW_HEIGHT;
+    uint useRotoscope;
+    uint useEGA;
+    float iTime;
+    float worldX;
+    float worldY;
+    float heading;
+    float deadX;
+    float deadY;
+    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+    // (3 = hyperspace, 4 = encounter, 5 = starport)
+    uint game_context; 
+    uint alienVar1;
+    float screenX;
+    float screenY;
+    float adjust;
+    float planetSize;
+
+    float orbitCamX;
+    float orbitCamY;
+    float orbitCamZ;
+
+    float nebulaBase;
+    float nebulaMultiplier;
+
+} uniforms;
+
+layout(binding = 5) uniform IconBlock {
+    Icon icons[32];
+};
+
+#include "tables.h"
+#include "noise.h"
+#include "distance.h"
+#include "hyperspace_stars.h"
+#include "starburst.h"
+#include "nebula.h"
+#include "sun.h"
+#include "planet.h"
+
+vec4 DrawOrreryPixel(vec2 uv) {
+    vec4 pixel = vec4(0.);
+
+    vec4 fragColor;
+    vec2 sub;
+
+    float iTime = uniforms.iTime;
+
+    vec2 pixelPos = uv * vec2(4.0, 6.0);
+
+    vec4 starPixel = vec4(0.);
+    vec4 sunPixel = vec4(0.);
+    vec4 iconPixel = vec4(0.);
+    vec4 shipPixel = vec4(0.);
+    vec4 planetPixel = vec4(0.);
+
+    for(int i = 0; i < 16; i++) {
+        Icon icon = icons[i];
+
+        if(icon.isActive == 0)
+            continue;
+
+        vec2 iconPos = vec2(float(icon.x), float(icon.y));
+        iconPos *= vec2(4.0, 6.0);
+
+        // 27 is RIGHT
+        // 28 is UP to the RIGHT
+        // 29 is UP
+        // 30 is UP to the LEFT
+        // 31 is LEFT
+        // 32 is DOWN to the LEFT
+        // 33 is DOWN
+        // 34 is DOWN to the RIGHT
+        if(icon.id >= 27 && icon.id <= 34) {
+            float distance = 4.0;
+            if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
+                vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
+
+                normUV -= 0.5;
+                // Rotate the normUVs to match the icon.id orientation
+                float angle = (icon.id - 27) * 45.0;
+                float rad = radians(angle);
+                float s = sin(rad);
+                float c = cos(rad);
+                normUV = vec2(normUV.x * c - normUV.y * s, normUV.x * s + normUV.y * c);
+
+                normUV += 0.5;
+
+                vec4 texColor = texture(ShipTexture, normUV);
+                shipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
+            }
+        } else if(icon.id >= 51 && icon.id <= 91) {
+            float basesize = 29.0f * float(icon.id - 50);
+
+            if(icon.icon_type == Icon_Sun)
+            {
+                float dist = calculateDistance(iconPos, pixelPos);
+                if(dist < basesize * 4.0) {
+                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 4.0);
+                    main_star(sunPixel, normUV, iTime, colortable[icon.clr & 0xf].rgb);
+
+                    if(dist < basesize * 0.96)
+                    {
+                        sunPixel.a = 1.0;
+                    }
+                    else
+                    {
+                        float luma = 0.299 * sunPixel.r + 0.587 * sunPixel.g + 0.114 * sunPixel.b;
+                        sunPixel.a = luma;
+                        sunPixel.rgb *= sunPixel.a;
+                    }
+                }
+            }
+            else if(icon.icon_type == Icon_Planet)
+            {
+                float dist = calculateDistance(iconPos, pixelPos);
+                if(dist < basesize * 1.05) {
+                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 1.00);
+
+                    vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
+                    vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
+
+                    //vec3 northPole = normalize(vec3(0, -1, .001));
+                    vec3 sidePole = normalize(vec3(0, -0.918, 0.397));
+                    vec3 sidePerspective = normalize(vec3(0, 0, 1));    
+
+                    float ydist = (abs(uniforms.screenY - iconPos.y)) / 120.0;
+                
+                    vec3 camPos = sidePole; //slerp(sidePerspective, northPole, ydist);
+
+                    draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex, camPos);
+
+                    if(dist < basesize * 1.0)
+                    {
+                        //planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
+                        planetPixel.a = 1.0;
+                    }
+                    else
+                    {
+                        float luma = 0.299 * planetPixel.r + 0.587 * planetPixel.g + 0.114 * planetPixel.b;
+                        planetPixel.a = luma;
+                        planetPixel.rgb *= planetPixel.a;
+                    }
+                }
+            }
+        }
+    }
+
+    pixel += starPixel;
+    pixel = sunPixel  + (pixel * (1 - sunPixel.a));
+    pixel = planetPixel + (pixel * (1 - planetPixel.a));
+    pixel = shipPixel + (pixel * (1 - shipPixel.a));
+    
+    return pixel;
+}
+
+void main() {
+    ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+
+    vec2 normalizedCoords = (pixelPos / vec2(imageSize(imgOutput)) - vec2(0.5, 0.5)) * vec2(800.0, -800.0);
+
+    vec4 pixel = DrawOrreryPixel(normalizedCoords);
+
+    // Place the pixel in the larger surface
+    imageStore(imgOutput, pixelPos, pixel);
+}

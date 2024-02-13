@@ -23,6 +23,7 @@ set(SHADER_LIST
     "text.comp"
     "navigation.comp"
     "orbit.comp"
+    "orrery.comp"
     # Add more shaders here
 )
 # Path to the Vulkan SDK's glslc shader compiler

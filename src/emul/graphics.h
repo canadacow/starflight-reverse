@@ -513,6 +513,8 @@ struct FrameToRender
     vec2<int16_t> deadReckoning;
     int16_t heading;
     uint32_t renderCount;
+
+    std::vector<Icon> solarSystem;
 };
 
 enum class OrbitState {
@@ -610,7 +612,7 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
 void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
 void GraphicsSave(char *filename);
 
-void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, const std::vector<Icon>& iconList);
+void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, const std::vector<Icon>& iconList, const std::vector<Icon>& system);
 void GraphicsReportGameFrame();
 void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);
 
