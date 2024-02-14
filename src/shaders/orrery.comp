@@ -106,6 +106,8 @@ layout(binding = 4) uniform UniformBlock {
     float nebulaBase;
     float nebulaMultiplier;
 
+    uint orbitMask;
+
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {
@@ -121,6 +123,44 @@ layout(binding = 5) uniform IconBlock {
 #include "sun.h"
 #include "planet.h"
 
+vec4 DrawOrbits(vec2 uv) {
+    
+    // Center the coordinates
+    uv = uv * 2.0 - 1.0;
+
+    // Parameters
+    vec2 center = vec2(0.0, 0.0); // Center of the orbits
+    float fadeWidth = 0.01; // Width of the fade effect for each orbit
+    vec3 orbitColor = vec3(0.66, 0.66, 0.66); // Color of the orbits
+    
+    // Bitmask representing which orbits are present (8-bit, 1 for each orbit)
+    uint bitmask = uniforms.orbitMask; // Decimal equivalent of the binary 10101010
+    
+    // Initialize alpha to 0 (fully transparent)
+    float alpha = 0.0;
+    
+    // Loop through each bit in the bitmask to draw orbits if that bit is set
+    for(int i = 0; i < 8; i++) {
+        if((bitmask & (1 << i)) != 0) {
+            // Calculate the radius for this orbit based on its index
+            float radius = 0.15 + float(i) * 0.11; // Adjust spacing as needed
+            
+            // SDF for a circle at this radius
+            float dist = length(uv - center) - radius;
+            
+            // Calculate alpha for this orbit, add it to the total alpha
+            alpha += 1.0 - smoothstep(0.0, fadeWidth, abs(dist));
+        }
+    }
+    
+    // Clamp alpha to [0, 1] to ensure it doesn't exceed 1
+    alpha = clamp(alpha, 0.0, 1.0);
+    
+    // Combine the color with the calculated alpha for the gradient effect
+    vec4 fragColor = vec4(orbitColor * alpha, alpha);
+    return fragColor;
+}
+
 vec4 DrawOrreryPixel(vec2 uv) {
     vec4 pixel = vec4(0.);
 
@@ -129,9 +169,11 @@ vec4 DrawOrreryPixel(vec2 uv) {
 
     float iTime = uniforms.iTime;
 
-    vec2 pixelPos = uv * vec2(4.0, 6.0);
+    vec2 normalizedCoords = (uv - vec2(0.5, 0.5)) * vec2(800.0, -800.0);
 
-    vec4 starPixel = vec4(0.);
+    vec2 pixelPos = normalizedCoords * vec2(4.0, 6.0);
+
+    vec4 starPixel = DrawOrbits(uv);
     vec4 sunPixel = vec4(0.);
     vec4 iconPixel = vec4(0.);
     vec4 shipPixel = vec4(0.);
@@ -157,7 +199,7 @@ vec4 DrawOrreryPixel(vec2 uv) {
         if(icon.id >= 27 && icon.id <= 34) {
             float distance = 4.0;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
-                vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
+                vec2 normUV = calculateNormalizedUVOrrery(iconPos, pixelPos, distance * 2.0);
 
                 normUV -= 0.5;
                 // Rotate the normUVs to match the icon.id orientation
@@ -179,7 +221,7 @@ vec4 DrawOrreryPixel(vec2 uv) {
             {
                 float dist = calculateDistance(iconPos, pixelPos);
                 if(dist < basesize * 4.0) {
-                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 4.0);
+                    vec2 normUV = calculateNormalizedUVOrrery(iconPos, pixelPos, basesize * 4.0);
                     main_star(sunPixel, normUV, iTime, colortable[icon.clr & 0xf].rgb);
 
                     if(dist < basesize * 0.96)
@@ -198,18 +240,14 @@ vec4 DrawOrreryPixel(vec2 uv) {
             {
                 float dist = calculateDistance(iconPos, pixelPos);
                 if(dist < basesize * 1.05) {
-                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 1.00);
+                    vec2 normUV = calculateNormalizedUVOrrery(iconPos, pixelPos, basesize * 1.00);
 
                     vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
                     vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
 
-                    //vec3 northPole = normalize(vec3(0, -1, .001));
                     vec3 sidePole = normalize(vec3(0, -0.918, 0.397));
-                    vec3 sidePerspective = normalize(vec3(0, 0, 1));    
-
-                    float ydist = (abs(uniforms.screenY - iconPos.y)) / 120.0;
-                
-                    vec3 camPos = sidePole; //slerp(sidePerspective, northPole, ydist);
+               
+                    vec3 camPos = sidePole;
 
                     draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex, camPos);
 
@@ -239,10 +277,9 @@ vec4 DrawOrreryPixel(vec2 uv) {
 
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+    vec2 uv = pixelPos / vec2(imageSize(imgOutput));
 
-    vec2 normalizedCoords = (pixelPos / vec2(imageSize(imgOutput)) - vec2(0.5, 0.5)) * vec2(800.0, -800.0);
-
-    vec4 pixel = DrawOrreryPixel(normalizedCoords);
+    vec4 pixel = DrawOrreryPixel(uv);
 
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);

@@ -111,6 +111,8 @@ layout(binding = 14) uniform UniformBlock {
     float nebulaBase;
     float nebulaMultiplyer;
 
+    uint orbitMask;
+
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {
@@ -491,17 +493,46 @@ void main() {
                 break;
         }
 
+        if(uniforms.game_context == 2)
+        {
+            if(uv.x >= 0.52 && uv.x < 0.98)
+            {
+                if(uv.y >= 0.011 && uv.y < 0.37) 
+                {
+                
+                    vec2 ouv;
+
+                    // Normalize the x coordinate
+                    float normalizedX = (uv.x - 0.52) / (0.98 - 0.52);
+                    // Normalize the y coordinate
+                    float normalizedY = (uv.y - 0.011) / (0.37 - 0.011);
+
+                    ouv = vec2(normalizedX, normalizedY);
+                    ouv.y = 1.0 - ouv.y;
+
+                    vec4 orreryPixel = texture(OrreryTexture, ouv);
+                    pixel.rgba = orreryPixel.rgba;
+                }
+            }
+        }
+
         float blendFactor = (roto.navMask & 0xff) / 255.0;
 
         if(blendFactor > 0.0)
         {
-            if((roto.navMask >> 8) > 0)
+            if((roto.navMask >> 8) == 0xff)
             {
                 vec4 chromaKeyColor = vec4(unpackUnorm4x8(roto.chromaKey)).bgra;
 
                 if(colorDistance(pixel, chromaKeyColor) < 0.05) {
                     pixel = mix(pixel, navigationPixel, blendFactor);
                 }
+            }
+            else if ((roto.navMask >> 8) == 0x80)
+            {
+                vec3 blendedRGB = pixel.rgb + navigationPixel.rgb * (1.0 - pixel.a);
+                float blendedA = pixel.a + navigationPixel.a * (1.0 - pixel.a);
+                pixel = vec4(blendedRGB, blendedA);
             }
             else
             {
@@ -520,13 +551,6 @@ void main() {
         {
             pixel = CGAPalette[c & 3];
         }
-    }
-
-    if(uv.x >= 0.5 && uv.y >= 0.5)
-    {
-        vec2 ouv = (uv - vec2(0.5, 0.5)) * vec2(2.0, 2.0);
-        vec4 orreryPixel = texture(OrreryTexture, ouv);
-        pixel.rgb = orreryPixel.rgb;
     }
 
     pixel.a = 1.0;

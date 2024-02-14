@@ -1050,7 +1050,7 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
-void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system)
+void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1076,6 +1076,7 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
         ftr.iconList = iconList;
         ftr.solarSystem = system;
         ftr.renderCount = 0;
+        ftr.orbitMask = orbitMask;
         ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
         ftr.screenCoord = WLD_to_SCR(ftr.worldCoord);
         ftr.heading = (int16_t)Read16(0x5dc7);
@@ -1535,7 +1536,7 @@ static int GraphicsInitThread()
 
         bd.orrery = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
-                s_gc.vc.create_image(2000, 2000, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+                s_gc.vc.create_image(920, 718, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
@@ -2249,7 +2250,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
 
         res.push_back(
-            avk::command::dispatch((2000 + 3) / 4u, (2000 + 3) / 4u, 1));
+            avk::command::dispatch((920 + 3) / 4u, (718 + 3) / 4u, 1));
 
         res.push_back(
             avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].orrery->get_image(),
@@ -2472,6 +2473,7 @@ void GraphicsUpdate()
     uniform.planetSize = frameSync.currentPlanetSphereSize;
     uniform.nebulaBase = 0.0f;
     uniform.nebulaMultiplier = 50.0f;
+    uniform.orbitMask = ftr.orbitMask;
     
     // If we're in a system, nebulas behave a little differently
     if (uniform.game_context == 1 || uniform.game_context == 2)
@@ -2685,12 +2687,13 @@ void GraphicsUpdate()
                 { 3, 148,157, 198, 0x0 },
             };
 
-            for (auto& rect : rects)
+            for(int i = 0; i < rects.size(); ++i)
             {
+                auto& rect = rects[i];
                 for (int y = rect.y0; y < rect.y1; ++y) {
                     for (int x = rect.x0; x < rect.x1; ++x) {
                         int index = y * GRAPHICS_MODE_WIDTH + x;
-                        shaderBackBuffer[index].navMask = 0xffff;
+                        shaderBackBuffer[index].navMask = i == 1 ? 0x80ff : 0xffff;
                         shaderBackBuffer[index].chromaKey = rect.chromaKey;
                     }
                 }
@@ -2754,9 +2757,17 @@ void GraphicsUpdate()
 
             if (frameSync.gameContext == 2)
             {
+                auto sol = ftr.solarSystem;
+
+                if (ftr.iconList.size() > 0)
+                {
+                    // Put the ship in the icon list
+                    sol.push_back(ftr.iconList.back());
+                }
+
                 // Solar system orrery
                 orreryPipeline = s_gc.orreryPipeline;
-                orrery = IconUniform(ftr.solarSystem);
+                orrery = IconUniform(sol);
             }
 
             navPipeline = s_gc.navigationPipeline;

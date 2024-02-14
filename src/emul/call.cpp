@@ -1010,6 +1010,7 @@ static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
+static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
 
 uint64_t s_targetFrameKey = 0;
@@ -2007,7 +2008,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xb0bd) // PARALLEL-TASKS
                 {
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask);
                 }
 
                 if(nextInstr == 0xcbbf) // MANEUVER
@@ -2015,7 +2016,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask);
                 }
 
                 if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 
@@ -2051,10 +2052,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     Icon sun{};
 
                     ForthPushCurrent(iaddr);
-                    uint16_t orbitMask = Read16(0x63ef + 0x11);
+                    s_orbitMask = Read16(0x63ef + 0x11);
                     ForthCall(0x7a14); // IOPEN
 
-                    sun.id = 52;
+                    sun.id = 53; // 52 is the default size
                     sun.clr = 14;
                     sun.icon_type = IconType::Sun;
                     sun.iaddr = iaddr;
@@ -2068,7 +2069,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     for(int i = 0; i <= 7; ++i)
                     {
-                        if (!(orbitMask & (1 << i))) 
+                        if (!(s_orbitMask & (1 << i)))
                             continue;
 
                         for (;;)
@@ -2083,11 +2084,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             auto instOff = GetInstanceOffset();
                             ForthCall(0xda72); // GetCOORDS
                             Icon mi;
-                            mi.y = (int16_t)Pop();
+                            mi.y = -(int16_t)Pop();
                             mi.x = (int16_t)Pop();
                             mi.iaddr = instOff;
 
-                            mi.id = 51;
+                            mi.id = 52; // 51 is the default size
                             mi.clr = 0xf;
 
                             mi.icon_type = IconType::Planet;

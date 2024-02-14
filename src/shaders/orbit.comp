@@ -106,6 +106,8 @@ layout(binding = 4) uniform UniformBlock {
     float nebulaBase;
     float nebulaMultiplier;
 
+    uint orbitMask;
+
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {
