@@ -2094,12 +2094,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             mi.icon_type = IconType::Planet;
 
                             auto planetIt = planets.find(instOff);
-                            assert(planetIt != planets.end());
+                            if (planetIt != planets.end())
+                            {
+                                mi.seed = planetIt->second.seed;
+                            }
+                            else
+                            {
+                                assert(planetIt != planets.end());
+                            }
 
                             mi.planet_to_sunX = mi.x;
                             mi.planet_to_sunY = -mi.y;
 
-                            mi.seed = planetIt->second.seed;
+                            
 
                             miniIcons.push_back(mi);
 

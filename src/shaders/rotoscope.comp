@@ -510,7 +510,27 @@ void main() {
                     ouv = vec2(normalizedX, normalizedY);
                     ouv.y = 1.0 - ouv.y;
 
+                    #if 0
+                    vec2 orrerySize = vec2(textureSize(OrreryTexture, 0));
+
+                    // Supersampling OrreryTexture by averaging 4 samples around the target UV
+                    vec2 ssUvOffsets[4] = vec2[](
+                        vec2(-0.25, -0.25) / orrerySize,
+                        vec2(0.25, -0.25) / orrerySize,
+                        vec2(-0.25, 0.25) / orrerySize,
+                        vec2(0.25, 0.25) / orrerySize
+                    );
+
+                    vec4 orreryPixelSum = vec4(0.0);
+                    for (int i = 0; i < 4; i++) {
+                        orreryPixelSum += texture(OrreryTexture, ouv + ssUvOffsets[i]);
+                    }
+                    vec4 orreryPixel = orreryPixelSum / 4.0;
+                    #else
+
                     vec4 orreryPixel = texture(OrreryTexture, ouv);
+
+                    #endif
                     pixel.rgba = orreryPixel.rgba;
                 }
             }
