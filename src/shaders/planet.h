@@ -115,11 +115,16 @@ void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir,
     vec3 viewDir;
     float fresnelExponent = 2.0; // Adjust this to change the strength of the Fresnel effect
 
+    float alphaOut = 1.0;
+
     if (discriminant < 0.0) {
         color = vec3(0.); // Background color
         point = camPos * rayDir;
         rayNormal = normalize(point - sphereCenter);
         viewDir = normalize(camPos - point);
+
+        alphaOut = 1.0 - abs(discriminant) / 0.1; // Make alpha a function of the distance from 0
+        alphaOut = clamp(alphaOut, 0.0, 1.0); // Ensure alpha stays within [0, 1]
     }
     else {
         // Calculate the intersection point
@@ -193,6 +198,6 @@ void draw_planet(out vec4 fragColor, in vec2 uv, in float iTime, in vec3 sunDir,
     vec3 atmosphereColor = vec3(0.1, 0.2, 0.6) * atmosphereIntensity * atmosphereFade; // Adjust the color to a more realistic sky blue
     color += atmosphereColor * (diffuse + 1.0 * fresnelFactor);
 
-    fragColor = vec4(color, 1.0);
+    fragColor = vec4(color, alphaOut);
 }
 

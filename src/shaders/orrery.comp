@@ -197,7 +197,7 @@ vec4 DrawOrreryPixel(vec2 uv) {
         // 33 is DOWN
         // 34 is DOWN to the RIGHT
         if(icon.id >= 27 && icon.id <= 34) {
-            float distance = 4.0;
+            float distance = 16.0;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 vec2 normUV = calculateNormalizedUVOrrery(iconPos, pixelPos, distance * 2.0);
 
@@ -212,7 +212,7 @@ vec4 DrawOrreryPixel(vec2 uv) {
                 normUV += 0.5;
 
                 vec4 texColor = texture(ShipTexture, normUV);
-                shipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
+                shipPixel = vec4(1.); //vec4(texColor.rgb * texColor.a, texColor.a);
             }
         } else if(icon.id >= 51 && icon.id <= 91) {
             float basesize = 29.0f * float(icon.id - 50);
@@ -239,7 +239,7 @@ vec4 DrawOrreryPixel(vec2 uv) {
             else if(icon.icon_type == Icon_Planet)
             {
                 float dist = calculateDistance(iconPos, pixelPos);
-                if(dist < basesize * 1.05) {
+                if(dist < basesize * 1.30) {
                     vec2 normUV = calculateNormalizedUVOrrery(iconPos, pixelPos, basesize * 1.00);
 
                     vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
@@ -254,13 +254,13 @@ vec4 DrawOrreryPixel(vec2 uv) {
                     if(dist < basesize * 1.0)
                     {
                         //planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
-                        planetPixel.a = 1.0;
+                        //planetPixel.a = 1.0;
                     }
                     else
                     {
-                        float luma = 0.299 * planetPixel.r + 0.587 * planetPixel.g + 0.114 * planetPixel.b;
-                        planetPixel.a = luma;
-                        planetPixel.rgb *= planetPixel.a;
+                        //float luma = 0.299 * planetPixel.r + 0.587 * planetPixel.g + 0.114 * planetPixel.b;
+                        //planetPixel.a = luma;
+                        //planetPixel.rgb *= planetPixel.a;
                     }
                 }
             }

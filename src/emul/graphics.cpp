@@ -2762,7 +2762,9 @@ void GraphicsUpdate()
                 if (ftr.iconList.size() > 0)
                 {
                     // Put the ship in the icon list
-                    sol.push_back(ftr.iconList.back());
+                    auto ship = ftr.iconList.back();
+                    ship.y = -ship.y;
+                    sol.push_back(ship);
                 }
 
                 // Solar system orrery
