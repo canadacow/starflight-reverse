@@ -699,6 +699,13 @@ void Find() // "(FIND)"
 
 void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int color, int seg, bool fill)
 {
+    Rotoscope pixelType = Rotoscope(EllipsePixel);
+
+    if(frameSync.inDrawAuxSys)
+    {
+        pixelType = Rotoscope(AuxSysPixel);
+    }
+
     int XRadiusSq = XRadius * XRadius;
     int YRadiusSq = YRadius * YRadius;
     int twoXRadiusSq = 2 * XRadiusSq;
@@ -717,16 +724,16 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
         {
             for (int i = x_center - x; i <= x_center + x; i++)
             {
-                GraphicsPixel(i, y_center + y, color, seg, Rotoscope(EllipsePixel));
-                GraphicsPixel(i, y_center - y, color, seg, Rotoscope(EllipsePixel));
+                GraphicsPixel(i, y_center + y, color, seg, pixelType);
+                GraphicsPixel(i, y_center - y, color, seg, pixelType);
             }
         }
         else
         {
-            GraphicsPixel(x_center + x, y_center + y, color, seg, Rotoscope(EllipsePixel));
-            GraphicsPixel(x_center - x, y_center + y, color, seg, Rotoscope(EllipsePixel));
-            GraphicsPixel(x_center + x, y_center - y, color, seg, Rotoscope(EllipsePixel));
-            GraphicsPixel(x_center - x, y_center - y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center + x, y_center + y, color, seg, pixelType);
+            GraphicsPixel(x_center - x, y_center + y, color, seg, pixelType);
+            GraphicsPixel(x_center + x, y_center - y, color, seg, pixelType);
+            GraphicsPixel(x_center - x, y_center - y, color, seg, pixelType);
         }
 
         y++;
@@ -757,16 +764,16 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
         {
             for (int i = x_center - x; i <= x_center + x; i++)
             {
-                GraphicsPixel(i, y_center + y, color, seg, Rotoscope(EllipsePixel));
-                GraphicsPixel(i, y_center - y, color, seg, Rotoscope(EllipsePixel));
+                GraphicsPixel(i, y_center + y, color, seg, pixelType);
+                GraphicsPixel(i, y_center - y, color, seg, pixelType);
             }
         }
         else
         {
-            GraphicsPixel(x_center + x, y_center + y, color, seg, Rotoscope(EllipsePixel));
-            GraphicsPixel(x_center - x, y_center + y, color, seg, Rotoscope(EllipsePixel));
-            GraphicsPixel(x_center + x, y_center - y, color, seg, Rotoscope(EllipsePixel));
-            GraphicsPixel(x_center - x, y_center - y, color, seg, Rotoscope(EllipsePixel));
+            GraphicsPixel(x_center + x, y_center + y, color, seg, pixelType);
+            GraphicsPixel(x_center - x, y_center + y, color, seg, pixelType);
+            GraphicsPixel(x_center + x, y_center - y, color, seg, pixelType);
+            GraphicsPixel(x_center - x, y_center - y, color, seg, pixelType);
         }
 
         x++;
@@ -1196,6 +1203,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inGameOps = true;
+                }
+
+                if(nextInstr == 0xe0a3)
+                {
+                    frameSync.inDrawAuxSys = true;
                 }
 
                 if (nextInstr == 0xe4b6) // (PHRASE>CT)
@@ -2042,6 +2054,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xe0a3) // .AUXSYS
                 {
+                    frameSync.inDrawAuxSys = false;
+
                     uint32_t lo_iaddr = Read16(0x629f);
                     uint32_t hi_iaddr = Read8(0x629f + 2);
 
@@ -2100,13 +2114,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                             else
                             {
-                                assert(planetIt != planets.end());
+                                ForthCall(0x7506); // INST-SUB
+
+                                lo_iaddr = Pop();
+                                hi_iaddr = Pop();
+
+                                iaddr = (hi_iaddr << 16) | lo_iaddr;
+
                             }
 
                             mi.planet_to_sunX = mi.x;
                             mi.planet_to_sunY = -mi.y;
-
-                            
 
                             miniIcons.push_back(mi);
 
@@ -3293,6 +3311,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
             //printf("LFILLPOLY YMIN %d YMAX %d SCAN 0x%x\n", YMIN, YMAX, SCAN);
 
+
             for(uint16_t y = YMIN; y <= YMAX; ++y)
             {
                 // 0x0547: mov    cx,[57EC] // YMIN
@@ -3305,25 +3324,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 auto xr = Read8(rasterOffset + 1);
                 //printf("LFILLPOLY y %d, xl %d, xr %d color %d\n", y, xl, xr, color);
 
-                #if 1
                 for(uint16_t x = xl; x <= xr; ++x)
                 {
-                    GraphicsPixel(x, y, color, bufseg, Rotoscope(PolyFillPixel));
-                }
-                #else
-                if(y == YMIN || y == YMAX)
-                {
-                    for(uint16_t x = xl; x <= xr; ++x)
+                    if(frameSync.inDrawAuxSys)
                     {
-                        GraphicsPixel(x, y, color, bufseg);
+                        GraphicsPixel(x, y, color, bufseg, Rotoscope(AuxSysPixel));
+                    }
+                    else
+                    {
+                        GraphicsPixel(x, y, color, bufseg, Rotoscope(PolyFillPixel));
                     }
                 }
-                else
-                {
-                    GraphicsPixel(xl, y, color, bufseg);
-                    GraphicsPixel(xr, y, color, bufseg);
-                }
-                #endif
             }
         }
         break;

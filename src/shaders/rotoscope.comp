@@ -374,6 +374,38 @@ vec4 DrawNavigationPixel(ivec2 pixelPos) {
     return imageLoad(NavigationTexture, pixelPos);
 }
 
+vec4 DrawAuxSysPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
+    float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
+    float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
+
+    vec2 ouv = vec2(subX, subY);
+    ouv.y = 1.0 - ouv.y;
+
+    #if 0
+    vec2 orrerySize = vec2(textureSize(OrreryTexture, 0));
+
+    // Supersampling OrreryTexture by averaging 4 samples around the target UV
+    vec2 ssUvOffsets[4] = vec2[](
+        vec2(-0.25, -0.25) / orrerySize,
+        vec2(0.25, -0.25) / orrerySize,
+        vec2(-0.25, 0.25) / orrerySize,
+        vec2(0.25, 0.25) / orrerySize
+    );
+
+    vec4 orreryPixelSum = vec4(0.0);
+    for (int i = 0; i < 4; i++) {
+        orreryPixelSum += texture(OrreryTexture, ouv + ssUvOffsets[i]);
+    }
+    vec4 orreryPixel = orreryPixelSum / 4.0;
+    #else
+
+    vec4 orreryPixel = texture(OrreryTexture, ouv);
+
+    #endif
+
+    return orreryPixel;
+}
+
 vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel;
 
@@ -489,51 +521,11 @@ void main() {
                 break;
             case NavigationalPixel:
                 break;
+            case AuxSysPixel:
+                pixel = DrawAuxSysPixel(roto, uv, subUv);
+                break;
             default:
                 break;
-        }
-
-        if(uniforms.game_context == 2)
-        {
-            if(uv.x >= 0.52 && uv.x < 0.98)
-            {
-                if(uv.y >= 0.011 && uv.y < 0.37) 
-                {
-                
-                    vec2 ouv;
-
-                    // Normalize the x coordinate
-                    float normalizedX = (uv.x - 0.52) / (0.98 - 0.52);
-                    // Normalize the y coordinate
-                    float normalizedY = (uv.y - 0.011) / (0.37 - 0.011);
-
-                    ouv = vec2(normalizedX, normalizedY);
-                    ouv.y = 1.0 - ouv.y;
-
-                    #if 0
-                    vec2 orrerySize = vec2(textureSize(OrreryTexture, 0));
-
-                    // Supersampling OrreryTexture by averaging 4 samples around the target UV
-                    vec2 ssUvOffsets[4] = vec2[](
-                        vec2(-0.25, -0.25) / orrerySize,
-                        vec2(0.25, -0.25) / orrerySize,
-                        vec2(-0.25, 0.25) / orrerySize,
-                        vec2(0.25, 0.25) / orrerySize
-                    );
-
-                    vec4 orreryPixelSum = vec4(0.0);
-                    for (int i = 0; i < 4; i++) {
-                        orreryPixelSum += texture(OrreryTexture, ouv + ssUvOffsets[i]);
-                    }
-                    vec4 orreryPixel = orreryPixelSum / 4.0;
-                    #else
-
-                    vec4 orreryPixel = texture(OrreryTexture, ouv);
-
-                    #endif
-                    pixel.rgba = orreryPixel.rgba;
-                }
-            }
         }
 
         float blendFactor = (roto.navMask & 0xff) / 255.0;

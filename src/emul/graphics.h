@@ -172,6 +172,7 @@ enum PixelContents
     PlotPixel,
     TilePixel,
     RunBitPixel,
+    AuxSysPixel,
 };
 
 enum IconType
@@ -435,7 +436,7 @@ struct Rotoscope
 
     Rotoscope(PixelContents pixel)
     {
-        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == RunBitPixel);
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == RunBitPixel || pixel == AuxSysPixel);
         content = pixel;
         EGAcolor = 0;
         argb = 0;
@@ -469,6 +470,7 @@ struct Rotoscope
                 case PlotPixel:
                 case PolyFillPixel:
                 case TilePixel:
+                case AuxSysPixel:
                     break;
                 case NavigationalPixel:
                     navigationData = other.navigationData;
@@ -497,7 +499,7 @@ struct Rotoscope
     }
 
     Rotoscope& operator=(const PixelContents& pixel) {
-        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel);
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == AuxSysPixel);
         content = pixel;
         EGAcolor = 0;
         argb = 0;
@@ -553,6 +555,7 @@ struct FrameSync {
 
     bool inGameOps = false;
     bool inNebula = false;
+    bool inDrawAuxSys = false;
 
     inline static const vec3<float> staringPos = { 0.0f, -0.918f, 0.397f };
 

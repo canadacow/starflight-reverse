@@ -1133,6 +1133,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case TilePixel:
         case NavigationalPixel:
         case PicPixel:
+        case AuxSysPixel:
             break;
         case TextPixel:
             textData = other.textData;
@@ -2483,6 +2484,7 @@ void GraphicsUpdate()
     }
 
     bool hasNavigation = false;
+    bool hasAuxSysPixel = false;
     static uint32_t activeAlien = 0;
 
     std::vector<avk::recorded_commands_t> commands{};
@@ -2562,6 +2564,9 @@ void GraphicsUpdate()
         {
             std::lock_guard<std::mutex> lg(rotoscopePixelMutex);
 
+            vec2<int32_t> auxSysTL = { INT32_MAX, INT32_MAX };
+            vec2<int32_t> auxSysBR = { INT32_MIN, INT32_MIN };
+
             for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i)
             {
 #if defined(USE_CPU_RASTERIZATION)
@@ -2573,6 +2578,17 @@ void GraphicsUpdate()
                 {
                     hasNavigation = true;
                     shaderBackBuffer[i].navMask = 0xff;
+                }
+
+                if (rotoscopePixels[i].content == AuxSysPixel)
+                {
+                    hasAuxSysPixel = true;
+                    int currentX = i % GRAPHICS_MODE_WIDTH;
+                    int currentY = i / GRAPHICS_MODE_WIDTH;
+                    auxSysTL.x = (std::min)(auxSysTL.x, currentX);
+                    auxSysTL.y = (std::min)(auxSysTL.y, currentY);
+                    auxSysBR.x = (std::max)(auxSysBR.x, currentX);
+                    auxSysBR.y = (std::max)(auxSysBR.y, currentY);
                 }
 
                 if(rotoscopePixels[i].content == RunBitPixel)
@@ -2587,6 +2603,23 @@ void GraphicsUpdate()
                     }
                 }
 #endif
+            }
+
+            if (hasAuxSysPixel) {
+                int auxSysWidth = auxSysBR.x - auxSysTL.x + 1;
+                int auxSysHeight = auxSysBR.y - auxSysTL.y + 1;
+
+                for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i) {
+                    if (rotoscopePixels[i].content == AuxSysPixel) {
+                        int currentX = i % GRAPHICS_MODE_WIDTH;
+                        int currentY = i / GRAPHICS_MODE_WIDTH;
+
+                        rotoscopePixels[i].blt_x = currentX - auxSysTL.x;
+                        rotoscopePixels[i].blt_y = currentY - auxSysTL.y;
+                        rotoscopePixels[i].blt_w = auxSysWidth;
+                        rotoscopePixels[i].blt_h = auxSysHeight;
+                    }
+                }
             }
         }
 
@@ -2683,7 +2716,7 @@ void GraphicsUpdate()
 
             const std::vector<SolidRect> rects = {
                 { 12, 0, 68, 7, 0xaaaaaa },
-                { 84, 2, 154, 74, 0x0 },
+                { 83, 2, 157, 74, 0x0 },
                 { 3, 148,157, 198, 0x0 },
             };
 
@@ -2755,7 +2788,7 @@ void GraphicsUpdate()
                 }
             }
 
-            if (frameSync.gameContext == 2)
+            if (hasAuxSysPixel)
             {
                 auto sol = ftr.solarSystem;
 
