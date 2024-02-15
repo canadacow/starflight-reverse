@@ -2726,7 +2726,8 @@ void GraphicsUpdate()
                 for (int y = rect.y0; y < rect.y1; ++y) {
                     for (int x = rect.x0; x < rect.x1; ++x) {
                         int index = y * GRAPHICS_MODE_WIDTH + x;
-                        shaderBackBuffer[index].navMask = i == 1 ? 0x80ff : 0xffff;
+                        shaderBackBuffer[index].navMask = i == 1 ? 0x8000 : 0xff00;
+                        shaderBackBuffer[index].navMask += navMaskValue;
                         shaderBackBuffer[index].chromaKey = rect.chromaKey;
                     }
                 }

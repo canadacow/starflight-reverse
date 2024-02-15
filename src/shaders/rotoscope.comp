@@ -565,11 +565,11 @@ void main() {
             }
             else if ((roto.navMask >> 8) == 0x80)
             {
-                navigationPixel = (blur13(vec2(pixelPos), vec2(1.0, 0.0)) + blur13(vec2(pixelPos), vec2(0.0, 1.0))) / 2.0;
+                navigationPixel = (blur13(vec2(pixelPos), vec2(2.0, 0.0)) + blur13(vec2(pixelPos), vec2(0.0, 2.0))) / 2.0;
 
                 vec3 blendedRGB = pixel.rgb + navigationPixel.rgb * (1.0 - pixel.a);
                 float blendedA = pixel.a + navigationPixel.a * (1.0 - pixel.a);
-                pixel = vec4(blendedRGB, blendedA);
+                pixel = mix(pixel, vec4(blendedRGB, blendedA), blendFactor);
             }
             else
             {

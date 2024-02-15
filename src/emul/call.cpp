@@ -2056,87 +2056,91 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     frameSync.inDrawAuxSys = false;
 
-                    uint32_t lo_iaddr = Read16(0x629f);
-                    uint32_t hi_iaddr = Read8(0x629f + 2);
-
-                    uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
-
-                    std::vector<Icon> miniIcons;
-
-                    Icon sun{};
-
-                    ForthPushCurrent(iaddr);
-                    s_orbitMask = Read16(0x63ef + 0x11);
-                    ForthCall(0x7a14); // IOPEN
-
-                    sun.id = 53; // 52 is the default size
-                    sun.clr = 14;
-                    sun.icon_type = IconType::Sun;
-                    sun.iaddr = iaddr;
-
-                    miniIcons.push_back(sun);
-
-                    ForthCall(0x7a86); // INEXT 
-
-                    auto systemIt = starsystem.find(iaddr);
-                    assert(systemIt != starsystem.end());
-
-                    for(int i = 0; i <= 7; ++i)
+                    if (frameSync.gameContext == 2)
                     {
-                        if (!(s_orbitMask & (1 << i)))
-                            continue;
 
-                        for (;;)
+                        uint32_t lo_iaddr = Read16(0x629f);
+                        uint32_t hi_iaddr = Read8(0x629f + 2);
+
+                        uint32_t iaddr = (hi_iaddr << 16) | lo_iaddr;
+
+                        std::vector<Icon> miniIcons;
+
+                        Icon sun{};
+
+                        ForthPushCurrent(iaddr);
+                        s_orbitMask = Read16(0x63ef + 0x11);
+                        ForthCall(0x7a14); // IOPEN
+
+                        sun.id = 53; // 52 is the default size
+                        sun.clr = 14;
+                        sun.icon_type = IconType::Sun;
+                        sun.iaddr = iaddr;
+
+                        miniIcons.push_back(sun);
+
+                        ForthCall(0x7a86); // INEXT 
+
+                        auto systemIt = starsystem.find(iaddr);
+                        assert(systemIt != starsystem.end());
+
+                        for (int i = 0; i <= 7; ++i)
                         {
-                            auto instType = GetInstanceClass();
-                            if (instType != 11)
-                            {
-                                ForthCall(0x7a86); // INEXT
+                            if (!(s_orbitMask & (1 << i)))
                                 continue;
-                            }
 
-                            auto instOff = GetInstanceOffset();
-                            ForthCall(0xda72); // GetCOORDS
-                            Icon mi;
-                            mi.y = -(int16_t)Pop();
-                            mi.x = (int16_t)Pop();
-                            mi.iaddr = instOff;
-
-                            mi.id = 52; // 51 is the default size
-                            mi.clr = 0xf;
-
-                            mi.icon_type = IconType::Planet;
-
-                            auto planetIt = planets.find(instOff);
-                            if (planetIt != planets.end())
+                            for (;;)
                             {
-                                mi.seed = planetIt->second.seed;
+                                auto instType = GetInstanceClass();
+                                if (instType != 11)
+                                {
+                                    ForthCall(0x7a86); // INEXT
+                                    continue;
+                                }
+
+                                auto instOff = GetInstanceOffset();
+                                ForthCall(0xda72); // GetCOORDS
+                                Icon mi;
+                                mi.y = -(int16_t)Pop();
+                                mi.x = (int16_t)Pop();
+                                mi.iaddr = instOff;
+
+                                mi.id = 52; // 51 is the default size
+                                mi.clr = 0xf;
+
+                                mi.icon_type = IconType::Planet;
+
+                                auto planetIt = planets.find(instOff);
+                                if (planetIt != planets.end())
+                                {
+                                    mi.seed = planetIt->second.seed;
+                                }
+                                else
+                                {
+                                    ForthCall(0x7506); // INST-SUB
+
+                                    lo_iaddr = Pop();
+                                    hi_iaddr = Pop();
+
+                                    iaddr = (hi_iaddr << 16) | lo_iaddr;
+
+                                }
+
+                                mi.planet_to_sunX = mi.x;
+                                mi.planet_to_sunY = -mi.y;
+
+                                miniIcons.push_back(mi);
+
+                                ForthCall(0x7a86); // INEXT
+                                break;
                             }
-                            else
-                            {
-                                ForthCall(0x7506); // INST-SUB
-
-                                lo_iaddr = Pop();
-                                hi_iaddr = Pop();
-
-                                iaddr = (hi_iaddr << 16) | lo_iaddr;
-
-                            }
-
-                            mi.planet_to_sunX = mi.x;
-                            mi.planet_to_sunY = -mi.y;
-
-                            miniIcons.push_back(mi);
-
-                            ForthCall(0x7a86); // INEXT
-                            break;
                         }
+
+                        s_currentSolarSystem = miniIcons;
+
+                        ForthCall(0x79cb); // ICLOSE
+                        ForthPopCurrent();
                     }
-
-                    s_currentSolarSystem = miniIcons;
-
-                    ForthCall(0x79cb); // ICLOSE
-                    ForthPopCurrent();
                 }
             }
         break;
