@@ -2070,19 +2070,55 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         ForthPushCurrent(iaddr);
                         s_orbitMask = Read16(0x63ef + 0x11);
+
+                        ForthCall(0x7532); // @INST-SPECIES
+                        auto species = Pop();
+
                         ForthCall(0x7a14); // IOPEN
 
                         sun.id = 53; // 52 is the default size
-                        sun.clr = 14;
+                        sun.clr = 15;
                         sun.icon_type = IconType::Sun;
                         sun.iaddr = iaddr;
+
+                        auto systemIt = starsystem.find(iaddr);
+                        assert(systemIt != starsystem.end());
+
+                        switch (species)
+                        {
+                            case 77:
+                                // GetColor(RED);
+                                sun.clr = 0x04;
+                                break;
+                            case 75:
+                                // GetColor(ORANGE);
+                                sun.clr = 0x06;
+                                break;
+                            case 71:
+                                // GetColor(YELLOW);
+                                sun.clr = 0x0e;
+                                break;
+                            case 70:
+                                // GetColor(WHITE);
+                                sun.clr = 0x0f;
+                                break;
+                            case 65:
+                                // GetColor(GREEN);
+                                sun.clr = 0x03;
+                                break;
+                            case 66:
+                                // GetColor(BLUE);
+                                sun.clr = 0x09;
+                                break;
+                            default:
+                                // GetColor(LT_dash_BLUE);
+                                sun.clr = 0x0b;
+                                break;
+                        }
 
                         miniIcons.push_back(sun);
 
                         ForthCall(0x7a86); // INEXT 
-
-                        auto systemIt = starsystem.find(iaddr);
-                        assert(systemIt != starsystem.end());
 
                         for (int i = 0; i <= 7; ++i)
                         {
