@@ -697,6 +697,24 @@ void Find() // "(FIND)"
     }
 }
 
+const unsigned short int pp_ILEFT = 0x5738; // ILEFT size: 2
+const unsigned short int pp_IRIGHT = 0x5745; // IRIGHT size: 2
+const unsigned short int pp_IBELOW = 0x5752; // IBELOW size: 2
+const unsigned short int pp_IABOVE = 0x575f; // IABOVE size: 2
+
+static void ClippedGraphicsPixel(int x, int y, int color, uint32_t offset, Rotoscope pc) {
+    // Assume GetBoundaryValue is a function or a mechanism to retrieve the stored values
+    // for the clipping boundaries from their respective addresses or variables.
+    int16_t leftBoundary = (int16_t)Read16(pp_ILEFT);
+    int16_t rightBoundary = (int16_t)Read16(pp_IRIGHT);
+    int16_t topBoundary = (int16_t)Read16(pp_IABOVE);
+    int16_t bottomBoundary = (int16_t)Read16(pp_IBELOW);
+
+    if (x >= leftBoundary && x <= rightBoundary && y >= bottomBoundary && y <= topBoundary) {
+        GraphicsPixel(x, y, color, offset, pc);
+    }
+}
+
 void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int color, int seg, bool fill)
 {
     Rotoscope pixelType = Rotoscope(EllipsePixel);
@@ -724,16 +742,16 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
         {
             for (int i = x_center - x; i <= x_center + x; i++)
             {
-                GraphicsPixel(i, y_center + y, color, seg, pixelType);
-                GraphicsPixel(i, y_center - y, color, seg, pixelType);
+                ClippedGraphicsPixel(i, y_center + y, color, seg, pixelType);
+                ClippedGraphicsPixel(i, y_center - y, color, seg, pixelType);
             }
         }
         else
         {
-            GraphicsPixel(x_center + x, y_center + y, color, seg, pixelType);
-            GraphicsPixel(x_center - x, y_center + y, color, seg, pixelType);
-            GraphicsPixel(x_center + x, y_center - y, color, seg, pixelType);
-            GraphicsPixel(x_center - x, y_center - y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center + x, y_center + y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center - x, y_center + y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center + x, y_center - y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center - x, y_center - y, color, seg, pixelType);
         }
 
         y++;
@@ -764,16 +782,16 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
         {
             for (int i = x_center - x; i <= x_center + x; i++)
             {
-                GraphicsPixel(i, y_center + y, color, seg, pixelType);
-                GraphicsPixel(i, y_center - y, color, seg, pixelType);
+                ClippedGraphicsPixel(i, y_center + y, color, seg, pixelType);
+                ClippedGraphicsPixel(i, y_center - y, color, seg, pixelType);
             }
         }
         else
         {
-            GraphicsPixel(x_center + x, y_center + y, color, seg, pixelType);
-            GraphicsPixel(x_center - x, y_center + y, color, seg, pixelType);
-            GraphicsPixel(x_center + x, y_center - y, color, seg, pixelType);
-            GraphicsPixel(x_center - x, y_center - y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center + x, y_center + y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center - x, y_center + y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center + x, y_center - y, color, seg, pixelType);
+            ClippedGraphicsPixel(x_center - x, y_center - y, color, seg, pixelType);
         }
 
         x++;
@@ -1009,6 +1027,28 @@ uint8_t frequencyLookupTable[] = {
 
 #pragma pack(pop)
 
+static Icon GetIcon(uint16_t index) {
+    uint16_t IXSEG = Read16(0x59be);
+    uint16_t IYSEG = Read16(0x59c2);
+    uint16_t IDSEG = Read16(0x59c6);
+    uint16_t ICSEG = Read16(0x59ca);
+    uint16_t ILSEG = Read16(0x59ce);
+    uint16_t IHSEG = Read16(0x59da);
+
+    Icon icon;
+    uint16_t IINDEX = index;
+    icon.x = (int32_t)(int16_t)Read16Long(IXSEG, IINDEX * 2);
+    icon.y = (int32_t)(int16_t)Read16Long(IYSEG, IINDEX * 2);
+    icon.id = Read8Long(IDSEG, IINDEX);
+    icon.clr = Read8Long(ICSEG, IINDEX);
+    
+    uint32_t lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
+    uint32_t hi_iaddr = Read8Long(IHSEG, IINDEX);
+    icon.iaddr = (hi_iaddr << 16) | lo_iaddr;
+
+    return icon;
+};
+
 extern unsigned short regbx;
 uint16_t nparmsStackSi = 0;
 
@@ -1205,6 +1245,26 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inGameOps = true;
                 }
 
+                if(nextInstr == 0xeaa2 && (std::string(overlayName) == "MAP-OV")) // >GAMEOPTIONS 
+                {
+                    const unsigned short int pp_ILOCAL = 0x59f5;
+                    frameSync.inDrawStarMap = true;
+
+                    auto iconCount = Read16(pp_ILOCAL);
+
+                    std::vector<Icon> starMapLocale{};
+
+                    for (uint16_t i = 0; i < iconCount; ++i)
+                    {
+                        bool found = false;
+
+                        Icon icon = GetIcon(i);
+                        starMapLocale.push_back(icon);
+                    }
+
+                    printf("Starmap Locale has %d icons\n", iconCount);
+                }
+
                 if(nextInstr == 0xe0a3)
                 {
                     frameSync.inDrawAuxSys = true;
@@ -1214,6 +1274,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     s_recordedText = "";
                     s_shouldRecordText = true;
+                }
+
+                if (nextInstr == 0xa705) // INIT-BUTTON
+                {
+                    frameSync.inDrawShipButton = true;
+                }
+
+                if (nextInstr == 0xa042) // .1LOGO
+                {
+                    frameSync.inSmallLogo = true;
                 }
 
                 if (nextInstr == 0xe6f8) // MANEUVER
@@ -1395,29 +1465,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     uint16_t localCount = Read16(0x59f5); // ILOCAL?
                     //printf("localCount %d\n", localCount);
 
-                    auto getIcon = [](uint16_t index) -> Icon {
-                        uint16_t IXSEG = Read16(0x59be);
-                        uint16_t IYSEG = Read16(0x59c2);
-                        uint16_t IDSEG = Read16(0x59c6);
-                        uint16_t ICSEG = Read16(0x59ca);
-                        uint16_t ILSEG = Read16(0x59ce);
-                        uint16_t IHSEG = Read16(0x59da);
-
-                        Icon icon;
-                        uint16_t IINDEX = index;
-                        icon.x = (int32_t)(int16_t)Read16Long(IXSEG, IINDEX * 2);
-                        icon.y = (int32_t)(int16_t)Read16Long(IYSEG, IINDEX * 2);
-                        icon.id = Read8Long(IDSEG, IINDEX);
-                        icon.clr = Read8Long(ICSEG, IINDEX);
-
-                        
-                        uint32_t lo_iaddr = Read16Long(ILSEG, IINDEX * 2);
-                        uint32_t hi_iaddr = Read8Long(IHSEG, IINDEX);
-                        icon.iaddr = (hi_iaddr << 16) | lo_iaddr;
-
-                        return icon;
-                    };
-
                     s_currentIconList.clear();
 
                     //ASMCall(0x7577); // CI
@@ -1433,7 +1480,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         Icon icon{};
                         for (uint16_t i = 0; i < localCount; ++i)
                         {
-                            icon = getIcon(i);
+                            icon = GetIcon(i);
 
                             ForthPushCurrent(icon.iaddr);
                             auto instType = GetInstanceClass();
@@ -1539,7 +1586,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     {
                         bool found = false;
 
-                        Icon icon = getIcon(i);
+                        Icon icon = GetIcon(i);
 
                         Push(icon.x);
                         Push(icon.y);
@@ -2036,6 +2083,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inGameOps = false;
                 }
 
+                if(nextInstr == 0xeaa2 && (std::string(overlayName) == "MAP-OV")) // >GAMEOPTIONS 
+                {
+                    frameSync.inDrawStarMap = false;
+                }
+
                 if (nextInstr == 0xdb04) // ORBSETUP
                 {
                     uint32_t lo_iaddr = Read16(0x62bf);
@@ -2050,6 +2102,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.currentPlanetSphereSize = 100;
 
                     GraphicsSetOrbitState(OrbitState::Holding);
+                }
+
+                if (nextInstr == 0xa705) // INIT-BUTTON
+                {
+                    frameSync.inDrawShipButton = false;
+                }
+
+                if (nextInstr == 0xa042) // .1LOGO
+                {
+                    frameSync.inSmallLogo = false;
                 }
 
                 if(nextInstr == 0xe0a3) // .AUXSYS
@@ -3168,6 +3230,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
                 Rotoscope rs{};
                 rs.content = PicPixel;
+                if(frameSync.inDrawShipButton)
+                {
+                    rs.picData.picID = 0x8000;
+                }
+                if(frameSync.inSmallLogo)
+                {
+                    rs.picData.picID = 0x8001;
+                }
                 GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode, bufseg, rs);
             }
             //exit(1);

@@ -391,8 +391,6 @@ struct NavigationData
 struct PicData
 {
     uint64_t picID;
-    uint8_t  pic_x;
-    uint8_t  pic_y;
 };
 
 struct Rotoscope
@@ -556,6 +554,9 @@ struct FrameSync {
     bool inGameOps = false;
     bool inNebula = false;
     bool inDrawAuxSys = false;
+    bool inDrawShipButton = false;
+    bool inSmallLogo = false;
+    bool inDrawStarMap = false;
 
     inline static const vec3<float> staringPos = { 0.0f, -0.918f, 0.397f };
 

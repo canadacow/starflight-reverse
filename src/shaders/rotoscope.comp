@@ -503,6 +503,21 @@ vec4 blur13(vec2 uv, vec2 direction) {
   return color;
 }
 
+vec4 DrawPicPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
+    float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
+    float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
+
+    vec2 ouv = vec2(subX, subY);
+
+    if(roto.runBitData.tag == 0x8000)
+    {
+        return vec4(subX, subY, 0.0, 1.0);
+    }
+    
+    vec4 val = vec4(unpackUnorm4x8(roto.argb)).bgra + vec4(0.5, 0.0, 0.0, 0.1);
+    return val;
+}
+
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
     vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
@@ -546,6 +561,9 @@ void main() {
                 break;
             case AuxSysPixel:
                 pixel = DrawAuxSysPixel(roto, uv, subUv);
+                break;
+            case PicPixel:
+                pixel = DrawPicPixel(roto, uv, subUv);
                 break;
             default:
                 break;

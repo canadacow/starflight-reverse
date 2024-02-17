@@ -1132,7 +1132,6 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case PolyFillPixel:
         case TilePixel:
         case NavigationalPixel:
-        case PicPixel:
         case AuxSysPixel:
             break;
         case TextPixel:
@@ -1140,6 +1139,9 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
             break;
         case LinePixel:
             lineData = other.lineData;
+            break;
+        case PicPixel:
+            runBitData.tag = other.picData.picID;
             break;
         case RunBitPixel:
             runBitData = other.runBitData;
@@ -2256,6 +2258,12 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         res.push_back(
             avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].orrery->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal }));
+    }
+    else
+    {
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].orrery->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }));
     }
 
     if(navPipeline.has_value())
