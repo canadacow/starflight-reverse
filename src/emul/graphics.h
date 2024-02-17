@@ -276,8 +276,10 @@ struct Icon {
 
 extern std::vector<Icon> GetLocalIconList(uint32_t* gameContext);
 
+template<size_t N>
 struct IconUniform {
-    ShaderIcon icons[32];
+    static_assert(N > 0, "IconUniform must contain at least one icon.");
+    ShaderIcon icons[N];
 
     static void ConvertIconToShaderIcon(const Icon& icon, ShaderIcon& shaderIcon)
     {
@@ -300,9 +302,9 @@ struct IconUniform {
 
     IconUniform(std::vector<Icon> _icons)
     {
-        assert(_icons.size() < _countof(icons));
+        assert(_icons.size() <= N);
 
-        for(int i = 0; i < _countof(icons); ++i)
+        for(int i = 0; i < N; ++i)
         {
             if(i < _icons.size())
             {
@@ -317,7 +319,7 @@ struct IconUniform {
 
     IconUniform(Icon planet)
     {
-        for(int i = 0; i < _countof(icons); ++i)
+        for(int i = 0; i < N; ++i)
         {
             icons[i].isActive = 0;
         }

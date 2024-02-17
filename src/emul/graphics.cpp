@@ -1562,19 +1562,19 @@ static int GraphicsInitThread()
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform)));
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<32>)));
 
         bd.orreryUniform =
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform))); 
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<32>))); 
 
         bd.starmapUniform =
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(ShaderIcon) * 1024));
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<1024>)));
 
         s_gc.buffers.push_back(std::move(bd));
     }
@@ -2225,9 +2225,9 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
 
 std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, 
     UniformBlock& uniform, 
-    IconUniform& iconUniform,
-    IconUniform& orreryUniform,
-    IconUniform& starmapUniform,
+    IconUniform<32>& iconUniform,
+    IconUniform<32>& orreryUniform,
+    IconUniform<1024>& starmapUniform,
     const std::vector<RotoscopeShader>& shaderBackBuffer, 
     avk::compute_pipeline navPipeline,
     avk::compute_pipeline orreryPipeline,
@@ -2258,10 +2258,13 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         ));
 
     res.push_back(
-        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform)));
+        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform<32>)));
 
     res.push_back(
-        s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform)));        
+        s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform<32>)));        
+
+    res.push_back(
+        s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<1024>)));        
 
     if (orreryPipeline.has_value())
     {
@@ -2380,7 +2383,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     return res;
 }
 
-uint32_t IconUniform::IndexFromSeed(uint32_t seed)
+template<size_t N>
+uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
 {
     if(seed == 0)
     {
@@ -2840,13 +2844,13 @@ void GraphicsUpdate()
         avk::compute_pipeline orreryPipeline{};
         avk::compute_pipeline starmapPipeline{};
 
-        IconUniform ic{};
-        IconUniform orrery{};
-        IconUniform starmap{};
+        IconUniform<32> ic{};
+        IconUniform<32> orrery{};
+        IconUniform<1024> starmap{};
 
         if(frameSync.gameContext != 1)
         {
-            ic = IconUniform(ftr.iconList);
+            ic = IconUniform<32>(ftr.iconList);
             for (int i = 0; i < 32; ++i)
             {
                 if (ic.icons[i].isActive)
@@ -2878,7 +2882,7 @@ void GraphicsUpdate()
 
                 // Solar system orrery
                 orreryPipeline = s_gc.orreryPipeline;
-                orrery = IconUniform(sol);
+                orrery = IconUniform<32>(sol);
             }
 
             navPipeline = s_gc.navigationPipeline;
@@ -2889,7 +2893,7 @@ void GraphicsUpdate()
             {
                 if(i.seed == frameSync.currentPlanet)
                 {
-                    ic = IconUniform(i);
+                    ic = IconUniform<32>(i);
                     ic.icons[0].screenX = 36;
                     ic.icons[0].screenY = 61;
                     ic.icons[0].bltX = 36;
