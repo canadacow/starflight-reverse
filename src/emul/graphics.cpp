@@ -106,6 +106,7 @@ struct GraphicsContext
         avk::command_buffer command;
         avk::image_sampler navigation;
         avk::image_sampler orrery;
+        avk::image_sampler starmap;
     };
     
     std::vector<BufferData> buffers;
@@ -134,6 +135,7 @@ struct GraphicsContext
     avk::compute_pipeline orbitPipeline;
     avk::compute_pipeline orreryPipeline;
     avk::compute_pipeline textPipeline;
+    avk::compute_pipeline starmapPipeline;
 
     avk::descriptor_cache descriptorCache;
 
@@ -1540,6 +1542,12 @@ static int GraphicsInitThread()
         bd.orrery = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
                 s_gc.vc.create_image(920, 718, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
+
+        bd.starmap = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
