@@ -103,6 +103,7 @@ struct GraphicsContext
         avk::buffer uniform;
         avk::buffer iconUniform;
         avk::buffer orreryUniform;
+        avk::buffer starmapUniform;
         avk::command_buffer command;
         avk::image_sampler navigation;
         avk::image_sampler orrery;
@@ -1052,7 +1053,7 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
-void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask)
+void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const std::vector<Icon>& starMap)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1077,6 +1078,7 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
         ftr.deadReckoning = { x , y };
         ftr.iconList = iconList;
         ftr.solarSystem = system;
+        ftr.starMap = starMap;
         ftr.renderCount = 0;
         ftr.orbitMask = orbitMask;
         ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
@@ -1098,6 +1100,10 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
     }
     else
     {
+        std::unique_lock<std::mutex> lock(frameSync.mutex);
+
+        frameSync.stoppedFrame.starMap = starMap;
+
         frameSync.frameCompleted.notify_one();
     }
 }
@@ -1135,6 +1141,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case TilePixel:
         case NavigationalPixel:
         case AuxSysPixel:
+        case StarMapPixel:
             break;
         case TextPixel:
             textData = other.textData;
@@ -1561,7 +1568,13 @@ static int GraphicsInitThread()
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform)));                
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform))); 
+
+        bd.starmapUniform =
+            s_gc.vc.create_buffer(
+                avk::memory_usage::host_coherent,
+                vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
+                avk::uniform_buffer_meta::create_from_size(sizeof(ShaderIcon) * 1024));
 
         s_gc.buffers.push_back(std::move(bd));
     }
@@ -1598,7 +1611,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::buffer>(0, 14, s_gc.buffers[0].uniform),
         avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 16, 1u),
-        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 17, 1u)
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 17, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 18, 1u)
     );
 
     s_gc.navigationPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -1629,6 +1643,16 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
         avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
         avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].orreryUniform)
+    );
+
+    s_gc.starmapPipeline = s_gc.vc.create_compute_pipeline_for(
+        "starmap.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].starmapUniform)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -2203,9 +2227,11 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     UniformBlock& uniform, 
     IconUniform& iconUniform,
     IconUniform& orreryUniform,
+    IconUniform& starmapUniform,
     const std::vector<RotoscopeShader>& shaderBackBuffer, 
     avk::compute_pipeline navPipeline,
-    avk::compute_pipeline orreryPipeline)
+    avk::compute_pipeline orreryPipeline,
+    avk::compute_pipeline starmapPipeline)
 {
     std::vector<avk::recorded_commands_t> res{};
 
@@ -2315,6 +2341,10 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     }
 
     res.push_back(
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }));
+
+    res.push_back(
         avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()));
 
     res.push_back(
@@ -2336,7 +2366,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 14, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
                 avk::descriptor_binding(0, 15, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer()),
                 avk::descriptor_binding(0, 16, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 17, s_gc.buffers[inFlightIndex].orrery->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
+                avk::descriptor_binding(0, 17, s_gc.buffers[inFlightIndex].orrery->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 18, s_gc.buffers[inFlightIndex].starmap->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
             })));
 
     res.push_back(
@@ -2411,6 +2442,8 @@ void GraphicsUpdate()
     }
     else
     {
+        std::unique_lock<std::mutex> lock(frameSync.mutex);
+
         ftr = frameSync.stoppedFrame;
     }
     
@@ -2501,6 +2534,7 @@ void GraphicsUpdate()
 
     bool hasNavigation = false;
     bool hasAuxSysPixel = false;
+    bool hasStarMap = false;
     static uint32_t activeAlien = 0;
 
     std::vector<avk::recorded_commands_t> commands{};
@@ -2583,6 +2617,9 @@ void GraphicsUpdate()
             vec2<int32_t> auxSysTL = { INT32_MAX, INT32_MAX };
             vec2<int32_t> auxSysBR = { INT32_MIN, INT32_MIN };
 
+            vec2<int32_t> starMapTL = { INT32_MAX, INT32_MAX };
+            vec2<int32_t> starMapBR = { INT32_MIN, INT32_MIN };
+
             for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i)
             {
 #if defined(USE_CPU_RASTERIZATION)
@@ -2607,6 +2644,17 @@ void GraphicsUpdate()
                     auxSysBR.y = (std::max)(auxSysBR.y, currentY);
                 }
 
+                if (rotoscopePixels[i].content == StarMapPixel)
+                {
+                    hasStarMap = true;
+                    int currentX = i % GRAPHICS_MODE_WIDTH;
+                    int currentY = i / GRAPHICS_MODE_WIDTH;
+                    starMapTL.x = (std::min)(starMapTL.x, currentX);
+                    starMapTL.y = (std::min)(starMapTL.y, currentY);
+                    starMapBR.x = (std::max)(starMapBR.x, currentX);
+                    starMapBR.y = (std::max)(starMapBR.y, currentY);
+                }
+
                 if(rotoscopePixels[i].content == RunBitPixel)
                 {
                     switch(rotoscopePixels[i].runBitData.tag)
@@ -2621,21 +2669,30 @@ void GraphicsUpdate()
 #endif
             }
 
-            if (hasAuxSysPixel) {
-                int auxSysWidth = auxSysBR.x - auxSysTL.x + 1;
-                int auxSysHeight = auxSysBR.y - auxSysTL.y + 1;
+            auto processPixelType = [&](PixelContents pixelType, vec2<int32_t>& tl, vec2<int32_t>& br) {
+                int width = br.x - tl.x + 1;
+                int height = br.y - tl.y + 1;
 
                 for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i) {
-                    if (rotoscopePixels[i].content == AuxSysPixel) {
-                        int currentX = i % GRAPHICS_MODE_WIDTH;
-                        int currentY = i / GRAPHICS_MODE_WIDTH;
+                    int currentX = i % GRAPHICS_MODE_WIDTH;
+                    int currentY = i / GRAPHICS_MODE_WIDTH;
 
-                        rotoscopePixels[i].blt_x = currentX - auxSysTL.x;
-                        rotoscopePixels[i].blt_y = currentY - auxSysTL.y;
-                        rotoscopePixels[i].blt_w = auxSysWidth;
-                        rotoscopePixels[i].blt_h = auxSysHeight;
+                    if (currentX >= tl.x && currentX <= br.x && currentY >= tl.y && currentY <= br.y) {
+                        rotoscopePixels[i].content = pixelType;
+                        rotoscopePixels[i].blt_x = currentX - tl.x;
+                        rotoscopePixels[i].blt_y = currentY - tl.y;
+                        rotoscopePixels[i].blt_w = width;
+                        rotoscopePixels[i].blt_h = height;
                     }
                 }
+            };
+
+            if (hasAuxSysPixel) {
+                processPixelType(AuxSysPixel, auxSysTL, auxSysBR);
+            }
+
+            if (hasStarMap) {
+                processPixelType(StarMapPixel, starMapTL, starMapBR);
             }
         }
 
@@ -2781,9 +2838,11 @@ void GraphicsUpdate()
 #else
         avk::compute_pipeline navPipeline{};
         avk::compute_pipeline orreryPipeline{};
+        avk::compute_pipeline starmapPipeline{};
 
         IconUniform ic{};
         IconUniform orrery{};
+        IconUniform starmap{};
 
         if(frameSync.gameContext != 1)
         {
@@ -2861,7 +2920,12 @@ void GraphicsUpdate()
             }
         }
 
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, shaderBackBuffer, navPipeline, orreryPipeline);
+        if (hasStarMap)
+        {
+            starmapPipeline = s_gc.starmapPipeline;
+        }
+
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
     }

@@ -723,6 +723,10 @@ void ELLIPSE_INTEGER(int x_center, int y_center, int XRadius, int YRadius, int c
     {
         pixelType = Rotoscope(AuxSysPixel);
     }
+    else if (frameSync.inDrawStarMap)
+    {
+        pixelType = Rotoscope(StarMapPixel);
+    }
 
     int XRadiusSq = XRadius * XRadius;
     int YRadiusSq = YRadius * YRadius;
@@ -1057,6 +1061,7 @@ static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
+static std::vector<Icon> s_currentStarMap;
 static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
 
@@ -1245,10 +1250,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inGameOps = true;
                 }
 
+                if(nextInstr == 0xEAAE) // Clear for starmap
+                {
+                    frameSync.inDrawStarMap = true;
+                }
+
                 if(nextInstr == 0xeaa2 && (std::string(overlayName) == "MAP-OV")) // >GAMEOPTIONS 
                 {
                     const unsigned short int pp_ILOCAL = 0x59f5;
-                    frameSync.inDrawStarMap = true;
 
                     auto iconCount = Read16(pp_ILOCAL);
 
@@ -1261,6 +1270,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         Icon icon = GetIcon(i);
                         starMapLocale.push_back(icon);
                     }
+
+                    starMapLocale = s_currentStarMap;
+
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
 
                     printf("Starmap Locale has %d icons\n", iconCount);
                 }
@@ -2067,7 +2080,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xb0bd) // PARALLEL-TASKS
                 {
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
                 }
 
                 if(nextInstr == 0xcbbf) // MANEUVER
@@ -2075,7 +2088,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
                 }
 
                 if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 
@@ -3180,7 +3193,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 int color = Read16(0x55F2); // COLOR
 
                 // Write pixel data back to the buffer
-                GraphicsPixel(x, y, color & 0xf, Read16(0x5648), Rotoscope(PlotPixel));
+                if(frameSync.inDrawStarMap)
+                {
+                    GraphicsPixel(x, y, color & 0xf, Read16(0x5648), Rotoscope(StarMapPixel));
+                }
+                else
+                {
+                    GraphicsPixel(x, y, color & 0xf, Read16(0x5648), Rotoscope(PlotPixel));
+                }
             }
         break;
         case 0x9017: // LXPLOT 
@@ -3229,7 +3249,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 //printf("blt xblt=%i yblt=%i lblt=%i wblt=%i color=%i 0x%04x:0x%04x 0x%04x xor %d\n", x0, y0, w, h, color, bltseg, bltoffs, bufseg, xormode);
                 Rotoscope rs{};
-                rs.content = PicPixel;
+                if (frameSync.inDrawStarMap)
+                {
+                    rs.content = StarMapPixel;
+                }
+                else
+                {
+                    rs.content = PicPixel;
+                }
+
                 if(frameSync.inDrawShipButton)
                 {
                     rs.picData.picID = 0x8000;
@@ -3439,6 +3467,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     if(frameSync.inDrawAuxSys)
                     {
                         GraphicsPixel(x, y, color, bufseg, Rotoscope(AuxSysPixel));
+                    }
+                    else if(frameSync.inDrawStarMap)
+                    {
+                        GraphicsPixel(x, y, color, bufseg, Rotoscope(StarMapPixel));
                     }
                     else
                     {

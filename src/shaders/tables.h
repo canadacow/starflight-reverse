@@ -11,6 +11,7 @@
 #define TilePixel 9
 #define RunBitPixel 10
 #define AuxSysPixel 11
+#define StarMapPixel 12
 
 #define Icon_Other  0
 #define Icon_Sun    1
