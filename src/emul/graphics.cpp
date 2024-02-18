@@ -736,33 +736,27 @@ private:
 
     unsigned short getArrowKeyDown() {
         const Uint8* state = (const Uint8*)s_keyboardState;
-        if (state[SDL_SCANCODE_UP]) {
-            return 328;
-        } else if (state[SDL_SCANCODE_DOWN]) {
-            return 336;
-        } else if (state[SDL_SCANCODE_LEFT]) {
-            return 331;
-        } else if (state[SDL_SCANCODE_RIGHT]) {
-            return 333;
-        } else if (state[SDL_SCANCODE_KP_8]) {
-            return 328; // Numpad 8
-        } else if (state[SDL_SCANCODE_KP_2]) {
-            return 336; // Numpad 2
-        } else if (state[SDL_SCANCODE_KP_4]) {
-            return 331; // Numpad 4
-        } else if (state[SDL_SCANCODE_KP_6]) {
-            return 333; // Numpad 6
-        } else if (state[SDL_SCANCODE_KP_7]) {
-            return 327; // Numpad 7
-        } else if (state[SDL_SCANCODE_KP_9]) {
-            return 329; // Numpad 9
-        } else if (state[SDL_SCANCODE_KP_1]) {
-            return 335; // Numpad 1
-        } else if (state[SDL_SCANCODE_KP_3]) {
-            return 337; // Numpad 3
-        } else {
-            return 0; // No arrow key down
-        }
+        bool up = state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_KP_8];
+        bool down = state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_KP_2];
+        bool left = state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_KP_4];
+        bool right = state[SDL_SCANCODE_RIGHT] || state[SDL_SCANCODE_KP_6];
+
+        if (up && left) return 327; // Numpad 7 for up and left
+        if (up && right) return 329; // Numpad 9 for up and right
+        if (down && left) return 335; // Numpad 1 for down and left
+        if (down && right) return 337; // Numpad 3 for down and right
+        if (up) return 328;
+        if (down) return 336;
+        if (left) return 331;
+        if (right) return 333;
+
+        // Check for diagonal numpad keys directly
+        if (state[SDL_SCANCODE_KP_7]) return 327;
+        if (state[SDL_SCANCODE_KP_9]) return 329;
+        if (state[SDL_SCANCODE_KP_1]) return 335;
+        if (state[SDL_SCANCODE_KP_3]) return 337;
+
+        return 0; // No arrow key down
     }
 
     static unsigned short GetKey(int sym)
