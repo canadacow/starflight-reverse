@@ -2664,13 +2664,13 @@ void GraphicsUpdate()
 #else
                 shaderBackBuffer[i] = rotoscopePixels[i];
 
-                if (rotoscopePixels[i].content == NavigationalPixel)
+                if (shaderBackBuffer[i].content == NavigationalPixel)
                 {
                     hasNavigation = true;
                     shaderBackBuffer[i].navMask = 0xff;
                 }
 
-                if (rotoscopePixels[i].content == AuxSysPixel)
+                if (shaderBackBuffer[i].content == AuxSysPixel)
                 {
                     hasAuxSysPixel = true;
                     int currentX = i % GRAPHICS_MODE_WIDTH;
@@ -2681,7 +2681,7 @@ void GraphicsUpdate()
                     auxSysBR.y = (std::max)(auxSysBR.y, currentY);
                 }
 
-                if (rotoscopePixels[i].content == StarMapPixel)
+                if (shaderBackBuffer[i].content == StarMapPixel)
                 {
                     hasStarMap = true;
                     int currentX = i % GRAPHICS_MODE_WIDTH;
@@ -2692,12 +2692,12 @@ void GraphicsUpdate()
                     starMapBR.y = (std::max)(starMapBR.y, currentY);
                 }
 
-                if(rotoscopePixels[i].content == RunBitPixel)
+                if(shaderBackBuffer[i].content == RunBitPixel)
                 {
-                    switch(rotoscopePixels[i].runBitData.tag)
+                    switch(shaderBackBuffer[i].runBitData.tag)
                     {
                         case 9: // MECHAN 9
-                            setActiveAlien(rotoscopePixels[i].runBitData.tag);
+                            setActiveAlien(shaderBackBuffer[i].runBitData.tag);
                             break;
                         default:
                         break;
@@ -2715,11 +2715,11 @@ void GraphicsUpdate()
                     int currentY = i / GRAPHICS_MODE_WIDTH;
 
                     if (currentX >= tl.x && currentX <= br.x && currentY >= tl.y && currentY <= br.y) {
-                        rotoscopePixels[i].content = pixelType;
-                        rotoscopePixels[i].blt_x = currentX - tl.x;
-                        rotoscopePixels[i].blt_y = currentY - tl.y;
-                        rotoscopePixels[i].blt_w = width;
-                        rotoscopePixels[i].blt_h = height;
+                        shaderBackBuffer[i].content = pixelType;
+                        shaderBackBuffer[i].blt_x = currentX - tl.x;
+                        shaderBackBuffer[i].blt_y = currentY - tl.y;
+                        shaderBackBuffer[i].blt_w = width;
+                        shaderBackBuffer[i].blt_h = height;
                     }
                 }
             };
@@ -2804,7 +2804,7 @@ void GraphicsUpdate()
 
             for (int i = 0; i < GRAPHICS_MODE_WIDTH * GRAPHICS_MODE_HEIGHT; ++i)
             {
-                if (rotoscopePixels[i].content == NavigationalPixel)
+                if (shaderBackBuffer[i].content == NavigationalPixel)
                 {
                     shaderBackBuffer[i].navMask = 0xff;
                 }
