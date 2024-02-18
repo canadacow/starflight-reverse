@@ -44,6 +44,10 @@ struct vec2 {
         return *this;
     }
 
+    vec2 operator-(const vec2& other) const {
+        return vec2(x - other.x, y - other.y);
+    }
+
     vec2() : x(0), y(0) {}
     vec2(T _x, T _y) : x(_x), y(_y) {}
 };
@@ -272,6 +276,12 @@ struct Icon {
     int32_t planet_to_sunY;
 
     uint32_t seed;
+};
+
+struct StarMapSetup {
+    std::vector<Icon> starmap;
+    vec2<int16_t> offset;
+    vec2<int16_t> window;
 };
 
 extern std::vector<Icon> GetLocalIconList(uint32_t* gameContext);
@@ -522,7 +532,7 @@ struct FrameToRender
     uint16_t orbitMask;
 
     std::vector<Icon> solarSystem;
-    std::vector<Icon> starMap;
+    StarMapSetup starMap;
 };
 
 enum class OrbitState {
@@ -624,7 +634,7 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
 void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
 void GraphicsSave(char *filename);
 
-void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const std::vector<Icon>& starMap);
+void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const StarMapSetup& starMap);
 void GraphicsReportGameFrame();
 void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);
 

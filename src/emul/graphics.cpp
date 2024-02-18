@@ -1053,7 +1053,7 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
-void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const std::vector<Icon>& starMap)
+void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const StarMapSetup& starMap)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1554,7 +1554,7 @@ static int GraphicsInitThread()
 
         bd.starmap = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
-                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+                s_gc.vc.create_image(1112, 664, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
@@ -2264,7 +2264,44 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform<32>)));        
 
     res.push_back(
-        s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<1024>)));        
+        s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<1024>)));     
+
+    if (starmapPipeline.has_value())
+    {
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
+
+        res.push_back(
+            avk::command::bind_pipeline(starmapPipeline.as_reference()));
+
+        res.push_back(
+            avk::command::bind_descriptors(starmapPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
+                    avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].starmap->get_image_view()->as_storage_image(avk::layout::general)),
+                    avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
+                    avk::descriptor_binding(0, 2, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                    avk::descriptor_binding(0, 3, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                    avk::descriptor_binding(0, 4, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                    avk::descriptor_binding(0, 5, s_gc.buffers[inFlightIndex].starmapUniform->as_uniform_buffer())
+                })));
+
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
+
+        res.push_back(
+            avk::command::dispatch((1112 + 3) / 4u, (664 + 3) / 4u, 1));
+
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal }));
+    }
+    else
+    {
+        res.push_back(
+            avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }));
+    }
 
     if (orreryPipeline.has_value())
     {
@@ -2342,10 +2379,6 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
             avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].navigation->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }));
     }
-
-    res.push_back(
-        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }));
 
     res.push_back(
         avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()));
@@ -2927,6 +2960,13 @@ void GraphicsUpdate()
         if (hasStarMap)
         {
             starmapPipeline = s_gc.starmapPipeline;
+
+            starmap = IconUniform<1024>(ftr.starMap.starmap);
+            uniform.worldX = ftr.starMap.offset.x;
+            uniform.worldY = ftr.starMap.offset.y;
+
+            uniform.screenX = ftr.starMap.window.x;
+            uniform.screenY = ftr.starMap.window.y;
         }
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline);

@@ -4,6 +4,12 @@ float calculateDistance(vec2 point1, vec2 point2) {
     return sqrt((xDist * xDist) + (yDist * yDist));
 }
 
+float calculateDistanceWorldAspect(vec2 point1, vec2 point2) {
+    float xDist = 0.925f * (point2.x - point1.x);
+    float yDist = point2.y - point1.y;
+    return sqrt((xDist * xDist) + (yDist * yDist));
+}
+
 float calculateBoundingBoxDistance(vec2 point1, vec2 point2) {
     float xDist = abs(point2.x - point1.x);
     float yDist = abs(point2.y - point1.y);

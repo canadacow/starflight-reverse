@@ -1039,7 +1039,7 @@ static Icon GetIcon(uint16_t index) {
     uint16_t ILSEG = Read16(0x59ce);
     uint16_t IHSEG = Read16(0x59da);
 
-    Icon icon;
+    Icon icon{};
     uint16_t IINDEX = index;
     icon.x = (int32_t)(int16_t)Read16Long(IXSEG, IINDEX * 2);
     icon.y = (int32_t)(int16_t)Read16Long(IYSEG, IINDEX * 2);
@@ -1050,7 +1050,60 @@ static Icon GetIcon(uint16_t index) {
     uint32_t hi_iaddr = Read8Long(IHSEG, IINDEX);
     icon.iaddr = (hi_iaddr << 16) | lo_iaddr;
 
+    auto current_iaddr = icon.iaddr;
+
+    ForthPushCurrent(current_iaddr);
+    auto instType = GetInstanceClass();
+    auto instOff = GetInstanceOffset();
+
+    if (instType == 0xb) // Unbox this box
+    {
+        current_iaddr = instOff;
+        ForthPushCurrent(current_iaddr);
+        instType = GetInstanceClass();
+        instOff = GetInstanceOffset();
+        ForthPopCurrent();
+    }
+
+    ForthPopCurrent();
+
+    auto it = InstanceTypes.find(instType);
+    assert(it != InstanceTypes.end());
+
+    if (it->second == "STAR")
+    {
+        icon.icon_type = (uint32_t)IconType::Sun;
+    }
+    if (it->second == "NEBULA")
+    {
+        icon.icon_type = (uint32_t)IconType::Nebula;
+    }
+    if (it->second == "PLANET")
+    {
+        icon.icon_type = (uint32_t)IconType::Planet;
+    }
+    if (it->second == "SHIP")
+    {
+        icon.icon_type = (uint32_t)IconType::Ship;
+    }
+
     return icon;
+};
+
+vec2<int16_t> SCR_to_WLD(vec2<int16_t> input) {
+    vec2<int16_t> output;
+
+    output.y = input.y - static_cast<int16_t>(Read16(0x596B)); // YLLDEST
+    output.y *= static_cast<int16_t>(Read16(0x6223)); // YWLD:YPIX
+    output.y /= static_cast<int16_t>(Read16(0x6221)); // YWLD:YPIX
+    output.y += static_cast<int16_t>(Read16(0x5B31)); // BVIS
+
+    output.x = input.x - static_cast<int16_t>(Read16(0x595D)); // XLLDEST
+    output.x *= static_cast<int16_t>(Read16(0x6213)); // XWLD:XPIX
+    output.x /= static_cast<int16_t>(Read16(0x6211)); // XWLD:XPIX
+    output.x += static_cast<int16_t>(Read16(0x5B3C)); // LVIS
+
+    return output;
 };
 
 extern unsigned short regbx;
@@ -1061,7 +1114,7 @@ static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
-static std::vector<Icon> s_currentStarMap;
+static StarMapSetup s_currentStarMap;
 static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
 
@@ -1271,11 +1324,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         starMapLocale.push_back(icon);
                     }
 
-                    starMapLocale = s_currentStarMap;
+                    // Get locus
+
+                    //SCR_to_WLD()
+                    vec2<int16_t> tl = { 20, 199 };
+                    vec2<int16_t> br = { 159, 33 };
+
+                    auto tlWld = SCR_to_WLD(tl);
+                    auto brWld = SCR_to_WLD(br);
+
+                    auto window = brWld - tlWld;
+
+                    s_currentStarMap.starmap = starMapLocale;
+                    s_currentStarMap.offset = tlWld;
+                    s_currentStarMap.window = window;
 
                     GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
-
-                    printf("Starmap Locale has %d icons\n", iconCount);
                 }
 
                 if(nextInstr == 0xe0a3)

@@ -121,7 +121,7 @@ layout(binding = 15) uniform IconBlock {
 
 layout(rgba8, binding = 16) readonly uniform image2D NavigationTexture;
 layout(binding = 17) uniform sampler2D OrreryTexture;
-layout(rgba8, binding = 18) readonly uniform image2D StarMapTexture;
+layout(binding = 18) uniform sampler2D StarMapTexture;
 
 #include "tables.h"
 #include "noise.h"
@@ -519,8 +519,13 @@ vec4 DrawPicPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     return val;
 }
 
-vec4 DrawStarMapPixel(ivec2 pixelPos) {
-    return imageLoad(StarMapTexture, pixelPos);
+vec4 DrawStarMapPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
+    float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
+    float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
+
+    vec2 ouv = vec2(subX, subY);
+
+    return texture(StarMapTexture, ouv);
 }
 
 void main() {
@@ -571,7 +576,7 @@ void main() {
                 pixel = DrawPicPixel(roto, uv, subUv);
                 break;
             case StarMapPixel:
-                pixel = DrawStarMapPixel(pixelPos);
+                pixel = DrawStarMapPixel(roto, uv, subUv);
                 break;
             default:
                 break;
