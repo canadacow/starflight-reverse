@@ -2872,9 +2872,19 @@ void GraphicsUpdate()
 
         if (ftr.deadReckoning.x != 0 || ftr.deadReckoning.y != 0)
         {
+            float deltaHeading = targetHeading - frameSync.shipHeading;
+
+            if (deltaHeading > 180.0f) {
+                deltaHeading -= 360.0f;
+            } else if (deltaHeading < -180.0f) {
+                deltaHeading += 360.0f;
+            }
+
             // Apply a low-pass filter to smoothly transition frameSync.heading towards targetHeading
             float alpha = 0.1f; // Adjust alpha between 0.0 and 1.0 to control the smoothing (0.1 for example)
-            frameSync.shipHeading = frameSync.shipHeading * (1.0f - alpha) + targetHeading * alpha;
+            //frameSync.shipHeading = frameSync.shipHeading * (1.0f - alpha) + targetHeading * alpha;
+            float adjustedDelta = deltaHeading * alpha;
+            frameSync.shipHeading += adjustedDelta;
         }
 
         // Ensure frameSync.heading wraps correctly at 360 degrees
