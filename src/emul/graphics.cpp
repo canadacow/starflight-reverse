@@ -237,7 +237,7 @@ enum SFGraphicsMode
 
 SFGraphicsMode toSetGraphicsMode = Unset;
 SFGraphicsMode graphicsMode = Unset;
-std::counting_semaphore<1024> modeChangeComplete{ 0 };
+std::counting_semaphore<700> modeChangeComplete{ 0 };
 
 FrameSync frameSync{};
 
@@ -1574,7 +1574,7 @@ static int GraphicsInitThread()
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<1024>)));
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<700>)));
 
         s_gc.buffers.push_back(std::move(bd));
     }
@@ -2227,7 +2227,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     UniformBlock& uniform, 
     IconUniform<32>& iconUniform,
     IconUniform<32>& orreryUniform,
-    IconUniform<1024>& starmapUniform,
+    IconUniform<700>& starmapUniform,
     const std::vector<RotoscopeShader>& shaderBackBuffer, 
     avk::compute_pipeline navPipeline,
     avk::compute_pipeline orreryPipeline,
@@ -2264,7 +2264,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform<32>)));        
 
     res.push_back(
-        s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<1024>)));     
+        s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<700>)));     
 
     if (starmapPipeline.has_value())
     {
@@ -2879,7 +2879,7 @@ void GraphicsUpdate()
 
         IconUniform<32> ic{};
         IconUniform<32> orrery{};
-        IconUniform<1024> starmap{};
+        IconUniform<700> starmap{};
 
         if(frameSync.gameContext != 1)
         {
@@ -2961,7 +2961,7 @@ void GraphicsUpdate()
         {
             starmapPipeline = s_gc.starmapPipeline;
 
-            starmap = IconUniform<1024>(ftr.starMap.starmap);
+            starmap = IconUniform<700>(ftr.starMap.starmap);
             uniform.worldX = ftr.starMap.offset.x;
             uniform.worldY = ftr.starMap.offset.y;
 

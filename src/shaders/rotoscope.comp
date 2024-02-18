@@ -515,7 +515,7 @@ vec4 DrawPicPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         return vec4(subX, subY, 0.0, 1.0);
     }
     
-    vec4 val = vec4(unpackUnorm4x8(roto.argb)).bgra + vec4(0.5, 0.0, 0.0, 0.1);
+    vec4 val = vec4(unpackUnorm4x8(roto.argb)).bgra; // + vec4(0.5, 0.0, 0.0, 0.1);
     return val;
 }
 

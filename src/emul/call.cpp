@@ -1065,8 +1065,6 @@ static Icon GetIcon(uint16_t index) {
         ForthPopCurrent();
     }
 
-    ForthPopCurrent();
-
     auto it = InstanceTypes.find(instType);
     assert(it != InstanceTypes.end());
 
@@ -1086,6 +1084,17 @@ static Icon GetIcon(uint16_t index) {
     {
         icon.icon_type = (uint32_t)IconType::Ship;
     }
+    if (it->second == "FLUX")
+    {
+        icon.icon_type = (uint32_t)IconType::Flux;
+
+        icon.planet_to_sunX = (int32_t)Read16(0x63ef+0xb);
+        icon.planet_to_sunY = (int32_t)Read16(0x63ef+0x11);
+
+        assert(!(icon.planet_to_sunX == icon.x && icon.planet_to_sunY == icon.y));
+    }
+
+    ForthPopCurrent();
 
     return icon;
 };
