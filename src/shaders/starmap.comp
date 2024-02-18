@@ -3,7 +3,7 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
-layout(local_size_x = 4, local_size_y = 4) in;
+layout(local_size_x = 32, local_size_y = 32) in;
 
 #define Icon_Other  0
 #define Icon_Sun    1
@@ -123,6 +123,42 @@ layout(binding = 5) uniform IconBlock {
 #include "sun.h"
 #include "planet.h"
 
+#define rot(a) mat2(cos(a), -sin(a), sin(a), cos(a))
+#define pi 3.14159265359
+
+float rr(vec2 uv, float halfExtent, float borderRadius, float anim)
+{
+    halfExtent += sin(uniforms.iTime * 3.) * .05 * anim;
+    return smoothstep(.02, .01, 
+                      length(max(abs(uv) - halfExtent, 0.)) - borderRadius);
+}
+
+float outerNotch(vec2 uv, float angle) 
+{
+    const float notchSize = .045;
+    const float skew = 1.3;
+    uv *= rot(angle);
+    uv.y -= .55 + sin(uniforms.iTime * 6.) * .095;
+    uv.x /= ((uv.y + notchSize) / (2. * notchSize)) * (skew - 1.) + 1.;
+    uv.y /= 2.75;
+    return smoothstep(.018, .01, length(max(abs(uv) - notchSize, 0.)));
+}
+
+vec4 drawReticle(vec2 uv)
+{
+    float inner = rr(uv, .18, .02, 1.) * (1. - rr(uv, .12, .02, 1.));
+    float dawt = rr(uv, .03, .02, 0.);
+    float notch = outerNotch(uv, 0.) + outerNotch(uv, pi / 2.)
+        + outerNotch(uv, pi) + outerNotch(uv, 1.5 * pi);
+    vec3 frag = (notch + dawt + inner + rr(uv, .35, .05, 1.) * (1. - rr(uv, .275, .05, 1.))
+        * step(.15, min(abs(uv.x), abs(uv.y)))) * vec3(0., 1., 0.);
+
+    float luminosity = 0.2126 * frag.r + 0.7152 * frag.g + 0.0722 * frag.b;
+    float alpha = smoothstep(0.0, 1.0, luminosity);
+
+    return vec4(frag, alpha);
+}
+
 vec4 DrawStarmapPixel(vec2 uv) {
     vec4 pixel = vec4(0.);
 
@@ -140,6 +176,7 @@ vec4 DrawStarmapPixel(vec2 uv) {
     vec4 iconPixel = vec4(0.);
     vec4 shipPixel = vec4(0.);
     vec4 nebulaPixel = vec4(0.);
+    vec4 reticlePixel = vec4(0.);
 
     bool hasNebula = false;
 
@@ -150,7 +187,6 @@ vec4 DrawStarmapPixel(vec2 uv) {
             continue;
 
         vec2 iconPos = vec2(float(icon.x), float(icon.y));
-        iconPos *= vec2(1.0, 1.0);
 
         if(icon.id >= 51 && icon.id <= 91) 
         {
@@ -194,6 +230,14 @@ vec4 DrawStarmapPixel(vec2 uv) {
         }
     }
 
+    vec2 recticle = vec2(uniforms.deadX, uniforms.deadY);
+
+    if(calculateBoundingBoxDistance(recticle, pixelPos) < 32.0)
+    {
+        vec2 normUV = calculateNormalizedUVWorldAspect(recticle, pixelPos, 32.0) - vec2(0.5, 0.5);
+        reticlePixel = drawReticle(normUV);
+    }
+
     if(hasNebula)
     {
         pixel = nebulaPixel;
@@ -202,8 +246,10 @@ vec4 DrawStarmapPixel(vec2 uv) {
     {
         pixel += starPixel;
         pixel += sunPixel;
-        pixel = shipPixel + (pixel * (1 - shipPixel.a));
     }
+
+    pixel = shipPixel + (pixel * (1 - shipPixel.a));
+    pixel = reticlePixel + (pixel * (1 - reticlePixel.a));
     
     return pixel;
 }

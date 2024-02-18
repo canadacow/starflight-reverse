@@ -27,6 +27,12 @@ float calculateBoundingBoxDistanceIcon(vec2 point1, vec2 point2) {
     return max(xDist, yDist);
 }
 
+vec2 calculateNormalizedUVWorldAspect(vec2 point1, vec2 point2, float width) {
+    vec2 uv = vec2(0.925f * (point2.x - point1.x) / width, (point2.y - point1.y) / width) + vec2(0.5, 0.5);
+    return uv;
+}
+
+
 vec2 calculateNormalizedUVIcon(vec2 point1, vec2 point2, float width) {
     vec2 uv = vec2((point2.x - point1.x) / width, 0.60f * (point2.y - point1.y) / width) + vec2(0.5, 0.5);
     return uv;

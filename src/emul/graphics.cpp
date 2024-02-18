@@ -2290,7 +2290,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
 
         res.push_back(
-            avk::command::dispatch((1112 + 3) / 4u, (664 + 3) / 4u, 1));
+            avk::command::dispatch((1112 + 31) / 32u, (664 + 31) / 32u, 1));
 
         res.push_back(
             avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].starmap->get_image(),
@@ -2967,6 +2967,9 @@ void GraphicsUpdate()
 
             uniform.screenX = ftr.starMap.window.x;
             uniform.screenY = ftr.starMap.window.y;
+
+            uniform.deadX = (int16_t)Read16(0xe542);
+            uniform.deadY = (int16_t)Read16(0xe546);
         }
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline);
