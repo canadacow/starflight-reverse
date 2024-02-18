@@ -182,7 +182,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                 normUV -= 0.5;
                 // Rotate the normUVs to match the icon.id orientation
-                float angle = (icon.id - 27) * 45.0;
+                float angle = uniforms.heading; // (icon.id - 27) * 45.0;
                 float rad = radians(angle);
                 float s = sin(rad);
                 float c = cos(rad);

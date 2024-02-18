@@ -2844,7 +2844,47 @@ void GraphicsUpdate()
             }
         }
 
-        uniform.heading = (float)ftr.heading;
+        float targetHeading = 0.0f;
+        if (ftr.deadReckoning.x == 1 && ftr.deadReckoning.y == 0) {
+            targetHeading = 0.0f; // East
+        }
+        else if (ftr.deadReckoning.x == 1 && ftr.deadReckoning.y == 1) {
+            targetHeading = 45.0f; // Northeast
+        }
+        else if (ftr.deadReckoning.x == 0 && ftr.deadReckoning.y == 1) {
+            targetHeading = 90.0f; // North
+        }
+        else if (ftr.deadReckoning.x == -1 && ftr.deadReckoning.y == 1) {
+            targetHeading = 135.0f; // Northwest
+        }
+        else if (ftr.deadReckoning.x == -1 && ftr.deadReckoning.y == 0) {
+            targetHeading = 180.0f; // West
+        }
+        else if (ftr.deadReckoning.x == -1 && ftr.deadReckoning.y == -1) {
+            targetHeading = 225.0f; // Southwest
+        }
+        else if (ftr.deadReckoning.x == 0 && ftr.deadReckoning.y == -1) {
+            targetHeading = 270.0f; // South
+        }
+        else if (ftr.deadReckoning.x == 1 && ftr.deadReckoning.y == -1) {
+            targetHeading = 315.0f; // Southeast
+        }
+
+        if (ftr.deadReckoning.x != 0 || ftr.deadReckoning.y != 0)
+        {
+            // Apply a low-pass filter to smoothly transition frameSync.heading towards targetHeading
+            float alpha = 0.1f; // Adjust alpha between 0.0 and 1.0 to control the smoothing (0.1 for example)
+            frameSync.shipHeading = frameSync.shipHeading * (1.0f - alpha) + targetHeading * alpha;
+        }
+
+        // Ensure frameSync.heading wraps correctly at 360 degrees
+        if (frameSync.shipHeading >= 360.0f) {
+            frameSync.shipHeading -= 360.0f;
+        } else if (frameSync.shipHeading < 0.0f) {
+            frameSync.shipHeading += 360.0f;
+        }
+
+        uniform.heading = frameSync.shipHeading;
 
         uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
         uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);

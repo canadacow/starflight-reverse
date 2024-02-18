@@ -566,6 +566,8 @@ struct FrameSync {
     std::chrono::steady_clock::time_point maneuveringStartTime;
     std::chrono::steady_clock::time_point maneuveringEndTime;
 
+    float shipHeading = 0.0;
+
     bool inGameOps = false;
     bool inNebula = false;
     bool inDrawAuxSys = false;
