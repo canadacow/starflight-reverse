@@ -159,6 +159,58 @@ vec4 drawReticle(vec2 uv)
     return vec4(frag, alpha);
 }
 
+#define THICKNESS 0.2
+
+// b.x = width
+// b.y = height
+// r.x = roundness top-right  
+// r.y = roundness boottom-right
+// r.z = roundness top-left
+// r.w = roundness bottom-left
+float sdRoundBox( in vec2 p, in vec2 b, in vec4 r ) 
+{
+    r.xy = (p.x>0.0)?r.xy : r.zw;
+    r.x  = (p.y>0.0)?r.x  : r.y;
+    vec2 q = abs(p)-b+r.x;
+    return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r.x;
+}
+
+float sdCross( in vec2 p, in vec2 b, float r ) 
+{
+    p = abs(p); p = (p.y>p.x) ? p.yx : p.xy;
+    
+	vec2  q = p - b;
+    float k = max(q.y,q.x);
+    vec2  w = (k>0.0) ? q : vec2(b.y-p.x,-k);
+    float d = length(max(w,0.0));
+    return ((k>0.0)?d:-d) + r;
+}
+
+float opSubtraction( float d1, float d2 )
+{
+    return max(-d1,d2);
+}
+
+float opOnion( in float p, in float r )
+{
+  return abs(p) - r;
+}
+
+vec4 DrawShip(in vec2 p)
+{   
+    float transition = (sin(uniforms.iTime/0.5) + 1.0) / 2.0;
+
+	float d = opOnion(sdRoundBox( p, vec2(1.0, 1.0), vec4(transition) ) + THICKNESS, THICKNESS);
+    d = opSubtraction(sdCross( p, vec2(1.5, 0.15), 0.0 ), d);
+
+    vec3 frag = (d>0.0) ? vec3(0.0, 0.0, 0.0) : vec3(0.33, 1.0, 1.0);
+
+    float luminosity = 0.2126 * frag.r + 0.7152 * frag.g + 0.0722 * frag.b;
+    float alpha = smoothstep(0.0, 1.0, luminosity);
+
+    return vec4(frag, alpha);
+}
+
 vec4 DrawStarmapPixel(vec2 uv) {
     vec4 pixel = vec4(0.);
 
@@ -196,7 +248,7 @@ vec4 DrawStarmapPixel(vec2 uv) {
             {
                 if(calculateDistanceWorldAspect(iconPos, pixelPos) < basesize) 
                 {
-                    nebulaPixel = vec4(0.2, 0.56, 0.89, 1.0);
+                    nebulaPixel = vec4(0.0, 0.66, 0.00, 1.0);
                     hasNebula = true;
                 }
             }
@@ -231,11 +283,18 @@ vec4 DrawStarmapPixel(vec2 uv) {
     }
 
     vec2 recticle = vec2(uniforms.deadX, uniforms.deadY);
+    vec2 ship = vec2(uniforms.orbitCamX, uniforms.orbitCamY);
 
     if(calculateBoundingBoxDistance(recticle, pixelPos) < 32.0)
     {
         vec2 normUV = calculateNormalizedUVWorldAspect(recticle, pixelPos, 32.0) - vec2(0.5, 0.5);
         reticlePixel = drawReticle(normUV);
+    }
+
+    if(calculateBoundingBoxDistance(ship, pixelPos) < 14.0)
+    {
+        vec2 normUV = calculateNormalizedUVWorldAspect(ship, pixelPos, 12.0) - vec2(0.5, 0.5);
+        shipPixel = DrawShip(normUV);
     }
 
     if(hasNebula)

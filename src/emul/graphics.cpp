@@ -2970,6 +2970,9 @@ void GraphicsUpdate()
 
             uniform.deadX = (int16_t)Read16(0xe542);
             uniform.deadY = (int16_t)Read16(0xe546);
+
+            uniform.orbitCamX = (int16_t)Read16(0xE54A);
+            uniform.orbitCamY = (int16_t)Read16(0xE54E);
         }
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline);
