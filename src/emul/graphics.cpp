@@ -30,6 +30,19 @@
 
 #include "vulkan_helper.h"
 
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_STANDARD_VARARGS
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_FONT_BAKING
+#define NK_INCLUDE_DEFAULT_FONT
+#define NK_SDLSURFACE_IMPLEMENTATION
+
+#include "nuklear.h"
+
+#include "sdl2surface_rawfb.h"
+
 #if defined(PLANES)
     #undef PLANES
 #endif
@@ -65,6 +78,9 @@ static SDL_Renderer *renderer  = NULL;
 static SDL_Texture* graphicsTexture = NULL;
 static SDL_Texture* windowTexture = NULL;
 static SDL_Texture* textTexture = NULL;
+
+static SDL_Surface* nk_surface = NULL;
+static sdlsurface_context* nk_context = NULL;
 
 //#define ENABLE_OFFSCREEN_VIDEO_RENDERER 1
 
@@ -1443,6 +1459,10 @@ static int GraphicsInitThread()
         return 0;
     }
 
+    nk_surface = SDL_CreateRGBSurfaceWithFormat(0, WINDOW_WIDTH, WINDOW_HEIGHT, 32, SDL_PIXELFORMAT_ARGB8888);
+
+    nk_context = nk_sdlsurface_init(nk_surface, 13.0f);
+
     graphicsTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, GRAPHICS_MODE_WIDTH, GRAPHICS_MODE_HEIGHT);
     if (graphicsTexture == NULL)
     {
@@ -2426,6 +2446,46 @@ uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
     return it->second;
 }
 
+void DrawUI()
+{
+    struct nk_color clear = { 0,100,0,255 };
+
+    enum { EASY, HARD };
+    static int op = EASY;
+    static float value = 0.6f;
+    static int i = 20;
+
+    auto ctx = nk_context->ctx;
+
+    if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
+        NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE)) {
+        /* fixed widget pixel width */
+        nk_layout_row_static(&ctx, 30, 80, 1);
+        if (nk_button_label(&ctx, "button")) {
+            /* event handling */
+        }
+
+        /* fixed widget window ratio width */
+        nk_layout_row_dynamic(&ctx, 30, 2);
+        if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
+        if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
+
+        /* custom widget pixel width */
+        nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
+        {
+            nk_layout_row_push(&ctx, 50);
+            nk_label(&ctx, "Volume:", NK_TEXT_LEFT);
+            nk_layout_row_push(&ctx, 110);
+            nk_slider_float(&ctx, 0, &value, 1.0f, 0.1f);
+        }
+        nk_layout_row_end(&ctx);
+    }
+    nk_end(&ctx);
+
+    nk_sdlsurface_render(nk_context, clear, 1);
+
+}
+
 void GraphicsUpdate()
 {
     if (graphicsMode != toSetGraphicsMode)
@@ -2768,6 +2828,8 @@ void GraphicsUpdate()
         data = textPixels.data();
         dataSize = textPixels.size() * sizeof(uint32_t);
     }
+
+    DrawUI();
 
     s_gc.vc.sync_before_render();
 

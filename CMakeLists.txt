@@ -69,6 +69,7 @@ find_package(xxHash CONFIG REQUIRED)
 find_package(Vulkan 1.2.162 REQUIRED)
 find_package(CURL REQUIRED)
 find_package(Magnum REQUIRED)
+find_package(unofficial-nuklear CONFIG REQUIRED)
 
 set_source_files_properties(
     src/cpu/cpu.cpp 
@@ -114,6 +115,7 @@ add_executable(emulatesdl
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)
 
 target_link_libraries(emulatesdl PRIVATE 
+        nuklear
         Magnum::Magnum
         SDL2::SDL2main
         SDL2::SDL2
