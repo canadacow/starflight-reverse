@@ -247,8 +247,6 @@ bool Deserialize(const std::string& filename)
     return true;
 }
 
-
-
 void HandleInterrupt()
 {
     static int disktransferaddress_segment = -1;
@@ -1132,7 +1130,7 @@ uint64_t s_targetFrameKey = 0;
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
     unsigned short i;
-    enum RETURNCODE ret;
+    enum RETURNCODE ret = OK;
 
     regbx = bx;
 
@@ -1310,6 +1308,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inGameOps = true;
+                }
+
+                if(nextInstr == 0xee39 && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
+                {
+                    frameSync.shouldSave = true;
+                }
+
+                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
+                {
+                    frameSync.inCombatRender = true;
+                    auto shipCount = Read16(0xe1fb);
+
                 }
 
                 if(nextInstr == 0xEAAE) // Clear for starmap
@@ -2105,13 +2115,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         bx = ax;
                         unsigned short execaddr = Read16(bx);
 
-                        auto ret = Call(execaddr, bx);
+                        ret = Call(execaddr, bx);
 
                         if(ret != OK)
                         {
                             break;
                         }
                     }
+
+                    if (ret != STOP)
+                        ret = OK;
                 }
 
                 if (nextInstr == 0xef37) // SET-DESTINATION
@@ -2193,6 +2206,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if (nextInstr == 0xa705) // INIT-BUTTON
                 {
                     frameSync.inDrawShipButton = false;
+                }
+
+                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
+                {
+                    frameSync.inCombatRender = false;
                 }
 
                 if (nextInstr == 0xa042) // .1LOGO
@@ -2539,7 +2557,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 uint64_t binHash = 0;
                 std::string filename{};
 
-                bool serialized = Serialize(binHash, filename);
+                bool serialized = false;
 
                 auto printSerialized = [&]{
                     if(serialized)
@@ -2548,22 +2566,38 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     }
                     else
                     {
-                        printf("Failed to serialize state.\n");
+                        if(frameSync.shouldSave)
+                        {
+                            printf("Failed to serialize state.\n");
+                        }
+                        else
+                        {
+                            printf("Did not serialize state as it was not requested.\n");
+                        }
                     }
                 };
+
+                if(frameSync.shouldSave)
+                {
+                    serialized = Serialize(binHash, filename);
+                }
 
                 bx = Pop();
                 printf("jump to %x. Either stop (0x0) or restart (0x100)\n", bx);
                 printSerialized();
                 
-                // Undo redirection
+                // Should just show pop up with UI
                 fflush(stdout);
                 fflush(stderr);
+                
+                #if 0
+                // Undo redirection
                 freopen("/dev/stdout", "a", stdout);
                 freopen("/dev/stderr", "a", stderr);
                 printSerialized();
+                #endif
             }
-            return EXIT;
+            return STOP;
         break;
 
         case 0x174C: Write16(regbp+2, Read16(regbp)); break; // "(LEAVE)"
@@ -4608,7 +4642,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             return ERROR;
         break;
     }
-    return OK;
+    return ret;
 }
 
 void SaveSTARFLT()

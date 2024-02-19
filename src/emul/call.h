@@ -4,7 +4,7 @@
 #include <string>
 #include <functional>
 
-enum RETURNCODE {OK, ERROR, EXIT, INPUT};
+enum RETURNCODE {OK, ERROR, EXIT, INPUT, STOP};
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx);
 enum RETURNCODE Step();

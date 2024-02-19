@@ -574,6 +574,8 @@ struct FrameSync {
     bool inDrawShipButton = false;
     bool inSmallLogo = false;
     bool inDrawStarMap = false;
+    bool inCombatRender = false;
+    bool shouldSave = false;
 
     inline static const vec3<float> staringPos = { 0.0f, -0.918f, 0.397f };
 

@@ -122,6 +122,7 @@ layout(binding = 15) uniform IconBlock {
 layout(rgba8, binding = 16) readonly uniform image2D NavigationTexture;
 layout(binding = 17) uniform sampler2D OrreryTexture;
 layout(binding = 18) uniform sampler2D StarMapTexture;
+layout(rgba8, binding = 19) readonly uniform image2D UITexture;
 
 #include "tables.h"
 #include "noise.h"
@@ -622,6 +623,9 @@ void main() {
     }
 
     pixel.a = 1.0;
+
+    vec4 uiPixel = imageLoad(UITexture, pixelPos);
+    pixel = uiPixel + (pixel * (1 - uiPixel.a));
 
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);

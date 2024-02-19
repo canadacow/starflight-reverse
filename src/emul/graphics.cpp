@@ -124,6 +124,7 @@ struct GraphicsContext
         avk::image_sampler navigation;
         avk::image_sampler orrery;
         avk::image_sampler starmap;
+        avk::image_sampler ui;
     };
     
     std::vector<BufferData> buffers;
@@ -701,6 +702,25 @@ public:
     }
 };
 
+static nk_buttons sdl_button_to_nk(int button)
+{
+    switch (button)
+    {
+    default:
+        /* ft */
+    case SDL_BUTTON_LEFT:
+        return NK_BUTTON_LEFT;
+        break;
+    case SDL_BUTTON_MIDDLE:
+        return NK_BUTTON_MIDDLE;
+        break;
+    case SDL_BUTTON_RIGHT:
+        return NK_BUTTON_RIGHT;
+        break;
+
+    }
+}
+
 class SDLKeyboard : public DOSKeyboard {
 private:
     std::mutex eventQueueMutex;
@@ -897,6 +917,22 @@ public:
                     break;
                 case SDL_QUIT:
                     GraphicsQuit();
+                case SDL_MOUSEMOTION:
+                    nk_input_motion(&(nk_context->ctx), event.motion.x, event.motion.y);
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    nk_input_button(&(nk_context->ctx), sdl_button_to_nk(event.button.button), event.button.x, event.button.y, 1);
+                    break;
+                case SDL_MOUSEBUTTONUP:
+                    nk_input_button(&(nk_context->ctx), sdl_button_to_nk(event.button.button), event.button.x, event.button.y, 0);
+                    break;
+                case SDL_MOUSEWHEEL:
+                    {
+                        struct nk_vec2 vec;
+                        vec.x = event.wheel.x;
+                        vec.y = event.wheel.y;
+                        nk_input_scroll(&(nk_context->ctx), vec);
+                    }
                     break;
                 default:
                     break;
@@ -905,11 +941,15 @@ public:
             return false;
         };
 
+        nk_input_begin(&(nk_context->ctx));
+
         SDL_Event event;
         while(SDL_PollEvent(&event))
         {
             handleEvent(event);
         }
+
+        nk_input_end(&(nk_context->ctx));
     }
 
     // Non-destructive read equivalent to Int 16 ah = 1
@@ -1572,6 +1612,12 @@ static int GraphicsInitThread()
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
+        bd.ui = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));            
+
         bd.iconUniform =
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
@@ -1626,7 +1672,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::buffer>(0, 15, s_gc.buffers[0].iconUniform),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 16, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 17, 1u),
-        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 18, 1u)
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 18, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 19, 1u)
     );
 
     s_gc.navigationPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -2245,7 +2292,9 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     const std::vector<RotoscopeShader>& shaderBackBuffer, 
     avk::compute_pipeline navPipeline,
     avk::compute_pipeline orreryPipeline,
-    avk::compute_pipeline starmapPipeline)
+    avk::compute_pipeline starmapPipeline,
+    const void* data,
+    uint64_t dataSize)
 {
     std::vector<avk::recorded_commands_t> res{};
 
@@ -2279,6 +2328,25 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
 
     res.push_back(
         s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<700>)));     
+
+    s_gc.buffers[inFlightIndex].frameStaging->fill(data, 0, 0, dataSize),
+
+    res.push_back(
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].frameStaging.as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+        ));
+
+    res.push_back(
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].ui->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }));
+
+    res.push_back(
+        avk::copy_buffer_to_image(s_gc.buffers[inFlightIndex].frameStaging, s_gc.buffers[inFlightIndex].ui->get_image(), avk::layout::transfer_dst));
+
+    res.push_back(
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].ui->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }));
 
     if (starmapPipeline.has_value())
     {
@@ -2417,7 +2485,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 15, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer()),
                 avk::descriptor_binding(0, 16, s_gc.buffers[inFlightIndex].navigation->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 17, s_gc.buffers[inFlightIndex].orrery->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 18, s_gc.buffers[inFlightIndex].starmap->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
+                avk::descriptor_binding(0, 18, s_gc.buffers[inFlightIndex].starmap->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 19, s_gc.buffers[inFlightIndex].ui->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
             })));
 
     res.push_back(
@@ -2448,17 +2517,18 @@ uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
 
 void DrawUI()
 {
-    struct nk_color clear = { 0,100,0,255 };
+    struct nk_color clear = { 0,0,0,0 };
 
     enum { EASY, HARD };
     static int op = EASY;
     static float value = 0.6f;
     static int i = 20;
 
-    auto ctx = nk_context->ctx;
+    auto& ctx = nk_context->ctx;
 
+#if 0
     if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
-        NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE)) {
+        NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE | NK_WINDOW_SCALABLE)) {
         /* fixed widget pixel width */
         nk_layout_row_static(&ctx, 30, 80, 1);
         if (nk_button_label(&ctx, "button")) {
@@ -2481,9 +2551,9 @@ void DrawUI()
         nk_layout_row_end(&ctx);
     }
     nk_end(&ctx);
+#endif
 
     nk_sdlsurface_render(nk_context, clear, 1);
-
 }
 
 void GraphicsUpdate()
@@ -3083,7 +3153,7 @@ void GraphicsUpdate()
             uniform.orbitCamY = (int16_t)Read16(0xE54E);
         }
 
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline);
+        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline, nk_surface->pixels, WINDOW_WIDTH * WINDOW_HEIGHT * 4);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 #endif
     }
