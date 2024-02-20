@@ -1335,7 +1335,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
 
                     int shipIndex = -1;
-                    vec2<int32_t> shipLocation;
+                    vec2<float> shipLocation;
 
                     for (int i = 0; i < iconCount; ++i)
                     {
@@ -1349,8 +1349,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         }
                     }
 
-                    vec2<int32_t> arenaTL{ INT32_MAX, INT32_MAX };
-                    vec2<int32_t> arenaBR{ INT32_MIN, INT32_MIN };
+                    vec2<float> arenaTL{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+                    vec2<float> arenaBR{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
 
                     for (Icon& icon : combatLocale)
                     {
@@ -1363,17 +1363,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         if (icon.y > arenaBR.y) arenaBR.y = icon.y;
                     }
 
-                    const vec2<int32_t> smallestArena = { 20, 25 };
+                    // Orig area is 9 x 15
+
+                    const vec2<float> smallestArena = { 20.0f, 25.0f };
 
                     for (Icon& icon : combatLocale)
                     {
                         // Determine the scaling factor based on the arena size
-                        float scaleX = static_cast<float>(smallestArena.x) / static_cast<float>(arenaBR.x - arenaTL.x);
-                        float scaleY = static_cast<float>(smallestArena.y) / static_cast<float>(arenaBR.y - arenaTL.y);
+                        float scaleX = smallestArena.x / (arenaBR.x - arenaTL.x);
+                        float scaleY = smallestArena.y / (arenaBR.y - arenaTL.y);
                         float scale = std::min(scaleX, scaleY) * 8; // 8 is the base icon size for the smallest arena
 
-                        icon.screenX = static_cast<int32_t>(round((float)icon.x * scale));
-                        icon.screenY = static_cast<int32_t>(round((float)-icon.y * scale));
+                        icon.screenX = icon.x * scale;
+                        icon.screenY = -icon.y * scale;
 
                         // Adjust positions to center in the viewport
                         icon.screenX += 80;

@@ -239,13 +239,13 @@ struct UniformBlock {
 
 struct ShaderIcon {
     uint32_t isActive;
-    int32_t x;
-    int32_t y;
-    int32_t screenX;
+    float x;
+    float y;
+    float screenX;
 
-    int32_t screenY;
-    int32_t bltX;
-    int32_t bltY;
+    float screenY;
+    float bltX;
+    float bltY;
     uint32_t id;
 
     uint32_t clr;
@@ -260,13 +260,13 @@ struct ShaderIcon {
 };
 
 struct Icon {
-    int32_t x;
-    int32_t y;
-    int32_t screenX;
-    int32_t screenY;
+    float x;
+    float y;
+    float screenX;
+    float screenY;
 
-    int32_t bltX;
-    int32_t bltY;
+    float bltX;
+    float bltY;
     uint32_t id;
     uint32_t clr;
 

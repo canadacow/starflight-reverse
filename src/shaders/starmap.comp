@@ -13,13 +13,13 @@ layout(local_size_x = 32, local_size_y = 32) in;
 
 struct Icon {
     uint isActive;
-    int x;
-    int y;
-    int screenX;
+    float x;
+    float y;
+    float screenX;
 
-    int screenY;
-    int bltX;
-    int bltY;
+    float screenY;
+    float bltX;
+    float bltY;
     uint id;
 
     uint clr;

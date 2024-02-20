@@ -7,8 +7,8 @@ layout(local_size_x = 4, local_size_y = 4) in;
 
 struct Icon {
     uint isActive;
-    int x;
-    int y;
+    float x;
+    float y;
     float screenX;
 
     float screenY;
