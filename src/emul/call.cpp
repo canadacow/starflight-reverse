@@ -1291,6 +1291,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 //         .CIRCLE  codep:0x224c wordp:0x965e size:0x000a C-string:'DrawCIRCLE'
                 //       FILLELLIP  codep:0x224c wordp:0x9674 size:0x004a C-string:'FILLELLIP'
                 //        FILLCIRC  codep:0x224c wordp:0x96ca size:0x000a C-string:'FILLCIRC'
+                
+                const unsigned short int pp_ILOCAL = 0x59f5;
 
                 uint16_t nextInstr = bx + 2;
 
@@ -1327,6 +1329,63 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inCombatRender = true;
                     auto shipCount = Read16(0xe1fb);
 
+                    auto iconCount = Read16(pp_ILOCAL);
+
+                    std::vector<Icon> combatLocale{};
+
+
+                    int shipIndex = -1;
+                    vec2<int32_t> shipLocation;
+
+                    for (int i = 0; i < iconCount; ++i)
+                    {
+                        Icon icon = GetIcon(i);
+                        combatLocale.push_back(icon);
+
+                        if(icon.icon_type == IconType::Ship)
+                        {
+                            shipIndex = i;
+                            shipLocation = { icon.x, icon.y };
+                        }
+                    }
+
+                    vec2<int32_t> arenaTL{ INT32_MAX, INT32_MAX };
+                    vec2<int32_t> arenaBR{ INT32_MIN, INT32_MIN };
+
+                    for (Icon& icon : combatLocale)
+                    {
+                        icon.x -= shipLocation.x;
+                        icon.y -= shipLocation.y;
+
+                        if (icon.x < arenaTL.x) arenaTL.x = icon.x;
+                        if (icon.y < arenaTL.y) arenaTL.y = icon.y;
+                        if (icon.x > arenaBR.x) arenaBR.x = icon.x;
+                        if (icon.y > arenaBR.y) arenaBR.y = icon.y;
+                    }
+
+                    const vec2<int32_t> smallestArena = { 20, 25 };
+
+                    for (Icon& icon : combatLocale)
+                    {
+                        // Determine the scaling factor based on the arena size
+                        float scaleX = static_cast<float>(smallestArena.x) / static_cast<float>(arenaBR.x - arenaTL.x);
+                        float scaleY = static_cast<float>(smallestArena.y) / static_cast<float>(arenaBR.y - arenaTL.y);
+                        float scale = std::min(scaleX, scaleY) * 8; // 8 is the base icon size for the smallest arena
+
+                        icon.screenX = static_cast<int32_t>(round((float)icon.x * scale));
+                        icon.screenY = static_cast<int32_t>(round((float)-icon.y * scale));
+
+                        // Adjust positions to center in the viewport
+                        icon.screenX += 80;
+                        icon.screenY += 100;
+
+                        icon.bltX = icon.screenX;
+                        icon.bltY = icon.screenY;
+                    }
+
+                    s_currentIconList = combatLocale;
+
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
                 }
 
                 if(nextInstr == 0xEAAE) // Clear for starmap
@@ -1336,8 +1395,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xeaa2 && (std::string(overlayName) == "MAP-OV")) // >GAMEOPTIONS 
                 {
-                    const unsigned short int pp_ILOCAL = 0x59f5;
-
                     auto iconCount = Read16(pp_ILOCAL);
 
                     std::vector<Icon> starMapLocale{};
