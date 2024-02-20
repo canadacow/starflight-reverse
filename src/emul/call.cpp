@@ -463,7 +463,7 @@ void XCHG(unsigned short *a, unsigned short *b)
     *b = temp;
 }
 
-void ParameterCall(unsigned short bx, unsigned short addr)
+RETURNCODE ParameterCall(unsigned short bx, unsigned short addr)
 {
     // call word 0x1649;
     //printf("Parametercall addr=%04x, si=%04x bx=%04x content=0x%04x\n", addr, regsi, bx+2, Read16(bx+2));
@@ -479,6 +479,8 @@ void ParameterCall(unsigned short bx, unsigned short addr)
     bx += 2; // push address of variable in the overlays
     Push(bx);
 
+    RETURNCODE ret = OK;
+
     for(;;)
     {
         unsigned short ax = Read16(regsi); // si is the forth program counter
@@ -486,13 +488,18 @@ void ParameterCall(unsigned short bx, unsigned short addr)
         bx = ax;
         unsigned short execaddr = Read16(bx);
 
-        auto ret = Call(execaddr, bx);
+        ret = Call(execaddr, bx);
 
         if(ret != OK)
         {
+            if (ret != STOP)
+                ret = OK;
+
             break;
         }
     }
+
+    return ret;
 }
 
 
@@ -2357,7 +2364,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 Push(0); // Not sure why
                 */
 
-                ParameterCall(bx, 0xb869);
+                ret = ParameterCall(bx, 0xb869);
             }
         break;
 
@@ -2605,38 +2612,38 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         case 0x83f8: // all overlays
             //printf("Load overlay '%s'\n", FindWord(bx+2, -1));
-            ParameterCall(bx, 0x83f8);
+            ret = ParameterCall(bx, 0x83f8);
             break;
-        case 0x5275: ParameterCall(bx, 0x5275); break; // "OVT" "IARRAYS"
-        case 0x4ef5: ParameterCall(bx, 0x4ef5); break; // "BLACK DK-BLUE DL-GREE GREEN RED VIOLET BROWN ... WHITE"
-        case 0x6ec1: ParameterCall(bx, 0x6ec1); break; // ":TIMEST :SIGNAT :CKSUM :SAVE :VERSIO"
-        case 0x3aec: ParameterCall(bx, 0x3aec); break; // D@ V= C= <OFF> <ON> <BLOCK>
+        case 0x5275: ret = ParameterCall(bx, 0x5275); break; // "OVT" "IARRAYS"
+        case 0x4ef5: ret = ParameterCall(bx, 0x4ef5); break; // "BLACK DK-BLUE DL-GREE GREEN RED VIOLET BROWN ... WHITE"
+        case 0x6ec1: ret = ParameterCall(bx, 0x6ec1); break; // ":TIMEST :SIGNAT :CKSUM :SAVE :VERSIO"
+        case 0x3aec: ret = ParameterCall(bx, 0x3aec); break; // D@ V= C= <OFF> <ON> <BLOCK>
         case 0x3b68:
             {
-                ParameterCall(bx, 0x3b68); 
+            ret = ParameterCall(bx, 0x3b68);
                 break; // "(2C:) NULL 0. VANEWSP IROOT .... *EOL"
             }
-        case 0x4a96: ParameterCall(bx, 0x4a96); break; // "CASE:"
+        case 0x4a96: ret = ParameterCall(bx, 0x4a96); break; // "CASE:"
         case 0x4a4f: // "CASE"
             {
-                ParameterCall(bx, 0x4a4f); 
+                ret = ParameterCall(bx, 0x4a4f);
                 break; 
             }
-        case 0xeca2: ParameterCall(bx, 0xeca2); break; // in PL-SET Overlay
-        case 0xe114: ParameterCall(bx, 0xe114); break; // in LP Overlay
-        case 0xe2cf: ParameterCall(bx, 0xe2cf); break; // in LP Overlay
-        case 0xe4f0: ParameterCall(bx, 0xe4f0); break; // in LP Overlay
-        case 0xf0cc: ParameterCall(bx, 0xf0cc); break; // in STORM-OV
-        case 0xe940: ParameterCall(bx, 0xe940); break; // in VITA-OV
-        case 0xe555: ParameterCall(bx, 0xe555); break; // in HP-OV
-        case 0xe420: ParameterCall(bx, 0xe420); break; // in HP-OV
-        case 0xea73: ParameterCall(bx, 0xea73); break; // in SENT-OV
-        case 0x4e00: ParameterCall(bx, 0x4e00); break; // Arrays
-        case 0x744d: ParameterCall(bx, 0x744d); break; // "INST-SI" "INST-PR" "%NAME" "PHR-CNT" "TEXT-CO" "PHRASE$" ...
+        case 0xeca2: ret = ParameterCall(bx, 0xeca2); break; // in PL-SET Overlay
+        case 0xe114: ret = ParameterCall(bx, 0xe114); break; // in LP Overlay
+        case 0xe2cf: ret = ParameterCall(bx, 0xe2cf); break; // in LP Overlay
+        case 0xe4f0: ret = ParameterCall(bx, 0xe4f0); break; // in LP Overlay
+        case 0xf0cc: ret = ParameterCall(bx, 0xf0cc); break; // in STORM-OV
+        case 0xe940: ret = ParameterCall(bx, 0xe940); break; // in VITA-OV
+        case 0xe555: ret = ParameterCall(bx, 0xe555); break; // in HP-OV
+        case 0xe420: ret = ParameterCall(bx, 0xe420); break; // in HP-OV
+        case 0xea73: ret = ParameterCall(bx, 0xea73); break; // in SENT-OV
+        case 0x4e00: ret = ParameterCall(bx, 0x4e00); break; // Arrays
+        case 0x744d: ret = ParameterCall(bx, 0x744d); break; // "INST-SI" "INST-PR" "%NAME" "PHR-CNT" "TEXT-CO" "PHRASE$" ...
         //case 0x1AB5: ParameterCall(bx, 0x1AB5); break; // "FORTH MUSIC IT-VOC MISC-"
         case 0xe211: 
             {
-                ParameterCall(bx, 0xe211); // in COMBAT-OV
+                ret = ParameterCall(bx, 0xe211); // in COMBAT-OV
                 break; 
             }
         case 0x7227:
@@ -2653,7 +2660,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
             //printf("Load data    '%s'\n", s);
             // "FILE-NA FILE-TY FILE-ST FILE-EN FILE-#R FILE-RL FILE-SL"
-            ParameterCall(bx, 0x7227);
+            ret = ParameterCall(bx, 0x7227);
           }
         break;
 
@@ -2677,7 +2684,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             exit(1);
           }
           */
-          ParameterCall(bx, 0x73ea);
+          ret = ParameterCall(bx, 0x73ea);
         }
         break;
 
