@@ -235,6 +235,8 @@ struct UniformBlock {
     float nebulaMultiplier;
 
     uint32_t orbitMask;
+
+    float zoomLevel; // 8 means 8x8 pixels are shown 1:1 with the emulator
 };
 
 struct ShaderIcon {

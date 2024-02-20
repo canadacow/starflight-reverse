@@ -1349,40 +1349,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         }
                     }
 
-                    vec2<float> arenaTL{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
-                    vec2<float> arenaBR{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
-
                     for (Icon& icon : combatLocale)
                     {
                         icon.x -= shipLocation.x;
                         icon.y -= shipLocation.y;
-
-                        if (icon.x < arenaTL.x) arenaTL.x = icon.x;
-                        if (icon.y < arenaTL.y) arenaTL.y = icon.y;
-                        if (icon.x > arenaBR.x) arenaBR.x = icon.x;
-                        if (icon.y > arenaBR.y) arenaBR.y = icon.y;
-                    }
-
-                    // Orig area is 9 x 15
-
-                    const vec2<float> smallestArena = { 20.0f, 25.0f };
-
-                    for (Icon& icon : combatLocale)
-                    {
-                        // Determine the scaling factor based on the arena size
-                        float scaleX = smallestArena.x / (arenaBR.x - arenaTL.x);
-                        float scaleY = smallestArena.y / (arenaBR.y - arenaTL.y);
-                        float scale = std::min(scaleX, scaleY) * 8; // 8 is the base icon size for the smallest arena
-
-                        icon.screenX = icon.x * scale;
-                        icon.screenY = -icon.y * scale;
-
-                        // Adjust positions to center in the viewport
-                        icon.screenX += 80;
-                        icon.screenY += 100;
-
-                        icon.bltX = icon.screenX;
-                        icon.bltY = icon.screenY;
                     }
 
                     s_currentIconList = combatLocale;

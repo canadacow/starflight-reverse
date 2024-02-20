@@ -113,6 +113,8 @@ layout(binding = 14) uniform UniformBlock {
 
     uint orbitMask;
 
+    float zoomLevel;
+
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {

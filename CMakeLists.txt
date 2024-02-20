@@ -112,7 +112,7 @@ add_executable(emulatesdl
     src/tts/speech.cpp
 )
 
-target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS NOMINMAX)
 
 target_link_libraries(emulatesdl PRIVATE 
         nuklear

@@ -1976,13 +1976,13 @@ float calculateDistance(vec2<float> point1, vec2<float> point2) {
 float calculateBoundingBoxDistance(vec2<float> point1, vec2<float> point2) {
     float xDist = abs(point2.x - point1.x);
     float yDist = abs(point2.y - point1.y);
-    return max(xDist, yDist);
+    return std::max(xDist, yDist);
 }
 
 float calculateBoundingBoxDistanceIcon(vec2<float> point1, vec2<float> point2) {
     float xDist = abs(point2.x - point1.x);
     float yDist = 0.60f * abs(point2.y - point1.y);
-    return max(xDist, yDist);
+    return std::max(xDist, yDist);
 }
 
 uint32_t DrawNavigationPixel(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv, const std::vector<Icon>& icons)
@@ -2685,6 +2685,7 @@ void GraphicsUpdate()
     uniform.nebulaBase = 0.0f;
     uniform.nebulaMultiplier = 50.0f;
     uniform.orbitMask = ftr.orbitMask;
+    uniform.zoomLevel = 8.0f;
     
     // If we're in a system, nebulas behave a little differently
     if (uniform.game_context == 1 || uniform.game_context == 2)
@@ -3059,80 +3060,133 @@ void GraphicsUpdate()
         IconUniform<32> orrery{};
         IconUniform<700> starmap{};
 
-        if(frameSync.gameContext != 1)
+        // ( 0 = planet surface, 1=orbit, 2=system)         
+        // ( 3 = hyperspace, 4 = encounter, 5 = starport)
+
+        switch (frameSync.gameContext)
         {
-            ic = IconUniform<32>(ftr.iconList);
-            for (int i = 0; i < 32; ++i)
-            {
-                if (ic.icons[i].isActive)
+            case 0: // planet surface
+            case 2: // system
+            case 3: // hyperspace
+            case 5: // starport
                 {
-                    ShaderIcon& si = ic.icons[i];
+                    ic = IconUniform<32>(ftr.iconList);
+                    for (int i = 0; i < 32; ++i)
+                    {
+                        if (ic.icons[i].isActive)
+                        {
+                            ShaderIcon& si = ic.icons[i];
 
-                    if (si.id >= 27 && si.id <= 34)
-                        continue;
+                            if (si.id >= 27 && si.id <= 34)
+                                continue;
 
-                    si.screenX -= uniform.deadX * 4.0f;
-                    si.screenY += uniform.deadY * 6.0f;
+                            si.screenX -= uniform.deadX * 4.0f;
+                            si.screenY += uniform.deadY * 6.0f;
 
-                    si.bltX -= uniform.deadX * 4.0f;
-                    si.bltY += uniform.deadY * 6.0f;
+                            si.bltX -= uniform.deadX * 4.0f;
+                            si.bltY += uniform.deadY * 6.0f;
+                        }
+                    }
+
+                    if (hasAuxSysPixel)
+                    {
+                        auto sol = ftr.solarSystem;
+
+                        if (ftr.iconList.size() > 0)
+                        {
+                            // Put the ship in the icon list
+                            auto ship = ftr.iconList.back();
+                            ship.y = -ship.y;
+                            sol.push_back(ship);
+                        }
+
+                        // Solar system orrery
+                        orreryPipeline = s_gc.orreryPipeline;
+                        orrery = IconUniform<32>(sol);
+                    }
+
+                    navPipeline = s_gc.navigationPipeline;
                 }
-            }
-
-            if (hasAuxSysPixel)
-            {
-                auto sol = ftr.solarSystem;
-
-                if (ftr.iconList.size() > 0)
+                break;
+            case 1: // orbit
                 {
-                    // Put the ship in the icon list
-                    auto ship = ftr.iconList.back();
-                    ship.y = -ship.y;
-                    sol.push_back(ship);
+                    for (auto& i : ftr.iconList)
+                    {
+                        if (i.seed == frameSync.currentPlanet)
+                        {
+                            ic = IconUniform<32>(i);
+                            ic.icons[0].screenX = 36;
+                            ic.icons[0].screenY = 61;
+                            ic.icons[0].bltX = 36;
+                            ic.icons[0].bltY = 66;
+
+                            break;
+                        }
+                    }
+
+                    navPipeline = s_gc.orbitPipeline;
+                    auto status = frameSync.GetOrbitStatus();
+
+                    uniform.planetSize = status.apparentSphereSize;
+                    uniform.orbitCamX = status.camPos.x;
+                    uniform.orbitCamY = status.camPos.y;
+                    uniform.orbitCamZ = status.camPos.z;
+
+                    if (frameSync.orbitState == OrbitState::Insertion || frameSync.orbitState == OrbitState::Orbiting || frameSync.orbitState == OrbitState::Landing)
+                    {
+                        uniform.worldX -= (status.camPos.x - frameSync.staringPos.x) * 2.0f;
+                        uniform.worldY -= (status.camPos.y - frameSync.staringPos.y) * 10.0f;
+                    }
+
+                    if (frameSync.orbitState == OrbitState::Landing)
+                    {
+                        // Freeze time
+                        uniform.iTime = std::chrono::duration<float>(frameSync.orbitTimestamp - s_gc.epoch).count();
+                    }
                 }
-
-                // Solar system orrery
-                orreryPipeline = s_gc.orreryPipeline;
-                orrery = IconUniform<32>(sol);
-            }
-
-            navPipeline = s_gc.navigationPipeline;
-        }
-        else
-        {
-            for(auto& i : ftr.iconList)
-            {
-                if(i.seed == frameSync.currentPlanet)
+                break;
+            case 4: // encounter
                 {
-                    ic = IconUniform<32>(i);
-                    ic.icons[0].screenX = 36;
-                    ic.icons[0].screenY = 61;
-                    ic.icons[0].bltX = 36;
-                    ic.icons[0].bltY = 66;
+                    vec2<float> arenaTL{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+                    vec2<float> arenaBR{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
 
-                    break;
+                    auto combatLocale = ftr.iconList;
+
+                    for (Icon& icon : combatLocale)
+                    {
+                        if (icon.x < arenaTL.x) arenaTL.x = icon.x;
+                        if (icon.y < arenaTL.y) arenaTL.y = icon.y;
+                        if (icon.x > arenaBR.x) arenaBR.x = icon.x;
+                        if (icon.y > arenaBR.y) arenaBR.y = icon.y;
+                    }
+
+                    // Orig area is 9 x 15
+
+                    const vec2<float> smallestArena = { 20.0f, 25.0f };
+
+                    float zoomLevel = 8.0f; // Default zoom level when everything fits in the smallest area
+
+                    // Calculate the current arena size
+                    float currentArenaWidth = arenaBR.x - arenaTL.x;
+                    float currentArenaHeight = arenaBR.y - arenaTL.y;
+
+                    // Calculate the zoom level based on the current arena size
+                    if (currentArenaWidth > smallestArena.x || currentArenaHeight > smallestArena.y) {
+                        float widthZoom = currentArenaWidth / smallestArena.x;
+                        float heightZoom = currentArenaHeight / smallestArena.y;
+                        float maxZoom = std::max(widthZoom, heightZoom);
+
+                        zoomLevel /= maxZoom; // Adjust zoom level based on how much we need to zoom out
+                    }
+
+                    uniform.zoomLevel = zoomLevel;
+
+                    ic = IconUniform<32>(combatLocale);
                 }
-            }
-
-            navPipeline = s_gc.orbitPipeline;
-            auto status = frameSync.GetOrbitStatus();
-
-            uniform.planetSize = status.apparentSphereSize;
-            uniform.orbitCamX = status.camPos.x;
-            uniform.orbitCamY = status.camPos.y;
-            uniform.orbitCamZ = status.camPos.z;
-
-            if (frameSync.orbitState == OrbitState::Insertion || frameSync.orbitState == OrbitState::Orbiting || frameSync.orbitState == OrbitState::Landing)
-            {
-                uniform.worldX -= (status.camPos.x - frameSync.staringPos.x) * 2.0f;
-                uniform.worldY -= (status.camPos.y - frameSync.staringPos.y) * 10.0f;
-            }
-
-            if (frameSync.orbitState == OrbitState::Landing)
-            {
-                // Freeze time
-                uniform.iTime = std::chrono::duration<float>(frameSync.orbitTimestamp - s_gc.epoch).count();
-            }
+                break;
+            default:
+                assert(false);
+                break;
         }
 
         if (hasStarMap)
