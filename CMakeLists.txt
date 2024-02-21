@@ -25,6 +25,7 @@ set(SHADER_LIST
     "orbit.comp"
     "orrery.comp"
     "starmap.comp"
+    "encounter.comp"
     # Add more shaders here
 )
 # Path to the Vulkan SDK's glslc shader compiler

@@ -154,6 +154,7 @@ struct GraphicsContext
     avk::compute_pipeline orreryPipeline;
     avk::compute_pipeline textPipeline;
     avk::compute_pipeline starmapPipeline;
+    avk::compute_pipeline encounterPipeline;
 
     avk::descriptor_cache descriptorCache;
 
@@ -1716,6 +1717,16 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].starmapUniform)
     );
 
+    s_gc.encounterPipeline = s_gc.vc.create_compute_pipeline_for(
+        "encounter.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].rotoscope),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
+    );
+
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
         "text.comp",
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
@@ -2685,7 +2696,7 @@ void GraphicsUpdate()
     uniform.nebulaBase = 0.0f;
     uniform.nebulaMultiplier = 50.0f;
     uniform.orbitMask = ftr.orbitMask;
-    uniform.zoomLevel = 8.0f;
+    uniform.zoomLevel = 1.0f;
     
     // If we're in a system, nebulas behave a little differently
     if (uniform.game_context == 1 || uniform.game_context == 2)
@@ -3147,41 +3158,54 @@ void GraphicsUpdate()
                 break;
             case 4: // encounter
                 {
-                    vec2<float> arenaTL{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
-                    vec2<float> arenaBR{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
+                    vec2<float> arena{0.0f, 0.0f};
 
                     auto combatLocale = ftr.iconList;
 
                     for (Icon& icon : combatLocale)
                     {
-                        if (icon.x < arenaTL.x) arenaTL.x = icon.x;
-                        if (icon.y < arenaTL.y) arenaTL.y = icon.y;
-                        if (icon.x > arenaBR.x) arenaBR.x = icon.x;
-                        if (icon.y > arenaBR.y) arenaBR.y = icon.y;
+                        float distX = std::abs(icon.x);
+                        float distY = std::abs(icon.y);
+
+                        if (distX > arena.x) arena.x = distX;
+                        if (distY > arena.y) arena.y = distY;
                     }
 
                     // Orig area is 9 x 15
 
-                    const vec2<float> smallestArena = { 20.0f, 25.0f };
+                    const vec2<float> smallestArena = { 16.0f, 20.0f };
 
-                    float zoomLevel = 8.0f; // Default zoom level when everything fits in the smallest area
+                    float zoomLevel = 1.0f; // Default zoom level when everything fits in the smallest area
 
                     // Calculate the current arena size
-                    float currentArenaWidth = arenaBR.x - arenaTL.x;
-                    float currentArenaHeight = arenaBR.y - arenaTL.y;
+                    // Since the arena is symmetrical around (0,0), we double the largest distance to get the full size
+                    float currentArenaWidth = 2 * arena.x;
+                    float currentArenaHeight = 2 * arena.y;
 
                     // Calculate the zoom level based on the current arena size
                     if (currentArenaWidth > smallestArena.x || currentArenaHeight > smallestArena.y) {
-                        float widthZoom = currentArenaWidth / smallestArena.x;
-                        float heightZoom = currentArenaHeight / smallestArena.y;
-                        float maxZoom = std::max(widthZoom, heightZoom);
+                        float widthZoom = smallestArena.x / currentArenaWidth;
+                        float heightZoom = smallestArena.y / currentArenaHeight;
+                        float minZoom = std::min(widthZoom, heightZoom);
 
-                        zoomLevel /= maxZoom; // Adjust zoom level based on how much we need to zoom out
+                        zoomLevel *= minZoom; // Adjust zoom level based on how much we need to zoom out
+                    }
+
+                    //printf("Current Arena Size: Width = %f, Height = %f zoomlevel %f\n", currentArenaWidth, currentArenaHeight, zoomLevel);
+
+                    for (Icon& icon : combatLocale)
+                    {
+                        icon.screenX = icon.x;
+                        icon.screenY = -icon.y;
+
+                        icon.bltX = icon.screenX;
+                        icon.bltY = icon.screenY;
                     }
 
                     uniform.zoomLevel = zoomLevel;
 
                     ic = IconUniform<32>(combatLocale);
+                    navPipeline = s_gc.encounterPipeline;
                 }
                 break;
             default:
