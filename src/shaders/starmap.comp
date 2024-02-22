@@ -75,7 +75,7 @@ layout(std430, binding = 1) buffer RotoBuffer {
     Rotoscope rotoPixels[];
 };
 
-layout(binding = 2) uniform sampler2D ShipTexture;
+layout(binding = 2) uniform sampler2DArray ShipTexture;
 layout(binding = 3) uniform sampler2DArray PlanetTextures;
 
 layout(binding = 4) uniform UniformBlock {

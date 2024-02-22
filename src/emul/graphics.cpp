@@ -1405,7 +1405,7 @@ void LoadAssets()
 
     s_gc.shipImage = s_gc.vc.create_image_sampler(
         s_gc.vc.create_image_view(
-            imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
+            s_gc.vc.create_image(512, 512, vk::Format::eR8G8B8A8Unorm, 2, avk::memory_usage::device, avk::image_usage::general_image)
         ), 
         s_gc.vc.create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_edge)
     );
@@ -1440,7 +1440,10 @@ void LoadAssets()
     );
 
     s_gc.vc.record_and_submit_with_fence({
-            avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
+        avk::sync::image_memory_barrier(s_gc.shipImage->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
+
+        avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
 
             avk::sync::image_memory_barrier(s_gc.alienColorImage->get_image(),
@@ -2637,6 +2640,55 @@ void GraphicsUpdate()
 
     if (s_gc.shouldInitPlanets)
     {
+        // Ship initialization
+
+        std::vector<std::pair<std::string, vk::Format>> shipTextures = {
+            {"ship.png", vk::Format::eR8G8B8A8Unorm},
+            {"mechan-9.png", vk::Format::eR8G8B8A8Unorm}
+        };
+
+        const uint32_t shipTextureSize = 512 * 512 * 4; // Assuming 512x512 RGBA images
+        const uint32_t totalDataSize = shipTextureSize * shipTextures.size();
+
+        auto shipBuffer = s_gc.vc.create_buffer(
+            AVK_STAGING_BUFFER_MEMORY_USAGE,
+            vk::BufferUsageFlagBits::eTransferSrc,
+            avk::generic_buffer_meta::create_from_size(totalDataSize)
+        );
+
+        std::vector<avk::recorded_commands_t> commands{};
+
+        commands.push_back(
+            avk::sync::buffer_memory_barrier(shipBuffer.as_reference(),
+                avk::stage::auto_stage >> avk::stage::auto_stage,
+                avk::access::auto_access >> avk::access::auto_access
+            ));
+
+        int i = 0;
+        for(auto& textureInfo : shipTextures)
+        {
+            std::vector<uint8_t> image;
+            unsigned width, height;
+            unsigned error = lodepng::decode(image, width, height, textureInfo.first, LCT_RGBA, 8);
+            if (error) {
+                printf("decoder error %d, %s\n", error, lodepng_error_text(error));
+                exit(-1);
+            }
+
+            commands.push_back(shipBuffer->fill(image.data(), 0, i * shipTextureSize, shipTextureSize));
+            commands.push_back(avk::copy_buffer_to_image_layer_mip_level(shipBuffer, s_gc.shipImage->get_image(), i, 0, avk::layout::transfer_dst, vk::ImageAspectFlagBits::eColor, i * shipTextureSize));
+
+            ++i;
+        }
+
+        commands.push_back(avk::sync::image_memory_barrier(s_gc.shipImage->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }));
+
+        s_gc.vc.record_and_submit_with_fence(commands, *s_gc.mQueue)->wait_until_signalled();
+
+        // Planet initialization
+        commands.clear();
+
         const uint32_t mapSize = 48 * 24 * 4;
         const uint32_t dataSize = mapSize * s_gc.surfaceData.size();
 
@@ -2645,8 +2697,6 @@ void GraphicsUpdate()
             vk::BufferUsageFlagBits::eTransferSrc,
             avk::generic_buffer_meta::create_from_size(dataSize)
         );
-
-        std::vector<avk::recorded_commands_t> commands{};
 
         commands.push_back(
             avk::sync::buffer_memory_barrier(sb.as_reference(),
@@ -2658,7 +2708,7 @@ void GraphicsUpdate()
             avk::sync::image_memory_barrier(s_gc.planetAlbedoImages->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::transfer_dst }));
 
-        int i = 0;
+        i = 0;
         for(auto& ps : s_gc.surfaceData)
         {
             commands.push_back(sb->fill(ps.second.albedo.data(), 0, i * mapSize, mapSize));
