@@ -265,7 +265,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 }
             }
         } else if(icon.id < 50) {
-            if(calculateBoundingBoxDistance(iconPos, pixelPos) < 4.0f) {
+            float distance = 4.0 * uniforms.zoomLevel;
+            if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 iconPixel += colortable[icon.clr & 0xf];
             }
         } else {

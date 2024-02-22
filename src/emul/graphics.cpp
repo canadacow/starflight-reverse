@@ -2521,7 +2521,10 @@ uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
     assert(s_gc.surfaceData.size());
 
     auto it = s_gc.seedToIndex.find(seed);
-    assert(it != s_gc.seedToIndex.end());
+    if (it == s_gc.seedToIndex.end())
+    {
+        return 0;
+    }
 
     return it->second;
 }
@@ -3202,7 +3205,9 @@ void GraphicsUpdate()
                         icon.bltY = icon.screenY;
                     }
 
-                    uniform.zoomLevel = zoomLevel;
+                    frameSync.zoomLevel = frameSync.zoomLevel * 0.95f + zoomLevel * 0.05f;
+
+                    uniform.zoomLevel = frameSync.zoomLevel;
 
                     ic = IconUniform<32>(combatLocale);
                     navPipeline = s_gc.encounterPipeline;

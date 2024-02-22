@@ -2745,7 +2745,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         break;
 
         case 0x25bc: // "(?TERMINAL)" keyboard check buffer
-            if (frameSync.maneuvering)
+            if (frameSync.maneuvering && !frameSync.inGameOps)
             {
                 if (GraphicsHasKey())
                 {

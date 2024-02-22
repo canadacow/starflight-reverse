@@ -570,6 +570,8 @@ struct FrameSync {
 
     float shipHeading = 0.0;
 
+    float zoomLevel = 1.0f;
+
     bool inGameOps = false;
     bool inNebula = false;
     bool inDrawAuxSys = false;
