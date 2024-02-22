@@ -17,6 +17,9 @@
 #define Icon_Sun    1
 #define Icon_Planet 2
 #define Icon_Nebula 3
+#define Icon_Flux   4
+#define Icon_Ship   5
+#define Icon_Vessel 6
 
 const vec4 colortable[16] = 
 {

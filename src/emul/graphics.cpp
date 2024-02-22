@@ -1395,7 +1395,8 @@ void LoadAssets()
     std::vector<uint8_t> image;
     unsigned width, height;
 
-    unsigned error = lodepng::decode(image, width, height, "ship.png", LCT_RGBA, 8);
+    //unsigned error = lodepng::decode(image, width, height, "ship.png", LCT_RGBA, 8);
+    unsigned error = lodepng::decode(image, width, height, "mechan-9.png", LCT_RGBA, 8);
     if(error) 
     {
         printf("decoder error %d, %s\n", error, lodepng_error_text(error));

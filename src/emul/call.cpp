@@ -555,6 +555,12 @@ void ASMCall(uint16_t word)
     Call(word, word);
 }
 
+uint16_t GetInstanceSpecies()
+{
+    ForthCall(0x7532); // @INST-SPECIES
+    return Pop();
+}
+
 uint16_t GetInstanceClass()
 {
     ForthCall(0x7520); // @INST-CLASS
@@ -1060,6 +1066,7 @@ static Icon GetIcon(uint16_t index) {
     ForthPushCurrent(current_iaddr);
     auto instType = GetInstanceClass();
     auto instOff = GetInstanceOffset();
+    icon.species = GetInstanceSpecies();
 
     if (instType == 0xb) // Unbox this box
     {
@@ -1088,6 +1095,10 @@ static Icon GetIcon(uint16_t index) {
     if (it->second == "SHIP")
     {
         icon.icon_type = (uint32_t)IconType::Ship;
+    }
+    if (it->second == "VESSEL")
+    {
+        icon.icon_type = (uint32_t)IconType::Vessel;
     }
     if (it->second == "FLUX")
     {
@@ -1347,6 +1358,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             shipIndex = i;
                             shipLocation = { icon.x, icon.y };
                         }
+
+                        printf("Ship %d spec %d\n", i, icon.species);
                     }
 
                     for (Icon& icon : combatLocale)

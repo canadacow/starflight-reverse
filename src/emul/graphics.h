@@ -188,6 +188,7 @@ enum IconType
     Nebula,
     Flux,
     Ship,
+    Vessel,
 };
 
 // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
@@ -278,6 +279,8 @@ struct Icon {
     int32_t planet_to_sunY;
 
     uint32_t seed;
+
+    uint16_t species;
 };
 
 struct StarMapSetup {
