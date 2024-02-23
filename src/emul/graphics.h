@@ -238,6 +238,8 @@ struct UniformBlock {
     uint32_t orbitMask;
 
     float zoomLevel; // 8 means 8x8 pixels are shown 1:1 with the emulator
+
+    float thrust;
 };
 
 struct ShaderIcon {
@@ -572,6 +574,7 @@ struct FrameSync {
     std::chrono::steady_clock::time_point maneuveringEndTime;
 
     float shipHeading = 0.0;
+    float thrust = 0.0;
 
     float zoomLevel = 1.0f;
 

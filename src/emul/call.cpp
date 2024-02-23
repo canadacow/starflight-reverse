@@ -1317,7 +1317,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
-                if(nextInstr == 0xcbbf) // MANEUVER
+                if(nextInstr == 0xcbbf || (nextInstr == 0xf4bd && (std::string(overlayName) == "COMBAT-OV"))) // MANEUVER
                 {
                     frameSync.maneuvering = true;
                     frameSync.maneuveringStartTime = std::chrono::steady_clock::now();
@@ -1410,7 +1410,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
                 }
 
-                if(nextInstr == 0xe0a3)
+                if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV"))
                 {
                     frameSync.inDrawAuxSys = true;
                 }
@@ -2218,7 +2218,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
                 }
 
-                if(nextInstr == 0xcbbf) // MANEUVER
+                if(nextInstr == 0xcbbf || (nextInstr == 0xf4bd && (std::string(overlayName) == "COMBAT-OV"))) // MANEUVER
                 {
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
@@ -2267,7 +2267,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inSmallLogo = false;
                 }
 
-                if(nextInstr == 0xe0a3) // .AUXSYS
+                if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV")) // .AUXSYS
                 {
                     frameSync.inDrawAuxSys = false;
 

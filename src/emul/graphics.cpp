@@ -3079,6 +3079,21 @@ void GraphicsUpdate()
             } else {
                 frameSync.shipHeading += (std::max)(deltaHeading, -maxTurnRate);
             }
+
+            float thrustage = 0.3f;
+
+            if(abs(deltaHeading) > 0.0)
+            {
+                thrustage = 1.0f;
+            }
+
+            frameSync.thrust = (frameSync.thrust * 0.9f) + (thrustage * 0.1f);
+        }
+        else
+        {
+            frameSync.thrust -= 0.01f;
+            if(frameSync.thrust < 0.0f)
+                frameSync.thrust = 0.0f;
         }
 
         // Ensure frameSync.heading wraps correctly at 360 degrees
@@ -3089,6 +3104,7 @@ void GraphicsUpdate()
         }
 
         uniform.heading = frameSync.shipHeading;
+        uniform.thrust = frameSync.thrust;
 
         uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
         uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);

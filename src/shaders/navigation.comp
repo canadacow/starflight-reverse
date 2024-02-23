@@ -109,6 +109,8 @@ layout(binding = 4) uniform UniformBlock {
     uint orbitMask;
 
     float zoomLevel;
+
+    float thrust;
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {
@@ -123,6 +125,7 @@ layout(binding = 5) uniform IconBlock {
 #include "nebula.h"
 #include "sun.h"
 #include "planet.h"
+#include "engines.h"
 
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel = vec4(0.);
@@ -178,7 +181,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         // 33 is DOWN
         // 34 is DOWN to the RIGHT
         if(icon.id >= 27 && icon.id <= 34) {
-            float distance = 4.0;
+            float distance = 8.0;
             if(calculateBoundingBoxDistanceIcon(bltPos, pixelPos) < distance) {
                 vec2 normUV = calculateNormalizedUVIcon(bltPos, pixelPos, distance * 2.0);
 
@@ -189,11 +192,23 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 float s = sin(rad);
                 float c = cos(rad);
                 normUV = vec2(normUV.x * c - normUV.y * s, normUV.x * s + normUV.y * c);
+                normUV *= 2.0;
 
                 normUV += 0.5;
 
                 vec4 texColor = texture(ShipTexture, vec3(normUV, 0));
                 shipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
+                
+                if(normUV.x < 0.02 && normUV.y >= 0.30 && normUV.y <= 0.70 && uniforms.thrust > 0.0)
+                {
+                    vec2 subUv = vec2((normUV.x + 1.0), ((normUV.y - 0.3) * 2.0) + 0.1);
+                    vec4 engines;
+
+                    float thrustRadius = 0.15 + (uniforms.thrust * 0.18);
+
+                    main_engines(engines, subUv, iTime, thrustRadius);
+                    shipPixel += engines;
+                }
             }
         } else if(icon.id >= 51 && icon.id <= 91) {
             float basesize = 29.0f * float(icon.id - 50);

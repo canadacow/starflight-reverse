@@ -115,6 +115,8 @@ layout(binding = 14) uniform UniformBlock {
 
     float zoomLevel;
 
+    float thrust;
+
 } uniforms;
 
 layout(binding = 15) uniform IconBlock {
