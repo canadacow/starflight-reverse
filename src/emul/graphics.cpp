@@ -2674,41 +2674,72 @@ uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
 
 void DrawUI()
 {
-    struct nk_color clear = { 0,0,0,0 };
+    enum GameMode {
+        ROTOSCOPE_MODE,
+        EGA_MODE,
+        CGA_MODE
+    };
 
-    enum { EASY, HARD };
-    static int op = EASY;
-    static float value = 0.6f;
-    static int i = 20;
+    struct SaveGame {
+        uint64_t screenshotTextureId;
+        std::string timestamp;
+    };
+
+    static std::vector<SaveGame> saveGames;
+    static GameMode currentMode = ROTOSCOPE_MODE;
+
+    struct nk_color clear = { 0,0,0,0 };
 
     auto& ctx = nk_context->ctx;
 
-#if 1
-    if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
-        NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE | NK_WINDOW_SCALABLE)) {
-        /* fixed widget pixel width */
-        nk_layout_row_static(&ctx, 30, 80, 1);
-        if (nk_button_label(&ctx, "button")) {
-            /* event handling */
+    float panelWidth = WINDOW_WIDTH * 0.33f;
+    float panelHeight = WINDOW_HEIGHT; // Full height
+    float panelX = 0; // Starting from the left edge
+    float panelY = 0; // Starting from the top
+
+    if (nk_begin(&ctx, "Starflight - Reimaged Panel", nk_rect(panelX, panelY, panelWidth, panelHeight),
+        NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR)) {
+        
+        // Adjust layout spacing to fit the new panel size
+        nk_layout_row_dynamic(&ctx, 20, 1);
+        nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
+
+        // Mode selection radio buttons
+        nk_layout_row_dynamic(&ctx, 30, 1);
+        if (nk_option_label(&ctx, "Rotoscope Mode", currentMode == ROTOSCOPE_MODE)) currentMode = ROTOSCOPE_MODE;
+        if (nk_option_label(&ctx, "EGA Mode", currentMode == EGA_MODE)) currentMode = EGA_MODE;
+        if (nk_option_label(&ctx, "CGA Mode", currentMode == CGA_MODE)) currentMode = CGA_MODE;
+
+        // Pause game button
+        nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1); // Adjust width to fit panel
+        if (nk_button_label(&ctx, "Pause Game")) {
+            // Pause game logic here
         }
 
-        /* fixed widget window ratio width */
-        nk_layout_row_dynamic(&ctx, 30, 2);
-        if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
-        if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
+        // Save game browser
+        nk_layout_row_dynamic(&ctx, 150, 1); // Adjust size as needed
+        if (nk_group_begin(&ctx, "Save Games", NK_WINDOW_BORDER)) {
+            // Iterate over save games
+            for (const auto& saveGame : saveGames) {
+                nk_layout_row_begin(&ctx, NK_STATIC, 30, 2); // Adjust size as needed
+                {
+                    // Display save game screenshot
+                    nk_image(&ctx, nk_image_id(saveGame.screenshotTextureId));
+                    nk_layout_row_push(&ctx, (int)(panelWidth - 250)); // Adjust width to fit panel
+                    // Display save game timestamp
+                    nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_LEFT);
+                }
+                nk_layout_row_end(&ctx);
 
-        /* custom widget pixel width */
-        nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
-        {
-            nk_layout_row_push(&ctx, 50);
-            nk_label(&ctx, "Volume:", NK_TEXT_LEFT);
-            nk_layout_row_push(&ctx, 110);
-            nk_slider_float(&ctx, 0, &value, 1.0f, 0.1f);
+                // Select save game
+                if (nk_button_label(&ctx, "Load")) {
+                    // Load game logic here, using saveGame.id or similar identifier
+                }
+            }
+            nk_group_end(&ctx);
         }
-        nk_layout_row_end(&ctx);
     }
     nk_end(&ctx);
-#endif
 
     nk_sdlsurface_render(nk_context, clear, 1);
 }
