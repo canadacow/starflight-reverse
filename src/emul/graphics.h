@@ -599,6 +599,9 @@ struct FrameSync {
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;
 
+    std::chrono::steady_clock::time_point uiTriggerTimestamp;
+    Magnum::Animation::Track<Magnum::Float, Magnum::Float> uiTrigger{};
+
     inline static const vec3<float> staringPos = { 0.0f, -0.918f, 0.397f };
 
     int32_t gameTickTimer = 0;

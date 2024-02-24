@@ -928,18 +928,43 @@ public:
                 case SDL_KEYDOWN:
                     if (event.key.keysym.sym == SDLK_F1)
                     {
+                        auto now = std::chrono::steady_clock::now();
+                        auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
+                        constexpr float menuActivationInSeconds = 0.25f;
+                        if (duration >= menuActivationInSeconds)
+                        {
+                            Magnum::Float timePoint = duration;
+                            Magnum::Float uiTriggerValue = frameSync.uiTrigger.at(timePoint);
+
+                            frameSync.uiTriggerTimestamp = now; 
+
+                            if (uiTriggerValue >= 1.0f) {
+                                frameSync.uiTrigger = {{
+                                    {0.0f, 1.0f}, 
+                                    {menuActivationInSeconds, 0.0f}
+                                }, Magnum::Math::lerp};
+                            } else {
+                                frameSync.uiTrigger = {{
+                                    {0.0f, 0.0f}, 
+                                    {menuActivationInSeconds, 1.0f}
+                                }, Magnum::Math::lerp};
+                            }
+                        }
+                    }
+                    else if (event.key.keysym.sym == SDLK_F2)
+                    {
                         s_useRotoscope = !s_useRotoscope;
                     }
-                    else if(event.key.keysym.sym == SDLK_F2)
+                    else if(event.key.keysym.sym == SDLK_F3)
                     {
                         s_useEGA = !s_useEGA;
                     }
-                    else if (event.key.keysym.sym == SDLK_F3)
+                    else if (event.key.keysym.sym == SDLK_F4)
                     {
                         s_adjust -= 1.0f;
                         printf("ADJUST %f\n", s_adjust);
                     }
-                    else if (event.key.keysym.sym == SDLK_F4)
+                    else if (event.key.keysym.sym == SDLK_F5)
                     {
                         s_adjust += 1.00f;
                         printf("ADJUST %f\n", s_adjust);
@@ -2658,7 +2683,7 @@ void DrawUI()
 
     auto& ctx = nk_context->ctx;
 
-#if 0
+#if 1
     if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
         NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE | NK_WINDOW_SCALABLE)) {
         /* fixed widget pixel width */
@@ -2868,7 +2893,10 @@ void GraphicsUpdate()
     uniform.nebulaMultiplier = 50.0f;
     uniform.orbitMask = ftr.orbitMask;
     uniform.zoomLevel = 1.0f;
-    uniform.menuVisibility = 0.0f;
+
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
+    uniform.menuVisibility = frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
     
     // If we're in a system, nebulas behave a little differently
     if (uniform.game_context == 1 || uniform.game_context == 2)
@@ -3083,7 +3111,10 @@ void GraphicsUpdate()
         dataSize = textPixels.size() * sizeof(uint32_t);
     }
 
-    DrawUI();
+    if (uniform.menuVisibility > 0.0f)
+    {
+        DrawUI();
+    }
 
     s_gc.vc.sync_before_render();
 
