@@ -2366,6 +2366,7 @@ std::vector<avk::recorded_commands_t> CPUCopyPass(VulkanContext::frame_id_t inFl
 }
 
 std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, 
+    avk::image_sampler outputImage,
     UniformBlock& uniform, 
     IconUniform<32>& iconUniform,
     IconUniform<32>& orreryUniform,
@@ -2380,7 +2381,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     std::vector<avk::recorded_commands_t> res{};
 
     res.push_back(
-        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+        avk::sync::image_memory_barrier(outputImage->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
 
     res.push_back(
@@ -2548,7 +2549,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
 
     res.push_back(
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
-                avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].gameOutput->get_image_view()->as_storage_image(avk::layout::general)),
+                avk::descriptor_binding(0, 0, outputImage->get_image_view()->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
                 avk::descriptor_binding(0, 2, s_gc.FONT1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 3, s_gc.FONT2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
@@ -2574,7 +2575,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1));
 
     res.push_back(
-        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+        avk::sync::image_memory_barrier(outputImage->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::transfer_src }));                        
 
 
@@ -3373,31 +3374,62 @@ void GraphicsUpdate()
             uniform.orbitCamY = (int16_t)Read16(0xE54E);
         }
 
-        auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline, nk_surface->pixels, WINDOW_WIDTH * WINDOW_HEIGHT * 4);
-        commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
+        auto gpuCommands = GPURotoscope(inFlightIndex,
+            s_gc.buffers[inFlightIndex].gameOutput,
+            uniform,
+            ic, 
+            orrery, 
+            starmap, 
+            shaderBackBuffer, 
+            navPipeline, 
+            orreryPipeline, 
+            starmapPipeline, 
+            nk_surface->pixels, 
+            WINDOW_WIDTH * WINDOW_HEIGHT * 4);
 
+        commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
 
         if (frameSync.takeScreenshot)
         {
-#if 0
             std::vector<avk::recorded_commands_t> res{};
 
-            auto readbackBuffer = s_gc.vc.create_buffer(avk::memory_usage::host_coherent, vk::BufferUsageFlagBits::eTransferDst, s_gc.vc.current_backbuffer()->image_at(0)->config().size);
+            auto tempCombinedImageSampler = s_gc.vc.create_image_sampler(
+                s_gc.vc.create_image_view(
+                    s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+                ),
+                s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));            
 
-            res.push_back(
-                avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-                    avk::stage::transfer >> avk::stage::transfer).with_layout_transition({ avk::layout::present_src, avk::layout::transfer_src })
+            auto readbackBuffer = s_gc.vc.create_buffer(
+                AVK_STAGING_BUFFER_MEMORY_USAGE,
+                vk::BufferUsageFlagBits::eTransferDst,
+                avk::generic_buffer_meta::create_from_size(WINDOW_WIDTH * WINDOW_HEIGHT * 4)
             );
 
-            res.push_back(
-                avk::copy_image_to_buffer(s_gc.vc.current_backbuffer()->image_at(0), readbackBuffer, avk::layout::transfer_src)
+            auto screenshot = GPURotoscope(inFlightIndex,
+                tempCombinedImageSampler,
+                uniform,
+                ic,
+                orrery,
+                starmap,
+                shaderBackBuffer,
+                navPipeline,
+                orreryPipeline,
+                starmapPipeline,
+                nk_surface->pixels,
+                WINDOW_WIDTH * WINDOW_HEIGHT * 4);
+
+            screenshot.push_back(
+                avk::copy_image_to_buffer(tempCombinedImageSampler->get_image(), avk::layout::transfer_src, vk::ImageAspectFlagBits::eColor, readbackBuffer)
             );
 
-            res.push_back(
-                avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-                    avk::stage::transfer >> avk::stage::transfer).with_layout_transition({ avk::layout::transfer_src, avk::layout::present_src })
-            );
-#endif
+            s_gc.vc.record_and_submit_with_fence(screenshot, *s_gc.mQueue)->wait_until_signalled();
+
+            auto address = readbackBuffer->map_memory(avk::mapping_access::read);
+
+            lodepng::encode("screenshot.png", static_cast<unsigned char*>(address.get()), WINDOW_WIDTH, WINDOW_HEIGHT, LCT_RGBA, 8);
+
+            frameSync.takeScreenshot = false;
+            frameSync.screenshotSemaphore.release();
         }
 #endif
     }
@@ -4002,6 +4034,9 @@ void GraphicsSaveScreen()
     std::string str = ss.str();
     serializedRotoscope.assign(str.begin(), str.end());
 
+    frameSync.takeScreenshot = true;
+
+    frameSync.screenshotSemaphore.acquire();
     printf("Here");
 }
 
