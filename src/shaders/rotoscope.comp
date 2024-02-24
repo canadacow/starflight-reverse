@@ -628,9 +628,6 @@ void main() {
 
     pixel.a = 1.0;
 
-    vec4 uiPixel = imageLoad(UITexture, pixelPos);
-    pixel = uiPixel + (pixel * (1 - uiPixel.a));
-
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);
 }

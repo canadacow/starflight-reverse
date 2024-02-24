@@ -246,6 +246,8 @@ struct UniformBlock {
     float zoomLevel; // 8 means 8x8 pixels are shown 1:1 with the emulator
 
     float thrust;
+    
+    float menuVisibility;
 };
 
 struct ShaderIcon {

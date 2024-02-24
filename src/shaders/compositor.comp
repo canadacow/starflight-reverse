@@ -1,0 +1,76 @@
+// GLSL Compute Shader
+#version 450
+
+layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
+layout(rgba8, binding = 1) readonly uniform image2D gameScreen;
+layout(rgba8, binding = 2) readonly uniform image2D menuScreen;
+
+layout(binding = 3) uniform UniformBlock {
+    int GRAPHICS_MODE_WIDTH;
+    int GRAPHICS_MODE_HEIGHT;
+    int WINDOW_WIDTH;
+    int WINDOW_HEIGHT;
+    uint useRotoscope;
+    uint useEGA;
+    float iTime;
+    float worldX;
+    float worldY;
+    float heading;
+    float deadX;
+    float deadY;
+    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
+    // (3 = hyperspace, 4 = encounter, 5 = starport)
+    uint game_context; 
+    uint alienVar1;
+    float screenX;
+    float screenY;
+    float adjust;
+    float planetSize;
+
+    float orbitCamX;
+    float orbitCamY;
+    float orbitCamZ;
+
+    float nebulaBase;
+    float nebulaMultiplier;
+
+    uint orbitMask;
+
+    float zoomLevel;
+
+    float thrust;
+
+    float menuVisibility;
+} uniforms;
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+void main() {
+    ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+
+    vec4 gamePixel = imageLoad(gameScreen, pixelPos);
+    vec4 menuPixel = imageLoad(menuScreen, pixelPos);
+    float menuAlpha = menuPixel.a * uniforms.menuVisibility;
+
+    // Apply Gaussian blur based on menu visibility
+    float blurAmount = menuAlpha * 5.0; // Increase the blur amount as menu becomes more visible
+    vec4 blurredGamePixel = vec4(0.0);
+    int blurRadius = int(blurAmount);
+    if (blurRadius > 0) {
+        float totalWeight = 0.0;
+        for (int dx = -blurRadius; dx <= blurRadius; ++dx) {
+            for (int dy = -blurRadius; dy <= blurRadius; ++dy) {
+                float weight = exp(-(dx * dx + dy * dy) / (2.0 * blurAmount));
+                blurredGamePixel += weight * imageLoad(gameScreen, pixelPos + ivec2(dx, dy));
+                totalWeight += weight;
+            }
+        }
+        blurredGamePixel /= totalWeight;
+    } else {
+        blurredGamePixel = gamePixel;
+    }
+
+    // Blend game and menu screens
+    vec4 finalPixel = mix(blurredGamePixel, menuPixel, menuAlpha);
+    imageStore(imgOutput, pixelPos, finalPixel);
+}

@@ -113,6 +113,8 @@ layout(binding = 4) uniform UniformBlock {
 
     float thrust;
 
+    float menuVisibility;
+
 } uniforms;
 
 layout(binding = 5) uniform IconBlock {
