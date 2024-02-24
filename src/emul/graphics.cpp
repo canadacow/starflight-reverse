@@ -2687,6 +2687,7 @@ void DrawUI()
 
     static std::vector<SaveGame> saveGames;
     static GameMode currentMode = ROTOSCOPE_MODE;
+    static bool isPaused = false;
 
     struct nk_color clear = { 0,0,0,0 };
 
@@ -2698,10 +2699,12 @@ void DrawUI()
     float panelY = 0; // Starting from the top
 
     if (nk_begin(&ctx, "Starflight - Reimaged Panel", nk_rect(panelX, panelY, panelWidth, panelHeight),
-        NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR)) {
+        NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND)) {
+        
+        nk_style_push_color(&ctx, &ctx.style.window.background, nk_rgba(0, 0, 255, 230));
         
         // Adjust layout spacing to fit the new panel size
-        nk_layout_row_dynamic(&ctx, 20, 1);
+        nk_layout_row_dynamic(&ctx, 40, 1);
         nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
 
         // Mode selection radio buttons
@@ -2710,10 +2713,9 @@ void DrawUI()
         if (nk_option_label(&ctx, "EGA Mode", currentMode == EGA_MODE)) currentMode = EGA_MODE;
         if (nk_option_label(&ctx, "CGA Mode", currentMode == CGA_MODE)) currentMode = CGA_MODE;
 
-        // Pause game button
-        nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1); // Adjust width to fit panel
-        if (nk_button_label(&ctx, "Pause Game")) {
-            // Pause game logic here
+        nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1);
+        if (nk_button_label(&ctx, isPaused ? "Resume Game" : "Pause Game")) {
+            isPaused = !isPaused;
         }
 
         // Save game browser
