@@ -20,6 +20,12 @@
 #include <semaphore>
 #include <deque>
 #include <chrono>
+#include <sstream>
+
+#include <cereal/types/vector.hpp>
+#include <cereal/archives/binary.hpp>
+#include <cereal/archives/binary.hpp>
+#include <cereal/types/vector.hpp>
 
 template<typename T>
 struct vec2 {
@@ -527,6 +533,7 @@ struct Rotoscope
         return *this;
     }
 };
+CEREAL_CLASS_VERSION(Rotoscope, 1)
 
 struct FrameToRender
 {
@@ -668,5 +675,7 @@ uint8_t GraphicsPeek(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
 uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc = nullptr);
 
 int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color, int xormode, uint32_t offset);
+
+void GraphicsSaveScreen();
 
 #endif

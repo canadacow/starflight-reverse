@@ -269,6 +269,9 @@ std::jthread graphicsThread{};
 std::binary_semaphore stopSemaphore{0};
 std::mutex graphicsRetrace{};
 
+std::vector<uint8_t> serializedRotoscope;
+std::vector<uint8_t> serializedSnapshot;
+
 int cursorx = 0;
 int cursory = 0;
 
@@ -721,6 +724,63 @@ static nk_buttons sdl_button_to_nk(int button)
 
     }
 }
+
+namespace cereal {
+
+template<class Archive>
+void serialize(Archive& ar, NavigationData& data) {
+    ar(data.window_x, data.window_y);
+}
+
+template<class Archive>
+void serialize(Archive& ar, TextData& data) {
+    ar(data.character, data.xormode, data.fontNum);
+}
+
+template<class Archive>
+void serialize(Archive& ar, PicData& data) {
+    ar(data.picID);
+}
+
+template<class Archive>
+void serialize(Archive& ar, LineData& data) {
+    ar(data.x0, data.y0, data.x1, data.y1, data.n, data.total);
+}
+
+template<class Archive>
+void serialize(Archive& ar, RunBitData& data) {
+    ar(data.tag);
+}
+
+template <class Archive>
+void serialize(Archive & ar, Rotoscope & rotoscope) {
+    ar(rotoscope.content, rotoscope.EGAcolor, rotoscope.argb,
+       rotoscope.blt_x, rotoscope.blt_y, rotoscope.blt_w, rotoscope.blt_h,
+       rotoscope.bgColor, rotoscope.fgColor);
+
+    switch(rotoscope.content) {
+        case NavigationalPixel:
+            ar(rotoscope.navigationData);
+            break;
+        case TextPixel:
+            ar(rotoscope.textData);
+            break;
+        case PicPixel:
+            ar(rotoscope.picData);
+            break;
+        case LinePixel:
+            ar(rotoscope.lineData);
+            break;
+        case RunBitPixel:
+            ar(rotoscope.runBitData);
+            break;
+        default:
+            break;
+    }
+}
+
+}
+
 
 class SDLKeyboard : public DOSKeyboard {
 private:
@@ -3882,5 +3942,19 @@ void GraphicsSave(char *filename)
       fprintf(file, "\n");
   }
   fclose(file);
+}
+
+void GraphicsSaveScreen()
+{
+    std::stringstream ss;
+    {
+        cereal::BinaryOutputArchive oarchive(ss);
+        oarchive(rotoscopePixels);
+    } // Archive goes out of scope, ensuring all contents are flushed into the stringstream
+
+    std::string str = ss.str();
+    serializedRotoscope.assign(str.begin(), str.end());
+
+    printf("Here");
 }
 

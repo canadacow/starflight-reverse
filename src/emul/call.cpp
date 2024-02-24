@@ -1328,14 +1328,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inGameOps = true;
+                    GraphicsSaveScreen();
                 }
 
-                if(nextInstr == 0xee39 && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
+                if(nextInstr == 0xee39 && (std::string(overlayName) == "GAME-OV")) // SAVEGAME 
                 {
                     frameSync.shouldSave = true;
                 }
 
-                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
+                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500 
                 {
                     frameSync.inCombatRender = true;
                     auto shipCount = Read16(0xe1fb);
@@ -2257,7 +2258,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inDrawShipButton = false;
                 }
 
-                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
+                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500
                 {
                     frameSync.inCombatRender = false;
                 }
