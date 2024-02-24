@@ -125,6 +125,7 @@ struct GraphicsContext
         avk::image_sampler orrery;
         avk::image_sampler starmap;
         avk::image_sampler ui;
+        avk::image_sampler gameOutput;
     };
     
     std::vector<BufferData> buffers;
@@ -780,7 +781,6 @@ void serialize(Archive & ar, Rotoscope & rotoscope) {
 }
 
 }
-
 
 class SDLKeyboard : public DOSKeyboard {
 private:
@@ -1665,6 +1665,12 @@ static int GraphicsInitThread()
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
+        bd.gameOutput = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eB8G8R8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
+
         bd.orrery = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
                 s_gc.vc.create_image(920, 718, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
@@ -2301,8 +2307,8 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
     );
 
     return {
-        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }),
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }),
 
         sb->fill(data,0, 0, dataSize),
 
@@ -2328,14 +2334,14 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
 
         avk::command::bind_pipeline(s_gc.textPipeline.as_reference()),
         avk::command::bind_descriptors(s_gc.textPipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
-                avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
+                avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].gameOutput->get_image_view()->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.textImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 2, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer())
             })),
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
-        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::present_src })
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::transfer_src })
     };
 }
 
@@ -2374,8 +2380,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
     std::vector<avk::recorded_commands_t> res{};
 
     res.push_back(
-        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-        avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }));
 
     res.push_back(
         s_gc.buffers[inFlightIndex].rotoscope->fill(shaderBackBuffer.data(), 0, 0, shaderBackBuffer.size() * sizeof(RotoscopeShader)));
@@ -2542,7 +2548,7 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
 
     res.push_back(
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
-                avk::descriptor_binding(0, 0, s_gc.vc.current_backbuffer_reference().image_view_at(0)->as_storage_image(avk::layout::general)),
+                avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].gameOutput->get_image_view()->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
                 avk::descriptor_binding(0, 2, s_gc.FONT1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 3, s_gc.FONT2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
@@ -2568,8 +2574,9 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1));
 
     res.push_back(
-        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::present_src }));
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::transfer_src }));                        
+
 
     return res;
 }
@@ -2723,6 +2730,9 @@ void GraphicsUpdate()
                 avk::stage::auto_stage >> avk::stage::auto_stage,
                 avk::access::auto_access >> avk::access::auto_access
             ));
+
+        commands.push_back(avk::sync::image_memory_barrier(s_gc.shipImage->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst}));
 
         int i = 0;
         for(auto& textureInfo : shipTextures)
@@ -3365,8 +3375,45 @@ void GraphicsUpdate()
 
         auto gpuCommands = GPURotoscope(inFlightIndex, uniform, ic, orrery, starmap, shaderBackBuffer, navPipeline, orreryPipeline, starmapPipeline, nk_surface->pixels, WINDOW_WIDTH * WINDOW_HEIGHT * 4);
         commands.insert(commands.end(), gpuCommands.begin(), gpuCommands.end());
+
+
+        if (frameSync.takeScreenshot)
+        {
+#if 0
+            std::vector<avk::recorded_commands_t> res{};
+
+            auto readbackBuffer = s_gc.vc.create_buffer(avk::memory_usage::host_coherent, vk::BufferUsageFlagBits::eTransferDst, s_gc.vc.current_backbuffer()->image_at(0)->config().size);
+
+            res.push_back(
+                avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+                    avk::stage::transfer >> avk::stage::transfer).with_layout_transition({ avk::layout::present_src, avk::layout::transfer_src })
+            );
+
+            res.push_back(
+                avk::copy_image_to_buffer(s_gc.vc.current_backbuffer()->image_at(0), readbackBuffer, avk::layout::transfer_src)
+            );
+
+            res.push_back(
+                avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+                    avk::stage::transfer >> avk::stage::transfer).with_layout_transition({ avk::layout::transfer_src, avk::layout::present_src })
+            );
+#endif
+        }
 #endif
     }
+
+    commands.push_back(
+        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }));
+
+
+    commands.push_back(
+        avk::copy_image_to_another(s_gc.buffers[inFlightIndex].gameOutput->get_image(), avk::layout::transfer_src, s_gc.vc.current_backbuffer()->image_at(0), avk::layout::transfer_dst, vk::ImageAspectFlagBits::eColor)
+    );
+
+    commands.push_back(
+        avk::sync::image_memory_barrier(s_gc.vc.current_backbuffer()->image_at(0),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::present_src }));
 
     s_gc.vc.record(std::move(commands))
     .into_command_buffer(s_gc.buffers[inFlightIndex].command)
