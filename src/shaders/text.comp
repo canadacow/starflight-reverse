@@ -15,6 +15,57 @@ layout(binding = 2) uniform UniformBlock {
     uint useEGA;
 } uniforms;
 
+#define maskDark 0.66
+#define maskLight 1.0
+
+#define float3 vec3
+#define float2 vec2
+#define frac fract
+
+float3 Mask(float2 pos) {
+    float3 mask = float3(maskDark);
+
+    pos.x += pos.y * 3.0;
+    pos.x = frac(pos.x / 6.0);
+
+    if (pos.x < 0.333) 
+    {
+        mask.r = maskLight;
+    } else if (pos.x < 0.666) 
+    {
+        mask.g = maskLight;
+    } else 
+    {
+        mask.b = maskLight;
+    }
+
+    return mask;
+}
+
+vec3 hueToRGB(float h, float s, float l)
+{
+    h = h / 60.0;
+    float c = (1.0 - abs(2.0 * l - 1.0)) * s;
+    float x = c * (1.0 - abs(mod(h, 2.0) - 1.0));
+    vec3 rgb;
+    if(h <= 1.0)
+        rgb = vec3(c, x, 0.0);
+    else if(h <= 2.0)
+        rgb = vec3(x, c, 0.0);
+    else if(h <= 3.0)
+        rgb = vec3(0.0, c, x);
+    else if(h <= 4.0)
+        rgb = vec3(0.0, x, c);
+    else if(h <= 5.0)
+        rgb = vec3(x, 0.0, c);
+    else if(h <= 6.0)
+        rgb = vec3(c, 0.0, x);
+    
+    float m = l - 0.5 * c;
+        
+    return rgb + m;
+}
+
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
 
@@ -23,6 +74,9 @@ void main() {
 
     vec2 uv = vec2(float(pixelCoords.x) / float(uniforms.WINDOW_WIDTH), float(pixelCoords.y) / float(uniforms.WINDOW_HEIGHT));
     vec4 color = texture(imgInput, uv);
+
+    color.rgb *= Mask(pixelCoords);
+
     imageStore(imgOutput, pixelCoords, color);
 }
 

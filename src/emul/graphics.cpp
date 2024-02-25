@@ -1848,7 +1848,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         s_gc.vc.create_image_view(
             s_gc.vc.create_image(TEXT_MODE_WIDTH, TEXT_MODE_HEIGHT, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
         ),
-        s_gc.vc.create_sampler(avk::filter_mode::nearest_neighbor, avk::border_handling_mode::clamp_to_edge)
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
     );
 
     s_gc.epoch = std::chrono::steady_clock::now();
