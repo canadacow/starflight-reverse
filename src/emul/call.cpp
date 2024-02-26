@@ -27,6 +27,8 @@
 #include <cmath>
 #include <thread>
 #include <deque>
+#include <ostream>
+#include <fstream>
 
 #include <zstd.h>
 #include <xxhash.h>
@@ -41,6 +43,9 @@ unsigned short int cx = 0x0;
 unsigned short int dx = 0x0;
 
 static uint16_t CurrentImageTagForHybridBlit = 0;
+
+extern std::vector<uint8_t> serializedRotoscope;
+extern std::vector<uint8_t> serializedSnapshot;
 
 
 // ------------------------------------------------
@@ -119,7 +124,6 @@ void PrintCache()
 
 }
 
-
 // ------------------------------------------------
 
 uint8_t STARA[256000];
@@ -127,123 +131,162 @@ uint8_t STARA_ORIG[256000];
 uint8_t STARB[362496];
 uint8_t STARB_ORIG[362496];
 
-bool Serialize(uint64_t& combinedHash, std::string& filename)
+struct SectionHeader {
+    uint64_t offset;
+    uint64_t compressedSize;
+    uint64_t uncompressedSize;
+};
+
+struct ArchiveHeader {
+    char fourCC[4]; // Four-character code to identify the game or data type
+    uint32_t version; // Version of the archive format
+    SectionHeader staraHeader;
+    SectionHeader starbHeader;
+    SectionHeader rotoscopeHeader;
+    SectionHeader screenshotHeader;
+};
+
+std::vector<uint8_t> CompressData(const uint8_t* data, size_t dataSize, size_t& compressedSize) {
+    size_t const bufferCapacity = ZSTD_compressBound(dataSize); // Maximum compressed size
+    std::vector<uint8_t> compressedData(bufferCapacity);
+
+    compressedSize = ZSTD_compress(compressedData.data(), bufferCapacity, data, dataSize, 1);
+    if (ZSTD_isError(compressedSize)) {
+        throw std::runtime_error(ZSTD_getErrorName(compressedSize));
+    }
+
+    compressedData.resize(compressedSize); // Shrink to fit actual compressed size
+    return compressedData;
+}
+
+std::vector<uint8_t> DecompressData(const uint8_t* compressedData, size_t compressedSize, size_t decompressedSize) {
+    std::vector<uint8_t> decompressedData(decompressedSize);
+
+    size_t actualDecompressedSize = ZSTD_decompress(decompressedData.data(), decompressedSize, compressedData, compressedSize);
+    if (ZSTD_isError(actualDecompressedSize) || actualDecompressedSize != decompressedSize) {
+        throw std::runtime_error(ZSTD_getErrorName(actualDecompressedSize));
+    }
+
+    return decompressedData;
+}
+
+std::vector<uint8_t> CreateDifferentialData(const uint8_t* data, const uint8_t* origData, size_t dataSize) {
+    std::vector<uint8_t> diffData(dataSize);
+    for (size_t i = 0; i < dataSize; ++i) {
+        diffData[i] = data[i] ^ origData[i];
+    }
+    return diffData;
+}
+
+void ApplyDifferentialData(uint8_t* data, const std::vector<uint8_t>& diffData, const uint8_t* origData, size_t dataSize) {
+    for (size_t i = 0; i < dataSize; ++i) {
+        data[i] = diffData[i] ^ origData[i];
+    }
+}
+
+bool Serialize(const std::vector<uint8_t>& rotoscopedData, const std::vector<uint8_t>& screenshotData, uint64_t& combinedHash, std::string& filename)
 {
+    // Calculate hashes for STARA and STARB as before
     uint64_t hashA = XXH64(STARA, sizeof(STARA), 0);
     combinedHash = XXH64(STARB, sizeof(STARB), hashA);
 
+    // Generate filename based on combined hash
     std::stringstream ss;
     ss << std::hex << combinedHash;
-    filename = "sf-" + ss.str() + ".zst";
-    
-    FILE* file = fopen(filename.c_str(), "wb");
-    if (file == NULL)
+    filename = ss.str() + ".sfs";
+
+    std::ofstream file(filename, std::ios::binary);
+    if (!file.is_open())
     {
         printf("Could not open file %s\n", filename.c_str());
         return false;
     }
 
-    ZSTD_CCtx* cctx = ZSTD_createCCtx();
-    if (cctx == NULL)
-    {
-        printf("Could not create ZSTD_CCtx\n");
-        fclose(file);
-        return false;
-    }
+    // Initialize and write a placeholder for the archive header
+    ArchiveHeader archiveHeader = {};
+    memcpy(archiveHeader.fourCC, "SF1 ", 4); // Example FourCC code
+    archiveHeader.version = 1; // Starting with version 1
+    file.seekp(sizeof(ArchiveHeader), std::ios::beg);
 
-    // Calculate the total size of STARA and STARB
-    size_t totalSize = sizeof(STARA) + sizeof(STARB);
+    // Function to write sections and update headers
+    auto writeSection = [&](const std::vector<uint8_t>& data, SectionHeader& header, bool compress = true) {
+        if (compress) {
+            size_t compressedSize = 0;
+            auto buffer = CompressData(data.data(), data.size(), compressedSize);
+            header.offset = file.tellp();
+            header.compressedSize = compressedSize;
+            header.uncompressedSize = data.size();
+            file.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+        } else {
+            header.offset = file.tellp();
+            header.compressedSize = data.size(); // For uncompressed data, compressed size is the actual size
+            header.uncompressedSize = data.size();
+            file.write(reinterpret_cast<const char*>(data.data()), data.size());
+        }
+    };
 
-    // Create a buffer to hold both STARA and STARB
-    std::vector<unsigned char> combinedData(totalSize);
+    // Serialize and write each section
+    writeSection(CreateDifferentialData(STARA, STARA_ORIG, sizeof(STARA)), archiveHeader.staraHeader, true);
+    writeSection(CreateDifferentialData(STARB, STARB_ORIG, sizeof(STARB)), archiveHeader.starbHeader, true);
+    writeSection(rotoscopedData, archiveHeader.rotoscopeHeader, true); // Compress roto-scoped data
+    writeSection(screenshotData, archiveHeader.screenshotHeader, false); // Directly write the screenshot data
 
-    // Copy STARA and STARB into the combined buffer
-    memcpy(combinedData.data(), STARA, sizeof(STARA));
-    for(size_t i = 0; i < sizeof(STARA); i++)
-    {
-        combinedData[i] ^= STARA_ORIG[i];
-    }
+    // Go back and write the actual archive header at the beginning
+    file.seekp(0, std::ios::beg);
+    file.write(reinterpret_cast<const char*>(&archiveHeader), sizeof(ArchiveHeader));
 
-    memcpy(combinedData.data() + sizeof(STARA), STARB, sizeof(STARB));
-    for(size_t i = 0; i < sizeof(STARB); i++)
-    {
-        combinedData[i + sizeof(STARA)] ^= STARB_ORIG[i];
-    }
-
-    // Compress the combined buffer
-    std::vector<unsigned char> compressedData(ZSTD_compressBound(totalSize));
-    size_t const cSize = ZSTD_compressCCtx(cctx, compressedData.data(), compressedData.size(), combinedData.data(), totalSize, 1);
-    if (ZSTD_isError(cSize))
-    {
-        printf("Error compressing data: %s\n", ZSTD_getErrorName(cSize));
-        ZSTD_freeCCtx(cctx);
-        fclose(file);
-        return false;
-    }
-
-    // Write the compressed data to the file
-    fwrite(compressedData.data(), 1, cSize, file);
-
-    ZSTD_freeCCtx(cctx);
-    fclose(file);
+    file.close();
     return true;
 }
 
-bool Deserialize(const std::string& filename)
+bool Deserialize(const std::string& filename, std::vector<uint8_t>& rotoscopeData, std::vector<uint8_t>& screenshotData)
 {
-    FILE* file = fopen(filename.c_str(), "rb");
-    if (file == NULL)
+    std::ifstream file(filename, std::ios::binary);
+    if (!file.is_open())
     {
-        printf("Could not open file %s\n", filename.c_str());
+        std::cerr << "Could not open file " << filename << std::endl;
         return false;
     }
 
-    ZSTD_DCtx* dctx = ZSTD_createDCtx();
-    if (dctx == NULL)
+    // Read the archive header
+    ArchiveHeader archiveHeader;
+    file.read(reinterpret_cast<char*>(&archiveHeader), sizeof(ArchiveHeader));
+    if (file.fail())
     {
-        printf("Could not create ZSTD_DCtx\n");
-        fclose(file);
+        std::cerr << "Failed to read archive header from " << filename << std::endl;
         return false;
     }
 
-    // Get the file size
-    fseek(file, 0, SEEK_END);
-    size_t compressedSize = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    // Read the compressed data from the file
-    std::vector<unsigned char> compressedData(compressedSize);
-    fread(compressedData.data(), 1, compressedSize, file);
-
-    // Prepare a buffer for the decompressed data
-    size_t totalSize = sizeof(STARA) + sizeof(STARB);
-    std::vector<unsigned char> decompressedData(totalSize);
-
-    // Decompress the data
-    size_t const dSize = ZSTD_decompressDCtx(dctx, decompressedData.data(), decompressedData.size(), compressedData.data(), compressedSize);
-    if (ZSTD_isError(dSize))
+    // Verify the FourCC code
+    if (std::strncmp(archiveHeader.fourCC, "SF1 ", 4) != 0)
     {
-        printf("Error decompressing data: %s\n", ZSTD_getErrorName(dSize));
-        ZSTD_freeDCtx(dctx);
-        fclose(file);
+        std::cerr << "Invalid FourCC code in " << filename << std::endl;
         return false;
     }
 
-    // Copy the decompressed data to STARA and STARB
-    memcpy(STARA, decompressedData.data(), sizeof(STARA));
-    for(size_t i = 0; i < sizeof(STARA); i++)
-    {
-        STARA[i] ^= STARA_ORIG[i];
-    }
+    // Function to read and decompress sections
+    auto readSection = [&](const SectionHeader& header, bool decompress = true) -> std::vector<uint8_t> {
+        std::vector<uint8_t> data(header.compressedSize);
+        file.seekg(header.offset, std::ios::beg);
+        file.read(reinterpret_cast<char*>(data.data()), header.compressedSize);
+        if (decompress)
+        {
+            return DecompressData(data.data(), header.compressedSize, header.uncompressedSize);
+        }
+        return data;
+    };
 
-    memcpy(STARB, decompressedData.data() + sizeof(STARA), sizeof(STARB));
-    for(size_t i = 0; i < sizeof(STARB); i++)
-    {
-        STARB[i] ^= STARB_ORIG[i];
-    }
+    // Deserialize each section
+    std::vector<uint8_t> staraDiffData = readSection(archiveHeader.staraHeader);
+    ApplyDifferentialData(STARA, staraDiffData, STARA_ORIG, sizeof(STARA));
 
-    ZSTD_freeDCtx(dctx);
-    fclose(file);
+    std::vector<uint8_t> starbDiffData = readSection(archiveHeader.starbHeader);
+    ApplyDifferentialData(STARB, starbDiffData, STARB_ORIG, sizeof(STARB));
+
+    rotoscopeData = readSection(archiveHeader.rotoscopeHeader);
+    screenshotData = readSection(archiveHeader.screenshotHeader, false);
+
+    file.close();
     return true;
 }
 
@@ -1328,7 +1371,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inGameOps = true;
-                    GraphicsSaveScreen();
                 }
 
                 if(nextInstr == 0xee39 && (std::string(overlayName) == "GAME-OV")) // SAVEGAME 
@@ -2258,7 +2300,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inDrawShipButton = false;
                 }
 
-                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500
+                if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inCombatRender = false;
                 }
@@ -2629,7 +2671,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(frameSync.shouldSave)
                 {
-                    serialized = Serialize(binHash, filename);
+                    serialized = Serialize(serializedRotoscope, serializedSnapshot, binHash, filename);
                 }
 
                 bx = Pop();
@@ -4749,13 +4791,13 @@ void LoadSTARFLT(std::string hash)
     else
     {
         std::string prefix = "sf-" + hash;
-        std::string filename = prefix + ".zst";
+        std::string filename = prefix + ".sfs";
 
         for (const auto & entry : std::filesystem::directory_iterator("./")) {
             std::string file = entry.path().filename().string();
             if (file.substr(file.find_last_of(".") + 1) != "zst") continue;
             if (file.find(prefix) == 0) {
-                if (!Deserialize(file)) {
+                if (!Deserialize(file, serializedRotoscope, serializedSnapshot)) {
                     fprintf(stderr, "Error: Cannot deserialize file %s\n", file.c_str());
                     exit(1);
                 } else {

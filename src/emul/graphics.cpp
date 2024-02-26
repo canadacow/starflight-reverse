@@ -2701,8 +2701,6 @@ void DrawUI()
     if (nk_begin(&ctx, "Starflight - Reimaged Panel", nk_rect(panelX, panelY, panelWidth, panelHeight),
         NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND)) {
         
-        nk_style_push_color(&ctx, &ctx.style.window.background, nk_rgba(0, 0, 255, 230));
-        
         // Adjust layout spacing to fit the new panel size
         nk_layout_row_dynamic(&ctx, 40, 1);
         nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
