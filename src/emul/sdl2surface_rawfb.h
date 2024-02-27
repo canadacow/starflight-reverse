@@ -35,10 +35,13 @@
 
 #include <SDL.h>
 #include <SDL_surface.h>
+#include <SDL_image.h>
 
 struct sdlsurface_context *nk_sdlsurface_init(SDL_Surface *fb, float fontSize);
 void                  nk_sdlsurface_render(const struct sdlsurface_context *sdlsurface, const struct nk_color clear, const unsigned char enable_clear);
 void                  nk_sdlsurface_shutdown(struct sdlsurface_context *sdlsurface);
+NK_API struct nk_image nk_sdlsurface_imgfrompng(const char* data, int size);
+void nk_sdlsurface_destroy_image(struct nk_image img);
 
 #endif
 /*
@@ -67,6 +70,40 @@ struct sdlsurface_context {
 #ifndef MAX
 #define MAX(a,b) ((a) < (b) ? (b) : (a))
 #endif
+
+NK_API struct nk_image
+nk_sdlsurface_imgfrompng(const char* data, int size) {
+    if (!data || size <= 0) {
+        return nk_image_ptr(NULL);
+    }
+
+    // SDL_RWops is SDL's abstraction for reading data from arbitrary sources.
+    SDL_RWops* rw = SDL_RWFromConstMem(data, size);
+    if (!rw) {
+        SDL_Log("Failed to create RWops from memory: %s", SDL_GetError());
+        return nk_image_ptr(NULL);
+    }
+
+    // Use SDL_image to load the image data. Specify "PNG" as the type.
+    SDL_Surface* surface = IMG_LoadTyped_RW(rw, 1, "PNG");
+    if (!surface) {
+        SDL_Log("Failed to load image from memory: %s", IMG_GetError());
+        return nk_image_ptr(NULL);
+    }
+
+    // Convert SDL_Surface to nk_image
+    struct nk_image img = nk_image_ptr(surface);
+    img.w = surface->w;
+    img.h = surface->h;
+    return img;
+}
+
+void nk_sdlsurface_destroy_image(struct nk_image img) {
+    if (img.handle.ptr != NULL) {
+        SDL_Surface* surface = (SDL_Surface*)img.handle.ptr;
+        SDL_FreeSurface(surface);
+    }
+}
 
 static unsigned int
 nk_sdlsurface_color2int(const struct nk_color c, const SDL_PixelFormat *format)
@@ -965,16 +1002,29 @@ nk_sdlsurface_drawimage(const struct sdlsurface_context *sdlsurface,
     struct nk_rect src_rect;
     struct nk_rect dst_rect;
 
-    src_rect.x = img->region[0];
-    src_rect.y = img->region[1];
-    src_rect.w = img->region[2];
-    src_rect.h = img->region[3];
-
     dst_rect.x = x;
     dst_rect.y = y;
     dst_rect.w = w;
     dst_rect.h = h;
-    nk_sdlsurface_stretch_image(sdlsurface->fb, sdlsurface->font_tex, &dst_rect, &src_rect, &sdlsurface->scissors, col);
+
+    if (img->handle.ptr)
+    {
+        src_rect.x = 0;
+        src_rect.y = 0;
+        src_rect.w = img->w;
+        src_rect.h = img->h;
+
+        nk_sdlsurface_stretch_image(sdlsurface->fb, (const struct SDL_Surface*)img->handle.ptr, &dst_rect, &src_rect, &sdlsurface->scissors, col);
+    }
+    else
+    {
+        src_rect.x = img->region[0];
+        src_rect.y = img->region[1];
+        src_rect.w = img->region[2];
+        src_rect.h = img->region[3];
+
+        nk_sdlsurface_stretch_image(sdlsurface->fb, sdlsurface->font_tex, &dst_rect, &src_rect, &sdlsurface->scissors, col);
+    }
 }
 
 NK_API void

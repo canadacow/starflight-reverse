@@ -66,6 +66,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(sdl2 CONFIG REQUIRED)
+find_package(SDL2_image CONFIG REQUIRED)
 find_package(Zstd CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
 find_package(Vulkan 1.2.162 REQUIRED)
@@ -123,6 +124,7 @@ target_link_libraries(emulatesdl PRIVATE
         Magnum::Magnum
         SDL2::SDL2main
         SDL2::SDL2
+        SDL2_image::SDL2_image
         xxHash::xxhash
         avk
         Vulkan::Vulkan

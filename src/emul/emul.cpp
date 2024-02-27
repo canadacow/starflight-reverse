@@ -35,10 +35,11 @@ int main(int argc, char *argv[]) {
     {
         ret = Step();
 
+        if (IsGraphicsShutdown())
+            break;
+
     } while (ret == OK || ret == EXIT);
 
-    //GraphicsWait();
-    StopSpeech();
     GraphicsQuit();
     return 0;
 }

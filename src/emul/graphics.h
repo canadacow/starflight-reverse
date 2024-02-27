@@ -702,5 +702,6 @@ uint32_t GraphicsPeekDirect(int x, int y, uint32_t offset, Rotoscope* pc = nullp
 int16_t GraphicsFONT(uint16_t num, uint32_t character, int x1, int y1, int color, int xormode, uint32_t offset);
 
 void GraphicsSaveScreen();
+bool IsGraphicsShutdown();
 
 #endif

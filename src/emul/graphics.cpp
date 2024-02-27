@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
+#include <SDL2/SDL_image.h>
 #include <atomic>
 #include <stdio.h>
 #include <stdlib.h>
@@ -991,6 +992,7 @@ public:
                             if(SDL_GetWindowFromID(event.window.windowID) == window)
                             {
                                 GraphicsQuit();
+                                pushEvent(event);
                             }
                             #if defined(ENABLE_OFFSCREEN_VIDEO_RENDERER)
                             if(SDL_GetWindowFromID(event.window.windowID) == offscreenWindow)
@@ -1004,6 +1006,7 @@ public:
                     break;
                 case SDL_QUIT:
                     GraphicsQuit();
+                    break;
                 case SDL_MOUSEMOTION:
                     nk_input_motion(&(nk_context->ctx), event.motion.x, event.motion.y);
                     break;
@@ -1881,6 +1884,13 @@ void GraphicsInit()
         printf("SDL_Init Error: %s\n", SDL_GetError());
         return;
     }
+
+    /*
+    if ((IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) == 0)
+        printf("Failed to initialize SDL_image with PNG support: %s\n", IMG_GetError());
+        return;
+    }*/
+
     FILE* file;
     file = freopen("stdout", "w", stdout); // redirects stdout
     file = freopen("stderr", "w", stderr); // redirects stderr
@@ -2676,16 +2686,48 @@ uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
 #include <vector>
 #include <string>
 
-std::vector<std::string> GetAllSaveGameFiles() {
-    std::vector<std::string> sfsFiles;
+std::vector<std::filesystem::path> GetAllSaveGameFiles() {
+    std::vector<std::filesystem::path> sfsFiles;
     for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::current_path())) {
         if (entry.path().extension() == ".sfs") {
-            sfsFiles.push_back(entry.path().filename().string());
+            sfsFiles.push_back(entry.path());
         }
     }
     return sfsFiles;
 }
 
+std::vector<uint8_t> ExtractPngFromSaveFile(const std::filesystem::path& saveFilePath) {
+    std::ifstream saveFile(saveFilePath, std::ios::binary);
+    if (!saveFile.is_open()) {
+        throw std::runtime_error("Failed to open save file.");
+    }
+
+    ArchiveHeader archiveHeader;
+    saveFile.read(reinterpret_cast<char*>(&archiveHeader), sizeof(ArchiveHeader));
+    if (saveFile.gcount() != sizeof(ArchiveHeader)) {
+        throw std::runtime_error("Failed to read archive header.");
+    }
+
+    // Check if the fourCC matches expected value for a valid save file
+    if (strncmp(archiveHeader.fourCC, "SF1 ", 4) != 0) {
+        throw std::runtime_error("Invalid save file format.");
+    }
+
+    // Seek to the screenshot section
+    saveFile.seekg(archiveHeader.screenshotHeader.offset, std::ios::beg);
+    if (!saveFile.good()) {
+        throw std::runtime_error("Failed to seek to screenshot section.");
+    }
+
+    // Read the compressed screenshot data
+    std::vector<uint8_t> compressedScreenshot(archiveHeader.screenshotHeader.compressedSize);
+    saveFile.read(reinterpret_cast<char*>(compressedScreenshot.data()), archiveHeader.screenshotHeader.compressedSize);
+    if (saveFile.gcount() != static_cast<std::streamsize>(archiveHeader.screenshotHeader.compressedSize)) {
+        throw std::runtime_error("Failed to read compressed screenshot data.");
+    }
+
+    return compressedScreenshot;
+}
 
 void DrawUI()
 {
@@ -2696,13 +2738,41 @@ void DrawUI()
     };
 
     struct SaveGame {
-        uint64_t screenshotTextureId;
         std::string timestamp;
+        std::filesystem::path file;
+        struct nk_image screenshot;
     };
 
-    static std::vector<SaveGame> saveGames;
     static GameMode currentMode = ROTOSCOPE_MODE;
     static bool isPaused = false;
+    static int32_t screenshotIndex = 0;
+
+    static std::vector<SaveGame> saveGames;
+    static bool savegamesSearched = false;
+
+    if(!savegamesSearched) {
+        auto saveGameFiles = GetAllSaveGameFiles();
+        uint32_t i = 0;
+        for (const auto& file : saveGameFiles) {
+            SaveGame saveGame;
+            saveGame.file = file;
+
+            auto data = ExtractPngFromSaveFile(file);
+            saveGame.screenshot = nk_sdlsurface_imgfrompng((const char*)data.data(), data.size());
+
+            std::filesystem::file_time_type ftime = std::filesystem::last_write_time(file);
+            auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+            std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
+            std::stringstream ss;
+            ss << std::put_time(std::localtime(&cftime), "%Y-%m-%d %H:%M:%S");
+            saveGame.timestamp = ss.str();
+            saveGames.push_back(saveGame);
+
+            ++i;
+        }
+
+        savegamesSearched = true;
+    }
 
     struct nk_color clear = { 0,0,0,0 };
 
@@ -2725,36 +2795,57 @@ void DrawUI()
         nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
 
         // Mode selection radio buttons
-        nk_layout_row_dynamic(&ctx, 30, 1);
-        if (nk_option_label(&ctx, "Rotoscope Mode", currentMode == ROTOSCOPE_MODE)) currentMode = ROTOSCOPE_MODE;
-        if (nk_option_label(&ctx, "EGA Mode", currentMode == EGA_MODE)) currentMode = EGA_MODE;
-        if (nk_option_label(&ctx, "CGA Mode", currentMode == CGA_MODE)) currentMode = CGA_MODE;
+        nk_layout_row_begin(&ctx, NK_DYNAMIC, 30, 3); 
+        {
+            nk_layout_row_push(&ctx, 0.40f);
+            if (nk_option_label(&ctx, "Rotoscope Mode", currentMode == ROTOSCOPE_MODE)) currentMode = ROTOSCOPE_MODE;
+
+            nk_layout_row_push(&ctx, 0.30f);
+            if (nk_option_label(&ctx, "EGA Mode", currentMode == EGA_MODE)) currentMode = EGA_MODE;
+
+            nk_layout_row_push(&ctx, 0.30f);
+            if (nk_option_label(&ctx, "CGA Mode", currentMode == CGA_MODE)) currentMode = CGA_MODE;
+        }
+        nk_layout_row_end(&ctx);
 
         nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1);
         if (nk_button_label(&ctx, isPaused ? "Resume Game" : "Pause Game")) {
             isPaused = !isPaused;
         }
 
-        // Save game browser
-        nk_layout_row_dynamic(&ctx, 150, 1); // Adjust size as needed
+        nk_layout_row_dynamic(&ctx, 280, 1); // Height for the save game display
         if (nk_group_begin(&ctx, "Save Games", NK_WINDOW_BORDER)) {
-            // Iterate over save games
-            for (const auto& saveGame : saveGames) {
-                nk_layout_row_begin(&ctx, NK_STATIC, 30, 2); // Adjust size as needed
-                {
-                    // Display save game screenshot
-                    nk_image(&ctx, nk_image_id(saveGame.screenshotTextureId));
-                    nk_layout_row_push(&ctx, (int)(panelWidth - 250)); // Adjust width to fit panel
-                    // Display save game timestamp
-                    nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_LEFT);
-                }
-                nk_layout_row_end(&ctx);
+            // Display only one save game at a time
+            const auto& saveGame = saveGames[screenshotIndex]; // Use the current index to get the save game
 
-                // Select save game
-                if (nk_button_label(&ctx, "Load")) {
-                    // Load game logic here, using saveGame.id or similar identifier
+            nk_layout_row_begin(&ctx, NK_DYNAMIC, 200, 3); // Three elements in the row: < button, screenshot, > button
+            {
+                // Previous save game button
+                nk_layout_row_push(&ctx, 0.10f);
+                if (nk_button_label(&ctx, "<")) {
+                    screenshotIndex = (screenshotIndex + saveGames.size() - 1) % saveGames.size(); // Decrement index with wrap-around
+                }
+                // Display save game screenshot
+                nk_layout_row_push(&ctx, 0.80f);
+                nk_image(&ctx, saveGame.screenshot);
+                // Next save game button
+                nk_layout_row_push(&ctx, 0.10f);
+                if (nk_button_label(&ctx, ">")) {
+                    screenshotIndex = (screenshotIndex + 1) % saveGames.size(); // Increment index with wrap-around
                 }
             }
+            nk_layout_row_end(&ctx);
+
+            // Display save game timestamp below the screenshot
+            nk_layout_row_dynamic(&ctx, 20, 1); // Adjust height as needed for the timestamp
+            nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_CENTERED);
+
+            // Load button for the current save game
+            nk_layout_row_dynamic(&ctx, 30, 1); // Adjust height as needed for the load button
+            if (nk_button_label(&ctx, "Load")) {
+                // Load game logic here, using saveGame.file or similar identifier
+            }
+
             nk_group_end(&ctx);
         }
     }
@@ -4160,3 +4251,7 @@ void GraphicsSaveScreen()
     frameSync.screenshotSemaphore.acquire();
 }
 
+bool IsGraphicsShutdown()
+{
+    return graphicsIsShutdown;
+}
