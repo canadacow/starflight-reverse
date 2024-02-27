@@ -131,21 +131,6 @@ uint8_t STARA_ORIG[256000];
 uint8_t STARB[362496];
 uint8_t STARB_ORIG[362496];
 
-struct SectionHeader {
-    uint64_t offset;
-    uint64_t compressedSize;
-    uint64_t uncompressedSize;
-};
-
-struct ArchiveHeader {
-    char fourCC[4]; // Four-character code to identify the game or data type
-    uint32_t version; // Version of the archive format
-    SectionHeader staraHeader;
-    SectionHeader starbHeader;
-    SectionHeader rotoscopeHeader;
-    SectionHeader screenshotHeader;
-};
-
 std::vector<uint8_t> CompressData(const uint8_t* data, size_t dataSize, size_t& compressedSize) {
     size_t const bufferCapacity = ZSTD_compressBound(dataSize); // Maximum compressed size
     std::vector<uint8_t> compressedData(bufferCapacity);
@@ -184,7 +169,7 @@ void ApplyDifferentialData(uint8_t* data, const std::vector<uint8_t>& diffData, 
     }
 }
 
-bool Serialize(const std::vector<uint8_t>& rotoscopedData, const std::vector<uint8_t>& screenshotData, uint64_t& combinedHash, std::string& filename)
+bool Serialize(const std::vector<uint8_t>& rotoscopeData, const std::vector<uint8_t>& screenshotData, uint64_t& combinedHash, std::string& filename)
 {
     // Calculate hashes for STARA and STARB as before
     uint64_t hashA = XXH64(STARA, sizeof(STARA), 0);
@@ -228,7 +213,7 @@ bool Serialize(const std::vector<uint8_t>& rotoscopedData, const std::vector<uin
     // Serialize and write each section
     writeSection(CreateDifferentialData(STARA, STARA_ORIG, sizeof(STARA)), archiveHeader.staraHeader, true);
     writeSection(CreateDifferentialData(STARB, STARB_ORIG, sizeof(STARB)), archiveHeader.starbHeader, true);
-    writeSection(rotoscopedData, archiveHeader.rotoscopeHeader, true); // Compress roto-scoped data
+    writeSection(rotoscopeData, archiveHeader.rotoscopeHeader, true); // Compress roto-scoped data
     writeSection(screenshotData, archiveHeader.screenshotHeader, false); // Directly write the screenshot data
 
     // Go back and write the actual archive header at the beginning
@@ -1371,6 +1356,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inGameOps = true;
+                    GraphicsSaveScreen();
                 }
 
                 if(nextInstr == 0xee39 && (std::string(overlayName) == "GAME-OV")) // SAVEGAME 

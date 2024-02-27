@@ -2672,6 +2672,21 @@ uint32_t IconUniform<N>::IndexFromSeed(uint32_t seed)
     return it->second;
 }
 
+#include <filesystem>
+#include <vector>
+#include <string>
+
+std::vector<std::string> GetAllSaveGameFiles() {
+    std::vector<std::string> sfsFiles;
+    for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::current_path())) {
+        if (entry.path().extension() == ".sfs") {
+            sfsFiles.push_back(entry.path().filename().string());
+        }
+    }
+    return sfsFiles;
+}
+
+
 void DrawUI()
 {
     enum GameMode {
@@ -2697,6 +2712,10 @@ void DrawUI()
     float panelHeight = WINDOW_HEIGHT; // Full height
     float panelX = 0; // Starting from the left edge
     float panelY = 0; // Starting from the top
+
+    struct nk_style *s = &ctx.style;
+    nk_style_push_color(&ctx, &s->window.background, nk_rgba(64,64,64,230));
+    nk_style_push_style_item(&ctx, &s->window.fixed_background, nk_style_item_color(nk_rgba(64,64,64,230)));
 
     if (nk_begin(&ctx, "Starflight - Reimaged Panel", nk_rect(panelX, panelY, panelWidth, panelHeight),
         NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND)) {
@@ -2740,6 +2759,9 @@ void DrawUI()
         }
     }
     nk_end(&ctx);
+
+    nk_style_pop_color(&ctx);
+    nk_style_pop_style_item(&ctx);
 
     nk_sdlsurface_render(nk_context, clear, 1);
 }

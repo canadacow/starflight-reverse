@@ -402,6 +402,22 @@ struct RotoscopeShader {
     RotoscopeShader& operator=(const Rotoscope& other);
 };
 
+
+struct SectionHeader {
+    uint64_t offset;
+    uint64_t compressedSize;
+    uint64_t uncompressedSize;
+};
+
+struct ArchiveHeader {
+    char fourCC[4]; // Four-character code to identify the game or data type
+    uint32_t version; // Version of the archive format
+    SectionHeader staraHeader;
+    SectionHeader starbHeader;
+    SectionHeader rotoscopeHeader;
+    SectionHeader screenshotHeader;
+};
+
 #pragma pack(pop)
 
 struct PlanetSurface
@@ -598,6 +614,7 @@ struct FrameSync {
 
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;
+
 
     std::chrono::steady_clock::time_point uiTriggerTimestamp;
     Magnum::Animation::Track<Magnum::Float, Magnum::Float> uiTrigger{};
