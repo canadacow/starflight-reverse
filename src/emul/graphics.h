@@ -22,6 +22,8 @@
 #include <chrono>
 #include <sstream>
 
+#include "../emul/call.h"
+
 #include <cereal/types/vector.hpp>
 #include <cereal/archives/binary.hpp>
 #include <cereal/archives/binary.hpp>
@@ -660,7 +662,7 @@ static const int NagivationWindowHeight = 120;
 extern uint32_t colortable[16];
 extern bool graphicsIsShutdown;
 
-void GraphicsInit();
+std::binary_semaphore& GraphicsInit();
 void GraphicsUpdate();
 void GraphicsWait();
 void GraphicsQuit();

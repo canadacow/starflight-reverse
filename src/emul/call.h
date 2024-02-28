@@ -3,12 +3,13 @@
 
 #include <string>
 #include <functional>
+#include <filesystem>
 
-enum RETURNCODE {OK, ERROR, EXIT, INPUT, STOP};
+enum RETURNCODE {OK, ERROR, EXIT, CHARINPUT, STOP};
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx);
 enum RETURNCODE Step();
-void InitEmulator(std::string hash = "");
+void InitEmulator(std::filesystem::path path);
 void SaveSTARFLT();
 void EnableDebug();
 void PrintCStack();

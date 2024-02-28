@@ -224,7 +224,7 @@ bool Serialize(const std::vector<uint8_t>& rotoscopeData, const std::vector<uint
     return true;
 }
 
-bool Deserialize(const std::string& filename, std::vector<uint8_t>& rotoscopeData, std::vector<uint8_t>& screenshotData)
+bool Deserialize(std::filesystem::path filename, std::vector<uint8_t>& rotoscopeData, std::vector<uint8_t>& screenshotData)
 {
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open())
@@ -1160,6 +1160,7 @@ vec2<int16_t> SCR_to_WLD(vec2<int16_t> input) {
 };
 
 extern unsigned short regbx;
+extern std::atomic<bool> stopEmulationThread;
 uint16_t nparmsStackSi = 0;
 
 static bool s_shouldRecordText = false;
@@ -1175,6 +1176,9 @@ uint64_t s_targetFrameKey = 0;
 
 enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 {
+    if (stopEmulationThread)
+        return STOP;
+
     unsigned short i;
     enum RETURNCODE ret = OK;
 
@@ -4737,7 +4741,7 @@ void SaveSTARFLT()
     fclose(fp);
 }
 
-void LoadSTARFLT(std::string hash)
+void LoadSTARFLT(std::filesystem::path path)
 {
     FILE *fp;
     int ret;
@@ -4769,28 +4773,16 @@ void LoadSTARFLT(std::string hash)
     ret = fread(STARB_ORIG, 362496, 1, fp);
     fclose(fp);
 
-    if(hash.length() == 0)
+    if(path.empty())
     {
         memcpy(STARA, STARA_ORIG, sizeof(STARA));
         memcpy(STARB, STARB_ORIG, sizeof(STARB));
     }
     else
     {
-        std::string prefix = "sf-" + hash;
-        std::string filename = prefix + ".sfs";
-
-        for (const auto & entry : std::filesystem::directory_iterator("./")) {
-            std::string file = entry.path().filename().string();
-            if (file.substr(file.find_last_of(".") + 1) != "zst") continue;
-            if (file.find(prefix) == 0) {
-                if (!Deserialize(file, serializedRotoscope, serializedSnapshot)) {
-                    fprintf(stderr, "Error: Cannot deserialize file %s\n", file.c_str());
-                    exit(1);
-                } else {
-                    printf("File %s was loaded for resumption.\n", file.c_str());
-                    break;
-                }
-            }
+        if (!Deserialize(path, serializedRotoscope, serializedSnapshot)) {
+            fprintf(stderr, "Error: Cannot deserialize file %s\n", path.string().c_str());
+            exit(1);
         }
     }
 }
@@ -4831,10 +4823,10 @@ enum RETURNCODE Step()
     return ret;
 }
 
-void InitEmulator(std::string hash)
+void InitEmulator(std::filesystem::path path)
 {
     regbp = 0xd4a7 + 0x100 + 0x80; // call stack
     regsp = 0xd4a7 + 0x100;  // initial parameter stack
-    LoadSTARFLT(hash);
+    LoadSTARFLT(path);
     inputbuffer.clear();
 }

@@ -278,6 +278,38 @@ std::vector<uint8_t> serializedSnapshot;
 int cursorx = 0;
 int cursory = 0;
 
+std::jthread emulationThread;
+std::atomic<bool> stopEmulationThread = false;
+
+void StopEmulationThread() {
+    stopEmulationThread = true;
+    if (emulationThread.joinable()) {
+        emulationThread.join(); 
+    }
+}
+
+void StartEmulationThread(std::filesystem::path path)
+{
+    stopEmulationThread = false;
+
+    emulationThread = std::jthread([path]() {
+        InitCPU();
+        InitEmulator(path);
+        enum RETURNCODE ret;
+        do
+        {
+            ret = Step();
+
+            if (IsGraphicsShutdown())
+                break;
+
+            if (stopEmulationThread) {
+                break;
+            }
+        } while (ret == OK || ret == EXIT);
+    });
+}
+
 uint32_t colortable[16] =
 {
 0x000000, // black
@@ -1879,12 +1911,16 @@ void GraphicsSplash(uint16_t seg, uint16_t fileNum)
     s_gc.epoch = std::chrono::steady_clock::now();
 }
 
-void GraphicsInit()
+static std::binary_semaphore s_graphicsShutdown{0};
+
+std::binary_semaphore& GraphicsInit()
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0)
     {
         printf("SDL_Init Error: %s\n", SDL_GetError());
-        return;
+
+        s_graphicsShutdown.release();
+        return s_graphicsShutdown;
     }
 
     /*
@@ -1920,6 +1956,10 @@ void GraphicsInit()
 #endif
         }
     });
+
+    InitTextToSpeech();
+
+    return s_graphicsShutdown;
 }
 
 uint32_t DrawLinePixel(const Rotoscope& roto, vec2<float> uv, float polygonWidth)
@@ -2740,6 +2780,7 @@ void DrawUI()
     };
 
     struct SaveGame {
+        std::string hash;
         std::string timestamp;
         std::filesystem::path file;
         struct nk_image screenshot;
@@ -2881,6 +2922,8 @@ void DrawUI()
 
             nk_layout_row_dynamic(&ctx, 30, 2); // Two buttons in the same row
             if (nk_button_label(&ctx, "OK")) {
+                StopEmulationThread();
+                StartEmulationThread(saveGame.file);
                 loadWindowOpen = false; // Close the window after loading
             }
             if (nk_button_label(&ctx, "Cancel")) {
@@ -3765,6 +3808,8 @@ void GraphicsQuit()
     if (graphicsIsShutdown)
         return;
 
+    StopEmulationThread();
+
     StopSpeech();
 
     if(std::this_thread::get_id() != graphicsThread.get_id())
@@ -3791,6 +3836,8 @@ void GraphicsQuit()
     SDL_DestroyWindow(window);
 
     graphicsIsShutdown = true;
+
+    s_graphicsShutdown.release();
 }
 
 void GraphicsSetCursor(int x, int y)

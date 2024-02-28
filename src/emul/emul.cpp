@@ -23,22 +23,9 @@ int main(int argc, char *argv[]) {
         }
     }
    
-    GraphicsInit();
-    InitTextToSpeech();
+    auto& shutdown = GraphicsInit();
 
-    initFuture.wait();
-
-    InitCPU();
-    InitEmulator(hash);
-    enum RETURNCODE ret;
-    do
-    {
-        ret = Step();
-
-        if (IsGraphicsShutdown())
-            break;
-
-    } while (ret == OK || ret == EXIT);
+    shutdown.acquire();
 
     GraphicsQuit();
     return 0;

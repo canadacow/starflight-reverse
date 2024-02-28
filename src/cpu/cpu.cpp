@@ -9,7 +9,7 @@ unsigned char m[SystemMemorySize];
 unsigned char *mem;
 unsigned short regsp;
 unsigned short regbp;
-unsigned short int regsi = 0x129; // current vocabulary address (the forth pc pointer)
+unsigned short int regsi; // current vocabulary address (the forth pc pointer)
 
 unsigned short regbx;
 
@@ -123,6 +123,7 @@ unsigned short Pop()
 
 void InitCPU()
 {
+    regsi = 0x129;
     memset(m, 0, SystemMemorySize);
     mem = &m[StarflightBaseSegment << 4];
     Init8086(m);
