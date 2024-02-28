@@ -23,13 +23,13 @@ int main(int argc, char *argv[]) {
         }
     }
    
-    InitCPU();
-    InitEmulator(hash);
     GraphicsInit();
     InitTextToSpeech();
 
     initFuture.wait();
 
+    InitCPU();
+    InitEmulator(hash);
     enum RETURNCODE ret;
     do
     {

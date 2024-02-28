@@ -940,11 +940,13 @@ public:
                             frameSync.uiTriggerTimestamp = now; 
 
                             if (uiTriggerValue >= 1.0f) {
+                                SDL_ShowCursor(SDL_ENABLE);
                                 frameSync.uiTrigger = {{
                                     {0.0f, 1.0f}, 
                                     {menuActivationInSeconds, 0.0f}
                                 }, Magnum::Math::lerp};
                             } else {
+                                SDL_ShowCursor(SDL_DISABLE);
                                 frameSync.uiTrigger = {{
                                     {0.0f, 0.0f}, 
                                     {menuActivationInSeconds, 1.0f}
@@ -2750,6 +2752,9 @@ void DrawUI()
     static std::vector<SaveGame> saveGames;
     static bool savegamesSearched = false;
 
+    static bool loadWindowOpen = false; 
+    static int loadWindowIndex = -1;
+
     if(!savegamesSearched) {
         auto saveGameFiles = GetAllSaveGameFiles();
         uint32_t i = 0;
@@ -2770,6 +2775,10 @@ void DrawUI()
 
             ++i;
         }
+
+        std::sort(saveGames.begin(), saveGames.end(), [](const SaveGame& a, const SaveGame& b) {
+            return a.timestamp > b.timestamp;
+        });
 
         savegamesSearched = true;
     }
@@ -2843,13 +2852,43 @@ void DrawUI()
             // Load button for the current save game
             nk_layout_row_dynamic(&ctx, 30, 1); // Adjust height as needed for the load button
             if (nk_button_label(&ctx, "Load")) {
-                // Load game logic here, using saveGame.file or similar identifier
+                loadWindowOpen = true;
+                loadWindowIndex = screenshotIndex;
             }
 
             nk_group_end(&ctx);
         }
+
+
     }
     nk_end(&ctx);
+
+    float loadWindowWidth = 800.0f;
+    float loadWindowHeight = 650.0f;
+    float loadWindowX = (WINDOW_WIDTH - loadWindowWidth) / 2.0f;
+    float loadWindowY = (WINDOW_HEIGHT - loadWindowHeight) / 2.0f;
+
+    // Load confirmation window
+    if (loadWindowOpen && loadWindowIndex >= 0) {
+        if (nk_begin(&ctx, "Confirm Load Game", nk_rect(loadWindowX, loadWindowY, loadWindowWidth, loadWindowHeight), NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE)) {
+            // Display a larger screenshot for confirmation
+            const auto& saveGame = saveGames[loadWindowIndex]; 
+            nk_layout_row_dynamic(&ctx, 540, 1); 
+            nk_image(&ctx, saveGame.screenshot); 
+
+            nk_layout_row_dynamic(&ctx, 20, 1);
+            nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_CENTERED);
+
+            nk_layout_row_dynamic(&ctx, 30, 2); // Two buttons in the same row
+            if (nk_button_label(&ctx, "OK")) {
+                loadWindowOpen = false; // Close the window after loading
+            }
+            if (nk_button_label(&ctx, "Cancel")) {
+                loadWindowOpen = false; // Close the window without loading
+            }
+        }
+        nk_end(&ctx);
+    }
 
     nk_style_pop_color(&ctx);
     nk_style_pop_style_item(&ctx);
