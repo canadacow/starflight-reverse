@@ -214,8 +214,11 @@ nk_sdlsurface_img_getpixel(const struct SDL_Surface *img, const int x0, const in
         } else if (img->format->BytesPerPixel == 4) {
             pixel = ((Uint32 *)ptr)[x0];
             col = nk_sdlsurface_int2color(pixel, img->format);
+        } else if (img->format->BytesPerPixel == 3) {
+            pixel = ptr[x0*3+2] | (ptr[x0*3+1] << 8) | (ptr[x0*3+0] << 16);
+            col = nk_sdlsurface_int2color(pixel, img->format);
         } else if (img->format->BytesPerPixel == 2) {
-            pixel = ((Uint16 *)ptr)[x0];
+            pixel = ((Uint32 *)ptr)[x0];
             col = nk_sdlsurface_int2color(pixel, img->format);
         } else {
             pixel = ((Uint8 *)ptr)[x0];
@@ -914,6 +917,36 @@ nk_sdlsurface_stretch_image(const struct SDL_Surface *dst,
 }
 
 static void
+nk_sdlsurface_stretch_color_image(const struct SDL_Surface* dst,
+    const struct SDL_Surface* src, const struct nk_rect* dst_rect,
+    const struct nk_rect* src_rect, const struct nk_rect* dst_scissors)
+{
+    short i, j;
+    struct nk_color col;
+    float xinc = src_rect->w / dst_rect->w;
+    float yinc = src_rect->h / dst_rect->h;
+    float xoff = src_rect->x, yoff = src_rect->y;
+
+    /* Simple nearest filtering rescaling */
+    /* TODO: use bilinear filter */
+    for (j = 0; j < (short)dst_rect->h; j++) {
+        for (i = 0; i < (short)dst_rect->w; i++) {
+            if (dst_scissors) {
+                if (i + (int)(dst_rect->x + 0.5f) < dst_scissors->x || i + (int)(dst_rect->x + 0.5f) >= dst_scissors->w)
+                    continue;
+                if (j + (int)(dst_rect->y + 0.5f) < dst_scissors->y || j + (int)(dst_rect->y + 0.5f) >= dst_scissors->h)
+                    continue;
+            }
+            col = nk_sdlsurface_img_getpixel(src, (int)xoff, (int)yoff);
+            nk_sdlsurface_img_blendpixel(dst, i + (int)(dst_rect->x + 0.5f), j + (int)(dst_rect->y + 0.5f), col);
+            xoff += xinc;
+        }
+        xoff = src_rect->x;
+        yoff += yinc;
+    }
+}
+
+static void
 nk_sdlsurface_font_query_font_glyph(nk_handle handle, const float height,
     struct nk_user_font_glyph *glyph, const nk_rune codepoint,
     const nk_rune next_codepoint)
@@ -1014,7 +1047,7 @@ nk_sdlsurface_drawimage(const struct sdlsurface_context *sdlsurface,
         src_rect.w = img->w;
         src_rect.h = img->h;
 
-        nk_sdlsurface_stretch_image(sdlsurface->fb, (const struct SDL_Surface*)img->handle.ptr, &dst_rect, &src_rect, &sdlsurface->scissors, col);
+        nk_sdlsurface_stretch_color_image(sdlsurface->fb, (const struct SDL_Surface*)img->handle.ptr, &dst_rect, &src_rect, nullptr);
     }
     else
     {
