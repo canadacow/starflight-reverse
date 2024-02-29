@@ -1,19 +1,18 @@
 // GLSL Compute Shader
 #version 450
 
+#extension GL_GOOGLE_include_directive : enable
+
+#include "uniform.h"
+
 layout(local_size_x = 32, local_size_y = 32) in;
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
 layout(binding = 1) uniform sampler2D imgInput;
 
-layout(binding = 2) uniform UniformBlock {
-    int GRAPHICS_MODE_WIDTH;
-    int GRAPHICS_MODE_HEIGHT;
-    int WINDOW_WIDTH;
-    int WINDOW_HEIGHT;
-    uint useRotoscope;
-    uint useEGA;
-} uniforms;
+layout(binding = 2) uniform UB {
+    UniformBlock uniforms;
+} ub;
 
 #define maskDark 0.66
 #define maskLight 1.0
@@ -69,10 +68,10 @@ vec3 hueToRGB(float h, float s, float l)
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
 
-    if (pixelCoords.x >= uniforms.WINDOW_WIDTH || pixelCoords.y >= uniforms.WINDOW_HEIGHT)
+    if (pixelCoords.x >= ub.uniforms.WINDOW_WIDTH || pixelCoords.y >= ub.uniforms.WINDOW_HEIGHT)
         return;
 
-    vec2 uv = vec2(float(pixelCoords.x) / float(uniforms.WINDOW_WIDTH), float(pixelCoords.y) / float(uniforms.WINDOW_HEIGHT));
+    vec2 uv = vec2(float(pixelCoords.x) / float(ub.uniforms.WINDOW_WIDTH), float(pixelCoords.y) / float(ub.uniforms.WINDOW_HEIGHT));
     vec4 color = texture(imgInput, uv);
 
     color.rgb *= Mask(pixelCoords);

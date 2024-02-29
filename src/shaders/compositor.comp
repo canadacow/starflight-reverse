@@ -1,47 +1,17 @@
 // GLSL Compute Shader
 #version 450
 
+#extension GL_GOOGLE_include_directive : enable
+
+#include "uniform.h"
+
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
 layout(rgba8, binding = 1) readonly uniform image2D gameScreen;
 layout(rgba8, binding = 2) readonly uniform image2D menuScreen;
 
-layout(binding = 3) uniform UniformBlock {
-    int GRAPHICS_MODE_WIDTH;
-    int GRAPHICS_MODE_HEIGHT;
-    int WINDOW_WIDTH;
-    int WINDOW_HEIGHT;
-    uint useRotoscope;
-    uint useEGA;
-    float iTime;
-    float worldX;
-    float worldY;
-    float heading;
-    float deadX;
-    float deadY;
-    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
-    // (3 = hyperspace, 4 = encounter, 5 = starport)
-    uint game_context; 
-    uint alienVar1;
-    float screenX;
-    float screenY;
-    float adjust;
-    float planetSize;
-
-    float orbitCamX;
-    float orbitCamY;
-    float orbitCamZ;
-
-    float nebulaBase;
-    float nebulaMultiplier;
-
-    uint orbitMask;
-
-    float zoomLevel;
-
-    float thrust;
-
-    float menuVisibility;
-} uniforms;
+layout(binding = 3) uniform UB {
+    UniformBlock uniforms;
+} ub;
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -51,10 +21,10 @@ void main() {
     vec4 gamePixel = imageLoad(gameScreen, pixelPos);
     vec4 menuPixel = imageLoad(menuScreen, pixelPos);
     // Use uniforms.menuVisibility directly for blurAmount calculation
-    float menuAlpha = menuPixel.a * uniforms.menuVisibility;
+    float menuAlpha = menuPixel.a * ub.uniforms.menuVisibility;
 
     // Apply Gaussian blur based on overall menu visibility
-    float blurAmount = uniforms.menuVisibility * 20.0; // Increase the blur amount as menu becomes more visible
+    float blurAmount = ub.uniforms.menuVisibility * 20.0; // Increase the blur amount as menu becomes more visible
     vec4 blurredGamePixel = vec4(0.0);
     int blurRadius = int(blurAmount);
     if (blurRadius > 0) {

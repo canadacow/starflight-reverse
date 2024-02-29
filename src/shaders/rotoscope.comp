@@ -3,6 +3,8 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
+#include "uniform.h"
+
 layout(local_size_x = 4, local_size_y = 4) in;
 
 struct Icon {
@@ -82,42 +84,9 @@ layout(binding = 11) uniform sampler2D AlienColorTexture;
 layout(binding = 12) uniform sampler2D AlienDepthTexture;
 layout(binding = 13) uniform sampler2D AlienBackgroundTexture;
 
-layout(binding = 14) uniform UniformBlock {
-    int GRAPHICS_MODE_WIDTH;
-    int GRAPHICS_MODE_HEIGHT;
-    int WINDOW_WIDTH;
-    int WINDOW_HEIGHT;
-    uint useRotoscope;
-    uint useEGA;
-    float iTime;
-    float worldX;
-    float worldY;
-    float heading;
-    float deadX;
-    float deadY;
-    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
-    // (3 = hyperspace, 4 = encounter, 5 = starport)
-    uint game_context; 
-    uint alienVar1;
-    float screenX;
-    float screenY;
-    float adjust;
-    float planetSize;
-
-    float orbitCamX;
-    float orbitCamY;
-    float orbitCamZ;
-
-    float nebulaBase;
-    float nebulaMultiplyer;
-
-    uint orbitMask;
-
-    float zoomLevel;
-
-    float thrust;
-
-} uniforms;
+layout(binding = 14) uniform UB {
+    UniformBlock uniforms;
+} ub;
 
 layout(binding = 15) uniform IconBlock {
     Icon icons[32];
@@ -136,9 +105,9 @@ layout(rgba8, binding = 19) readonly uniform image2D UITexture;
 
 void drawMechan( out vec4 fragColor, in vec2 uv )
 {
-    float time = uniforms.iTime * 0.11;
+    float time = ub.uniforms.iTime * 0.11;
 
-    float talkPos = float(uniforms.alienVar1) / 50000.0;
+    float talkPos = float(ub.uniforms.alienVar1) / 50000.0;
 
     float zoomFactor = 1.0 + noise(vec2(time)) * 0.05 - talkPos; // Adjust the 0.1 value to control the amount of zoom
 
@@ -229,7 +198,7 @@ void drawMechan( out vec4 fragColor, in vec2 uv )
     // Use a step function to create a hard edge
     float circle = 1.0 - step(radius, dist);
 
-    float brightnessAdjustment = float(uniforms.alienVar1) / 1024.0; // Change this value to adjust brightness
+    float brightnessAdjustment = float(ub.uniforms.alienVar1) / 1024.0; // Change this value to adjust brightness
 
     // Calculate the adjusted color
     vec4 adjustedColor = fragColor * vec4(vec3(brightnessAdjustment), 1.0);
@@ -241,13 +210,13 @@ void drawMechan( out vec4 fragColor, in vec2 uv )
 vec4 DrawLinePixel(const Rotoscope roto, vec2 uv, float polygonWidth) {
     vec4 pixel;
 
-    float lineX1 = (roto.lineData.x0 + 0.10f) / uniforms.GRAPHICS_MODE_WIDTH;
-    float lineY1 = (roto.lineData.y0 + 0.10f) / uniforms.GRAPHICS_MODE_HEIGHT;
-    float lineX2 = (roto.lineData.x1 + 0.90f) / uniforms.GRAPHICS_MODE_WIDTH;
-    float lineY2 = (roto.lineData.y1 + 0.90f) / uniforms.GRAPHICS_MODE_HEIGHT;
+    float lineX1 = (roto.lineData.x0 + 0.10f) / ub.uniforms.GRAPHICS_MODE_WIDTH;
+    float lineY1 = (roto.lineData.y0 + 0.10f) / ub.uniforms.GRAPHICS_MODE_HEIGHT;
+    float lineX2 = (roto.lineData.x1 + 0.90f) / ub.uniforms.GRAPHICS_MODE_WIDTH;
+    float lineY2 = (roto.lineData.y1 + 0.90f) / ub.uniforms.GRAPHICS_MODE_HEIGHT;
 
     float a = polygonWidth;
-    float one_px = 1.0f / uniforms.WINDOW_WIDTH;
+    float one_px = 1.0f / ub.uniforms.WINDOW_WIDTH;
     vec2 p1 = vec2(lineX1, lineY1);
     vec2 p2 = vec2(lineX2, lineY2);
 
@@ -426,7 +395,7 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 fragColor;
     vec2 sub;
 
-    float iTime = uniforms.iTime;
+    float iTime = ub.uniforms.iTime;
 
     float subX = (float(roto.blt_x) + subUv.x) / float(roto.blt_w);
     float subY = (float(roto.blt_y) + subUv.y) / float(roto.blt_h);
@@ -535,18 +504,18 @@ vec4 DrawStarMapPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
-    vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
-    vec2 graphicSize = vec2(float(uniforms.GRAPHICS_MODE_WIDTH), float(uniforms.GRAPHICS_MODE_HEIGHT));
+    vec2 windowSize = vec2(float(ub.uniforms.WINDOW_WIDTH), float(ub.uniforms.WINDOW_HEIGHT));
+    vec2 graphicSize = vec2(float(ub.uniforms.GRAPHICS_MODE_WIDTH), float(ub.uniforms.GRAPHICS_MODE_HEIGHT));
     
     vec2 uv = vec2(pixelPos) / windowSize;
 
-    const float polygonWidth = uniforms.WINDOW_WIDTH / uniforms.GRAPHICS_MODE_WIDTH;
+    const float polygonWidth = ub.uniforms.WINDOW_WIDTH / ub.uniforms.GRAPHICS_MODE_WIDTH;
 
     // Calculate the corresponding position in the smaller texture
     uvec2 src = uvec2(floor(uv * graphicSize));
 
     // Calculate the index in the smaller texture
-    uint srcIndex = src.y * uint(uniforms.GRAPHICS_MODE_WIDTH) + src.x;
+    uint srcIndex = src.y * uint(ub.uniforms.GRAPHICS_MODE_WIDTH) + src.x;
 
     Rotoscope roto = rotoPixels[srcIndex];
 
@@ -556,7 +525,7 @@ void main() {
     vec4 pixel = vec4(unpackUnorm4x8(roto.argb)).bgra;
     vec4 navigationPixel = vec4(0.0); 
 
-    if(uniforms.useRotoscope != 0)
+    if(ub.uniforms.useRotoscope != 0)
     {
         navigationPixel = DrawNavigationPixel(pixelPos);
 
@@ -613,7 +582,7 @@ void main() {
             }
         }
     }
-    else if(uniforms.useEGA == 0)
+    else if(ub.uniforms.useEGA == 0)
     {
         uint c = EGAToCGA[roto.EGAcolor];
         if(subUv.x < 0.5f)

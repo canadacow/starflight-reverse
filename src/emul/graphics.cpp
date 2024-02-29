@@ -279,7 +279,9 @@ int cursorx = 0;
 int cursory = 0;
 
 std::jthread emulationThread;
+std::atomic<bool> emulationThreadRunning = false;
 std::atomic<bool> stopEmulationThread = false;
+std::atomic<bool> pauseEmulationThread = false;
 
 void StopEmulationThread() {
     stopEmulationThread = true;
@@ -290,6 +292,7 @@ void StopEmulationThread() {
 
 void StartEmulationThread(std::filesystem::path path)
 {
+    emulationThreadRunning = true;
     stopEmulationThread = false;
 
     emulationThread = std::jthread([path]() {
@@ -298,7 +301,14 @@ void StartEmulationThread(std::filesystem::path path)
         enum RETURNCODE ret;
         do
         {
-            ret = Step();
+            if(pauseEmulationThread)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(33));
+            }
+            else
+            {
+                ret = Step();
+            }
 
             if (IsGraphicsShutdown())
                 break;
@@ -307,6 +317,8 @@ void StartEmulationThread(std::filesystem::path path)
                 break;
             }
         } while (ret == OK || ret == EXIT);
+
+        emulationThreadRunning = false;
     });
 }
 

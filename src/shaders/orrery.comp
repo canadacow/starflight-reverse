@@ -3,6 +3,8 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
+#include "uniform.h"
+
 layout(local_size_x = 4, local_size_y = 4) in;
 
 #define Icon_Other  0
@@ -77,44 +79,9 @@ layout(std430, binding = 1) buffer RotoBuffer {
 layout(binding = 2) uniform sampler2DArray ShipTexture;
 layout(binding = 3) uniform sampler2DArray PlanetTextures;
 
-layout(binding = 4) uniform UniformBlock {
-    int GRAPHICS_MODE_WIDTH;
-    int GRAPHICS_MODE_HEIGHT;
-    int WINDOW_WIDTH;
-    int WINDOW_HEIGHT;
-    uint useRotoscope;
-    uint useEGA;
-    float iTime;
-    float worldX;
-    float worldY;
-    float heading;
-    float deadX;
-    float deadY;
-    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
-    // (3 = hyperspace, 4 = encounter, 5 = starport)
-    uint game_context; 
-    uint alienVar1;
-    float screenX;
-    float screenY;
-    float adjust;
-    float planetSize;
-
-    float orbitCamX;
-    float orbitCamY;
-    float orbitCamZ;
-
-    float nebulaBase;
-    float nebulaMultiplier;
-
-    uint orbitMask;
-
-    float zoomLevel;
-
-    float thrust;
-
-    float menuVisibility;
-
-} uniforms;
+layout(binding = 4) uniform UB {
+    UniformBlock uniforms;
+} ub;
 
 layout(binding = 5) uniform IconBlock {
     Icon icons[32];
@@ -140,7 +107,7 @@ vec4 DrawOrbits(vec2 uv) {
     vec3 orbitColor = vec3(0.66, 0.66, 0.66); // Color of the orbits
     
     // Bitmask representing which orbits are present (8-bit, 1 for each orbit)
-    uint bitmask = uniforms.orbitMask; // Decimal equivalent of the binary 10101010
+    uint bitmask = ub.uniforms.orbitMask; // Decimal equivalent of the binary 10101010
     
     // Initialize alpha to 0 (fully transparent)
     float alpha = 0.0;
@@ -173,7 +140,7 @@ vec4 DrawOrreryPixel(vec2 uv) {
     vec4 fragColor;
     vec2 sub;
 
-    float iTime = uniforms.iTime;
+    float iTime = ub.uniforms.iTime;
 
     vec2 normalizedCoords = (uv - vec2(0.5, 0.5)) * vec2(800.0, -800.0);
 

@@ -3,6 +3,8 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
+#include "uniform.h"
+
 layout(local_size_x = 4, local_size_y = 4) in;
 
 struct Icon {
@@ -72,43 +74,9 @@ layout(std430, binding = 1) buffer RotoBuffer {
 layout(binding = 2) uniform sampler2DArray ShipTexture;
 layout(binding = 3) uniform sampler2DArray PlanetTextures;
 
-layout(binding = 4) uniform UniformBlock {
-    int GRAPHICS_MODE_WIDTH;
-    int GRAPHICS_MODE_HEIGHT;
-    int WINDOW_WIDTH;
-    int WINDOW_HEIGHT;
-    uint useRotoscope;
-    uint useEGA;
-    float iTime;
-    float worldX;
-    float worldY;
-    float heading;
-    float deadX;
-    float deadY;
-    // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
-    // (3 = hyperspace, 4 = encounter, 5 = starport)
-    uint game_context; 
-    uint alienVar1;
-    float screenX;
-    float screenY;
-    float adjust;
-    float planetSize;
-
-    float orbitCamX;
-    float orbitCamY;
-    float orbitCamZ;
-
-    float nebulaBase;
-    float nebulaMultiplier;
-
-    uint orbitMask;
-
-    float zoomLevel;
-
-    float thrust;
-
-    float menuVisibility;
-} uniforms;
+layout(binding = 4) uniform UB {
+    UniformBlock uniforms;
+} ub;
 
 layout(binding = 5) uniform IconBlock {
     Icon icons[32];
@@ -129,7 +97,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 fragColor;
     vec2 sub;
 
-    float iTime = uniforms.iTime;
+    float iTime = ub.uniforms.iTime;
 
     float scrOffX = float(roto.blt_x) + subUv.x;
     float scrOffY = float(roto.blt_y) + subUv.y;
@@ -152,14 +120,14 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
     vec2 fragCoord = pixelPos + vec2(80.0, 100.0);
 
-    vec2 worldCoords = vec2((uniforms.worldX) / 1000.0, (uniforms.worldY) / -1000.0);
+    vec2 worldCoords = vec2((ub.uniforms.worldX) / 1000.0, (ub.uniforms.worldY) / -1000.0);
 
     vec4 starPixel = vec4(0.);
     vec4 sunPixel = vec4(0.);
     vec4 iconPixel = vec4(0.);
     vec4 shipPixel = vec4(0.);
     vec4 planetPixel = vec4(0.);
-    float nebulaPixel = uniforms.nebulaBase;
+    float nebulaPixel = ub.uniforms.nebulaBase;
 
     for(int i = 0; i < 16; i++) {
         Icon icon = icons[i];
@@ -169,7 +137,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
         vec2 iconPos = vec2(float(icon.screenX), float(icon.screenY));
 
-        iconPos *= (8.0f * uniforms.zoomLevel);
+        iconPos *= (8.0f * ub.uniforms.zoomLevel);
 
         // 27 is RIGHT
         // 28 is UP to the RIGHT
@@ -180,13 +148,13 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         // 33 is DOWN
         // 34 is DOWN to the RIGHT
         if(icon.id >= 27 && icon.id <= 34) {
-            float distance = 4.0 * uniforms.zoomLevel;
+            float distance = 4.0 * ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
 
                 normUV -= 0.5;
                 // Rotate the normUVs to match the icon.id orientation
-                float angle = uniforms.heading; // (icon.id - 27) * 45.0;
+                float angle = ub.uniforms.heading; // (icon.id - 27) * 45.0;
                 float rad = radians(angle);
                 float s = sin(rad);
                 float c = cos(rad);
@@ -238,7 +206,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     vec3 sidePole = normalize(vec3(0, -0.918, 0.397));
                     vec3 sidePerspective = normalize(vec3(0, 0, 1));    
 
-                    float ydist = (abs(uniforms.screenY - iconPos.y)) / 120.0;
+                    float ydist = (abs(ub.uniforms.screenY - iconPos.y)) / 120.0;
                 
                     vec3 camPos = sidePole; //slerp(sidePerspective, northPole, ydist);
 
@@ -264,7 +232,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 }
             }
         } else if(icon.id >= 35 && icon.id <= 42) {
-            float distance = 4.0 * uniforms.zoomLevel;
+            float distance = 4.0 * ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
 
@@ -282,7 +250,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 shipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
             }
         } else if(icon.id < 50) {
-            float distance = 4.0 * uniforms.zoomLevel;
+            float distance = 4.0 * ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 iconPixel += colortable[icon.clr & 0xf];
             }
@@ -348,7 +316,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         nebulaPixel = min(nebulaPixel / 8.0, 1.0);
 
         vec2 uv=fragCoord.xy/iResolution.xy-.5;
-        nebula(p, uv + (worldCoords * uniforms.nebulaMultiplier), iTime);
+        nebula(p, uv + (worldCoords * ub.uniforms.nebulaMultiplier), iTime);
         pixel += p * nebulaPixel;
     }
 
@@ -364,12 +332,12 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
 
-    vec2 windowSize = vec2(float(uniforms.WINDOW_WIDTH), float(uniforms.WINDOW_HEIGHT));
-    vec2 graphicSize = vec2(float(uniforms.GRAPHICS_MODE_WIDTH), float(uniforms.GRAPHICS_MODE_HEIGHT));
+    vec2 windowSize = vec2(float(ub.uniforms.WINDOW_WIDTH), float(ub.uniforms.WINDOW_HEIGHT));
+    vec2 graphicSize = vec2(float(ub.uniforms.GRAPHICS_MODE_WIDTH), float(ub.uniforms.GRAPHICS_MODE_HEIGHT));
   
     vec2 uv = vec2(pixelPos) / windowSize;
 
-    const float polygonWidth = uniforms.WINDOW_WIDTH / uniforms.GRAPHICS_MODE_WIDTH;
+    const float polygonWidth = ub.uniforms.WINDOW_WIDTH / ub.uniforms.GRAPHICS_MODE_WIDTH;
 
     // Calculate the corresponding position in the smaller texture
     uvec2 src = uvec2(floor(uv * graphicSize));
@@ -378,7 +346,7 @@ void main() {
 
     uvec2 srcLookup = src + uvec2(4, 8);
 
-    uint srcIndex = srcLookup.y * uint(uniforms.GRAPHICS_MODE_WIDTH) + srcLookup.x;
+    uint srcIndex = srcLookup.y * uint(ub.uniforms.GRAPHICS_MODE_WIDTH) + srcLookup.x;
 
     Rotoscope roto = rotoPixels[srcIndex];
 
