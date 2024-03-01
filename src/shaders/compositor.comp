@@ -24,7 +24,7 @@ void main() {
     float menuAlpha = menuPixel.a * ub.uniforms.menuVisibility;
 
     // Apply Gaussian blur based on overall menu visibility
-    float blurAmount = ub.uniforms.menuVisibility * 20.0; // Increase the blur amount as menu becomes more visible
+    float blurAmount = ub.uniforms.menuVisibility * ub.uniforms.blurAmount; // Increase the blur amount as menu becomes more visible
     vec4 blurredGamePixel = vec4(0.0);
     int blurRadius = int(blurAmount);
     if (blurRadius > 0) {

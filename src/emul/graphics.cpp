@@ -3232,6 +3232,7 @@ void GraphicsUpdate()
     auto now = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
     uniform.menuVisibility = frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
+    uniform.blurAmount = emulationThreadRunning ? 20.0f : 0.0f;
     
     // If we're in a system, nebulas behave a little differently
     if (uniform.game_context == 1 || uniform.game_context == 2)

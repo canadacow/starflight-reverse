@@ -250,6 +250,7 @@ struct UniformBlock {
     float thrust;
     
     float menuVisibility;
+    float blurAmount;
 };
 
 struct ShaderIcon {
