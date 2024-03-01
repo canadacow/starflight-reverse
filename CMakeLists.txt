@@ -27,6 +27,7 @@ set(SHADER_LIST
     "starmap.comp"
     "encounter.comp"
     "compositor.comp"
+    "title.comp"
     # Add more shaders here
 )
 # Path to the Vulkan SDK's glslc shader compiler

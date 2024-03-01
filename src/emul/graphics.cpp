@@ -97,8 +97,8 @@ static SDL_AudioDeviceID audioDevice = 0;
 
 static double toneInHz = 440.0;
 
-static std::atomic<bool> s_useRotoscope = true;
-static std::atomic<bool> s_useEGA = true;
+static bool s_useRotoscope = true;
+static bool s_useEGA = true;
 static std::atomic<uint32_t> s_alienVar1 = 0;
 static float s_adjust = 0.0f;
 
@@ -146,6 +146,9 @@ struct GraphicsContext
     avk::image_sampler shipImage;
     avk::image_sampler planetAlbedoImages;
 
+    avk::image_sampler boxArtImage;
+    avk::image_sampler fourDeeNoise;
+
     avk::image_sampler alienColorImage;
     avk::image_sampler alienDepthImage;
     avk::image_sampler alienBackgroundImage;
@@ -155,6 +158,7 @@ struct GraphicsContext
     avk::compute_pipeline orbitPipeline;
     avk::compute_pipeline orreryPipeline;
     avk::compute_pipeline textPipeline;
+    avk::compute_pipeline titlePipeline;
     avk::compute_pipeline starmapPipeline;
     avk::compute_pipeline encounterPipeline;
     avk::compute_pipeline compositorPipeline;
@@ -1352,6 +1356,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
 static Texture<1536, 1152, 4> LOGO1Texture;
 static Texture<1536, 1152, 4> LOGO2Texture;
 static Texture<1536, 1152, 4> PORTPICTexture;
+static Texture<2592, 2600, 4> BoxArtTexture;
 
 avk::image imageFromData(const void* data, uint32_t width, uint32_t height, uint32_t bytesPerPixel, vk::Format format, avk::image_usage usage)
 {
@@ -1395,17 +1400,18 @@ void LoadSplashImages()
     struct ImageToLoad
     {
         std::string name;
-        Texture<1536, 1152, 4>& pic;
+        // Texture<1536, 1152, 4>& pic; // No longer used
         avk::image_sampler& vkPic;
 
-        ImageToLoad(const std::string& name, Texture<1536, 1152, 4>& pic, avk::image_sampler& vkPic)
-            : name(name), pic(pic), vkPic(vkPic) {}
+        ImageToLoad(const std::string& name, avk::image_sampler& vkPic)
+            : name(name), vkPic(vkPic) {}
     };
 
     static const std::vector<ImageToLoad> images = {
-        { "logo_1.png", LOGO1Texture, s_gc.LOGO1 },
-        { "logo_2.png", LOGO2Texture, s_gc.LOGO2 },
-        { "station.png", PORTPICTexture, s_gc.PORTPIC }
+        { "logo_1.png", /* LOGO1Texture, */ s_gc.LOGO1 },
+        { "logo_2.png", /* LOGO2Texture, */ s_gc.LOGO2 },
+        { "station.png", /* PORTPICTexture, */ s_gc.PORTPIC },
+        { "boxart.png", /* BoxArtTexture, */ s_gc.boxArtImage }
     };
 
     for (auto& img : images)
@@ -1417,7 +1423,7 @@ void LoadSplashImages()
             exit(-1);
         }
 
-        fillTexture(img.pic, image);
+        //fillTexture(img.pic, image);
         img.vkPic = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
                 imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
@@ -1546,6 +1552,25 @@ void LoadAssets()
     );
     image.clear();
 
+    unsigned fourDeeNoiseWidth = 256, fourDeeNoiseHeight = 256;
+
+    // Generate RGBA fourDeeNoise
+    image.resize(fourDeeNoiseWidth * fourDeeNoiseHeight * 4); // 4 bytes per pixel (RGBA)
+    for (unsigned i = 0; i < image.size(); i += 4) {
+        image[i] = rand() % 256; // R
+        image[i + 1] = rand() % 256; // G
+        image[i + 2] = rand() % 256; // B
+        image[i + 3] = rand() % 256; // A
+    }
+
+    // Initialize the fourDeeNoise image sampler
+    s_gc.fourDeeNoise = s_gc.vc.create_image_sampler(
+        s_gc.vc.create_image_view(
+            imageFromData(image.data(), fourDeeNoiseWidth, fourDeeNoiseHeight, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
+        ),
+        s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
+    );
+
     s_gc.planetAlbedoImages = s_gc.vc.create_image_sampler(
         s_gc.vc.create_image_view(
             s_gc.vc.create_image(48, 24, vk::Format::eR8G8B8A8Unorm, 811, avk::memory_usage::device, avk::image_usage::general_image)
@@ -1588,6 +1613,9 @@ void LoadAssets()
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
 
             avk::sync::image_memory_barrier(s_gc.alienBackgroundImage->get_image(),
+                avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
+
+            avk::sync::image_memory_barrier(s_gc.fourDeeNoise->get_image(),
                 avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::shader_read_only_optimal }),
 
     }, *s_gc.mQueue)->wait_until_signalled();
@@ -1782,6 +1810,11 @@ static int GraphicsInitThread()
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
                 avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<700>)));
 
+        s_gc.vc.record_and_submit_with_fence({
+            avk::sync::image_memory_barrier(bd.gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::undefined, avk::layout::shader_read_only_optimal})
+        }, * s_gc.mQueue)->wait_until_signalled();
+
         s_gc.buffers.push_back(std::move(bd));
     }
 
@@ -1884,6 +1917,14 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 1, 1u),
         avk::descriptor_binding<avk::buffer>(0, 2, s_gc.buffers[0].uniform)
+    );
+
+    s_gc.titlePipeline = s_gc.vc.create_compute_pipeline_for(
+        "title.comp",
+        avk::descriptor_binding<avk::image_view_as_storage_image>(0, 0, 1u),
+        avk::descriptor_binding<avk::buffer>(0, 1, s_gc.buffers[0].uniform),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u)
     );
 
     s_gc.descriptorCache = s_gc.vc.create_descriptor_cache();
@@ -2438,7 +2479,34 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
         avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
 
         avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::transfer_src })
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal })
+    };
+}
+
+std::vector<avk::recorded_commands_t> TitlePass(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform)
+{
+    return {
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::general }),
+
+        s_gc.buffers[inFlightIndex].uniform->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].uniform.as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+        ),
+
+        avk::command::bind_pipeline(s_gc.titlePipeline.as_reference()),
+        avk::command::bind_descriptors(s_gc.titlePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
+                avk::descriptor_binding(0, 0, s_gc.buffers[inFlightIndex].gameOutput->get_image_view()->as_storage_image(avk::layout::general)),
+                avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
+                avk::descriptor_binding(0, 2, s_gc.fourDeeNoise->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 3, s_gc.boxArtImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+            })),
+        avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
+
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal })
     };
 }
 
@@ -2799,7 +2867,6 @@ void DrawUI()
     };
 
     static GameMode currentMode = ROTOSCOPE_MODE;
-    static bool isPaused = false;
     static int32_t screenshotIndex = 0;
 
     static std::vector<SaveGame> saveGames;
@@ -2856,23 +2923,39 @@ void DrawUI()
         nk_layout_row_dynamic(&ctx, 40, 1);
         nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
 
-        // Mode selection radio buttons
-        nk_layout_row_begin(&ctx, NK_DYNAMIC, 30, 3); 
-        {
-            nk_layout_row_push(&ctx, 0.40f);
-            if (nk_option_label(&ctx, "Rotoscope Mode", currentMode == ROTOSCOPE_MODE)) currentMode = ROTOSCOPE_MODE;
-
-            nk_layout_row_push(&ctx, 0.30f);
-            if (nk_option_label(&ctx, "EGA Mode", currentMode == EGA_MODE)) currentMode = EGA_MODE;
-
-            nk_layout_row_push(&ctx, 0.30f);
-            if (nk_option_label(&ctx, "CGA Mode", currentMode == CGA_MODE)) currentMode = CGA_MODE;
+        // Rotoscope toggle
+        nk_bool useRotoscope = s_useRotoscope;
+        nk_layout_row_dynamic(&ctx, 30, 2);
+        if (nk_checkbox_label(&ctx, "Rotoscope Graphics", (nk_bool*)&useRotoscope)) {
+            s_useRotoscope = useRotoscope != 0;
         }
-        nk_layout_row_end(&ctx);
+
+        // Graphics mode selection
+        if (!useRotoscope) { // Only show EGA/CGA options if Rotoscope is disabled
+            nk_layout_row_dynamic(&ctx, 30, 2);
+            if (nk_option_label(&ctx, "EGA Graphics", s_useEGA)) {
+                s_useEGA = 1;
+            }
+            if (nk_option_label(&ctx, "CGA Graphics", !s_useEGA)) {
+                s_useEGA = 0;
+            }
+        } else { // Place a spacer if s_useRotoscope is true
+            nk_layout_row_dynamic(&ctx, 30, 1); // Adjust for a single spacer row
+            //nk_spacing(&ctx, 1); // Add a spacer
+        }
 
         nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1);
-        if (nk_button_label(&ctx, isPaused ? "Resume Game" : "Pause Game")) {
-            isPaused = !isPaused;
+        if (!emulationThreadRunning)
+        {
+            if (nk_button_label(&ctx, "Start Game")) {
+                StartEmulationThread("");
+            }
+        }
+        else
+        {
+            if (nk_button_label(&ctx, pauseEmulationThread ? "Resume Game" : "Pause Game")) {
+                pauseEmulationThread = !pauseEmulationThread;
+            }
         }
 
         nk_layout_row_dynamic(&ctx, 280, 1); // Height for the save game display
@@ -3509,7 +3592,12 @@ void GraphicsUpdate()
 
     }
 
-    if (graphicsMode == SFGraphicsMode::Text)
+    if (!emulationThreadRunning)
+    {
+        auto titleCommands = TitlePass(inFlightIndex, uniform);
+        commands.insert(commands.end(), titleCommands.begin(), titleCommands.end());
+    }
+    else if (graphicsMode == SFGraphicsMode::Text)
     {
         auto textCommands = TextPass(inFlightIndex, uniform, data, dataSize);
         commands.insert(commands.end(), textCommands.begin(), textCommands.end());
