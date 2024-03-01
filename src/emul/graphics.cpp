@@ -1402,16 +1402,20 @@ void LoadSplashImages()
         std::string name;
         // Texture<1536, 1152, 4>& pic; // No longer used
         avk::image_sampler& vkPic;
+        avk::border_handling_mode border{};
 
-        ImageToLoad(const std::string& name, avk::image_sampler& vkPic)
-            : name(name), vkPic(vkPic) {}
+        ImageToLoad(const std::string& name, avk::image_sampler& vkPic, avk::border_handling_mode _border)
+            : name(name), vkPic(vkPic), border(_border) {}
+
+        
     };
 
     static const std::vector<ImageToLoad> images = {
-        { "logo_1.png", /* LOGO1Texture, */ s_gc.LOGO1 },
-        { "logo_2.png", /* LOGO2Texture, */ s_gc.LOGO2 },
-        { "station.png", /* PORTPICTexture, */ s_gc.PORTPIC },
-        { "boxart.png", /* BoxArtTexture, */ s_gc.boxArtImage }
+        { "logo_1.png", /* LOGO1Texture, */ s_gc.LOGO1, avk::border_handling_mode::clamp_to_edge },
+        { "logo_2.png", /* LOGO2Texture, */ s_gc.LOGO2, avk::border_handling_mode::clamp_to_edge },
+        { "station.png", /* PORTPICTexture, */ s_gc.PORTPIC, avk::border_handling_mode::clamp_to_edge },
+        { "boxart.png", /* BoxArtTexture, */ s_gc.boxArtImage, avk::border_handling_mode::clamp_to_edge },
+        { "noise.png", /* BoxArtTexture, */ s_gc.fourDeeNoise, avk::border_handling_mode::repeat },
     };
 
     for (auto& img : images)
@@ -1428,7 +1432,7 @@ void LoadSplashImages()
             s_gc.vc.create_image_view(
                 imageFromData(image.data(), width, height, 4, vk::Format::eR8G8B8A8Unorm, avk::image_usage::general_image)
             ),
-            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, img.border)
         );
         image.clear();
     }
@@ -1552,6 +1556,7 @@ void LoadAssets()
     );
     image.clear();
 
+#if 0
     unsigned fourDeeNoiseWidth = 256, fourDeeNoiseHeight = 256;
 
     // Generate RGBA fourDeeNoise
@@ -1570,6 +1575,7 @@ void LoadAssets()
         ),
         s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::repeat)
     );
+#endif
 
     s_gc.planetAlbedoImages = s_gc.vc.create_image_sampler(
         s_gc.vc.create_image_view(

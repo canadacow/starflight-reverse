@@ -265,7 +265,8 @@ void main() {
     boxArtColor.rgb *= boxArtColor.a;
 
     vec4 nebulaColor;
-    mainImage(nebulaColor, pixelPos);
+    ivec2 invertedPixelPos = ivec2(pixelPos.x, windowSize.y - pixelPos.y);
+    mainImage(nebulaColor, invertedPixelPos);
 
     nebulaColor.rgb = boxArtColor.rgb + (nebulaColor.rgb * (1.0 - boxArtColor.a));
     
