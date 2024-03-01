@@ -5,7 +5,7 @@
 
 #include "uniform.h"
 
-layout(local_size_x = 32, local_size_y = 32) in;
+layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(rgba8, binding = 0) writeonly uniform image2D imgOutput;
 
@@ -31,7 +31,7 @@ float noise3d(in vec3 x) {
     vec3 f = fract(x);
     f = f*f*(3.0-2.0*f);
     vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
-    vec2 rg = texture(noiseTexture, (uv + 0.5)/256.0, -100.0).xy;
+    vec2 rg = texture(noiseTexture, (uv + 0.5)/256.0).xy;
     return mix(rg.y, rg.x, f.z);
 }
 
@@ -40,7 +40,7 @@ vec2 noise3d2(in vec3 x) {
     vec3 f = fract(x);
     f = f*f*(3.0-2.0*f);
     vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
-    vec4 rg = texture(noiseTexture, (uv + 0.5)/256.0, -100.0);
+    vec4 rg = texture(noiseTexture, (uv + 0.5)/256.0);
     return vec2(mix(rg.y, rg.x, f.z), mix(rg.w, rg.z, f.z));
 }
 
@@ -69,14 +69,14 @@ vec4 noise3d4_discontinuous(in vec3 x) {
     vec3 f = fract(x);
     f = f*f*(3.0-2.0*f);
     vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
-    return texture(noiseTexture, (uv + 0.5)/256.0, -100.0);
+    return texture(noiseTexture, (uv + 0.5)/256.0);
 }
 
 vec4 noise2d4(in vec2 x) {
     vec2 p = floor(x);
     vec2 f = fract(x);
     f = f*f*(3.0-2.0*f);
-    return texture(noiseTexture, (p + f + 0.5)/256.0, -100.0);
+    return texture(noiseTexture, (p + f + 0.5)/256.0);
 }
 
 vec3 star_color(in float noise) {
@@ -213,6 +213,86 @@ vec4 ray_trace(in vec3 origin, in vec3 ray) {
     return acc;
 }
 
+// Function to calculate a point on a quadratic Bezier curve
+
+float engine_noise(vec2 st) {
+    st += vec2(ub.uniforms.iTime * 0.1, ub.uniforms.iTime * 0.1);
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+}
+
+vec2 quadraticBezier(vec2 p0, vec2 p1, vec2 p2, float t) {
+    float oneMinusT = 1.0 - t;
+    return oneMinusT * oneMinusT * p0 + 2.0 * oneMinusT * t * p1 + t * t * p2;
+}
+
+void engines( out vec4 fragColor, in vec2 uv )
+{
+    // Normalized coordinates for the center and engines
+    vec2 center = vec2(0.333333, 0.187403);
+    vec2 leftEngine = vec2(0.27000, 0.58142);
+    vec2 rightEngine = vec2(0.36265, 0.57335);
+
+    // Define control points for the Bezier curves
+    vec2 controlLeft = (center + leftEngine) / 2.0 + vec2(-0.23, 0.01);
+    vec2 controlRight = (center + rightEngine) / 2.0 + vec2(-0.265, 0.05);
+
+    // Calculate the closest point on the Bezier curve for each pixel
+    float closestTLeft = 0.0;
+    float closestTRight = 0.0;
+    float minDistLeft = 1.0; // Start with a large distance
+    float minDistRight = 1.0;
+    for (int i = 0; i < 200; ++i) {
+        float t = float(i) / 199.0;
+        vec2 pLeft = quadraticBezier(center, controlLeft, leftEngine, t);
+        vec2 pRight = quadraticBezier(center, controlRight, rightEngine, t);
+        float distLeft = distance(uv, pLeft);
+        float distRight = distance(uv, pRight);
+        if (distLeft < minDistLeft) {
+            minDistLeft = distLeft;
+            closestTLeft = t;
+        }
+        if (distRight < minDistRight) {
+            minDistRight = distRight;
+            closestTRight = t;
+        }
+    }
+
+    // Define the thickness of the trail
+    float thickness = 0.02;
+    
+    float yFactor = smoothstep(center.y, max(leftEngine.y, rightEngine.y), uv.y);
+    float dynamicThickness = mix(0.01, thickness, yFactor); // Adjust values as needed
+
+    float perspectiveFactor = 1.0 - (1.0 / (1.0 + 25.0 * distance(uv, center))); // Adjust the 10.0 factor as needed
+    float alphaLeft = (1.0 - smoothstep(0.0, dynamicThickness, minDistLeft)) * perspectiveFactor;
+    float alphaRight = (1.0 - smoothstep(0.0, dynamicThickness, minDistRight)) * perspectiveFactor;
+
+    // Trail color in normalized RGB (hex 0x426d98)
+    vec3 trailColor = vec3(66.0 / 255.0, 109.0 / 255.0, 152.0 / 255.0);
+
+    // Modify the trail color with noise and brightness near the engines
+    float noiseValueLeft = engine_noise(uv + closestTLeft);
+    float noiseValueRight = engine_noise(uv + closestTRight);
+    float brightnessLeft = 0.5 + 0.33 * noiseValueLeft;
+    float brightnessRight = 0.5 + 0.33 * noiseValueRight;
+
+    // Make it brighter towards the actual engine exhaust
+    float engineGlowLeft = smoothstep(0.15, 0.00, distance(uv, leftEngine));
+    float engineGlowRight = smoothstep(0.15, 0.00, distance(uv, rightEngine));
+    brightnessLeft += engineGlowLeft;
+    brightnessRight += engineGlowRight;
+
+    vec3 trailColorLeft = trailColor * brightnessLeft;
+    vec3 trailColorRight = trailColor * brightnessRight;
+
+    // Combine the trails and apply the color with noise
+    float alpha = max(alphaLeft, alphaRight);
+    vec3 combinedTrailColor = (trailColorLeft + trailColorRight) / 2.0;
+    vec4 trailEffect = vec4(combinedTrailColor * alpha, alpha);
+
+    fragColor = trailEffect;
+}
+
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 iResolution = vec2(float(ub.uniforms.WINDOW_WIDTH), float(ub.uniforms.WINDOW_HEIGHT));
 
@@ -238,8 +318,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
     vec3 star_pos;
     float star_brightness;
+    fragColor = vec4(0.0);
     // stars
-    fragColor = vec4(haze(ray, star_field(ray, 18.0, star_pos, star_brightness)), 1.0);
+    fragColor += vec4(haze(ray, star_field(ray, 18.0, star_pos, star_brightness)), 1.0);
     // stars with lens flare
     fragColor += vec4(star_field(ray, 4.0, star_pos, star_brightness), 1.0);
     // lens flares
@@ -264,12 +345,21 @@ void main() {
 
     boxArtColor.rgb *= boxArtColor.a;
 
+    vec4 pixel = vec4(0.0);
     vec4 nebulaColor;
+    vec4 engineColor;
     ivec2 invertedPixelPos = ivec2(pixelPos.x, windowSize.y - pixelPos.y);
-    mainImage(nebulaColor, invertedPixelPos);
 
-    nebulaColor.rgb = boxArtColor.rgb + (nebulaColor.rgb * (1.0 - boxArtColor.a));
-    
+    mainImage(nebulaColor, invertedPixelPos);
+    engines(engineColor, adjustedUV);
+
+    pixel = nebulaColor;
+    pixel.rgb = engineColor.rgb + (pixel.rgb * (1.0 - engineColor.a));
+    pixel.a = (1.0 - engineColor.a);
+
+    pixel.rgb = boxArtColor.rgb + (pixel.rgb * (1.0 - boxArtColor.a));
+    pixel.a = (1.0 - boxArtColor.a);
+
     // Store the color in the output image
-    imageStore(imgOutput, pixelPos, nebulaColor);
+    imageStore(imgOutput, pixelPos, pixel);
 }

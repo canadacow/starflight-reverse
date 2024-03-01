@@ -98,6 +98,7 @@ static SDL_AudioDeviceID audioDevice = 0;
 static double toneInHz = 440.0;
 
 static bool s_useRotoscope = true;
+static bool s_shouldToggleMenu = true;
 static bool s_useEGA = true;
 static std::atomic<uint32_t> s_alienVar1 = 0;
 static float s_adjust = 0.0f;
@@ -977,30 +978,7 @@ public:
                 case SDL_KEYDOWN:
                     if (event.key.keysym.sym == SDLK_F1)
                     {
-                        auto now = std::chrono::steady_clock::now();
-                        auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
-                        constexpr float menuActivationInSeconds = 0.25f;
-                        if (duration >= menuActivationInSeconds)
-                        {
-                            Magnum::Float timePoint = duration;
-                            Magnum::Float uiTriggerValue = frameSync.uiTrigger.at(timePoint);
-
-                            frameSync.uiTriggerTimestamp = now; 
-
-                            if (uiTriggerValue >= 1.0f) {
-                                SDL_ShowCursor(SDL_ENABLE);
-                                frameSync.uiTrigger = {{
-                                    {0.0f, 1.0f}, 
-                                    {menuActivationInSeconds, 0.0f}
-                                }, Magnum::Math::lerp};
-                            } else {
-                                SDL_ShowCursor(SDL_DISABLE);
-                                frameSync.uiTrigger = {{
-                                    {0.0f, 0.0f}, 
-                                    {menuActivationInSeconds, 1.0f}
-                                }, Magnum::Math::lerp};
-                            }
-                        }
+                        s_shouldToggleMenu = true;
                     }
                     else if (event.key.keysym.sym == SDLK_F2)
                     {
@@ -1414,7 +1392,7 @@ void LoadSplashImages()
         { "logo_1.png", /* LOGO1Texture, */ s_gc.LOGO1, avk::border_handling_mode::clamp_to_edge },
         { "logo_2.png", /* LOGO2Texture, */ s_gc.LOGO2, avk::border_handling_mode::clamp_to_edge },
         { "station.png", /* PORTPICTexture, */ s_gc.PORTPIC, avk::border_handling_mode::clamp_to_edge },
-        { "boxart.png", /* BoxArtTexture, */ s_gc.boxArtImage, avk::border_handling_mode::clamp_to_edge },
+        { "boxart.png", /* BoxArtTexture, */ s_gc.boxArtImage, avk::border_handling_mode::clamp_to_border },
         { "noise.png", /* BoxArtTexture, */ s_gc.fourDeeNoise, avk::border_handling_mode::repeat },
     };
 
@@ -2509,7 +2487,7 @@ std::vector<avk::recorded_commands_t> TitlePass(VulkanContext::frame_id_t inFlig
                 avk::descriptor_binding(0, 2, s_gc.fourDeeNoise->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 3, s_gc.boxArtImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
             })),
-        avk::command::dispatch((WINDOW_WIDTH + 31u) / 32u, (WINDOW_HEIGHT + 31u) / 32u, 1),
+        avk::command::dispatch((WINDOW_WIDTH + 15u) / 16u, (WINDOW_HEIGHT + 15u) / 16u, 1),
 
         avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal })
@@ -3051,6 +3029,36 @@ void GraphicsUpdate()
         std::fill(rotoscopePixels.begin(), rotoscopePixels.end(), ClearPixel);
 
         modeChangeComplete.release();
+    }
+
+    if(s_shouldToggleMenu)
+    {
+        auto now = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
+        constexpr float menuActivationInSeconds = 0.25f;
+        if (duration >= menuActivationInSeconds)
+        {
+            Magnum::Float timePoint = duration;
+            Magnum::Float uiTriggerValue = frameSync.uiTrigger.at(timePoint);
+
+            frameSync.uiTriggerTimestamp = now;
+
+            if (uiTriggerValue >= 1.0f) {
+                SDL_ShowCursor(SDL_ENABLE);
+                frameSync.uiTrigger = { {
+                    {0.0f, 1.0f},
+                    {menuActivationInSeconds, 0.0f}
+                }, Magnum::Math::lerp };
+            }
+            else {
+                SDL_ShowCursor(SDL_DISABLE);
+                frameSync.uiTrigger = { {
+                    {0.0f, 0.0f},
+                    {menuActivationInSeconds, 1.0f}
+                }, Magnum::Math::lerp };
+            }
+            s_shouldToggleMenu = false;
+        }
     }
 
     int semCount = INT32_MAX;
