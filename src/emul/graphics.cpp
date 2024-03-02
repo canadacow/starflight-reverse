@@ -720,6 +720,8 @@ public:
     // Destructive read equivalent to Int 16 ah = 0
     virtual unsigned short getKeyStroke() = 0;
 
+    virtual void pushKeyStroke(uint16_t key) {};
+
     virtual bool areArrowKeysDown() { return false; }
 
     virtual void update() = 0;
@@ -1110,6 +1112,17 @@ public:
 
         SDL_Event event = popEvent();
         return GetKey(event.key.keysym.sym);
+    }
+
+    void pushKeyStroke(uint16_t key) override {
+        SDL_Event newEvent;
+        SDL_zero(newEvent); // Initialize the new event to zero
+        newEvent.type = SDL_KEYDOWN; // Set the event type to key down
+        newEvent.key.keysym.sym = key; // Assign the key value
+        newEvent.key.state = SDL_PRESSED; // Set the key state to pressed
+        newEvent.key.timestamp = SDL_GetTicks(); // Assign the current timestamp
+
+        pushEvent(newEvent);
     }
 };
 
@@ -4462,11 +4475,12 @@ bool GraphicsHasKey()
 
 uint16_t GraphicsGetKey()
 {
-    if (frameSync.inPickGraphicsMode)
-    {
-        return 0x35; // ASCII code for "5"
-    }
     return keyboard->getKeyStroke();
+}
+
+void GraphicsPushKey(uint16_t key)
+{
+    keyboard->pushKeyStroke(key);
 }
 
 void GraphicsSave(char *filename)

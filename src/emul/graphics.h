@@ -614,7 +614,6 @@ struct FrameSync {
     bool inDrawStarMap = false;
     bool inCombatRender = false;
     bool shouldSave = false;
-    bool inPickGraphicsMode = false;
 
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;
@@ -671,6 +670,7 @@ void GraphicsQuit();
 
 bool GraphicsHasKey();
 uint16_t GraphicsGetKey();
+void GraphicsPushKey(uint16_t key);
 
 void GraphicsMode(int mode); // 0 = text, 1 = ega graphics
 void GraphicsClear(int color, uint32_t offset, int byteCount);

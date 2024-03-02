@@ -1370,7 +1370,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xef5a && (std::string(overlayName) == "GAME-OV")) // SET.DISPLAY.MODE
                 {
-                    frameSync.inPickGraphicsMode = true;
+                    GraphicsPushKey(0x35); // ASCII code for "5"
+                    GraphicsPushKey(0x0D); // ASCII code for the return character key
                 }
 
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500 
@@ -2272,11 +2273,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xeaa2 && (std::string(overlayName) == "MAP-OV")) // >GAMEOPTIONS 
                 {
                     frameSync.inDrawStarMap = false;
-                }
-
-                if(nextInstr == 0xef5a && (std::string(overlayName) == "GAME-OV")) // SET.DISPLAY.MODE
-                {
-                    frameSync.inPickGraphicsMode = false;
                 }
 
                 if (nextInstr == 0xdb04) // ORBSETUP
