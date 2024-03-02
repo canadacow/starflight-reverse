@@ -117,6 +117,9 @@ void InitTextToSpeech()
     assert(SUCCEEDED(hr));
 #endif
     s_speaker = std::jthread([]() {
+
+        SetCurrentThreadName("Speech Thread");
+
         while (!s_stop) {
             s_phrasesAvailable.acquire();
             VoiceToSpeak voiceToSpeak;

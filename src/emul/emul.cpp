@@ -14,6 +14,9 @@
 #include <semaphore>
 
 int main(int argc, char *argv[]) {
+
+    SetCurrentThreadName("Main Thread");
+
     std::string hash;
 
     for (int i = 1; i < argc; i++) {

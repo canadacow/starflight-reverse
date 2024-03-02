@@ -614,6 +614,7 @@ struct FrameSync {
     bool inDrawStarMap = false;
     bool inCombatRender = false;
     bool shouldSave = false;
+    bool inPickGraphicsMode = false;
 
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;

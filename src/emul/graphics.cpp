@@ -303,6 +303,9 @@ void StartEmulationThread(std::filesystem::path path)
     stopEmulationThread = false;
 
     emulationThread = std::jthread([path]() {
+
+        SetCurrentThreadName("Emulation Thread");
+
         InitCPU();
         InitEmulator(path);
         enum RETURNCODE ret;
@@ -1618,6 +1621,8 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
 
 static int GraphicsInitThread()
 {
+    SetCurrentThreadName("Graphics Thread");
+
     SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
 
     SDL_DisplayMode dm;
@@ -4457,6 +4462,10 @@ bool GraphicsHasKey()
 
 uint16_t GraphicsGetKey()
 {
+    if (frameSync.inPickGraphicsMode)
+    {
+        return 0x35; // ASCII code for "5"
+    }
     return keyboard->getKeyStroke();
 }
 

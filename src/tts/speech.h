@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../emul/platform.h"
+
 #include <string>
 
 void InitTextToSpeech();

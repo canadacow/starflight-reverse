@@ -97,6 +97,7 @@ set(HEADER_FILES
     src/disasmX86/debugger.h
 	src/util/lodepng.h 
     src/tts/speech.h
+    src/emul/platform.h
     ${CURL_INCLUDE_DIRS}
 )
 
@@ -104,6 +105,7 @@ add_executable(emulatesdl
     ${HEADER_FILES}
     src/emul/emul.cpp 
     src/emul/call.cpp 
+    src/emul/platform.cpp
     src/cpu/cpu.cpp
     src/emul/findword.cpp 
     src/emul/callstack.c 
