@@ -25,23 +25,22 @@ void main() {
 
     // Apply Gaussian blur based on overall menu visibility
     float blurAmount = ub.uniforms.menuVisibility * ub.uniforms.blurAmount; // Increase the blur amount as menu becomes more visible
-    vec4 blurredGamePixel = vec4(0.0);
+    float shadow = 0.0;
     int blurRadius = int(blurAmount);
-    if (blurRadius > 0) {
+    if (blurRadius > 0 && menuPixel.a == 0.0) {
         float totalWeight = 0.0;
         for (int dx = -blurRadius; dx <= blurRadius; ++dx) {
             for (int dy = -blurRadius; dy <= blurRadius; ++dy) {
                 float weight = exp(-(dx * dx + dy * dy) / (2.0 * blurAmount));
-                blurredGamePixel += weight * imageLoad(gameScreen, pixelPos + ivec2(dx, dy));
+                shadow += weight * imageLoad(menuScreen, pixelPos + ivec2(dx, dy)).a;
                 totalWeight += weight;
             }
         }
-        blurredGamePixel /= totalWeight;
-    } else {
-        blurredGamePixel = gamePixel;
+        shadow /= totalWeight;
     }
-
+    
     // Blend game and menu screens
-    vec4 finalPixel = (menuPixel * menuAlpha) + (blurredGamePixel * (1 - menuAlpha));
+    vec4 shadowedGame = gamePixel * (1.0 - shadow);
+    vec4 finalPixel = (menuPixel * menuAlpha) + (shadowedGame * (1 - menuAlpha));
     imageStore(imgOutput, pixelPos, finalPixel);
 }

@@ -100,6 +100,8 @@ static double toneInHz = 440.0;
 static bool s_useRotoscope = true;
 static bool s_shouldToggleMenu = true;
 static bool s_useEGA = true;
+static bool s_showHelp = false;
+static bool s_helpShown = false;
 static std::atomic<uint32_t> s_alienVar1 = 0;
 static float s_adjust = 0.0f;
 
@@ -2837,12 +2839,6 @@ std::vector<uint8_t> ExtractPngFromSaveFile(const std::filesystem::path& saveFil
 
 void DrawUI()
 {
-    enum GameMode {
-        ROTOSCOPE_MODE,
-        EGA_MODE,
-        CGA_MODE
-    };
-
     struct SaveGame {
         std::string hash;
         std::string timestamp;
@@ -2850,7 +2846,6 @@ void DrawUI()
         struct nk_image screenshot;
     };
 
-    static GameMode currentMode = ROTOSCOPE_MODE;
     static int32_t screenshotIndex = 0;
 
     static std::vector<SaveGame> saveGames;
@@ -2900,88 +2895,137 @@ void DrawUI()
     nk_style_push_color(&ctx, &s->window.background, nk_rgba(64,64,64,230));
     nk_style_push_style_item(&ctx, &s->window.fixed_background, nk_style_item_color(nk_rgba(64,64,64,230)));
 
-    if (nk_begin(&ctx, "Starflight - Reimaged Panel", nk_rect(panelX, panelY, panelWidth, panelHeight),
-        NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND)) {
-        
-        // Adjust layout spacing to fit the new panel size
-        nk_layout_row_dynamic(&ctx, 40, 1);
-        nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
+    if(saveGames.empty() && !emulationThreadRunning && !s_helpShown) {
+        s_showHelp = true;
+        s_helpShown = true;
+    }
 
-        // Rotoscope toggle
-        nk_bool useRotoscope = s_useRotoscope;
-        nk_layout_row_dynamic(&ctx, 30, 2);
-        if (nk_checkbox_label(&ctx, "Rotoscope Graphics", (nk_bool*)&useRotoscope)) {
-            s_useRotoscope = useRotoscope != 0;
-        }
+    if(s_showHelp)
+    {
+        float windowWidth = 600.0f;
+        float windowHeight = 400.0f; // Adjusted window height to accommodate all elements including the button at the bottom.
+        float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
+        float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
 
-        // Graphics mode selection
-        if (!useRotoscope) { // Only show EGA/CGA options if Rotoscope is disabled
-            nk_layout_row_dynamic(&ctx, 30, 2);
-            if (nk_option_label(&ctx, "EGA Graphics", s_useEGA)) {
-                s_useEGA = 1;
-            }
-            if (nk_option_label(&ctx, "CGA Graphics", !s_useEGA)) {
-                s_useEGA = 0;
-            }
-        } else { // Place a spacer if s_useRotoscope is true
-            nk_layout_row_dynamic(&ctx, 30, 1); // Adjust for a single spacer row
-            //nk_spacing(&ctx, 1); // Add a spacer
-        }
+        if (nk_begin(&ctx, "Welcome", nk_rect(windowX, windowY, windowWidth, windowHeight),
+            NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE)) {
 
-        nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1);
-        if (!emulationThreadRunning)
-        {
+            nk_layout_row_dynamic(&ctx, 20, 1);
+            nk_label(&ctx, "Welcome to the Unauthorized Remake of Starflight", NK_TEXT_CENTERED);
+
+            nk_layout_row_dynamic(&ctx, 15, 1);
+            nk_label(&ctx, "Key Bindings:", NK_TEXT_LEFT);
+            nk_label(&ctx, "F1 - Display the overlay", NK_TEXT_LEFT);
+            nk_label(&ctx, "F2 - Switch in and out of rotoscoped (remade) mode.", NK_TEXT_LEFT);
+            nk_label(&ctx, "F3 - Switch between EGA (16 color) and CGA (4 color) modes.", NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(&ctx, 30, 1);
+            nk_label(&ctx, "Save games are saved as they were in the original game, via pressing ESC while and saving the game. This will end that individual session and the game can then be restarted. This remake allows for an unlimited number of managed saves. They are now managed through the remake software accessible via this overlay.", NK_TEXT_CENTERED);
+
+            nk_layout_row_dynamic(&ctx, 30, 1); // This row is for spacing purposes, ensuring the button is at the very bottom.
+
+            nk_layout_row_dynamic(&ctx, 30, 1); // Adjusted to ensure the Start Game button is at the very bottom.
             if (nk_button_label(&ctx, "Start Game")) {
                 StartEmulationThread("");
+                s_showHelp = false;
+                s_shouldToggleMenu = true;
             }
         }
         else
         {
-            if (nk_button_label(&ctx, pauseEmulationThread ? "Resume Game" : "Pause Game")) {
-                pauseEmulationThread = !pauseEmulationThread;
-            }
+            s_showHelp = false;
         }
-
-        nk_layout_row_dynamic(&ctx, 280, 1); // Height for the save game display
-        if (nk_group_begin(&ctx, "Save Games", NK_WINDOW_BORDER)) {
-            // Display only one save game at a time
-            const auto& saveGame = saveGames[screenshotIndex]; // Use the current index to get the save game
-
-            nk_layout_row_begin(&ctx, NK_DYNAMIC, 200, 3); // Three elements in the row: < button, screenshot, > button
-            {
-                // Previous save game button
-                nk_layout_row_push(&ctx, 0.10f);
-                if (nk_button_label(&ctx, "<")) {
-                    screenshotIndex = (screenshotIndex + saveGames.size() - 1) % saveGames.size(); // Decrement index with wrap-around
-                }
-                // Display save game screenshot
-                nk_layout_row_push(&ctx, 0.80f);
-                nk_image(&ctx, saveGame.screenshot);
-                // Next save game button
-                nk_layout_row_push(&ctx, 0.10f);
-                if (nk_button_label(&ctx, ">")) {
-                    screenshotIndex = (screenshotIndex + 1) % saveGames.size(); // Increment index with wrap-around
-                }
-            }
-            nk_layout_row_end(&ctx);
-
-            // Display save game timestamp below the screenshot
-            nk_layout_row_dynamic(&ctx, 20, 1); // Adjust height as needed for the timestamp
-            nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_CENTERED);
-
-            // Load button for the current save game
-            nk_layout_row_dynamic(&ctx, 30, 1); // Adjust height as needed for the load button
-            if (nk_button_label(&ctx, "Load")) {
-                loadWindowOpen = true;
-                loadWindowIndex = screenshotIndex;
-            }
-
-            nk_group_end(&ctx);
-        }
-
-
+        nk_end(&ctx);
     }
-    nk_end(&ctx);
+    else
+    {
+        if (nk_begin(&ctx, "Starflight - Reimaged Panel", nk_rect(panelX, panelY, panelWidth, panelHeight),
+            NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND)) {
+            
+            // Adjust layout spacing to fit the new panel size
+            nk_layout_row_dynamic(&ctx, 40, 1);
+            nk_label(&ctx, "Starflight - Reimaged", NK_TEXT_CENTERED);
+
+            nk_layout_row_dynamic(&ctx, 30, 1);
+            if (nk_button_label(&ctx, "About")) {
+                s_showHelp = true;
+            }
+
+            // Rotoscope toggle
+            nk_bool useRotoscope = s_useRotoscope;
+            nk_layout_row_dynamic(&ctx, 30, 2);
+            if (nk_checkbox_label(&ctx, "Rotoscope Graphics", (nk_bool*)&useRotoscope)) {
+                s_useRotoscope = useRotoscope != 0;
+            }
+
+            // Graphics mode selection
+            if (!useRotoscope) { // Only show EGA/CGA options if Rotoscope is disabled
+                nk_layout_row_dynamic(&ctx, 30, 2);
+                if (nk_option_label(&ctx, "EGA Graphics", s_useEGA)) {
+                    s_useEGA = 1;
+                }
+                if (nk_option_label(&ctx, "CGA Graphics", !s_useEGA)) {
+                    s_useEGA = 0;
+                }
+            } else { // Place a spacer if s_useRotoscope is true
+                nk_layout_row_dynamic(&ctx, 30, 1); // Adjust for a single spacer row
+                //nk_spacing(&ctx, 1); // Add a spacer
+            }
+
+            nk_layout_row_static(&ctx, 30, (int)(panelWidth - 20), 1);
+            if (!emulationThreadRunning)
+            {
+                if (nk_button_label(&ctx, "Start Game")) {
+                    StartEmulationThread("");
+                    loadWindowOpen = false;
+                }
+            }
+            else
+            {
+                if (nk_button_label(&ctx, pauseEmulationThread ? "Resume Game" : "Pause Game")) {
+                    pauseEmulationThread = !pauseEmulationThread;
+                }
+            }
+
+            nk_layout_row_dynamic(&ctx, 320, 1); // Height for the save game display
+            if (nk_group_begin(&ctx, "Save Games", NK_WINDOW_BORDER)) {
+                // Display only one save game at a time
+                const auto& saveGame = saveGames[screenshotIndex]; // Use the current index to get the save game
+
+                nk_layout_row_begin(&ctx, NK_DYNAMIC, 230, 3); // Three elements in the row: < button, screenshot, > button
+                {
+                    // Previous save game button
+                    nk_layout_row_push(&ctx, 0.10f);
+                    if (nk_button_label(&ctx, "<")) {
+                        screenshotIndex = (screenshotIndex + saveGames.size() - 1) % saveGames.size(); // Decrement index with wrap-around
+                    }
+                    // Display save game screenshot
+                    nk_layout_row_push(&ctx, 0.80f);
+                    nk_image(&ctx, saveGame.screenshot);
+                    // Next save game button
+                    nk_layout_row_push(&ctx, 0.10f);
+                    if (nk_button_label(&ctx, ">")) {
+                        screenshotIndex = (screenshotIndex + 1) % saveGames.size(); // Increment index with wrap-around
+                    }
+                }
+                nk_layout_row_end(&ctx);
+
+                // Display save game timestamp below the screenshot
+                nk_layout_row_dynamic(&ctx, 20, 1); // Adjust height as needed for the timestamp
+                nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_CENTERED);
+
+                // Load button for the current save game
+                nk_layout_row_dynamic(&ctx, 30, 1); // Adjust height as needed for the load button
+                if (nk_button_label(&ctx, "Load")) {
+                    loadWindowOpen = true;
+                    loadWindowIndex = screenshotIndex;
+                }
+
+                nk_group_end(&ctx);
+            }
+        }
+        nk_end(&ctx);
+    }
 
     float loadWindowWidth = 800.0f;
     float loadWindowHeight = 650.0f;
@@ -3004,10 +3048,15 @@ void DrawUI()
                 StopEmulationThread();
                 StartEmulationThread(saveGame.file);
                 loadWindowOpen = false; // Close the window after loading
+                s_shouldToggleMenu = true;
             }
             if (nk_button_label(&ctx, "Cancel")) {
                 loadWindowOpen = false; // Close the window without loading
             }
+        }
+        else
+        {
+            loadWindowOpen = false;
         }
         nk_end(&ctx);
     }
@@ -3232,7 +3281,7 @@ void GraphicsUpdate()
     auto now = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
     uniform.menuVisibility = frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
-    uniform.blurAmount = emulationThreadRunning ? 20.0f : 0.0f;
+    uniform.blurAmount = 20.0f; // emulationThreadRunning ? 20.0f : 0.0f;
     
     // If we're in a system, nebulas behave a little differently
     if (uniform.game_context == 1 || uniform.game_context == 2)
