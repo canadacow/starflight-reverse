@@ -13,7 +13,9 @@
 #include <thread>
 #include <semaphore>
 
-int main(int argc, char *argv[]) {
+#include <SDL2/SDL.h>
+
+int SDL_main(int argc, char *argv[]) {
 
     SetCurrentThreadName("Main Thread");
 

@@ -101,7 +101,7 @@ set(HEADER_FILES
     ${CURL_INCLUDE_DIRS}
 )
 
-add_executable(emulatesdl 
+add_executable(emulatesdl WIN32
     ${HEADER_FILES}
     src/emul/emul.cpp 
     src/emul/call.cpp 
