@@ -1370,6 +1370,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xef5a && (std::string(overlayName) == "GAME-OV")) // SET.DISPLAY.MODE
                 {
+                    Write16(0x0a36, 0); // Turn off sound, i.e. set pp_IsSOUND to 0
                     GraphicsPushKey(0x35); // ASCII code for "5"
                     GraphicsPushKey(0x0D); // ASCII code for the return character key
                 }
@@ -1382,7 +1383,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     auto iconCount = Read16(pp_ILOCAL);
 
                     std::vector<Icon> combatLocale{};
-
 
                     int shipIndex = -1;
                     vec2<float> shipLocation;
@@ -1406,6 +1406,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         icon.x -= shipLocation.x;
                         icon.y -= shipLocation.y;
                     }
+
+                    ForthCall(0x798c); // SET-CURRENT
 
                     s_currentIconList = combatLocale;
 
@@ -1445,6 +1447,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     s_currentStarMap.starmap = starMapLocale;
                     s_currentStarMap.offset = tlWld;
                     s_currentStarMap.window = window;
+
+                    ForthCall(0x798c); // SET-CURRENT
 
                     GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
                 }
@@ -1638,7 +1642,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsReportGameFrame();
                 }
 
-                if (nextInstr == 0xe4fa) // (?NEWHEADXY)
+                if ((nextInstr == 0xe4fa) || ((nextInstr == 0xf208 && (std::string(overlayName) == "COMBAT-OV")))) // (?NEWHEADXY)
                 {
                     worldXDelta = (int16_t)Read16(0x5dae);
                     worldYDelta = (int16_t)Read16(0x5db9);
@@ -1921,6 +1925,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
                     }
+
+                    ForthCall(0x798c); // SET-CURRENT
                 }
 
                 if(nextInstr == 0xe7ec)
@@ -2226,7 +2232,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     printf("SET-DESTINATION out %d, wrld %d,%d cursor %d, %d\n", setDest, worldCoordsX, worldCoordsY, cursorX, cursorY);
                 }
 
-                if (nextInstr == 0xe4fa) // (?NEWHEADXY)
+                if ((nextInstr == 0xe4fa) || ((nextInstr == 0xf208 && (std::string(overlayName) == "COMBAT-OV")))) // (?NEWHEADXY)
                 {
                     int16_t newWorldX = (int16_t)Read16(0x5dae);
                     int16_t newWorldY = (int16_t)Read16(0x5db9);
@@ -2304,6 +2310,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if (nextInstr == 0xa042) // .1LOGO
                 {
                     frameSync.inSmallLogo = false;
+                }
+
+                if (nextInstr == 0xF069) // WF069 AKA GET-MPS
+                {
+                    const uint16_t cc_MPS = 0x5245;
+                    printf("MPS %u\n", Read16(cc_MPS));
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV")) // .AUXSYS
@@ -3775,8 +3787,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         }
         break;
 
-        case 0x8D09: // "DISPLAY" wait for vertical retrace
+        case 0x8D09: // DISPLAY-WAIT wait for vertical retrace
             {
+#if 0
                 static auto start = std::chrono::system_clock::now();
                 auto now = std::chrono::system_clock::now();
 
@@ -3795,6 +3808,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 while (std::chrono::system_clock::now() - start_wait < time_to_wait_in_ns) {
                     std::this_thread::yield();
                 }
+#endif
             }
         break;
 
