@@ -1375,6 +1375,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     GraphicsPushKey(0x0D); // ASCII code for the return character key
                 }
 
+                if(nextInstr == 0xef3b && (std::string(overlayName) == "COMBAT-OV")) // COMBAT
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+                }
+
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500 
                 {
                     frameSync.inCombatRender = true;
@@ -2304,6 +2309,46 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
                 {
+
+                    #pragma pack(push, 1)
+                    struct MissileRecord {
+                        int16_t currx;
+                        int16_t padding1;
+                        int16_t curry;
+                        int16_t padding2;
+                        int16_t destx; 
+                        int16_t desty;
+                        uint8_t morig; // 1=Player, 0=Alien
+                        uint8_t mclass;  // Weapon class (offset 18)
+                        int16_t deltax;  // Increment for DDA X (offset 20)
+                        int16_t padding3;
+                        int16_t deltay;  // Increment for DDA Y (offset 24)
+                        int16_t padding4;
+                    };
+                    #pragma pack(pop)
+
+                    static_assert(sizeof(MissileRecord) == 22, "MissileRecord size is not 22");
+
+                    const MissileRecord* mr = (const MissileRecord*)Read8Addr(0xe292);
+
+                    std::vector<MissileRecord> missiles{};
+
+                    // Get current missle locations
+                    uint16_t missleCount = Read16(0xe1FB);
+                    for(uint16_t i = 0; i < missleCount; ++i)
+                    {
+                        if(mr[i].mclass != 0)
+                        {
+                            missiles.push_back(mr[i]);
+                        }
+                    }
+
+                    int count = 0;
+                    for(const auto& missile : missiles)
+                    {
+                        printf("Missile %d - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
+                               ++count, missile.currx, missile.curry, missile.destx, missile.desty, missile.morig, missile.mclass, missile.deltax, missile.deltay);
+                    }
                     frameSync.inCombatRender = false;
                 }
 

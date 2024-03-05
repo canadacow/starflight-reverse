@@ -94,6 +94,12 @@ unsigned char Read8Long(unsigned short s, unsigned short o)
     return m[addr];
 }
 
+unsigned char* Read8Addr(unsigned short offset)
+{
+    return &mem[offset];
+}
+
+
 unsigned short Read16(unsigned short offset)
 {
     unsigned short val = mem[offset+0] | (mem[offset+1]<<8);
