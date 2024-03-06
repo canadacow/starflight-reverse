@@ -29,6 +29,8 @@
 #include "../cpu/cpu.h"
 #include "../tts/speech.h"
 
+#include "instance.h"
+
 #include "vulkan_helper.h"
 
 #define NK_INCLUDE_FIXED_TYPES
@@ -3091,6 +3093,114 @@ void DrawUI()
     nk_sdlsurface_render(nk_context, clear, 1);
 }
 
+static HeadingAndThrust calculateHeadingAndThrust(const vec2<int16_t>& deadReckoning, float currentHeading, float currentThrust) {
+    HeadingAndThrust result;
+    float targetHeading = 0.0f;
+
+    if (deadReckoning.x == 1 && deadReckoning.y == 0) {
+        targetHeading = 0.0f; // East
+    } else if (deadReckoning.x == 1 && deadReckoning.y == 1) {
+        targetHeading = 45.0f; // Northeast
+    } else if (deadReckoning.x == 0 && deadReckoning.y == 1) {
+        targetHeading = 90.0f; // North
+    } else if (deadReckoning.x == -1 && deadReckoning.y == 1) {
+        targetHeading = 135.0f; // Northwest
+    } else if (deadReckoning.x == -1 && deadReckoning.y == 0) {
+        targetHeading = 180.0f; // West
+    } else if (deadReckoning.x == -1 && deadReckoning.y == -1) {
+        targetHeading = 225.0f; // Southwest
+    } else if (deadReckoning.x == 0 && deadReckoning.y == -1) {
+        targetHeading = 270.0f; // South
+    } else if (deadReckoning.x == 1 && deadReckoning.y == -1) {
+        targetHeading = 315.0f; // Southeast
+    }
+
+    if (deadReckoning.x != 0 || deadReckoning.y != 0) {
+        float maxTurnRate = 5.0f; // Adjust this value as needed
+
+        float deltaHeading = targetHeading - currentHeading;
+
+        if (deltaHeading > 180.0f) {
+            deltaHeading -= 360.0f;
+        } else if (deltaHeading < -180.0f) {
+            deltaHeading += 360.0f;
+        }
+
+        if (deltaHeading > 0.0f) {
+            result.heading = currentHeading + std::min(deltaHeading, maxTurnRate);
+        } else {
+            result.heading = currentHeading + std::max(deltaHeading, -maxTurnRate);
+        }
+
+        float thrustage = 0.3f;
+
+        if (std::abs(deltaHeading) > 0.0) {
+            thrustage = 1.0f;
+        }
+
+        result.thrust = (currentThrust * 0.9f) + (thrustage * 0.1f);
+    } else {
+        result.thrust = currentThrust - 0.01f;
+        if (result.thrust < 0.0f) {
+            result.thrust = 0.0f;
+        }
+        result.heading = currentHeading;
+    }
+
+    // Ensure heading wraps correctly at 360 degrees
+    if (result.heading >= 360.0f) {
+        result.heading -= 360.0f;
+    } else if (result.heading < 0.0f) {
+        result.heading += 360.0f;
+    }
+
+    return result;
+}
+
+static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, float speed, float currentHeading, float currentThrust) {
+    // Convert numerical heading to dead reckoning
+    float targetHeading;
+    switch (heading) {
+        case 0: // East
+            targetHeading = 90.0f;
+            break;
+        case 1: // Northeast
+            targetHeading = 45.0f;
+            break;
+        case 2: // North
+            targetHeading = 0.0f;
+            break;
+        case 3: // Northwest
+            targetHeading = 315.0f;
+            break;
+        case 4: // West
+            targetHeading = 270.0f;
+            break;
+        case 5: // Southwest
+            targetHeading = 225.0f;
+            break;
+        case 6: // South
+            targetHeading = 180.0f;
+            break;
+        case 7: // Southeast
+            targetHeading = 135.0f;
+            break;
+        default:
+            targetHeading = currentHeading; // No change if invalid heading
+            break;
+    }
+
+    // Adjust speed to binary state as per instructions
+    speed = (speed != 0.0f) ? 1.0f : 0.0f;
+
+    // Convert speed to dead reckoning, apply rounding, and then cast to int16_t
+    int16_t deadReckoningX = static_cast<int16_t>(std::round(cos(targetHeading * M_PI / 180.0f) * speed));
+    int16_t deadReckoningY = static_cast<int16_t>(std::round(sin(targetHeading * M_PI / 180.0f) * speed));
+
+    // Call the original calculateHeadingAndThrust with the converted and casted values
+    return calculateHeadingAndThrust({deadReckoningX, deadReckoningY}, currentHeading, currentThrust);
+}
+
 void GraphicsUpdate()
 {
     if (graphicsMode != toSetGraphicsMode)
@@ -3594,75 +3704,27 @@ void GraphicsUpdate()
             }
         }
 
-        float targetHeading = 0.0f;
-        if (ftr.deadReckoning.x == 1 && ftr.deadReckoning.y == 0) {
-            targetHeading = 0.0f; // East
-        }
-        else if (ftr.deadReckoning.x == 1 && ftr.deadReckoning.y == 1) {
-            targetHeading = 45.0f; // Northeast
-        }
-        else if (ftr.deadReckoning.x == 0 && ftr.deadReckoning.y == 1) {
-            targetHeading = 90.0f; // North
-        }
-        else if (ftr.deadReckoning.x == -1 && ftr.deadReckoning.y == 1) {
-            targetHeading = 135.0f; // Northwest
-        }
-        else if (ftr.deadReckoning.x == -1 && ftr.deadReckoning.y == 0) {
-            targetHeading = 180.0f; // West
-        }
-        else if (ftr.deadReckoning.x == -1 && ftr.deadReckoning.y == -1) {
-            targetHeading = 225.0f; // Southwest
-        }
-        else if (ftr.deadReckoning.x == 0 && ftr.deadReckoning.y == -1) {
-            targetHeading = 270.0f; // South
-        }
-        else if (ftr.deadReckoning.x == 1 && ftr.deadReckoning.y == -1) {
-            targetHeading = 315.0f; // Southeast
-        }
+        auto cat = calculateHeadingAndThrust(ftr.deadReckoning, frameSync.shipHeading, frameSync.thrust);
+        frameSync.shipHeading = cat.heading;
+        frameSync.thrust = cat.thrust;
 
-        if (ftr.deadReckoning.x != 0 || ftr.deadReckoning.y != 0)
-        {
-            float maxTurnRate = 5.0f; // Adjust this value as needed
+        uniform.heading = cat.heading;
+        uniform.thrust = cat.thrust;
 
-            float deltaHeading = targetHeading - frameSync.shipHeading;
-
-            if (deltaHeading > 180.0f) {
-                deltaHeading -= 360.0f;
-            } else if (deltaHeading < -180.0f) {
-                deltaHeading += 360.0f;
+        for (const auto& icon : ftr.iconList) {
+            if (icon.inst_type == SF_INSTANCE_VESSEL) {
+                auto vesselIt = frameSync.vessels.find(icon.iaddr);
+                if (vesselIt != frameSync.vessels.end()) {
+                    float currentHeading = vesselIt->second.heading;
+                    float currentThrust = vesselIt->second.thrust;
+                    vesselIt->second = calculateHeadingAndSpeedToDeadReckoning(icon.vesselHeading, icon.vesselSpeed, currentHeading, currentThrust);
+                } else {
+                    float currentHeading = 0.0f;
+                    float currentThrust = 0.0f;
+                    frameSync.vessels[icon.iaddr] = calculateHeadingAndSpeedToDeadReckoning(icon.vesselHeading, icon.vesselSpeed, currentHeading, currentThrust);
+                }
             }
-
-            if (deltaHeading > 0.0f) {
-                frameSync.shipHeading += (std::min)(deltaHeading, maxTurnRate);
-            } else {
-                frameSync.shipHeading += (std::max)(deltaHeading, -maxTurnRate);
-            }
-
-            float thrustage = 0.3f;
-
-            if(abs(deltaHeading) > 0.0)
-            {
-                thrustage = 1.0f;
-            }
-
-            frameSync.thrust = (frameSync.thrust * 0.9f) + (thrustage * 0.1f);
         }
-        else
-        {
-            frameSync.thrust -= 0.01f;
-            if(frameSync.thrust < 0.0f)
-                frameSync.thrust = 0.0f;
-        }
-
-        // Ensure frameSync.heading wraps correctly at 360 degrees
-        if (frameSync.shipHeading >= 360.0f) {
-            frameSync.shipHeading -= 360.0f;
-        } else if (frameSync.shipHeading < 0.0f) {
-            frameSync.shipHeading += 360.0f;
-        }
-
-        uniform.heading = frameSync.shipHeading;
-        uniform.thrust = frameSync.thrust;
 
         uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
         uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);

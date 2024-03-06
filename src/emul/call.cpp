@@ -1092,20 +1092,20 @@ static Icon GetIcon(uint16_t index) {
     auto current_iaddr = icon.iaddr;
 
     ForthPushCurrent(current_iaddr);
-    auto instType = GetInstanceClass();
+    icon.inst_type = GetInstanceClass();
     auto instOff = GetInstanceOffset();
     icon.species = GetInstanceSpecies();
 
-    if (instType == 0xb) // Unbox this box
+    if (icon.inst_type == SF_INSTANCE_BOX) // Unbox this box
     {
         current_iaddr = instOff;
         ForthPushCurrent(current_iaddr);
-        instType = GetInstanceClass();
+        icon.inst_type = GetInstanceClass();
         instOff = GetInstanceOffset();
         ForthPopCurrent();
     }
 
-    auto it = InstanceTypes.find(instType);
+    auto it = InstanceTypes.find(icon.inst_type);
     assert(it != InstanceTypes.end());
 
     if (it->second == "STAR")
@@ -1127,6 +1127,11 @@ static Icon GetIcon(uint16_t index) {
     if (it->second == "VESSEL")
     {
         icon.icon_type = (uint32_t)IconType::Vessel;
+
+        icon.vesselHeading = (uint16_t)Read8(0x63ef + 11);
+        icon.vesselSpeed = (uint16_t)Read8(0x63ef + 12);
+        icon.vesselArmorHits = (uint16_t)Read16(0x63ef + 18);
+        icon.vesselShieldHits = (uint16_t)Read16(0x63ef + 20);
     }
     if (it->second == "FLUX")
     {

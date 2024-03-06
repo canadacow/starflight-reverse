@@ -270,7 +270,7 @@ struct ShaderIcon {
     int32_t planet_to_sunY;
 
     uint32_t planetIndex;
-    uint32_t padding0;
+    float    objectHeading;
     uint32_t padding1;
     uint32_t padding2;
 };
@@ -286,6 +286,7 @@ struct Icon {
     uint32_t id;
     uint32_t clr;
 
+    uint32_t inst_type;
     uint32_t icon_type;
     uint32_t iaddr;
     int32_t planet_to_sunX;
@@ -294,8 +295,17 @@ struct Icon {
     uint32_t seed;
 
     uint16_t species;
+
+    uint16_t vesselHeading;
+    uint16_t vesselSpeed;
+    uint16_t vesselArmorHits;
+    uint16_t vesselShieldHits;
 };
 
+struct HeadingAndThrust {
+    float heading;
+    float thrust;
+};
 
 struct MissileRecord {
     int16_t currx;
@@ -638,6 +648,7 @@ struct FrameSync {
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;
 
+    std::unordered_map<uint32_t, HeadingAndThrust> vessels;
 
     std::chrono::steady_clock::time_point uiTriggerTimestamp;
     Magnum::Animation::Track<Magnum::Float, Magnum::Float> uiTrigger{};
