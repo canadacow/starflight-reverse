@@ -297,6 +297,7 @@ struct Icon {
     uint16_t species;
 
     uint16_t vesselHeading;
+    uint16_t vesselHeadingFloat;
     uint16_t vesselSpeed;
     uint16_t vesselArmorHits;
     uint16_t vesselShieldHits;
@@ -352,6 +353,7 @@ struct IconUniform {
         shaderIcon.planet_to_sunY = icon.planet_to_sunY;
         shaderIcon.planetIndex = IndexFromSeed(icon.seed);
         shaderIcon.isActive = 1; // Assuming the icon is active when converted
+        shaderIcon.objectHeading = icon.vesselHeadingFloat;
     }
 
     IconUniform() : icons{}  {}

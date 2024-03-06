@@ -111,7 +111,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 planetPixel = vec4(0.);
     float nebulaPixel = ub.uniforms.nebulaBase;
 
-    for(int i = 0; i < 16; i++) {
+    for(int i = 0; i < 64; i++) {
         Icon icon = icons[i];
 
         if(icon.isActive == 0)
@@ -232,7 +232,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                 normUV -= 0.5;
                 // Rotate the normUVs to match the icon.id orientation
-                float angle = (icon.id - 35) * 45.0;
+                float angle = icon.objectHeading; // (icon.id - 35) * 45.0;
                 float rad = radians(angle);
                 float s = sin(rad);
                 float c = cos(rad);
@@ -252,6 +252,14 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             float distance = 1.0;
 
             switch(icon.id) {
+                case 252:
+                    {
+                        float distance = 1.0 * ub.uniforms.zoomLevel;
+                        if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
+                            iconPixel += colortable[0x4];
+                        }
+                    }
+                    break;
                 case 253:
                     switch(icon.clr & 0xf) {
                         case 0x4: // RED

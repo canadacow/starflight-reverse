@@ -1279,6 +1279,19 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         ftr.heading = (int16_t)Read16(0x5dc7);
         ftr.missiles = missiles;
 
+        for (auto& missile : ftr.missiles) {
+            vec2<int16_t> currPosWLD = { missile.currx, missile.curry };
+            vec2<int16_t> destPosWLD = { missile.destx, missile.desty };
+
+            vec2<int16_t> currPosSCR = WLD_to_SCR(currPosWLD);
+            vec2<int16_t> destPosSCR = WLD_to_SCR(destPosWLD);
+
+            missile.currx = currPosSCR.x;
+            missile.curry = currPosSCR.y;
+            missile.destx = destPosSCR.x;
+            missile.desty = destPosSCR.y;
+        }
+
         std::unique_lock<std::mutex> lock(frameSync.mutex);
 
         if (frameSync.framesToRender.size() < 2)
@@ -1808,13 +1821,13 @@ static int GraphicsInitThread()
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<32>)));
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<64>)));
 
         bd.orreryUniform =
             s_gc.vc.create_buffer(
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
-                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<32>))); 
+                avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<64>))); 
 
         bd.starmapUniform =
             s_gc.vc.create_buffer(
@@ -2605,8 +2618,8 @@ std::vector<avk::recorded_commands_t> GPUCompositor(VulkanContext::frame_id_t in
 std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inFlightIndex, 
     avk::image_sampler outputImage,
     UniformBlock& uniform, 
-    IconUniform<32>& iconUniform,
-    IconUniform<32>& orreryUniform,
+    IconUniform<64>& iconUniform,
+    IconUniform<64>& orreryUniform,
     IconUniform<700>& starmapUniform,
     const std::vector<RotoscopeShader>& shaderBackBuffer, 
     avk::compute_pipeline navPipeline,
@@ -2638,10 +2651,10 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         ));
 
     res.push_back(
-        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform<32>)));
+        s_gc.buffers[inFlightIndex].iconUniform->fill(&iconUniform, 0, 0, sizeof(IconUniform<64>)));
 
     res.push_back(
-        s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform<32>)));        
+        s_gc.buffers[inFlightIndex].orreryUniform->fill(&orreryUniform, 0, 0, sizeof(IconUniform<64>)));        
 
     res.push_back(
         s_gc.buffers[inFlightIndex].starmapUniform->fill(&starmapUniform, 0, 0, sizeof(IconUniform<700>)));     
@@ -3159,36 +3172,7 @@ static HeadingAndThrust calculateHeadingAndThrust(const vec2<int16_t>& deadRecko
 
 static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, float speed, float currentHeading, float currentThrust) {
     // Convert numerical heading to dead reckoning
-    float targetHeading;
-    switch (heading) {
-        case 0: // East
-            targetHeading = 90.0f;
-            break;
-        case 1: // Northeast
-            targetHeading = 45.0f;
-            break;
-        case 2: // North
-            targetHeading = 0.0f;
-            break;
-        case 3: // Northwest
-            targetHeading = 315.0f;
-            break;
-        case 4: // West
-            targetHeading = 270.0f;
-            break;
-        case 5: // Southwest
-            targetHeading = 225.0f;
-            break;
-        case 6: // South
-            targetHeading = 180.0f;
-            break;
-        case 7: // Southeast
-            targetHeading = 135.0f;
-            break;
-        default:
-            targetHeading = currentHeading; // No change if invalid heading
-            break;
-    }
+    float targetHeading = (heading - 35) * 45.0;
 
     // Adjust speed to binary state as per instructions
     speed = (speed != 0.0f) ? 1.0f : 0.0f;
@@ -3717,11 +3701,11 @@ void GraphicsUpdate()
                 if (vesselIt != frameSync.vessels.end()) {
                     float currentHeading = vesselIt->second.heading;
                     float currentThrust = vesselIt->second.thrust;
-                    vesselIt->second = calculateHeadingAndSpeedToDeadReckoning(icon.vesselHeading, icon.vesselSpeed, currentHeading, currentThrust);
+                    vesselIt->second = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
                 } else {
                     float currentHeading = 0.0f;
                     float currentThrust = 0.0f;
-                    frameSync.vessels[icon.iaddr] = calculateHeadingAndSpeedToDeadReckoning(icon.vesselHeading, icon.vesselSpeed, currentHeading, currentThrust);
+                    frameSync.vessels[icon.iaddr] = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
                 }
             }
         }
@@ -3762,8 +3746,8 @@ void GraphicsUpdate()
         avk::compute_pipeline orreryPipeline{};
         avk::compute_pipeline starmapPipeline{};
 
-        IconUniform<32> ic{};
-        IconUniform<32> orrery{};
+        IconUniform<64> ic{};
+        IconUniform<64> orrery{};
         IconUniform<700> starmap{};
 
         // ( 0 = planet surface, 1=orbit, 2=system)         
@@ -3776,7 +3760,7 @@ void GraphicsUpdate()
             case 3: // hyperspace
             case 5: // starport
                 {
-                    ic = IconUniform<32>(ftr.iconList);
+                    ic = IconUniform<64>(ftr.iconList);
                     for (int i = 0; i < 32; ++i)
                     {
                         if (ic.icons[i].isActive)
@@ -3808,7 +3792,7 @@ void GraphicsUpdate()
 
                         // Solar system orrery
                         orreryPipeline = s_gc.orreryPipeline;
-                        orrery = IconUniform<32>(sol);
+                        orrery = IconUniform<64>(sol);
                     }
 
                     navPipeline = s_gc.navigationPipeline;
@@ -3820,7 +3804,7 @@ void GraphicsUpdate()
                     {
                         if (i.seed == frameSync.currentPlanet)
                         {
-                            ic = IconUniform<32>(i);
+                            ic = IconUniform<64>(i);
                             ic.icons[0].screenX = 36;
                             ic.icons[0].screenY = 61;
                             ic.icons[0].bltX = 36;
@@ -3864,6 +3848,12 @@ void GraphicsUpdate()
 
                         if (distX > arena.x) arena.x = distX;
                         if (distY > arena.y) arena.y = distY;
+
+                        auto it = frameSync.vessels.find(icon.iaddr);
+                        if (it != frameSync.vessels.end())
+                        {
+                            icon.vesselHeadingFloat = it->second.heading;
+                        }
                     }
 
                     // Orig area is 9 x 15
@@ -3901,7 +3891,20 @@ void GraphicsUpdate()
 
                     uniform.zoomLevel = frameSync.zoomLevel;
 
-                    ic = IconUniform<32>(combatLocale);
+                    for (const auto& missile : ftr.missiles) {
+                        Icon missileIcon;
+                        missileIcon.x = missile.currx;
+                        missileIcon.y = -missile.currx;
+                        missileIcon.screenX = missileIcon.x;
+                        missileIcon.screenY = missileIcon.y;
+                        missileIcon.bltX = missileIcon.x;
+                        missileIcon.bltY = missileIcon.y;
+
+                        missileIcon.id = 252;
+                        combatLocale.push_back(missileIcon);
+                    }
+
+                    ic = IconUniform<64>(combatLocale);
                     navPipeline = s_gc.encounterPipeline;
                 }
                 break;
