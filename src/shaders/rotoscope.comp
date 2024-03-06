@@ -7,25 +7,6 @@
 
 layout(local_size_x = 4, local_size_y = 4) in;
 
-struct Icon {
-    uint isActive;
-    float x;
-    float y;
-    float screenX;
-
-    float screenY;
-    float bltX;
-    float bltY;
-    uint id;
-
-    uint clr;
-    uint icon_type;
-    int planet_to_sunX;
-    int planet_to_sunY;
-
-    uint planetIndex;
-};
-
 // Equivalent of TextData struct
 struct TextData {
     uint character;

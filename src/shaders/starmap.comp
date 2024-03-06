@@ -7,31 +7,6 @@
 
 layout(local_size_x = 32, local_size_y = 32) in;
 
-#define Icon_Other  0
-#define Icon_Sun    1
-#define Icon_Planet 2
-#define Icon_Nebula 3
-#define Icon_Flux   4
-
-struct Icon {
-    uint isActive;
-    float x;
-    float y;
-    float screenX;
-
-    float screenY;
-    float bltX;
-    float bltY;
-    uint id;
-
-    uint clr;
-    uint icon_type;
-    int planet_to_sunX;
-    int planet_to_sunY;
-
-    uint planetIndex;
-};
-
 // Equivalent of TextData struct
 struct TextData {
     uint character;

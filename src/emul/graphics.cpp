@@ -1239,7 +1239,12 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
-void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const StarMapSetup& starMap)
+void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, 
+    const std::vector<Icon>& iconList, 
+    const std::vector<Icon>& system, 
+    uint16_t orbitMask, 
+    const StarMapSetup& starMap,
+    const std::vector<MissileRecord>& missiles)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1261,7 +1266,7 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
     {
         FrameToRender ftr{};
 
-        ftr.deadReckoning = { x , y };
+        ftr.deadReckoning = { deadX , deadY };
         ftr.iconList = iconList;
         ftr.solarSystem = system;
         ftr.starMap = starMap;
@@ -1270,6 +1275,7 @@ void GraphicsSetDeadReckoning(int16_t x, int16_t y, const std::vector<Icon>& ico
         ftr.worldCoord = { (int16_t)Read16(0x5dae), (int16_t)Read16(0x5db9) };
         ftr.screenCoord = WLD_to_SCR(ftr.worldCoord);
         ftr.heading = (int16_t)Read16(0x5dc7);
+        ftr.missiles = missiles;
 
         std::unique_lock<std::mutex> lock(frameSync.mutex);
 

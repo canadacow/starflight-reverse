@@ -1168,6 +1168,7 @@ static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
+static std::vector<MissileRecord> s_missiles;
 static StarMapSetup s_currentStarMap;
 static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
@@ -1416,7 +1417,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     s_currentIconList = combatLocale;
 
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
                 }
 
                 if(nextInstr == 0xEAAE) // Clear for starmap
@@ -1455,7 +1456,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     ForthCall(0x798c); // SET-CURRENT
 
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV"))
@@ -2265,7 +2266,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xb0bd) // PARALLEL-TASKS
                 {
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
                 }
 
                 if(nextInstr == 0xcbbf || (nextInstr == 0xf4bd && (std::string(overlayName) == "COMBAT-OV"))) // MANEUVER
@@ -2273,7 +2274,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
                 }
 
                 if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 
@@ -2309,26 +2310,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // >GAMEOPTIONS 
                 {
-
-                    #pragma pack(push, 1)
-                    struct MissileRecord {
-                        int16_t currx;
-                        int16_t padding1;
-                        int16_t curry;
-                        int16_t padding2;
-                        int16_t destx; 
-                        int16_t desty;
-                        uint8_t morig; // 1=Player, 0=Alien
-                        uint8_t mclass;  // Weapon class (offset 18)
-                        int16_t deltax;  // Increment for DDA X (offset 20)
-                        int16_t padding3;
-                        int16_t deltay;  // Increment for DDA Y (offset 24)
-                        int16_t padding4;
-                    };
-                    #pragma pack(pop)
-
-                    static_assert(sizeof(MissileRecord) == 22, "MissileRecord size is not 22");
-
                     const MissileRecord* mr = (const MissileRecord*)Read8Addr(0xe292);
 
                     std::vector<MissileRecord> missiles{};
@@ -2349,6 +2330,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         printf("Missile %d - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
                                ++count, missile.currx, missile.curry, missile.destx, missile.desty, missile.morig, missile.mclass, missile.deltax, missile.deltay);
                     }
+
+                    s_missiles = missiles;
+
                     frameSync.inCombatRender = false;
                 }
 

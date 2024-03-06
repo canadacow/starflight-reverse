@@ -296,6 +296,24 @@ struct Icon {
     uint16_t species;
 };
 
+
+struct MissileRecord {
+    int16_t currx;
+    int16_t padding1;
+    int16_t curry;
+    int16_t padding2;
+    int16_t destx; 
+    int16_t desty;
+    uint8_t morig; // 1=Player, 0=Alien
+    uint8_t mclass;  // Weapon class (offset 18)
+    int16_t deltax;  // Increment for DDA X (offset 20)
+    int16_t padding3;
+    int16_t deltay;  // Increment for DDA Y (offset 24)
+    int16_t padding4;
+};
+
+static_assert(sizeof(MissileRecord) == 22, "MissileRecord size is not 22");
+
 struct StarMapSetup {
     std::vector<Icon> starmap;
     vec2<int16_t> offset;
@@ -568,6 +586,8 @@ struct FrameToRender
 
     std::vector<Icon> solarSystem;
     StarMapSetup starMap;
+
+    std::vector<MissileRecord> missiles;
 };
 
 enum class OrbitState {
@@ -684,7 +704,14 @@ void GraphicsPixelDirect(int x, int y, uint32_t color, uint32_t offset, Rotoscop
 void GraphicsBLT(int16_t x1, int16_t y1, int16_t w, int16_t h, const char* image, int color, int xormode, uint32_t offset, Rotoscope pc = Rotoscope(ClearPixel));
 void GraphicsSave(char *filename);
 
-void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, const std::vector<Icon>& iconList, const std::vector<Icon>& system, uint16_t orbitMask, const StarMapSetup& starMap);
+void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, 
+    const std::vector<Icon>& iconList, 
+    const std::vector<Icon>& system, 
+    uint16_t orbitMask, 
+    const StarMapSetup& starMap,
+    const std::vector<MissileRecord>& missiles
+    );
+
 void GraphicsReportGameFrame();
 void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);
 
