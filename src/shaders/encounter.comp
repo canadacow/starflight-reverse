@@ -146,7 +146,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 normUV += 0.5;
 
                 vec4 texColor = texture(ShipTexture, vec3(normUV, 0));
-                shipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
+                vec4 ourShipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
 
                 if(normUV.x < 0.02 && normUV.y >= 0.30 && normUV.y <= 0.70 && ub.uniforms.thrust > 0.0)
                 {
@@ -156,8 +156,10 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     float thrustRadius = 0.15 + (ub.uniforms.thrust * 0.18);
 
                     main_engines(engines, subUv, iTime, thrustRadius);
-                    shipPixel += engines;
+                    ourShipPixel += engines;
                 }
+
+                 shipPixel = ourShipPixel  + (shipPixel * (1 - ourShipPixel.a));
             }
         } else if(icon.id >= 51 && icon.id <= 91) {
             float basesize = 29.0f * float(icon.id - 50);
@@ -241,7 +243,9 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 normUV += 0.5;
 
                 vec4 texColor = texture(ShipTexture, vec3(normUV, 1));
-                shipPixel = vec4(texColor.rgb * texColor.a, texColor.a);
+                vec4 vessel = vec4(texColor.rgb * texColor.a, texColor.a);
+
+                shipPixel = vessel  + (shipPixel * (1 - vessel.a));
             }
         } else if(icon.id < 50) {
             float distance = 4.0 * ub.uniforms.zoomLevel;
@@ -249,56 +253,42 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 iconPixel += colortable[icon.clr & 0xf];
             }
         } else {
-            float distance = 1.0;
+            float distance = 2.0;
 
             switch(icon.id) {
-                case 252:
+                case 251:
                     {
-                        float distance = 1.0 * ub.uniforms.zoomLevel;
-                        if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
-                            iconPixel += colortable[0x4];
+                        vec2 start = iconPos.xy;
+                        vec2 end = vec2(icon.x1, icon.y1);
+                        vec4 color = colortable[icon.clr & 0xf];
+                        float thickness = 4.0 * ub.uniforms.zoomLevel; // Assuming a default thickness for the line
+
+                        // Convert start and end points to screen space if necessary
+                        // Assuming start and end are already in the correct space for simplicity
+
+                        // Line drawing algorithm (Bresenham's or similar)
+                        // Since we're in a shader, we'll use a simple distance-based approach
+                        float a = end.y - start.y;
+                        float b = start.x - end.x;
+                        float c = a * start.x + b * start.y;
+
+                        float lineDist = abs(a * pixelPos.x + b * pixelPos.y + c) / sqrt(a * a + b * b);
+                        if(lineDist <= thickness) {
+                            iconPixel += color;
                         }
                     }
                     break;
-                case 253:
-                    switch(icon.clr & 0xf) {
-                        case 0x4: // RED
-                        case 0x6: // ORANGE
-                            distance = 7.0f;
-                            break;
-                        case 0xE: // YELLOW
-                        case 0xF: // WHITE
-                            distance = 10.0f;
-                            break;
-                        default: // OTHERS
-                            distance = 14.0f;
-                            break;
-                    }
-                    if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
-                        vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
-                        starburst(starPixel, normUV, iTime, 1.05);
+                case 252:
+                    {
+                        distance = 2.0 * ub.uniforms.zoomLevel;
+                        if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
+                            iconPixel += colortable[icon.clr & 0xf];
+                        }
                     }
                     break;
                 case 254: // Invisible icon (Encounter hit testing?)
                     if(roto.blt_x == icon.screenX && roto.blt_y == icon.screenY) {
                         iconPixel += colortable[icon.clr & 0xf];
-                    }
-                    break;
-                case 255: // Flux icon
-                    if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < 14.0) {
-                        vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, 30.0) - 0.5;
-
-                        float radius = length(normUV);
-    
-                        float warpFactor = 0.33 - radius;
-    
-                        warpFactor = max(0.0, warpFactor);
-
-                        warpFactor *= warpFactor;
-    
-                        vec2 warp = warpFactor * vec2(starburst_noise(normUV + vec2(iTime)), starburst_noise(normUV + vec2(0.4, iTime)));
-
-                        worldCoords += warp;
                     }
                     break;
                 default:

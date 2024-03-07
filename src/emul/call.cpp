@@ -1164,6 +1164,13 @@ vec2<int16_t> SCR_to_WLD(vec2<int16_t> input) {
     return output;
 };
 
+uint16_t Peek16(uint16_t stackOffset) {
+    // Calculate the address by adding the offset to the stack pointer (regsp)
+    uint16_t address = regsp + (stackOffset * 2);
+    // Read the 16-bit value from the calculated address
+    return Read16(address);
+}
+
 extern unsigned short regbx;
 extern std::atomic<bool> stopEmulationThread;
 uint16_t nparmsStackSi = 0;
@@ -1174,6 +1181,7 @@ static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
 static std::vector<MissileRecord> s_missiles;
+static std::vector<LaserRecord> s_lasers;
 static StarMapSetup s_currentStarMap;
 static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
@@ -1360,7 +1368,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = true;
                     frameSync.maneuveringStartTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = true\n");
+                }
 
+                if(nextInstr == 0xEA81 && (std::string(overlayName) == "COMBAT-OV")) // .LASER
+                {
+                    LaserRecord laser = {};
+
+                    laser.x0 = static_cast<int16_t>(Peek16(4));
+                    laser.y0 = static_cast<int16_t>(Peek16(3));
+                    laser.x1 = static_cast<int16_t>(Peek16(2));
+                    laser.y1 = static_cast<int16_t>(Peek16(1));
+                    laser.color = static_cast<uint16_t>(Peek16(0));
+                    
+                    // Debug print to verify the values
+                    printf("Laser coordinates and color: (%u, %u) to (%u, %u) with color %u\n", laser.x0, laser.y0, laser.x1, laser.y1, laser.color);
+
+                    s_lasers.push_back(laser);
                 }
 
                 if(nextInstr == 0xf4dc && (std::string(overlayName) == "GAME-OV")) // >GAMEOPTIONS 
@@ -1412,17 +1435,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         printf("Ship %d spec %d\n", i, icon.species);
                     }
 
+                    #if 0
                     for (Icon& icon : combatLocale)
                     {
                         icon.x -= shipLocation.x;
                         icon.y -= shipLocation.y;
                     }
+                    #endif
 
                     ForthCall(0x798c); // SET-CURRENT
 
                     s_currentIconList = combatLocale;
 
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
                 }
 
                 if(nextInstr == 0xEAAE) // Clear for starmap
@@ -1461,7 +1486,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     ForthCall(0x798c); // SET-CURRENT
 
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV"))
@@ -2271,7 +2296,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xb0bd) // PARALLEL-TASKS
                 {
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
                 }
 
                 if(nextInstr == 0xcbbf || (nextInstr == 0xf4bd && (std::string(overlayName) == "COMBAT-OV"))) // MANEUVER
@@ -2279,7 +2304,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
                 }
 
                 if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 

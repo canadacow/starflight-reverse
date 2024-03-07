@@ -271,8 +271,8 @@ struct ShaderIcon {
 
     uint32_t planetIndex;
     float    objectHeading;
-    uint32_t padding1;
-    uint32_t padding2;
+    float    x1;
+    float    y1;
 };
 
 struct Icon {
@@ -280,6 +280,9 @@ struct Icon {
     float y;
     float screenX;
     float screenY;
+
+    float x1;
+    float y1;
 
     float bltX;
     float bltY;
@@ -323,6 +326,15 @@ struct MissileRecord {
     int16_t padding4;
 };
 
+struct LaserRecord {
+    int16_t x0;
+    int16_t y0;
+    int16_t x1;
+    int16_t y1;
+    uint16_t color;
+    std::chrono::steady_clock::time_point timestamp;
+};
+
 static_assert(sizeof(MissileRecord) == 22, "MissileRecord size is not 22");
 
 struct StarMapSetup {
@@ -354,6 +366,8 @@ struct IconUniform {
         shaderIcon.planetIndex = IndexFromSeed(icon.seed);
         shaderIcon.isActive = 1; // Assuming the icon is active when converted
         shaderIcon.objectHeading = icon.vesselHeadingFloat;
+        shaderIcon.x1 = icon.x1;
+        shaderIcon.y1 = icon.y1;
     }
 
     IconUniform() : icons{}  {}
@@ -651,6 +665,7 @@ struct FrameSync {
     bool takeScreenshot = false;
 
     std::unordered_map<uint32_t, HeadingAndThrust> vessels;
+    std::vector<LaserRecord> lasers;
 
     std::chrono::steady_clock::time_point uiTriggerTimestamp;
     Magnum::Animation::Track<Magnum::Float, Magnum::Float> uiTrigger{};
@@ -722,7 +737,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     const std::vector<Icon>& system, 
     uint16_t orbitMask, 
     const StarMapSetup& starMap,
-    const std::vector<MissileRecord>& missiles
+    const std::vector<MissileRecord>& missiles,
+    std::vector<LaserRecord>& lasers
     );
 
 void GraphicsReportGameFrame();

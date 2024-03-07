@@ -1246,7 +1246,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     const std::vector<Icon>& system, 
     uint16_t orbitMask, 
     const StarMapSetup& starMap,
-    const std::vector<MissileRecord>& missiles)
+    const std::vector<MissileRecord>& missiles,
+    std::vector<LaserRecord>& lasers)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1279,6 +1280,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         ftr.heading = (int16_t)Read16(0x5dc7);
         ftr.missiles = missiles;
 
+#if 0
         for (auto& missile : ftr.missiles) {
             vec2<int16_t> currPosWLD = { missile.currx, missile.curry };
             vec2<int16_t> destPosWLD = { missile.destx, missile.desty };
@@ -1291,8 +1293,25 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
             missile.destx = destPosSCR.x;
             missile.desty = destPosSCR.y;
         }
+#endif
 
         std::unique_lock<std::mutex> lock(frameSync.mutex);
+
+        // This section updates the laser records, removing outdated ones and adding new ones with the current timestamp.
+        // It first removes lasers older than 1 second, then adds new lasers from the provided list.
+        auto now = std::chrono::steady_clock::now();
+        frameSync.lasers.erase(std::remove_if(frameSync.lasers.begin(), frameSync.lasers.end(),
+            [now](const LaserRecord& laser) {
+                return std::chrono::duration_cast<std::chrono::seconds>(now - laser.timestamp).count() > 1;
+            }), frameSync.lasers.end());
+
+        for (auto& laser : lasers) {
+            LaserRecord newLaser = laser;
+            newLaser.timestamp = now;
+            frameSync.lasers.push_back(newLaser);
+        }
+
+        lasers.clear();
 
         if (frameSync.framesToRender.size() < 2)
         {
@@ -3894,14 +3913,32 @@ void GraphicsUpdate()
                     for (const auto& missile : ftr.missiles) {
                         Icon missileIcon;
                         missileIcon.x = missile.currx;
-                        missileIcon.y = -missile.currx;
+                        missileIcon.y = -missile.curry;
                         missileIcon.screenX = missileIcon.x;
                         missileIcon.screenY = missileIcon.y;
                         missileIcon.bltX = missileIcon.x;
                         missileIcon.bltY = missileIcon.y;
-
+                        missileIcon.clr = missile.morig == 1 ? 0x1 : 0x4;
                         missileIcon.id = 252;
+                        
                         combatLocale.push_back(missileIcon);
+                    }
+
+                    for(const auto& laser : frameSync.lasers) {
+                        Icon laserIcon;
+
+                        laserIcon.x = laser.x0;
+                        laserIcon.y = -laser.y0;
+                        laserIcon.screenX = laserIcon.x;
+                        laserIcon.screenY = laserIcon.y;
+                        laserIcon.bltX = laserIcon.x;
+                        laserIcon.bltY = laserIcon.y;
+
+                        laserIcon.x1 = laser.x1;
+                        laserIcon.y1 = -laser.y1;
+
+                        laserIcon.clr = laser.color;
+                        laserIcon.id = 251;
                     }
 
                     ic = IconUniform<64>(combatLocale);
