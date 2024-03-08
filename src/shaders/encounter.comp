@@ -270,11 +270,6 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                         vec4 color = colortable[icon.clr & 0xf];
 
-                        #if 1
-                        float a = end.y - start.y;
-                        float b = start.x - end.x;
-                        float c = a * start.x + b * start.y;
-
                         // Calculate the distance from the pixel to the line segment
                         float lineDist = LineSegmentDistance(pixelPos.xy, start.xy, end.xy);
 
@@ -285,17 +280,6 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                         if(lineDist <= thickness) {
                             iconPixel += color;
                         }
-                        #else
-                        float minX = min(start.x, end.x);
-                        float maxX = max(start.x, end.x);
-                        float minY = min(start.y, end.y);
-                        float maxY = max(start.y, end.y);
-                        if(pixelPos.x >= minX && pixelPos.x <= maxX && pixelPos.y >= minY && pixelPos.y <= maxY) {
-                            iconPixel += color;
-                        }
-
-                        #endif
-
                     }
                     break;
                 case 252:

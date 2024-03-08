@@ -1302,7 +1302,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         auto now = std::chrono::steady_clock::now();
         frameSync.lasers.erase(std::remove_if(frameSync.lasers.begin(), frameSync.lasers.end(),
             [now](const LaserRecord& laser) {
-                return std::chrono::duration_cast<std::chrono::seconds>(now - laser.timestamp).count() > 1;
+                return std::chrono::duration_cast<std::chrono::milliseconds>(now - laser.timestamp).count() > 250;
             }), frameSync.lasers.end());
 
         for (auto& laser : lasers) {
