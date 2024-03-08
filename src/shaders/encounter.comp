@@ -73,6 +73,12 @@ layout(binding = 5) uniform IconBlock {
 #include "planet.h"
 #include "engines.h"
 
+float LineSegmentDistance(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel = vec4(0.);
 
@@ -253,35 +259,49 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 iconPixel += colortable[icon.clr & 0xf];
             }
         } else {
-            float distance = 2.0;
+            float distanceI = 2.0;
 
             switch(icon.id) {
                 case 251:
                     {
                         vec2 start = iconPos.xy;
                         vec2 end = vec2(icon.x1, icon.y1);
+                        end *= (8.0f * ub.uniforms.zoomLevel);
+
                         vec4 color = colortable[icon.clr & 0xf];
-                        float thickness = 4.0 * ub.uniforms.zoomLevel; // Assuming a default thickness for the line
 
-                        // Convert start and end points to screen space if necessary
-                        // Assuming start and end are already in the correct space for simplicity
-
-                        // Line drawing algorithm (Bresenham's or similar)
-                        // Since we're in a shader, we'll use a simple distance-based approach
+                        #if 1
                         float a = end.y - start.y;
                         float b = start.x - end.x;
                         float c = a * start.x + b * start.y;
 
-                        float lineDist = abs(a * pixelPos.x + b * pixelPos.y + c) / sqrt(a * a + b * b);
+                        // Calculate the distance from the pixel to the line segment
+                        float lineDist = LineSegmentDistance(pixelPos.xy, start.xy, end.xy);
+
+                        // Use a thickness value appropriate for your needs
+                        float thickness = 1.0 * ub.uniforms.zoomLevel; // Example thickness
+
+                        // If the distance is within the thickness, color the pixel
                         if(lineDist <= thickness) {
                             iconPixel += color;
                         }
+                        #else
+                        float minX = min(start.x, end.x);
+                        float maxX = max(start.x, end.x);
+                        float minY = min(start.y, end.y);
+                        float maxY = max(start.y, end.y);
+                        if(pixelPos.x >= minX && pixelPos.x <= maxX && pixelPos.y >= minY && pixelPos.y <= maxY) {
+                            iconPixel += color;
+                        }
+
+                        #endif
+
                     }
                     break;
                 case 252:
                     {
-                        distance = 2.0 * ub.uniforms.zoomLevel;
-                        if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
+                        distanceI = 2.0 * ub.uniforms.zoomLevel;
+                        if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distanceI) {
                             iconPixel += colortable[icon.clr & 0xf];
                         }
                     }

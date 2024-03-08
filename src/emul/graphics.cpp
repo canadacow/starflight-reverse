@@ -3939,6 +3939,8 @@ void GraphicsUpdate()
 
                         laserIcon.clr = laser.color;
                         laserIcon.id = 251;
+
+                        combatLocale.push_back(laserIcon);
                     }
 
                     ic = IconUniform<64>(combatLocale);

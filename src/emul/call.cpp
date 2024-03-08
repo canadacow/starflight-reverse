@@ -1381,7 +1381,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     laser.color = static_cast<uint16_t>(Peek16(0));
                     
                     // Debug print to verify the values
-                    printf("Laser coordinates and color: (%u, %u) to (%u, %u) with color %u\n", laser.x0, laser.y0, laser.x1, laser.y1, laser.color);
+                    printf("Laser coordinates and color: (%d, %d) to (%d, %d) with color %u\n", laser.x0, laser.y0, laser.x1, laser.y1, laser.color);
 
                     s_lasers.push_back(laser);
                 }
