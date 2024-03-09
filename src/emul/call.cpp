@@ -1406,7 +1406,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xef3b && (std::string(overlayName) == "COMBAT-OV")) // COMBAT
                 {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
 
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500 
@@ -1447,7 +1447,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     s_currentIconList = combatLocale;
 
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
+                    //GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
                 }
 
                 if(nextInstr == 0xEAAE) // Clear for starmap

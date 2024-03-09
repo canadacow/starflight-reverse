@@ -1101,6 +1101,13 @@ public:
 
     // Destructive read equivalent to Int 16 ah = 0
     unsigned short getKeyStroke() override {
+        // Prioritize non-arrow keys
+        if (keysAvailable())
+        {
+            SDL_Event event = popEvent();
+            return GetKey(event.key.keysym.sym);
+        }
+
         auto arrow = getArrowKeyDown();
         if(arrow != 0)
         {
@@ -3881,6 +3888,7 @@ void GraphicsUpdate()
 
                     float zoomLevel = 1.0f; // Default zoom level when everything fits in the smallest area
 
+#if 0
                     // Calculate the current arena size
                     // Since the arena is symmetrical around (0,0), we double the largest distance to get the full size
                     float currentArenaWidth = 2 * arena.x;
@@ -3894,6 +3902,7 @@ void GraphicsUpdate()
 
                         zoomLevel *= minZoom; // Adjust zoom level based on how much we need to zoom out
                     }
+#endif
 
                     //printf("Current Arena Size: Width = %f, Height = %f zoomlevel %f\n", currentArenaWidth, currentArenaHeight, zoomLevel);
 
