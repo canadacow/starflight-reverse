@@ -268,17 +268,28 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                         vec2 end = vec2(icon.x1, icon.y1);
                         end *= (8.0f * ub.uniforms.zoomLevel);
 
-                        vec4 color = colortable[icon.clr & 0xf];
+                        vec4 baseColor = colortable[icon.clr & 0xf];
 
                         // Calculate the distance from the pixel to the line segment
                         float lineDist = LineSegmentDistance(pixelPos.xy, start.xy, end.xy);
 
-                        // Use a thickness value appropriate for your needs
-                        float thickness = 1.0 * ub.uniforms.zoomLevel; // Example thickness
+                        // Use a thickness value for the core of the laser
+                        float coreThickness = 0.5 * ub.uniforms.zoomLevel; // Core thickness of the laser
 
-                        // If the distance is within the thickness, color the pixel
-                        if(lineDist <= thickness) {
-                            iconPixel += color;
+                        // Calculate glow effect based on distance from the line
+                        float glowDist = 2.0 * ub.uniforms.zoomLevel; // Glow distance
+                        float glowIntensity = smoothstep(glowDist, coreThickness, lineDist);
+
+                        // Adjust the base color's alpha based on the glow intensity to create a fading effect
+                        vec4 color = vec4(baseColor.rgb, baseColor.a * glowIntensity);
+
+                        // If the distance is within the glow effect range, blend the pixel color
+                        if(lineDist <= glowDist) {
+                            float coreIntensity = smoothstep(coreThickness, 0.0, lineDist);
+                            // Enhance the core's brightness
+                            vec4 coreColor = vec4(baseColor.rgb * (1.0 + coreIntensity), 1.0);
+                            // Blend the glow and core colors
+                            iconPixel += mix(color, coreColor, coreIntensity);
                         }
                     }
                     break;

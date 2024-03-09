@@ -1965,6 +1965,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     ForthCall(0x798c); // SET-CURRENT
                 }
 
+#if 0
+                if(nextInstr == 0xf521) // DO-DAMAGE
+                {
+                    // Do nothing to prevent damage being taken
+                    Pop(); // Flag is missile or laser damage
+                    Pop(); // ?
+                }
+#endif
+                
                 if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
@@ -2796,6 +2805,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0xe211: 
             {
                 ret = ParameterCall(bx, 0xe211); // in COMBAT-OV
+                break; 
+            }
+        case 0xee6d:
+            {
+                ret = ParameterCall(bx, 0xee6d); // in DAMAGE-OV
                 break; 
             }
         case 0x7227:
