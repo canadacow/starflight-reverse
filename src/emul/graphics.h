@@ -31,6 +31,8 @@
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/vector.hpp>
 
+#include "spline.hpp"
+
 template<typename T>
 struct vec2 {
     union {
@@ -336,9 +338,7 @@ struct MissileRecordUnique {
     uint64_t hash;
 
     uint64_t computeHash(uint16_t offset) const {
-        uint64_t initialHash = XXH64(&mr, offsetof(MissileRecord, mclass) + sizeof(mr.mclass), 0);
-        uint64_t finalHash = XXH64(&offset, sizeof(offset), initialHash);
-        return finalHash;
+        return offset;
     }
 };
 
