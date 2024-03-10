@@ -1320,6 +1320,28 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
 
         lasers.clear();
 
+        for (auto& icon : iconList)
+        {
+            if (icon.inst_type == SF_INSTANCE_VESSEL) {
+                auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
+                if (vesselIt == frameSync.combatTheatre.end()) {
+                    frameSync.combatTheatre[icon.iaddr] = HeadingAndThrust();
+                }
+                vesselIt = frameSync.combatTheatre.find(icon.iaddr);
+
+                auto& pos = vesselIt->second.positions;
+
+                pos.push_back({ icon.x, icon.y });
+
+                const size_t N = 4;
+
+                if (pos.size() > N)
+                {
+                    pos.pop_front();
+                }
+            }
+        }
+  
         if (frameSync.framesToRender.size() < 2)
         {
             frameSync.framesToRender.push_back(ftr);
@@ -3721,21 +3743,6 @@ void GraphicsUpdate()
         uniform.heading = cat.heading;
         uniform.thrust = cat.thrust;
 
-        for (const auto& icon : ftr.iconList) {
-            if (icon.inst_type == SF_INSTANCE_VESSEL) {
-                auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
-                if (vesselIt != frameSync.combatTheatre.end()) {
-                    float currentHeading = vesselIt->second.heading;
-                    float currentThrust = vesselIt->second.thrust;
-                    vesselIt->second = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
-                } else {
-                    float currentHeading = 0.0f;
-                    float currentThrust = 0.0f;
-                    frameSync.combatTheatre[icon.iaddr] = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
-                }
-            }
-        }
-
         uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
         uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);
 
@@ -3874,12 +3881,6 @@ void GraphicsUpdate()
 
                         if (distX > arena.x) arena.x = distX;
                         if (distY > arena.y) arena.y = distY;
-
-                        auto it = frameSync.combatTheatre.find(icon.iaddr);
-                        if (it != frameSync.combatTheatre.end())
-                        {
-                            icon.vesselHeadingFloat = it->second.heading;
-                        }
                     }
 
                     // Orig area is 9 x 15
@@ -3908,11 +3909,19 @@ void GraphicsUpdate()
 
                     for (Icon& icon : combatLocale)
                     {
-                        icon.screenX = icon.x;
-                        icon.screenY = -icon.y;
+                        if(icon.inst_type == SF_INSTANCE_SHIP_COMBAT)
+                        {
+                            icon.x += uniform.deadX;
+                            icon.y += uniform.deadY;
+                        }
 
-                        icon.bltX = icon.screenX;
-                        icon.bltY = icon.screenY;
+                        icon.x = 8.0f * icon.x;
+                        icon.y = 8.0f * -icon.y;
+                        icon.screenX = icon.x;
+                        icon.screenY = icon.y;
+
+                        icon.bltX = icon.x;
+                        icon.bltY = icon.y;
                     }
 
                     frameSync.zoomLevel = frameSync.zoomLevel * 0.95f + zoomLevel * 0.05f;

@@ -64,6 +64,7 @@ static const std::unordered_map<uint16_t, std::string> InstanceTypes = {
 #define SF_INSTANCE_ASSIGN 0x11
 #define SF_INSTANCE_SHIP 0x12
 #define SF_INSTANCE_TRADE 0x13
+#define SF_INSTANCE_SHIP_COMBAT 0x14
 #define SF_INSTANCE_STARSYSTEM 0x17
 #define SF_INSTANCE_STAR 0x18
 #define SF_INSTANCE_VESSEL 0x19
