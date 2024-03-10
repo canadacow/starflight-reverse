@@ -125,7 +125,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
         vec2 iconPos = vec2(float(icon.screenX), float(icon.screenY));
 
-        iconPos *= (8.0f * ub.uniforms.zoomLevel);
+        //iconPos *= (8.0f * ub.uniforms.zoomLevel);
 
         // 27 is RIGHT
         // 28 is UP to the RIGHT
@@ -266,7 +266,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     {
                         vec2 start = iconPos.xy;
                         vec2 end = vec2(icon.x1, icon.y1);
-                        end *= (8.0f * ub.uniforms.zoomLevel);
+                        //end *= (8.0f * ub.uniforms.zoomLevel);
 
                         vec4 baseColor = colortable[icon.clr & 0xf];
 

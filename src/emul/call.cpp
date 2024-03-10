@@ -1180,7 +1180,7 @@ static bool s_secondFlag = false;
 static std::string s_recordedText = "";
 static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
-static std::vector<MissileRecord> s_missiles;
+static std::vector<MissileRecordUnique> s_missiles;
 static std::vector<LaserRecord> s_lasers;
 static StarMapSetup s_currentStarMap;
 static uint16_t s_orbitMask;
@@ -1379,6 +1379,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     laser.x1 = static_cast<int16_t>(Peek16(2));
                     laser.y1 = static_cast<int16_t>(Peek16(1));
                     laser.color = static_cast<uint16_t>(Peek16(0));
+
+                    laser.hash = laser.computeHash();
                     
                     // Debug print to verify the values
                     printf("Laser coordinates and color: (%d, %d) to (%d, %d) with color %u\n", laser.x0, laser.y0, laser.x1, laser.y1, laser.color);
@@ -1431,8 +1433,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             shipIndex = i;
                             shipLocation = { icon.x, icon.y };
                         }
-
-                        printf("Ship %d spec %d\n", i, icon.species);
                     }
 
                     #if 0
@@ -2351,7 +2351,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     const MissileRecord* mr = (const MissileRecord*)Read8Addr(0xe292);
 
-                    std::vector<MissileRecord> missiles{};
+                    std::vector<MissileRecordUnique> missiles{};
 
                     // Get current missle locations
                     uint16_t missleCount = Read16(0xe1FB);
@@ -2359,7 +2359,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     {
                         if(mr[i].mclass != 0)
                         {
-                            missiles.push_back(mr[i]);
+                            MissileRecordUnique mru = { mr[i], 0};
+                            mru.hash = mru.computeHash(i);
+                            missiles.push_back(mru);
                         }
                     }
 
@@ -2367,7 +2369,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     for(const auto& missile : missiles)
                     {
                         printf("Missile %d - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
-                               ++count, missile.currx, missile.curry, missile.destx, missile.desty, missile.morig, missile.mclass, missile.deltax, missile.deltay);
+                               ++count, missile.mr.currx, missile.mr.curry, missile.mr.destx, missile.mr.desty, missile.mr.morig, missile.mr.mclass, missile.mr.deltax, missile.mr.deltay);
                     }
 
                     s_missiles = missiles;

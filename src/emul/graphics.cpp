@@ -1253,7 +1253,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     const std::vector<Icon>& system, 
     uint16_t orbitMask, 
     const StarMapSetup& starMap,
-    const std::vector<MissileRecord>& missiles,
+    const std::vector<MissileRecordUnique>& missiles,
     std::vector<LaserRecord>& lasers)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
@@ -3723,15 +3723,15 @@ void GraphicsUpdate()
 
         for (const auto& icon : ftr.iconList) {
             if (icon.inst_type == SF_INSTANCE_VESSEL) {
-                auto vesselIt = frameSync.vessels.find(icon.iaddr);
-                if (vesselIt != frameSync.vessels.end()) {
+                auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
+                if (vesselIt != frameSync.combatTheatre.end()) {
                     float currentHeading = vesselIt->second.heading;
                     float currentThrust = vesselIt->second.thrust;
                     vesselIt->second = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
                 } else {
                     float currentHeading = 0.0f;
                     float currentThrust = 0.0f;
-                    frameSync.vessels[icon.iaddr] = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
+                    frameSync.combatTheatre[icon.iaddr] = calculateHeadingAndSpeedToDeadReckoning(icon.id - 35, icon.vesselSpeed, currentHeading, currentThrust);
                 }
             }
         }
@@ -3875,8 +3875,8 @@ void GraphicsUpdate()
                         if (distX > arena.x) arena.x = distX;
                         if (distY > arena.y) arena.y = distY;
 
-                        auto it = frameSync.vessels.find(icon.iaddr);
-                        if (it != frameSync.vessels.end())
+                        auto it = frameSync.combatTheatre.find(icon.iaddr);
+                        if (it != frameSync.combatTheatre.end())
                         {
                             icon.vesselHeadingFloat = it->second.heading;
                         }
@@ -3921,13 +3921,13 @@ void GraphicsUpdate()
 
                     for (const auto& missile : ftr.missiles) {
                         Icon missileIcon;
-                        missileIcon.x = missile.currx;
-                        missileIcon.y = -missile.curry;
+                        missileIcon.x = missile.mr.currx;
+                        missileIcon.y = -missile.mr.curry;
                         missileIcon.screenX = missileIcon.x;
                         missileIcon.screenY = missileIcon.y;
                         missileIcon.bltX = missileIcon.x;
                         missileIcon.bltY = missileIcon.y;
-                        missileIcon.clr = missile.morig == 1 ? 0x1 : 0x4;
+                        missileIcon.clr = missile.mr.morig == 1 ? 0x1 : 0x4;
                         missileIcon.id = 252;
                         
                         combatLocale.push_back(missileIcon);

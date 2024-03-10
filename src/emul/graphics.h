@@ -22,6 +22,8 @@
 #include <chrono>
 #include <sstream>
 
+#include <xxhash.h>
+
 #include "../emul/call.h"
 
 #include <cereal/types/vector.hpp>
@@ -307,6 +309,9 @@ struct Icon {
 };
 
 struct HeadingAndThrust {
+    std::deque<vec2<float>> positions;
+    std::deque<float> headings;
+
     float heading;
     float thrust;
 };
@@ -326,6 +331,17 @@ struct MissileRecord {
     int16_t padding4;
 };
 
+struct MissileRecordUnique {
+    MissileRecord mr;
+    uint64_t hash;
+
+    uint64_t computeHash(uint16_t offset) const {
+        uint64_t initialHash = XXH64(&mr, offsetof(MissileRecord, mclass) + sizeof(mr.mclass), 0);
+        uint64_t finalHash = XXH64(&offset, sizeof(offset), initialHash);
+        return finalHash;
+    }
+};
+
 struct LaserRecord {
     int16_t x0;
     int16_t y0;
@@ -333,6 +349,12 @@ struct LaserRecord {
     int16_t y1;
     uint16_t color;
     std::chrono::steady_clock::time_point timestamp;
+
+    uint64_t hash;
+
+    uint64_t computeHash() const {
+        return XXH64(&x0, sizeof(x0) + sizeof(y0) + sizeof(x1) + sizeof(y1) + sizeof(color) + sizeof(timestamp), 0);
+    }    
 };
 
 static_assert(sizeof(MissileRecord) == 22, "MissileRecord size is not 22");
@@ -613,7 +635,7 @@ struct FrameToRender
     std::vector<Icon> solarSystem;
     StarMapSetup starMap;
 
-    std::vector<MissileRecord> missiles;
+    std::vector<MissileRecordUnique> missiles;
 };
 
 enum class OrbitState {
@@ -664,7 +686,7 @@ struct FrameSync {
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;
 
-    std::unordered_map<uint32_t, HeadingAndThrust> vessels;
+    std::unordered_map<uint32_t, HeadingAndThrust> combatTheatre;
     std::vector<LaserRecord> lasers;
 
     std::chrono::steady_clock::time_point uiTriggerTimestamp;
@@ -737,7 +759,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     const std::vector<Icon>& system, 
     uint16_t orbitMask, 
     const StarMapSetup& starMap,
-    const std::vector<MissileRecord>& missiles,
+    const std::vector<MissileRecordUnique>& missiles,
     std::vector<LaserRecord>& lasers
     );
 
