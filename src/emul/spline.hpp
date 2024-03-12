@@ -164,6 +164,16 @@ public:
         return value;
     }
 
+    double derivative(double t) const
+    {
+        spline_data const& spline = find_spline(t);
+        double dt = t - spline.knot;
+        // Compute the derivative of the cubic polynomial at t
+        return 3 * spline.coefficients[3] * dt * dt + 
+            2 * spline.coefficients[2] * dt + 
+            spline.coefficients[1];
+    }
+
 private:
     /*
      * Constructs spline segments `_splines` for given set of knot points.

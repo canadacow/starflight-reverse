@@ -303,15 +303,22 @@ struct Icon {
 
     uint16_t species;
 
-    uint16_t vesselHeading;
-    uint16_t vesselHeadingFloat;
+    float vesselHeading;
     uint16_t vesselSpeed;
     uint16_t vesselArmorHits;
     uint16_t vesselShieldHits;
 };
 
+struct TimePoint
+{
+    uint64_t frameTime;
+    vec2<float> position;
+};
+
 struct HeadingAndThrust {
-    std::deque<vec2<float>> positions;
+    std::deque<TimePoint> tp;
+    std::optional<TimePoint> incomingTimePoint;
+
     std::deque<float> headings;
 
     float heading;
@@ -387,7 +394,7 @@ struct IconUniform {
         shaderIcon.planet_to_sunY = icon.planet_to_sunY;
         shaderIcon.planetIndex = IndexFromSeed(icon.seed);
         shaderIcon.isActive = 1; // Assuming the icon is active when converted
-        shaderIcon.objectHeading = icon.vesselHeadingFloat;
+        shaderIcon.objectHeading = icon.vesselHeading;
         shaderIcon.x1 = icon.x1;
         shaderIcon.y1 = icon.y1;
     }
@@ -656,6 +663,7 @@ struct FrameSync {
     std::mutex mutex;
     std::condition_variable frameCompleted;
     uint64_t completedFrames = 0;
+    uint64_t completedFramesPerGameFrame = 0;
 
     // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
     // (3 = hyperspace, 4 = encounter, 5 = starport)

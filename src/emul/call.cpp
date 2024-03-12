@@ -1408,7 +1408,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xef3b && (std::string(overlayName) == "COMBAT-OV")) // COMBAT
                 {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(66));
                 }
 
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500 

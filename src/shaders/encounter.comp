@@ -125,7 +125,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
         vec2 iconPos = vec2(float(icon.screenX), float(icon.screenY));
 
-        //iconPos *= (8.0f * ub.uniforms.zoomLevel);
+        iconPos *= ub.uniforms.zoomLevel;
 
         // 27 is RIGHT
         // 28 is UP to the RIGHT
@@ -136,7 +136,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         // 33 is DOWN
         // 34 is DOWN to the RIGHT
         if(icon.id >= 27 && icon.id <= 34) {
-            float distance = 8.0 * ub.uniforms.zoomLevel;
+            float distance = ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
 
@@ -170,78 +170,18 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
         } else if(icon.id >= 51 && icon.id <= 91) {
             float basesize = 29.0f * float(icon.id - 50);
 
-            if(icon.icon_type == Icon_Nebula)
-            {
-                if(calculateDistance(iconPos, pixelPos) < basesize) {
-                    nebulaPixel += basesize - calculateDistance(iconPos, pixelPos);
-                }
-            }
-            else if(icon.icon_type == Icon_Sun)
-            {
-                float dist = calculateDistance(iconPos, pixelPos);
-                if(dist < basesize * 4.0) {
-                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 4.0);
-                    main_star(sunPixel, normUV, iTime, colortable[icon.clr & 0xf].rgb);
-
-                    if(dist < basesize * 0.96)
-                    {
-                        sunPixel.a = 1.0;
-                    }
-                    else
-                    {
-                        float luma = 0.299 * sunPixel.r + 0.587 * sunPixel.g + 0.114 * sunPixel.b;
-                        sunPixel.a = luma;
-                        sunPixel.rgb *= sunPixel.a;
-                    }
-                }
-            }
-            else if(icon.icon_type == Icon_Planet)
-            {
-                float dist = calculateDistance(iconPos, pixelPos);
-                if(dist < basesize * 1.05) {
-                    vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, basesize * 1.00);
-
-                    vec2 planet_to_sun = vec2(icon.planet_to_sunX, icon.planet_to_sunY);
-                    vec3 planet_to_sun_norm = normalize(vec3(planet_to_sun.x, 0.0, planet_to_sun.y));
-
-                    //vec3 northPole = normalize(vec3(0, -1, .001));
-                    vec3 sidePole = normalize(vec3(0, -0.918, 0.397));
-                    vec3 sidePerspective = normalize(vec3(0, 0, 1));    
-
-                    float ydist = (abs(ub.uniforms.screenY - iconPos.y)) / 120.0;
-                
-                    vec3 camPos = sidePole; //slerp(sidePerspective, northPole, ydist);
-
-                    draw_planet(planetPixel, (normUV - 0.5) / 2.0, iTime, planet_to_sun_norm, icon.planetIndex, camPos);
-
-                    if(dist < basesize * 1.0)
-                    {
-                        //planetPixel.rgb = colortable[icon.clr & 0xf].rgb;
-                        planetPixel.a = 1.0;
-                    }
-                    else
-                    {
-                        float luma = 0.299 * planetPixel.r + 0.587 * planetPixel.g + 0.114 * planetPixel.b;
-                        planetPixel.a = luma;
-                        planetPixel.rgb *= planetPixel.a;
-                    }
-                }
-            }
-            else
-            {
-                if(calculateDistance(iconPos, pixelPos) < basesize) {
-                    iconPixel += colortable[icon.clr & 0xf];
-                }
+            if(calculateDistance(iconPos, pixelPos) < basesize) {
+                iconPixel += colortable[icon.clr & 0xf];
             }
         } else if(icon.id >= 35 && icon.id <= 42) {
-            float distance = 4.0 * ub.uniforms.zoomLevel;
+            float distance = 0.5 * ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
 
                 normUV -= 0.5;
                 // Rotate the normUVs to match the icon.id orientation
-                float angle = icon.objectHeading; // (icon.id - 35) * 45.0;
-                float rad = radians(angle);
+                //float angle = (icon.id - 35) * 45.0;
+                float rad = icon.objectHeading; //radians(angle);
                 float s = sin(rad);
                 float c = cos(rad);
                 normUV = vec2(normUV.x * c - normUV.y * s, normUV.x * s + normUV.y * c);
@@ -254,7 +194,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                 shipPixel = vessel  + (shipPixel * (1 - vessel.a));
             }
         } else if(icon.id < 50) {
-            float distance = 4.0 * ub.uniforms.zoomLevel;
+            float distance = 0.5 * ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
                 iconPixel += colortable[icon.clr & 0xf];
             }
@@ -277,7 +217,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                         float coreThickness = 0.5 * ub.uniforms.zoomLevel; // Core thickness of the laser
 
                         // Calculate glow effect based on distance from the line
-                        float glowDist = 2.0 * ub.uniforms.zoomLevel; // Glow distance
+                        float glowDist = 0.25 * ub.uniforms.zoomLevel; // Glow distance
                         float glowIntensity = smoothstep(glowDist, coreThickness, lineDist);
 
                         // Adjust the base color's alpha based on the glow intensity to create a fading effect
@@ -295,7 +235,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     break;
                 case 252:
                     {
-                        distanceI = 2.0 * ub.uniforms.zoomLevel;
+                        distanceI = 0.25 * ub.uniforms.zoomLevel;
                         if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distanceI) {
                             iconPixel += colortable[icon.clr & 0xf];
                         }

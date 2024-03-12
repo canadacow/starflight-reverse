@@ -1329,15 +1329,15 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
                 }
                 vesselIt = frameSync.combatTheatre.find(icon.iaddr);
 
-                auto& pos = vesselIt->second.positions;
+                auto& tp = vesselIt->second.tp;
 
-                pos.push_back({ icon.x, icon.y });
+                TimePoint timePoint = { frameSync.completedFrames, {icon.x, icon.y } };
 
-                const size_t N = 4;
-
-                if (pos.size() > N)
+                if(tp.size() < 3)
                 {
-                    pos.pop_front();
+                    vesselIt->second.tp.push_back(timePoint);
+                } else if (tp.back().position.x != icon.x || tp.back().position.y != icon.y) {
+                    vesselIt->second.incomingTimePoint.emplace(timePoint);
                 }
             }
         }
@@ -1345,8 +1345,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         if (frameSync.framesToRender.size() < 2)
         {
             frameSync.framesToRender.push_back(ftr);
-            uint64_t framesDrawn = frameSync.completedFrames;
-            frameSync.completedFrames = 0;
+            uint64_t framesDrawn = frameSync.completedFramesPerGameFrame;
+            frameSync.completedFramesPerGameFrame = 0;
 
             printf("GSDR Drew %d frames between one game frame GraphicsReportGameFrame - framesync cnt %d\n", framesDrawn, frameSync.framesToRender.size());
 
@@ -1373,6 +1373,55 @@ void GraphicsReportGameFrame()
 {
 
 }
+
+
+class Spline2D {
+public:
+    template<typename Container>
+    requires std::same_as<typename Container::value_type, TimePoint>
+    Spline2D(const Container& points) {
+        if (points.size() < 3) {
+            throw std::runtime_error("Need at least 3 points for spline computation.");
+        }
+
+        for (const auto& point : points) {
+            knots.push_back(point.frameTime);
+            valuesX.push_back(point.position.x);
+            valuesY.push_back(point.position.y);
+        }
+    }
+
+    void addPoint(const TimePoint& point) {
+        knots.push_back(point.frameTime);
+        valuesX.push_back(point.position.x);
+        valuesY.push_back(point.position.y);
+    }
+
+    void computeSplines() {
+        splineX = std::make_unique<cubic_spline>(knots, valuesX, cubic_spline::natural);
+        splineY = std::make_unique<cubic_spline>(knots, valuesY, cubic_spline::natural);
+    }
+
+    vec2<float> evaluate(double targetFrame) {
+        if (!splineX || !splineY) {
+            computeSplines();
+        }
+        return { (float)splineX->operator()(targetFrame), (float)splineY->operator()(targetFrame)};
+    }
+
+    double evaluateHeading(double targetFrame) {
+        if (!splineX || !splineY) {
+            computeSplines();
+        }
+        double tangentX = splineX->derivative(targetFrame);
+        double tangentY = splineY->derivative(targetFrame);
+        return atan2(tangentY, tangentX);
+    }
+
+private:
+    std::vector<double> knots, valuesX, valuesY;
+    std::unique_ptr<cubic_spline> splineX, splineY;
+};
 
 RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     content = other.content;
@@ -3674,6 +3723,10 @@ void GraphicsUpdate()
 
     s_gc.buffers[inFlightIndex].command->reset();
 
+    static const int framesPerGameFrame = 4;
+    
+    float interpolationFactor = (float)ftr.renderCount / (float)framesPerGameFrame;
+
     if (hasNavigation)
     {
         float secondsElapsedIn = (std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -3743,8 +3796,8 @@ void GraphicsUpdate()
         uniform.heading = cat.heading;
         uniform.thrust = cat.thrust;
 
-        uniform.deadX = (float)ftr.deadReckoning.x * ((float)ftr.renderCount / 4.0f);
-        uniform.deadY = (float)ftr.deadReckoning.y * ((float)ftr.renderCount / 4.0f);
+        uniform.deadX = (float)ftr.deadReckoning.x * interpolationFactor;
+        uniform.deadY = (float)ftr.deadReckoning.y * interpolationFactor;
 
         uniform.worldX = (float)ftr.worldCoord.x + uniform.deadX;
         uniform.worldY = (float)ftr.worldCoord.y + uniform.deadY;
@@ -3887,25 +3940,13 @@ void GraphicsUpdate()
 
                     const vec2<float> smallestArena = { 16.0f, 20.0f };
 
-                    float zoomLevel = 1.0f; // Default zoom level when everything fits in the smallest area
-
-#if 0
-                    // Calculate the current arena size
-                    // Since the arena is symmetrical around (0,0), we double the largest distance to get the full size
-                    float currentArenaWidth = 2 * arena.x;
-                    float currentArenaHeight = 2 * arena.y;
-
-                    // Calculate the zoom level based on the current arena size
-                    if (currentArenaWidth > smallestArena.x || currentArenaHeight > smallestArena.y) {
-                        float widthZoom = smallestArena.x / currentArenaWidth;
-                        float heightZoom = smallestArena.y / currentArenaHeight;
-                        float minZoom = std::min(widthZoom, heightZoom);
-
-                        zoomLevel *= minZoom; // Adjust zoom level based on how much we need to zoom out
-                    }
-#endif
+                    float zoomLevel = 8.0f; // Default zoom level when everything fits in the smallest area
 
                     //printf("Current Arena Size: Width = %f, Height = %f zoomlevel %f\n", currentArenaWidth, currentArenaHeight, zoomLevel);
+
+                    const float scale = 1.0f;
+
+                    bool printedShip = false;
 
                     for (Icon& icon : combatLocale)
                     {
@@ -3913,10 +3954,73 @@ void GraphicsUpdate()
                         {
                             icon.x += uniform.deadX;
                             icon.y += uniform.deadY;
+
+                            icon.x *= scale;
+                            icon.y *= -scale;
+                        }
+                        else if(icon.inst_type == SF_INSTANCE_VESSEL)
+                        {
+                            bool splined = false;
+                            auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
+                            if (vesselIt != frameSync.combatTheatre.end()) 
+                            { 
+                                auto& tp = vesselIt->second.tp;
+                                if (tp.size() >= 3) {
+
+                                    auto s2d = Spline2D{ tp };
+                                    s2d.computeSplines();
+                                    
+                                    double targetKnot = frameSync.completedFrames;
+
+                                    auto shipPos = s2d.evaluate(targetKnot);
+                                    double heading = s2d.evaluateHeading(targetKnot);
+
+                                    if(vesselIt->second.incomingTimePoint.has_value())
+                                    {
+                                        auto& val = vesselIt->second.incomingTimePoint.value();
+
+                                        shipPos.x = shipPos.x * (1.0f - interpolationFactor) + val.position.x * (interpolationFactor);
+                                        shipPos.y = shipPos.y * (1.0f - interpolationFactor) + val.position.y * (interpolationFactor);
+
+                                        TimePoint ntp = { val.frameTime, shipPos };
+
+                                        s2d.addPoint(ntp);
+
+                                        if(ftr.renderCount + 1 >= framesPerGameFrame)
+                                        {
+                                            tp.push_back(val);
+                                            vesselIt->second.incomingTimePoint.reset();
+
+                                            const size_t N = 16;
+                                            if (tp.size() > N)
+                                            {
+                                                tp.pop_front();
+                                            }
+                                        }
+                                    }
+
+                                    if (!printedShip) {
+                                        printf("Ship Debug Data 0x%lx: %f Past Positions: ", icon.iaddr, interpolationFactor);
+                                        for (const auto& pos : tp) printf("[%llu - %f, %f] ", pos.frameTime, pos.position.x, pos.position.y);
+                                        printf("Interpolated X: %f, Interpolated Y: %f ", shipPos.x, shipPos.y);
+                                        printf("Heading (degrees): %f\n", heading * (180.0 / M_PI));
+                                        printedShip = true;
+                                    }
+
+                                    icon.x = scale * shipPos.x;
+                                    icon.y = scale * -shipPos.y;
+                                    icon.vesselHeading = static_cast<float>(heading);
+                                    splined = true;
+                                }
+                            }
+
+                            if(!splined)
+                            {
+                                icon.x = scale * icon.x;
+                                icon.y = scale * -icon.y;
+                            }
                         }
 
-                        icon.x = 8.0f * icon.x;
-                        icon.y = 8.0f * -icon.y;
                         icon.screenX = icon.x;
                         icon.screenY = icon.y;
 
@@ -3924,14 +4028,15 @@ void GraphicsUpdate()
                         icon.bltY = icon.y;
                     }
 
-                    frameSync.zoomLevel = frameSync.zoomLevel * 0.95f + zoomLevel * 0.05f;
+                    uniform.zoomLevel = zoomLevel;
 
-                    uniform.zoomLevel = frameSync.zoomLevel;
+                    uniform.worldX = 1000.0f;
+                    uniform.worldY = 1000.0f;
 
                     for (const auto& missile : ftr.missiles) {
                         Icon missileIcon;
-                        missileIcon.x = missile.mr.currx;
-                        missileIcon.y = -missile.mr.curry;
+                        missileIcon.x = scale * missile.mr.currx;
+                        missileIcon.y = scale * -missile.mr.curry;
                         missileIcon.screenX = missileIcon.x;
                         missileIcon.screenY = missileIcon.y;
                         missileIcon.bltX = missileIcon.x;
@@ -3945,15 +4050,15 @@ void GraphicsUpdate()
                     for(const auto& laser : frameSync.lasers) {
                         Icon laserIcon;
 
-                        laserIcon.x = laser.x0;
-                        laserIcon.y = -laser.y0;
+                        laserIcon.x = scale * laser.x0;
+                        laserIcon.y = scale * -laser.y0;
                         laserIcon.screenX = laserIcon.x;
                         laserIcon.screenY = laserIcon.y;
                         laserIcon.bltX = laserIcon.x;
                         laserIcon.bltY = laserIcon.y;
 
-                        laserIcon.x1 = laser.x1;
-                        laserIcon.y1 = -laser.y1;
+                        laserIcon.x1 = scale * laser.x1;
+                        laserIcon.y1 = scale * -laser.y1;
 
                         laserIcon.clr = laser.color;
                         laserIcon.id = 251;
@@ -4095,6 +4200,7 @@ void GraphicsUpdate()
     {
         std::lock_guard<std::mutex> lock(frameSync.mutex);
         frameSync.completedFrames++;
+        frameSync.completedFramesPerGameFrame++;
     }
 }
 
