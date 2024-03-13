@@ -108,7 +108,8 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec2 iResolution = vec2(float(roto.blt_w), float(roto.blt_h));
     vec2 fragCoord = pixelPos + vec2(80.0, 100.0);
 
-    vec2 worldCoords = vec2((ub.uniforms.worldX) / 1000.0, (ub.uniforms.worldY) / -1000.0);
+    vec2 worldCoords = vec2((ub.uniforms.worldX) / 1000.0, (ub.uniforms.worldY) / 1000.0);
+    pixelPos += vec2(ub.uniforms.worldX, ub.uniforms.worldY);
 
     vec4 starPixel = vec4(0.);
     vec4 sunPixel = vec4(0.);
@@ -206,7 +207,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                     {
                         vec2 start = iconPos.xy;
                         vec2 end = vec2(icon.x1, icon.y1);
-                        //end *= (8.0f * ub.uniforms.zoomLevel);
+                        end *= (8.0f * ub.uniforms.zoomLevel);
 
                         vec4 baseColor = colortable[icon.clr & 0xf];
 
@@ -272,7 +273,16 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     pixel = planetPixel + (pixel * (1 - planetPixel.a));
     pixel = iconPixel + (pixel * (1 - iconPixel.a));
     pixel = shipPixel + (pixel * (1 - shipPixel.a));
-    
+
+#if 0
+    // Draw grid at whole integer values of pixelPos
+    float gridLineWidth = 0.02; // Width of the grid lines
+    vec2 gridPos = mod(pixelPos + vec2(0.5, 0.5), ub.uniforms.zoomLevel);
+    if(gridPos.x < gridLineWidth || gridPos.y < gridLineWidth) {
+        // Adjust pixel color to draw the grid
+        pixel.rgb = vec3(0.0, 1.0, 0.0); // Change pixel color to green for grid lines
+    }
+#endif
     return pixel;
 }
 

@@ -313,6 +313,7 @@ struct TimePoint
 {
     uint64_t frameTime;
     vec2<float> position;
+    bool synthetic;
 };
 
 struct HeadingAndThrust {

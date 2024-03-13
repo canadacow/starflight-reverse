@@ -334,6 +334,64 @@ void StartEmulationThread(std::filesystem::path path)
     });
 }
 
+class Spline2D {
+public:
+    template<typename Container>
+        requires std::same_as<typename Container::value_type, TimePoint>
+    Spline2D(const Container& points) {
+        if (points.size() < 3) {
+            throw std::runtime_error("Need at least 3 points for spline computation.");
+        }
+
+        for (const auto& point : points) {
+            knots.push_back(point.frameTime);
+            valuesX.push_back(point.position.x);
+            valuesY.push_back(point.position.y);
+        }
+    }
+
+    void addPoint(const TimePoint& point) {
+        knots.push_back(point.frameTime);
+        valuesX.push_back(point.position.x);
+        valuesY.push_back(point.position.y);
+    }
+
+    void computeSplines() {
+        splineX = std::make_unique<cubic_spline>(knots, valuesX, cubic_spline::natural);
+        splineY = std::make_unique<cubic_spline>(knots, valuesY, cubic_spline::natural);
+    }
+
+    vec2<float> evaluate(double targetFrame) {
+        if (!splineX || !splineY) {
+            computeSplines();
+        }
+        return { (float)splineX->operator()(targetFrame), (float)splineY->operator()(targetFrame) };
+    }
+
+    double evaluateHeading(double targetFrame) {
+        if (!splineX || !splineY) {
+            computeSplines();
+        }
+        double tangentX = splineX->derivative(targetFrame);
+        double tangentY = splineY->derivative(targetFrame);
+        return atan2(tangentY, tangentX);
+    }
+
+    double evaluateVelocity(double targetFrame) {
+        if (!splineX || !splineY) {
+            computeSplines();
+        }
+        double velocityX = splineX->derivative(targetFrame);
+        double velocityY = splineY->derivative(targetFrame);
+        return sqrt(velocityX * velocityX + velocityY * velocityY);
+    }
+
+private:
+    std::vector<double> knots, valuesX, valuesY;
+    std::unique_ptr<cubic_spline> splineX, splineY;
+};
+
+
 uint32_t colortable[16] =
 {
 0x000000, // black
@@ -1331,13 +1389,48 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
 
                 auto& tp = vesselIt->second.tp;
 
-                TimePoint timePoint = { frameSync.completedFrames, {icon.x, icon.y } };
+                TimePoint timePoint = { frameSync.completedFrames, {icon.x, icon.y }, false };
 
                 if(tp.size() < 3)
                 {
                     vesselIt->second.tp.push_back(timePoint);
                 } else if (tp.back().position.x != icon.x || tp.back().position.y != icon.y) {
-                    vesselIt->second.incomingTimePoint.emplace(timePoint);
+
+                    Spline2D spline(tp);
+
+                    uint64_t frameOfInterest = frameSync.completedFrames;
+                    if (tp.back().frameTime >= frameSync.completedFrames) {
+                        frameOfInterest = tp.back().frameTime;
+                    }
+                    else
+                    {
+                        auto anchor = spline.evaluate(frameSync.completedFrames);
+
+                        tp.erase(std::remove_if(tp.begin(), tp.end(), [](const TimePoint& point) {
+                            return point.synthetic;
+                        }), tp.end());
+
+                        tp.push_back({frameSync.completedFrames, anchor, true });
+                    }
+                    
+                    auto currentPosition = spline.evaluate(frameOfInterest);
+                    auto currentVelocity = spline.evaluateVelocity(frameOfInterest);
+
+                    float distanceToTarget = std::sqrt(std::pow(timePoint.position.x - currentPosition.x, 2) + std::pow(timePoint.position.y - currentPosition.y, 2));
+                    currentVelocity = 0.04f; //std::max(0.05, std::min(currentVelocity, 0.15));
+
+                    timePoint.frameTime = frameOfInterest + static_cast<uint64_t>(distanceToTarget / currentVelocity) + 1;
+                    tp.push_back(timePoint);
+
+                    auto it = std::lower_bound(tp.begin(), tp.end(), frameSync.completedFrames, [](const TimePoint& tp, const uint64_t& frame) {
+                        return tp.frameTime < frame;
+                    });
+                    size_t index = std::distance(tp.begin(), it);
+                    if (index > 4)
+                    {
+                        // Remove items from the beginning to keep at least 3 items before index
+                        tp.erase(tp.begin(), tp.begin() + (index - 3));
+                    }
                 }
             }
         }
@@ -1373,55 +1466,6 @@ void GraphicsReportGameFrame()
 {
 
 }
-
-
-class Spline2D {
-public:
-    template<typename Container>
-    requires std::same_as<typename Container::value_type, TimePoint>
-    Spline2D(const Container& points) {
-        if (points.size() < 3) {
-            throw std::runtime_error("Need at least 3 points for spline computation.");
-        }
-
-        for (const auto& point : points) {
-            knots.push_back(point.frameTime);
-            valuesX.push_back(point.position.x);
-            valuesY.push_back(point.position.y);
-        }
-    }
-
-    void addPoint(const TimePoint& point) {
-        knots.push_back(point.frameTime);
-        valuesX.push_back(point.position.x);
-        valuesY.push_back(point.position.y);
-    }
-
-    void computeSplines() {
-        splineX = std::make_unique<cubic_spline>(knots, valuesX, cubic_spline::natural);
-        splineY = std::make_unique<cubic_spline>(knots, valuesY, cubic_spline::natural);
-    }
-
-    vec2<float> evaluate(double targetFrame) {
-        if (!splineX || !splineY) {
-            computeSplines();
-        }
-        return { (float)splineX->operator()(targetFrame), (float)splineY->operator()(targetFrame)};
-    }
-
-    double evaluateHeading(double targetFrame) {
-        if (!splineX || !splineY) {
-            computeSplines();
-        }
-        double tangentX = splineX->derivative(targetFrame);
-        double tangentY = splineY->derivative(targetFrame);
-        return atan2(tangentY, tangentX);
-    }
-
-private:
-    std::vector<double> knots, valuesX, valuesY;
-    std::unique_ptr<cubic_spline> splineX, splineY;
-};
 
 RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
     content = other.content;
@@ -3948,6 +3992,8 @@ void GraphicsUpdate()
 
                     bool printedShip = false;
 
+                    vec2<float> shipAt = {};
+
                     for (Icon& icon : combatLocale)
                     {
                         if(icon.inst_type == SF_INSTANCE_SHIP_COMBAT)
@@ -3957,6 +4003,8 @@ void GraphicsUpdate()
 
                             icon.x *= scale;
                             icon.y *= -scale;
+
+                            shipAt = {icon.x, icon.y};
                         }
                         else if(icon.inst_type == SF_INSTANCE_VESSEL)
                         {
@@ -3975,32 +4023,8 @@ void GraphicsUpdate()
                                     auto shipPos = s2d.evaluate(targetKnot);
                                     double heading = s2d.evaluateHeading(targetKnot);
 
-                                    if(vesselIt->second.incomingTimePoint.has_value())
-                                    {
-                                        auto& val = vesselIt->second.incomingTimePoint.value();
-
-                                        shipPos.x = shipPos.x * (1.0f - interpolationFactor) + val.position.x * (interpolationFactor);
-                                        shipPos.y = shipPos.y * (1.0f - interpolationFactor) + val.position.y * (interpolationFactor);
-
-                                        TimePoint ntp = { val.frameTime, shipPos };
-
-                                        s2d.addPoint(ntp);
-
-                                        if(ftr.renderCount + 1 >= framesPerGameFrame)
-                                        {
-                                            tp.push_back(val);
-                                            vesselIt->second.incomingTimePoint.reset();
-
-                                            const size_t N = 16;
-                                            if (tp.size() > N)
-                                            {
-                                                tp.pop_front();
-                                            }
-                                        }
-                                    }
-
                                     if (!printedShip) {
-                                        printf("Ship Debug Data 0x%lx: %f Past Positions: ", icon.iaddr, interpolationFactor);
+                                        printf("Ship Debug Data knot %llu - 0x%lx: %f Past Positions: ", frameSync.completedFrames, icon.iaddr, interpolationFactor);
                                         for (const auto& pos : tp) printf("[%llu - %f, %f] ", pos.frameTime, pos.position.x, pos.position.y);
                                         printf("Interpolated X: %f, Interpolated Y: %f ", shipPos.x, shipPos.y);
                                         printf("Heading (degrees): %f\n", heading * (180.0 / M_PI));
@@ -4030,8 +4054,8 @@ void GraphicsUpdate()
 
                     uniform.zoomLevel = zoomLevel;
 
-                    uniform.worldX = 1000.0f;
-                    uniform.worldY = 1000.0f;
+                    uniform.worldX = shipAt.x * zoomLevel;
+                    uniform.worldY = shipAt.y * zoomLevel;
 
                     for (const auto& missile : ftr.missiles) {
                         Icon missileIcon;
