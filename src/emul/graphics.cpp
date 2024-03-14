@@ -391,6 +391,91 @@ private:
     std::unique_ptr<cubic_spline> splineX, splineY;
 };
 
+struct InterpolatorPoint {
+    vec2<float> position;
+    vec2<float> velocity;
+    float heading;
+};
+
+class Interpolator {
+public:
+    Interpolator() = default;
+
+    // Adds a new point with its corresponding time
+    void addPoint(float time, vec2<float> point) {
+        times.push_back(time);
+        points.push_back(point);
+
+        // Invalidate the splines to force re-computation when needed
+        splineX.reset();
+        splineY.reset();
+
+        // If we have exactly two points, we can directly compute the linear parameters
+        if (times.size() == 2) {
+            computeLinearParameters();
+        }
+        // If we have more than two points, we'll use a spline
+        else if (times.size() > 2) {
+            computeSpline();
+        }
+    }
+
+    // Computes the current position, velocity, and heading at a given time
+    InterpolatorPoint interpolate(float time) {
+        if (times.size() < 2) {
+            throw std::runtime_error("Interpolator requires at least two points.");
+        }
+
+        if (times.size() == 2) {
+            return linearInterpolation(time);
+        } else {
+            return splineInterpolation(time);
+        }
+    }
+
+private:
+    std::vector<float> times;
+    std::vector<vec2<float>> points;
+    std::optional<cubic_spline> splineX, splineY;
+    float linearSlopeX = 0, linearSlopeY = 0, linearInterceptX = 0, linearInterceptY = 0;
+
+    void computeLinearParameters() {
+        float dt = times[1] - times[0];
+        linearSlopeX = (points[1].x - points[0].x) / dt;
+        linearSlopeY = (points[1].y - points[0].y) / dt;
+        linearInterceptX = points[0].x - linearSlopeX * times[0];
+        linearInterceptY = points[0].y - linearSlopeY * times[0];
+    }
+
+    InterpolatorPoint linearInterpolation(float time) {
+        vec2<float> position(linearSlopeX * time + linearInterceptX, linearSlopeY * time + linearInterceptY);
+        vec2<float> velocity(linearSlopeX, linearSlopeY);
+        float heading = std::atan2(velocity.y, velocity.x);
+        return {position, velocity, heading};
+    }
+
+    void computeSpline() {
+        std::vector<double> t(times.begin(), times.end());
+        std::vector<double> x, y;
+        for (const auto& p : points) {
+            x.push_back(p.x);
+            y.push_back(p.y);
+        }
+        splineX.emplace(t, x, cubic_spline::natural);
+        splineY.emplace(t, y, cubic_spline::natural);
+    }
+
+    InterpolatorPoint splineInterpolation(float time) {
+        double x = splineX->operator()(time);
+        double y = splineY->operator()(time);
+        double dx = splineX->derivative(time);
+        double dy = splineY->derivative(time);
+        vec2<float> position(x, y);
+        vec2<float> velocity(dx, dy);
+        float heading = std::atan2(dy, dx);
+        return {position, velocity, heading};
+    }
+};
 
 uint32_t colortable[16] =
 {
@@ -1417,7 +1502,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
                     auto currentVelocity = spline.evaluateVelocity(frameOfInterest);
 
                     float distanceToTarget = std::sqrt(std::pow(timePoint.position.x - currentPosition.x, 2) + std::pow(timePoint.position.y - currentPosition.y, 2));
-                    currentVelocity = 0.04f; //std::max(0.05, std::min(currentVelocity, 0.15));
+                    currentVelocity = 0.01f; //std::max(0.05, std::min(currentVelocity, 0.15));
 
                     timePoint.frameTime = frameOfInterest + static_cast<uint64_t>(distanceToTarget / currentVelocity) + 1;
                     tp.push_back(timePoint);
