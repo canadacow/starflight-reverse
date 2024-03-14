@@ -1453,6 +1453,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         frameSync.stoppedFrame.starMap = starMap;
 
         frameSync.frameCompleted.notify_one();
+
+        frameSync.combatTheatre.clear();
     }
 }
 
