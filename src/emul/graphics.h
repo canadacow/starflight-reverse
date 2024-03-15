@@ -199,7 +199,11 @@ public:
 
     void queuePoint(vec2<float> point)
     {
-        unsplinedPoints.push_back(point);
+        if (unsplinedPoints.empty() || 
+            static_cast<int>(unsplinedPoints.back().x) != static_cast<int>(point.x) || 
+            static_cast<int>(unsplinedPoints.back().y) != static_cast<int>(point.y)) {
+            unsplinedPoints.push_back(point);
+        }
     }
 
     // Adds a new point with its corresponding time
@@ -222,8 +226,8 @@ public:
     }
 
     void addPoint(float anchorTime, vec2<float> point) {
-        float velocity = 0.025f;
-        float turningRadius = 3.0f;
+        float velocity = 0.1f;
+        float turningRadius = 5.0f;
 
         if (points.empty()) {
             throw std::runtime_error("At least one time anchor is required.");
@@ -240,7 +244,7 @@ public:
         
         } else {
             // New point and we have an established heading. Compute that now.
-            auto currentPos = interpolate(anchorTime);
+            auto currentPos = interpolateInternal(anchorTime);
 
             // clear our points
             points.clear();
@@ -260,6 +264,24 @@ public:
                 curTime = destTime;
                 pos = interPoint;
             }
+        }
+    }
+
+    // Computes the current position, velocity, and heading at a given time
+    InterpolatorPoint interpolateInternal(float time) {
+        if (times.size() < 1) {
+            throw std::runtime_error("Interpolator requires at least a point.");
+        }
+
+        if (times.size() == 1)
+        {
+            return pointInterpolation();
+        }
+        else if (times.size() == 2) {
+            return linearInterpolation(time);
+        }
+        else {
+            return splineInterpolation(time);
         }
     }
 
@@ -285,14 +307,7 @@ public:
             }
         }
 
-        if(times.size() == 1)
-        {
-            return pointInterpolation();
-        } else if (times.size() == 2) {
-            return linearInterpolation(time);
-        } else {
-            return splineInterpolation(time);
-        }
+        return interpolateInternal(time);
     }
 
     bool isExtrapolating(float time) const {
@@ -316,27 +331,33 @@ private:
         // Calculate vector from current position to target position
         vec2<float> toTarget = point2 - point0;
 
-        // If the target is directly behind the ship, adjust the target slightly to ensure an arc
-        if (std::abs(toTarget.x) < 0.01 && std::abs(toTarget.y) < 0.01) {
-            toTarget.x += std::cos(heading) * 0.01; // Small adjustment to ensure arc calculation
-            toTarget.y += std::sin(heading) * 0.01;
+        // Normalize the toTarget vector
+        float toTargetLength = std::sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y);
+        if (toTargetLength == 0) {
+            throw std::runtime_error("Directly on top of the target, cannot calculate intermediate points.");
         }
+        toTarget.x /= toTargetLength;
+        toTarget.y /= toTargetLength;
 
         // Calculate the angle to the target from the current heading
         float targetAngle = std::atan2(toTarget.y, toTarget.x);
-        float angleDifference = std::fmod(targetAngle - heading + 3 * M_PI, 2 * M_PI) - M_PI;
+        float currentAngle = heading;
+
+        // Calculate the shortest angular distance to the target angle, considering the circular nature of angles
+        float angleDifference = std::atan2(std::sin(targetAngle - currentAngle), std::cos(targetAngle - currentAngle));
 
         // Determine the direction to turn based on the shortest path
         float turnDirection = angleDifference >= 0 ? 1.0f : -1.0f;
 
-        // Calculate the number of intermediate points based on the angle difference
+        // Calculate the number of intermediate points based on the angle difference, ensuring at least 3 points for a spline
         int numPoints = std::max(3, static_cast<int>(std::abs(angleDifference) / (M_PI / 8)));
 
         // Generate intermediate points along the arc
-        for (int i = 1; i <= numPoints; ++i) {
+        for (int i = 1; i < numPoints; ++i) { // Exclude the last point to manually add point2 later
             float fraction = static_cast<float>(i) / static_cast<float>(numPoints);
-            float angle = heading + angleDifference * fraction;
-            vec2<float> arcPoint = point0 + vec2<float>(std::cos(angle), std::sin(angle)) * turningRadius * turnDirection * fraction;
+            float angle = currentAngle + angleDifference * fraction;
+            float distance = turningRadius * fraction * turnDirection; // Linearly increase distance from point0 based on fraction
+            vec2<float> arcPoint = point0 + vec2<float>(std::cos(angle), std::sin(angle)) * distance;
             intermediatePoints.push_back(arcPoint);
         }
 

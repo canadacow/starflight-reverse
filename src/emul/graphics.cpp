@@ -1769,6 +1769,51 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
 
 static int GraphicsInitThread()
 {
+    if(true)
+    {
+        Interpolator interpolator;
+        std::ofstream outFile("interpolated_points_with_heading.txt");
+
+        // Lambda function to add the first point with a specified time and mark it as a key point in the file
+        auto addFirstPointAndMark = [&interpolator, &outFile](float time, vec2<float> point) {
+            interpolator.addPointWithTime(time, point);
+            outFile << point.x << " " << point.y << " 0.0 1" << std::endl; // 1 marks this as a key point
+        };
+
+        // Lambda function for adding subsequent points without specifying time, marking them as key points in the file
+        auto addSubsequentPointAndMark = [&interpolator, &outFile](vec2<float> point) {
+            interpolator.queuePoint(point); // Assuming this method exists and computes time automatically
+            outFile << point.x << " " << point.y << " 0.0 1" << std::endl; // 1 marks this as a key point
+        };
+
+        // Use the first lambda function to add the first point with a specified time
+        addFirstPointAndMark(0, {0, 0});
+
+        // Use the second lambda function to add all subsequent points, letting their times be computed automatically
+        addSubsequentPointAndMark({10, 10});
+        addSubsequentPointAndMark({-10, -10});
+        addSubsequentPointAndMark({0, 0});
+
+        float t = 0.0f;
+
+        for(;;)
+        {
+            auto point = interpolator.interpolate(t);
+            outFile << point.position.x << " " << point.position.y << " " << point.heading << " 0" << std::endl; // 0 for interpolated points
+
+            if(interpolator.isExtrapolating(t))
+            {
+                break;
+            }
+
+            t += 2.0;
+        }
+
+        outFile.close();
+        exit(0);
+    }
+
+
     SetCurrentThreadName("Graphics Thread");
 
     SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
