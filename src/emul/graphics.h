@@ -227,8 +227,8 @@ public:
     }
 
     void addPoint(float anchorTime, vec2<float> point) {
-        float velocity = 0.1f;
-        float turningRadius = 5.0f;
+        float velocity = 0.03f;
+        float turningRadius = 1.0f;
 
         if (points.empty()) {
             throw std::runtime_error("At least one time anchor is required.");
@@ -272,6 +272,13 @@ public:
     InterpolatorPoint interpolateInternal(float time) {
         if (times.size() < 1) {
             throw std::runtime_error("Interpolator requires at least a point.");
+        }
+
+        if (isExtrapolating(time))
+        {
+            auto point = lastPoint;
+            point.velocity = { 0.0f, 0.0f };
+            return point;
         }
 
         if (times.size() == 1)
@@ -350,35 +357,19 @@ private:
         // Determine the direction to turn based on the shortest path
         float turnDirection = angleDifference >= 0 ? 1.0f : -1.0f;
 
-        // Calculate the center of the turning circle
-        vec2<float> center = point0 + vec2<float>(std::cos(currentAngle + M_PI_2 * turnDirection), std::sin(currentAngle + M_PI_2 * turnDirection)) * turningRadius;
-
-        // Calculate the starting and ending angles for the arc
-        float startAngle = std::atan2(point0.y - center.y, point0.x - center.x);
-        float endAngle = std::atan2(point2.y - center.y, point2.x - center.x);
-
-        // Ensure the arc moves in the correct direction
-        if (turnDirection > 0 && startAngle > endAngle) {
-            endAngle += M_PI * 2;
-        } else if (turnDirection < 0 && startAngle < endAngle) {
-            startAngle += M_PI * 2;
-        }
-
-        // Calculate the angular distance for the arc
-        float angularDistance = endAngle - startAngle;
-
-        // Calculate the number of intermediate points based on the angular distance
-        int numPoints = std::max(3, static_cast<int>(std::abs(angularDistance) / (M_PI / 8)));
+        // Calculate the number of intermediate points based on the angle difference, ensuring at least 3 points for a spline
+        int numPoints = std::max(3, static_cast<int>(std::abs(angleDifference) / (M_PI / 8)));
 
         // Generate intermediate points along the arc
         for (int i = 1; i < numPoints; ++i) {
             float fraction = static_cast<float>(i) / static_cast<float>(numPoints);
-            float angle = startAngle + angularDistance * fraction;
-            vec2<float> arcPoint = center + vec2<float>(std::cos(angle), std::sin(angle)) * turningRadius;
+            float angle = currentAngle + angleDifference * fraction;
+            float distance = turningRadius * std::abs(std::sin(angleDifference * fraction)); // Use sine to gradually increase distance
+            vec2<float> arcPoint = point0 + vec2<float>(std::cos(angle), std::sin(angle)) * distance;
             intermediatePoints.push_back(arcPoint);
         }
 
-        // Add the final target point
+        // Ensure the last point leads to the target
         intermediatePoints.push_back(point2);
 
         return intermediatePoints;

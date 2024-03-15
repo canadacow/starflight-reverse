@@ -1791,11 +1791,10 @@ static int GraphicsInitThread()
 
         // Use the second lambda function to add all subsequent points, letting their times be computed automatically
         addSubsequentPointAndMark({10, 10});
-        addSubsequentPointAndMark({10, -10});
-        addSubsequentPointAndMark({-10, -10 });
-        addSubsequentPointAndMark({ -10, 10 });
-        addSubsequentPointAndMark({ 5, 5 });
-        addSubsequentPointAndMark({ 0, 7.5 });
+        addSubsequentPointAndMark({9, 10});
+        addSubsequentPointAndMark({ 8, 10 });
+        addSubsequentPointAndMark({ 7, 9 });
+        addSubsequentPointAndMark({ 6, 10 });
         addSubsequentPointAndMark({ 0, 0 });
 
         float t = 0.0f;
