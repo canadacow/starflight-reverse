@@ -1769,7 +1769,7 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
 
 static int GraphicsInitThread()
 {
-    if(true)
+    if(false)
     {
         Interpolator interpolator;
         std::ofstream outFile("interpolated_points_with_heading.txt");

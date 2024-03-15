@@ -35,6 +35,7 @@
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
+#define M_PI_2 (M_PI * 2.0)
 #endif
 
 template<typename T>
@@ -349,19 +350,35 @@ private:
         // Determine the direction to turn based on the shortest path
         float turnDirection = angleDifference >= 0 ? 1.0f : -1.0f;
 
-        // Calculate the number of intermediate points based on the angle difference, ensuring at least 3 points for a spline
-        int numPoints = std::max(3, static_cast<int>(std::abs(angleDifference) / (M_PI / 8)));
+        // Calculate the center of the turning circle
+        vec2<float> center = point0 + vec2<float>(std::cos(currentAngle + M_PI_2 * turnDirection), std::sin(currentAngle + M_PI_2 * turnDirection)) * turningRadius;
+
+        // Calculate the starting and ending angles for the arc
+        float startAngle = std::atan2(point0.y - center.y, point0.x - center.x);
+        float endAngle = std::atan2(point2.y - center.y, point2.x - center.x);
+
+        // Ensure the arc moves in the correct direction
+        if (turnDirection > 0 && startAngle > endAngle) {
+            endAngle += M_PI * 2;
+        } else if (turnDirection < 0 && startAngle < endAngle) {
+            startAngle += M_PI * 2;
+        }
+
+        // Calculate the angular distance for the arc
+        float angularDistance = endAngle - startAngle;
+
+        // Calculate the number of intermediate points based on the angular distance
+        int numPoints = std::max(3, static_cast<int>(std::abs(angularDistance) / (M_PI / 8)));
 
         // Generate intermediate points along the arc
         for (int i = 1; i < numPoints; ++i) {
             float fraction = static_cast<float>(i) / static_cast<float>(numPoints);
-            float angle = currentAngle + angleDifference * fraction;
-            float distance = turningRadius * std::abs(std::sin(angleDifference * fraction)); // Use sine to gradually increase distance
-            vec2<float> arcPoint = point0 + vec2<float>(std::cos(angle), std::sin(angle)) * distance;
+            float angle = startAngle + angularDistance * fraction;
+            vec2<float> arcPoint = center + vec2<float>(std::cos(angle), std::sin(angle)) * turningRadius;
             intermediatePoints.push_back(arcPoint);
         }
 
-        // Ensure the last point leads to the target
+        // Add the final target point
         intermediatePoints.push_back(point2);
 
         return intermediatePoints;
