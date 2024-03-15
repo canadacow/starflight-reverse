@@ -1791,8 +1791,12 @@ static int GraphicsInitThread()
 
         // Use the second lambda function to add all subsequent points, letting their times be computed automatically
         addSubsequentPointAndMark({10, 10});
-        addSubsequentPointAndMark({-10, -10});
-        addSubsequentPointAndMark({0, 0});
+        addSubsequentPointAndMark({10, -10});
+        addSubsequentPointAndMark({-10, -10 });
+        addSubsequentPointAndMark({ -10, 10 });
+        addSubsequentPointAndMark({ 5, 5 });
+        addSubsequentPointAndMark({ 0, 7.5 });
+        addSubsequentPointAndMark({ 0, 0 });
 
         float t = 0.0f;
 
@@ -1806,7 +1810,7 @@ static int GraphicsInitThread()
                 break;
             }
 
-            t += 2.0;
+            t += 8.0;
         }
 
         outFile.close();

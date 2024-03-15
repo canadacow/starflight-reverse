@@ -353,10 +353,10 @@ private:
         int numPoints = std::max(3, static_cast<int>(std::abs(angleDifference) / (M_PI / 8)));
 
         // Generate intermediate points along the arc
-        for (int i = 1; i < numPoints; ++i) { // Exclude the last point to manually add point2 later
+        for (int i = 1; i < numPoints; ++i) {
             float fraction = static_cast<float>(i) / static_cast<float>(numPoints);
             float angle = currentAngle + angleDifference * fraction;
-            float distance = turningRadius * fraction * turnDirection; // Linearly increase distance from point0 based on fraction
+            float distance = turningRadius * std::abs(std::sin(angleDifference * fraction)); // Use sine to gradually increase distance
             vec2<float> arcPoint = point0 + vec2<float>(std::cos(angle), std::sin(angle)) * distance;
             intermediatePoints.push_back(arcPoint);
         }
