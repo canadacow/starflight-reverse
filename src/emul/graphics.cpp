@@ -4011,29 +4011,7 @@ void GraphicsUpdate()
 
                     const float scale = 1.0f;
 
-                    bool printedShip = false;
-
                     vec2<float> shipAt = {};
-
-                    auto vesselCount = std::count_if(combatLocale.begin(), combatLocale.end(), [](const Icon& icon) {
-                        return icon.inst_type == SF_INSTANCE_VESSEL;
-                    });
-
-                    if (vesselCount > 1) {
-                        bool vesselKept = false;
-                        combatLocale.erase(std::remove_if(combatLocale.begin(), combatLocale.end(), [&vesselKept](const Icon& icon) {
-                            if (icon.inst_type == SF_INSTANCE_VESSEL) {
-                                if (!vesselKept) {
-                                    vesselKept = true; // Keep the first vessel
-                                    return false;
-                                }
-                                return true; // Remove other vessels
-                            }
-                            return false; // Keep all non-vessel icons
-                        }), combatLocale.end());
-                    }
-
-                    std::optional<Icon> smoothShip;
 
                     for (Icon& icon : combatLocale)
                     {
@@ -4049,29 +4027,24 @@ void GraphicsUpdate()
                         }
                         else if(icon.inst_type == SF_INSTANCE_VESSEL)
                         {
-                            auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
-                            if (vesselIt != frameSync.combatTheatre.end()) 
+                            // Debris doesn't move.
+                            if (icon.species != 24)
                             {
-                                auto& interp = vesselIt->second.interp;
-                                auto ship = icon;
-                                
-                                // We have an interpolator
-                                auto shipPos = interp->interpolate((float)frameSync.completedFrames);
-                                ship.x = scale * shipPos.position.x;
-                                ship.y = scale * -shipPos.position.y;
-                                ship.vesselHeading = shipPos.heading;
-                                
-                                ship.screenX = ship.x;
-                                ship.screenY = ship.y;
+                                auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
+                                if (vesselIt != frameSync.combatTheatre.end())
+                                {
+                                    auto& interp = vesselIt->second.interp;
 
-                                ship.bltX = ship.x;
-                                ship.bltY = ship.y;
-
-                                smoothShip.emplace(ship);
-
+                                    auto shipPos = interp->interpolate((float)frameSync.completedFrames);
+                                    icon.x = scale * shipPos.position.x;
+                                    icon.y = scale * -shipPos.position.y;
+                                    icon.vesselHeading = shipPos.heading;
+                                }
+                            }
+                            else
+                            {
                                 icon.x *= scale;
                                 icon.y *= -scale;
-
                             }
                         }
 
@@ -4080,11 +4053,6 @@ void GraphicsUpdate()
 
                         icon.bltX = icon.x;
                         icon.bltY = icon.y;
-                    }
-
-                    if(smoothShip.has_value())
-                    {
-                        combatLocale.push_back(smoothShip.value());
                     }
 
                     uniform.zoomLevel = zoomLevel;

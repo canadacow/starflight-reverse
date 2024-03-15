@@ -275,7 +275,7 @@ public:
         {
             auto point = lastPoint;
             // Coast at a very slow velocity, a fraction of ship_velocity, using the last good heading
-            float coastingVelocityFactor = 0.75f; // Adjust this factor to control the coasting speed
+            float coastingVelocityFactor = 1.0f; // Adjust this factor to control the coasting speed
             float deltaTime = time - times.back(); // Time since the last known point
             point.position.x += std::cos(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
             point.position.y += std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
@@ -331,7 +331,7 @@ private:
     std::deque<vec2<float>> unsplinedPoints;
 
     static inline const float ship_velocity = 0.03f;
-    static inline const float ship_turningRadius = 1.0f;
+    static inline const float ship_turningRadius = 0.75f;
 
     std::vector<vec2<float>> calculateIntermediatePoints(const vec2<float>& point0, float heading, const vec2<float>& point2, float turningRadius) {
         std::vector<vec2<float>> intermediatePoints;
