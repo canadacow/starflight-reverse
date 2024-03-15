@@ -1392,17 +1392,16 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
                 }
 
                 vesselIt = frameSync.combatTheatre.find(icon.iaddr);
+                auto& ship = vesselIt->second;
 
                 if(newShip)
                 {
-                    auto& ship = vesselIt->second;
                     ship.interp = std::make_unique<Interpolator>();
                     ship.interp->addPointWithTime((float)frameSync.completedFrames, {icon.x, icon.y });
                 }
                 else
                 {
-                    TimePoint tp = { { icon.x, icon.y } };
-                    vesselIt->second.incomingTp.push_back(tp);
+                    ship.interp->queuePoint({ icon.x, icon.y });
                 }
             }
         }
@@ -3968,6 +3967,26 @@ void GraphicsUpdate()
 
                     vec2<float> shipAt = {};
 
+                    auto vesselCount = std::count_if(combatLocale.begin(), combatLocale.end(), [](const Icon& icon) {
+                        return icon.inst_type == SF_INSTANCE_VESSEL;
+                    });
+
+                    if (vesselCount > 1) {
+                        bool vesselKept = false;
+                        combatLocale.erase(std::remove_if(combatLocale.begin(), combatLocale.end(), [&vesselKept](const Icon& icon) {
+                            if (icon.inst_type == SF_INSTANCE_VESSEL) {
+                                if (!vesselKept) {
+                                    vesselKept = true; // Keep the first vessel
+                                    return false;
+                                }
+                                return true; // Remove other vessels
+                            }
+                            return false; // Keep all non-vessel icons
+                        }), combatLocale.end());
+                    }
+
+                    std::optional<Icon> smoothShip;
+
                     for (Icon& icon : combatLocale)
                     {
                         if(icon.inst_type == SF_INSTANCE_SHIP_COMBAT)
@@ -3985,27 +4004,26 @@ void GraphicsUpdate()
                             auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
                             if (vesselIt != frameSync.combatTheatre.end()) 
                             {
-                                auto& incoming = vesselIt->second.incomingTp;
                                 auto& interp = vesselIt->second.interp;
-
-                                if(incoming.size())
-                                {
-                                    // We have new points.
-                                    
-                                    // Are we there yet?
-                                    if(interp->isExtrapolating((float)frameSync.completedFrames))
-                                    {
-                                        // We're extrapolating, time to incorporate our new points
-                                        interp->addPoint((float)frameSync.completedFrames, incoming.front().position);
-                                        incoming.pop_front();
-                                    }
-                                }
+                                auto ship = icon;
                                 
                                 // We have an interpolator
                                 auto shipPos = interp->interpolate((float)frameSync.completedFrames);
-                                icon.x = scale * shipPos.position.x;
-                                icon.y = scale * -shipPos.position.y;
-                                icon.vesselHeading = shipPos.heading;
+                                ship.x = scale * shipPos.position.x;
+                                ship.y = scale * -shipPos.position.y;
+                                ship.vesselHeading = shipPos.heading;
+                                
+                                ship.screenX = ship.x;
+                                ship.screenY = ship.y;
+
+                                ship.bltX = ship.x;
+                                ship.bltY = ship.y;
+
+                                smoothShip.emplace(ship);
+
+                                icon.x *= scale;
+                                icon.y *= -scale;
+
                             }
                         }
 
@@ -4014,6 +4032,11 @@ void GraphicsUpdate()
 
                         icon.bltX = icon.x;
                         icon.bltY = icon.y;
+                    }
+
+                    if(smoothShip.has_value())
+                    {
+                        combatLocale.push_back(smoothShip.value());
                     }
 
                     uniform.zoomLevel = zoomLevel;
