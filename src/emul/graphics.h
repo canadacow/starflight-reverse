@@ -1,10 +1,7 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#include <Magnum/Animation/Player.h>
-#include <Magnum/Math/Vector3.h>
-#include <Magnum/Math/Quaternion.h>
-#include <Magnum/Math/Complex.h>
+#include "common.pch"
 
 #include <stdint.h>
 #include <assert.h>
@@ -25,13 +22,6 @@
 #include <xxhash.h>
 
 #include "../emul/call.h"
-
-#include <cereal/types/vector.hpp>
-#include <cereal/archives/binary.hpp>
-#include <cereal/archives/binary.hpp>
-#include <cereal/types/vector.hpp>
-
-#include "spline.hpp"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846

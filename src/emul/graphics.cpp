@@ -2547,7 +2547,7 @@ uint32_t DrawRunBit(const Rotoscope& roto, vec2<float> uv, vec2<float> subUv)
     return pixel;
 }
 
-void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels, const std::vector<Icon>& icons)
+static void DoRotoscope(std::vector<uint32_t>& windowData, const std::vector<Rotoscope>& rotoPixels, const std::vector<Icon>& icons)
 {
     uint32_t index = 0;
     const float polygonWidth = (float)WINDOW_WIDTH / (float)GRAPHICS_MODE_WIDTH;

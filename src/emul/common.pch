@@ -1,0 +1,16 @@
+#ifndef COMMON_PCH_H
+#define COMMON_PCH_H
+
+#include <Magnum/Animation/Player.h>
+#include <Magnum/Math/Vector3.h>
+#include <Magnum/Math/Quaternion.h>
+#include <Magnum/Math/Complex.h>
+
+#include <cereal/types/vector.hpp>
+#include <cereal/archives/binary.hpp>
+#include <cereal/archives/binary.hpp>
+#include <cereal/types/vector.hpp>
+
+#include "spline.hpp"
+
+#endif // COMMON_PCH_H

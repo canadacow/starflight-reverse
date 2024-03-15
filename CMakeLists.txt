@@ -98,6 +98,7 @@ set(HEADER_FILES
 	src/util/lodepng.h 
     src/tts/speech.h
     src/emul/platform.h
+    src/emul/common.pch
     ${CURL_INCLUDE_DIRS}
 )
 
@@ -118,6 +119,8 @@ add_executable(emulatesdl WIN32
     src/emul/vulkan_helper.cpp
     src/tts/speech.cpp
 )
+
+target_precompile_headers(emulatesdl PRIVATE src/emul/common.pch)
 
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS NOMINMAX)
 
