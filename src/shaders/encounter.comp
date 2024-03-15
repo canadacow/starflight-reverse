@@ -286,6 +286,17 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     return pixel;
 }
 
+vec4 DrawRadar(vec2 subUv) {
+    vec4 radarPixel = vec4(0.0);
+    ivec2 radarSize = ivec2(71, 119);
+    ivec2 samplePos = ivec2(subUv * vec2(radarSize));
+    ivec2 rotoPos = samplePos + ivec2(4, 8);
+    uint rotoIndex = uint(rotoPos.y) * uint(ub.uniforms.GRAPHICS_MODE_WIDTH) + uint(rotoPos.x);
+    Rotoscope rotoPixel = rotoPixels[rotoIndex];
+    radarPixel = colortable[rotoPixel.EGAcolor & 0xf];
+    return radarPixel;
+}
+
 void main() {
     ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
 
@@ -319,6 +330,14 @@ void main() {
 
     // System and hyperspace
     pixel = DrawNavigationPixel(roto, uv, subUv);
+
+    vec2 radarTL = vec2(0.02, 0.05);
+    vec2 radarBR = vec2(0.25, 0.30);
+
+    if(uv.x >= radarTL.x && uv.x <= radarBR.x && uv.y >= radarTL.y && uv.y <= radarBR.y) {
+        vec2 normalizedUv = (uv - radarTL) / (radarBR - radarTL);
+        pixel += DrawRadar(normalizedUv);
+    }
 
     // Place the pixel in the larger surface
     imageStore(imgOutput, pixelPos, pixel);
