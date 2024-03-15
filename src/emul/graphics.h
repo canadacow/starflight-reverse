@@ -227,9 +227,6 @@ public:
     }
 
     void addPoint(float anchorTime, vec2<float> point) {
-        float velocity = 0.03f;
-        float turningRadius = 1.0f;
-
         if (points.empty()) {
             throw std::runtime_error("At least one time anchor is required.");
         }
@@ -240,7 +237,7 @@ public:
 
         if (points.size() == 1) {
             vec2<float> lastPoint = points.back();
-            auto timeToDest = timeToReach(lastPoint, point, anchorTime, velocity);
+            auto timeToDest = timeToReach(lastPoint, point, anchorTime, ship_velocity);
             addPointWithTime(timeToDest, point);
         
         } else {
@@ -253,13 +250,13 @@ public:
 
             addPointWithTime(anchorTime, currentPos.position);
 
-            auto intermediate = calculateIntermediatePoints(currentPos.position, currentPos.heading, point, turningRadius);
+            auto intermediate = calculateIntermediatePoints(currentPos.position, currentPos.heading, point, ship_turningRadius);
 
             vec2<float> pos = currentPos.position;
             float curTime = anchorTime;
 
             for (const auto& interPoint : intermediate) {
-                auto destTime = timeToReach(pos, interPoint, curTime, velocity) + 1.0f;
+                auto destTime = timeToReach(pos, interPoint, curTime, ship_velocity) + 1.0f;
                 addPointWithTime(destTime, interPoint);
 
                 curTime = destTime;
@@ -277,7 +274,13 @@ public:
         if (isExtrapolating(time))
         {
             auto point = lastPoint;
-            point.velocity = { 0.0f, 0.0f };
+            // Coast at a very slow velocity, a fraction of ship_velocity, using the last good heading
+            float coastingVelocityFactor = 0.75f; // Adjust this factor to control the coasting speed
+            float deltaTime = time - times.back(); // Time since the last known point
+            point.position.x += std::cos(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
+            point.position.y += std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
+            point.velocity = { std::cos(lastPoint.heading) * ship_velocity * coastingVelocityFactor, 
+                            std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor };
             return point;
         }
 
@@ -307,12 +310,6 @@ public:
                 unsplinedPoints.pop_front();
                 addPoint(time, point);
             }
-            else
-            {
-                auto point = lastPoint;
-                point.velocity = { 0.0f, 0.0f };
-                return point;
-            }
         }
 
         return interpolateInternal(time);
@@ -332,6 +329,9 @@ private:
     float linearSlopeX = 0, linearSlopeY = 0, linearInterceptX = 0, linearInterceptY = 0;
     InterpolatorPoint lastPoint;
     std::deque<vec2<float>> unsplinedPoints;
+
+    static inline const float ship_velocity = 0.03f;
+    static inline const float ship_turningRadius = 1.0f;
 
     std::vector<vec2<float>> calculateIntermediatePoints(const vec2<float>& point0, float heading, const vec2<float>& point2, float turningRadius) {
         std::vector<vec2<float>> intermediatePoints;
