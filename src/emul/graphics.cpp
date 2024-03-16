@@ -1401,7 +1401,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
                 }
                 else
                 {
-                    ship.interp->queuePoint({ icon.x, icon.y });
+                    ship.interp->queuePoint({ icon.x, icon.y }, (float)frameSync.completedFrames);
                 }
             }
         }
@@ -1782,7 +1782,7 @@ static int GraphicsInitThread()
 
         // Lambda function for adding subsequent points without specifying time, marking them as key points in the file
         auto addSubsequentPointAndMark = [&interpolator, &outFile](vec2<float> point) {
-            interpolator.queuePoint(point); // Assuming this method exists and computes time automatically
+            interpolator.queuePoint(point, 0.0f); // Assuming this method exists and computes time automatically
             outFile << point.x << " " << point.y << " 0.0 1" << std::endl; // 1 marks this as a key point
         };
 
@@ -4013,6 +4013,8 @@ void GraphicsUpdate()
 
                     vec2<float> shipAt = {};
 
+                    std::vector<Icon> dummies;
+
                     for (Icon& icon : combatLocale)
                     {
                         if(icon.inst_type == SF_INSTANCE_SHIP_COMBAT)
@@ -4033,6 +4035,18 @@ void GraphicsUpdate()
                                 auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
                                 if (vesselIt != frameSync.combatTheatre.end())
                                 {
+                                    {
+                                        Icon dummy = icon;
+                                        dummy.x = scale * dummy.x;
+                                        dummy.y = scale * -dummy.y;
+                                        dummy.screenX = dummy.x;
+                                        dummy.screenY = dummy.y;
+
+                                        dummy.bltX = dummy.x;
+                                        dummy.bltY = dummy.y;
+                                        dummies.push_back(dummy);
+                                    }
+
                                     auto& interp = vesselIt->second.interp;
 
                                     auto shipPos = interp->interpolate((float)frameSync.completedFrames);
@@ -4054,6 +4068,12 @@ void GraphicsUpdate()
                         icon.bltX = icon.x;
                         icon.bltY = icon.y;
                     }
+
+#if 0
+                    for (const auto& dummy : dummies) {
+                        combatLocale.push_back(dummy);
+                    }
+#endif
 
                     uniform.zoomLevel = zoomLevel;
 

@@ -1408,11 +1408,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xef3b && (std::string(overlayName) == "COMBAT-OV")) // COMBAT
                 {
+                    #if 0
                     for(int i = 0; i < 3; ++i)
                     {
                         GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
                         std::this_thread::sleep_for(std::chrono::milliseconds(25));
                     }
+                    #endif
                 }
 
                 if(nextInstr == 0xE500 && (std::string(overlayName) == "COMBAT-OV")) // WE500 

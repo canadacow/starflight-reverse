@@ -287,13 +287,21 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 }
 
 vec4 DrawRadar(vec2 subUv) {
-    vec4 radarPixel = vec4(0.0);
-    ivec2 radarSize = ivec2(71, 119);
-    ivec2 samplePos = ivec2(subUv * vec2(radarSize));
-    ivec2 rotoPos = samplePos + ivec2(4, 8);
-    uint rotoIndex = uint(rotoPos.y) * uint(ub.uniforms.GRAPHICS_MODE_WIDTH) + uint(rotoPos.x);
-    Rotoscope rotoPixel = rotoPixels[rotoIndex];
-    radarPixel = colortable[rotoPixel.EGAcolor & 0xf];
+    vec4 radarPixel = vec4(0.0,0.1,0.0,0.0);
+    ivec2 radarSize = ivec2(69, 90);
+    const int kernelSize = 5; // Gaussian kernel size
+    const float sigma = 1.0; // Standard deviation for Gaussian blur
+    float kernel[kernelSize] = float[](0.06136, 0.24477, 0.38774, 0.24477, 0.06136); // Precomputed Gaussian kernel values
+    vec2 offset[kernelSize] = vec2[](vec2(-2.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(2.0, 0.0)); // Corresponding offset values
+
+    for(int i = 0; i < kernelSize; ++i) {
+        ivec2 samplePos = ivec2(subUv * vec2(radarSize)) + ivec2(offset[i].x, offset[i].y);
+        ivec2 rotoPos = samplePos + ivec2(5, 20);
+        uint rotoIndex = uint(rotoPos.y) * uint(ub.uniforms.GRAPHICS_MODE_WIDTH) + uint(rotoPos.x);
+        Rotoscope rotoPixel = rotoPixels[rotoIndex];
+        vec4 color = colortable[rotoPixel.EGAcolor & 0xf];
+        radarPixel += color * kernel[i];
+    }
     return radarPixel;
 }
 
@@ -332,7 +340,7 @@ void main() {
     pixel = DrawNavigationPixel(roto, uv, subUv);
 
     vec2 radarTL = vec2(0.02, 0.05);
-    vec2 radarBR = vec2(0.25, 0.30);
+    vec2 radarBR = vec2(0.25, 0.33);
 
     if(uv.x >= radarTL.x && uv.x <= radarBR.x && uv.y >= radarTL.y && uv.y <= radarBR.y) {
         vec2 normalizedUv = (uv - radarTL) / (radarBR - radarTL);

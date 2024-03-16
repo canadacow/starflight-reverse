@@ -188,11 +188,26 @@ class Interpolator {
 public:
     Interpolator() = default;
 
-    void queuePoint(vec2<float> point)
+    void queuePoint(vec2<float> point, float queueTime)
     {
+        bool shouldQueue = false;
         if (unsplinedPoints.empty() || 
             static_cast<int>(unsplinedPoints.back().x) != static_cast<int>(point.x) || 
             static_cast<int>(unsplinedPoints.back().y) != static_cast<int>(point.y)) {
+            shouldQueue = true;
+        }
+        if (points.size() < 3 && 
+            (static_cast<int>(points.back().x) != static_cast<int>(point.x) || 
+            static_cast<int>(points.back().y) != static_cast<int>(point.y))) {
+            shouldQueue = true;
+        }
+        if (isExtrapolating(queueTime) && unsplinedPoints.empty()) {
+            auto lastPoint = interpolateInternal(queueTime);
+            if (std::sqrt(std::pow(lastPoint.position.x - point.x, 2) + std::pow(lastPoint.position.y - point.y, 2)) > 0.01f) {
+                shouldQueue = true;
+            }
+        }
+        if (shouldQueue) {
             unsplinedPoints.push_back(point);
         }
     }
@@ -321,7 +336,7 @@ private:
     std::deque<vec2<float>> unsplinedPoints;
 
     static inline const float ship_velocity = 0.03f;
-    static inline const float ship_turningRadius = 0.75f;
+    static inline const float ship_turningRadius = 1.0f;
 
     std::vector<vec2<float>> calculateIntermediatePoints(const vec2<float>& point0, float heading, const vec2<float>& point2, float turningRadius) {
         std::vector<vec2<float>> intermediatePoints;
