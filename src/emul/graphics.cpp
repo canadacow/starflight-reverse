@@ -1307,6 +1307,18 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
+int GetFramesPerGameFrame()
+{
+    if (frameSync.gameContext != 4)
+    {
+        return 4;
+    }
+    else
+    {
+        return 16;
+    }
+}
+
 void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY, 
     const std::vector<Icon>& iconList, 
     const std::vector<Icon>& system, 
@@ -3410,7 +3422,7 @@ void GraphicsUpdate()
 
            ++frameSync.framesToRender.front().renderCount;
 
-           if (frameSync.framesToRender.front().renderCount >= 4)
+           if (frameSync.framesToRender.front().renderCount >= GetFramesPerGameFrame())
            {
                frameSync.stoppedFrame = frameSync.framesToRender.front();
                frameSync.framesToRender.pop_front();
@@ -3788,7 +3800,7 @@ void GraphicsUpdate()
 
     s_gc.buffers[inFlightIndex].command->reset();
 
-    static const int framesPerGameFrame = 4;
+    const int framesPerGameFrame = GetFramesPerGameFrame();
     
     float interpolationFactor = (float)ftr.renderCount / (float)framesPerGameFrame;
 
@@ -4005,7 +4017,7 @@ void GraphicsUpdate()
 
                     const vec2<float> smallestArena = { 16.0f, 20.0f };
 
-                    float zoomLevel = 8.0f; // Default zoom level when everything fits in the smallest area
+                    float zoomLevel = 12.0f; // Default zoom level when everything fits in the smallest area
 
                     //printf("Current Arena Size: Width = %f, Height = %f zoomlevel %f\n", currentArenaWidth, currentArenaHeight, zoomLevel);
 

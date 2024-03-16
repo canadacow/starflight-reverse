@@ -60,7 +60,7 @@ layout(binding = 4) uniform UB {
 } ub;
 
 layout(binding = 5) uniform IconBlock {
-    Icon icons[32];
+    Icon icons[64];
 };
 
 #include "tables.h"
