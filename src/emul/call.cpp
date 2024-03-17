@@ -1175,6 +1175,7 @@ extern unsigned short regbx;
 extern std::atomic<bool> stopEmulationThread;
 uint16_t nparmsStackSi = 0;
 
+static uint64_t s_missileNonce = 1;
 static bool s_shouldRecordText = false;
 static bool s_secondFlag = false;
 static std::string s_recordedText = "";
@@ -1185,6 +1186,7 @@ static std::vector<LaserRecord> s_lasers;
 static StarMapSetup s_currentStarMap;
 static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
+static std::unordered_map<uint16_t, uint64_t> s_missileIds;
 
 uint64_t s_targetFrameKey = 0;
 
@@ -1373,7 +1375,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if( nextInstr == 0xe72c && (std::string(overlayName) == "COMBAT-OV")) // COMBAT mdelete (free missiles)
                 {
                     auto val = Read16(0xe1f7); // Missile addr
-                    printf("missile presently set to: %u\n", val);
+
+                    auto index = val - 0xe292;
+                    assert(index % sizeof(MissileRecord) == 0);
+                    index /= sizeof(MissileRecord);
+
+                    auto it = s_missileIds.find(index);
+                    assert(it != s_missileIds.end());
+                    s_missileIds.erase(it);
                 }
 
                 if( nextInstr == 0xe6e4 && (std::string(overlayName) == "COMBAT-OV")) // COMBAT minstall (allocate missiles)
@@ -2377,17 +2386,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     {
                         if(mr[i].mclass != 0)
                         {
-                            MissileRecordUnique mru = { mr[i], 0};
-                            mru.hash = mru.computeHash(i);
+                            assert(s_missileIds.find(i) != s_missileIds.end());
+
+                            MissileRecordUnique mru = { mr[i], s_missileIds.find(i)->second};
                             missiles.push_back(mru);
                         }
                     }
 
-                    int count = 0;
                     for(const auto& missile : missiles)
                     {
-                        printf("Missile %d - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
-                               ++count, missile.mr.currx, missile.mr.curry, missile.mr.destx, missile.mr.desty, missile.mr.morig, missile.mr.mclass, missile.mr.deltax, missile.mr.deltay);
+                        printf("Missile %llu - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
+                               missile.nonce, missile.mr.currx, missile.mr.curry, missile.mr.destx, missile.mr.desty, missile.mr.morig, missile.mr.mclass, missile.mr.deltax, missile.mr.deltay);
                     }
 
                     s_missiles = missiles;
@@ -2409,7 +2418,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if( nextInstr == 0xe6e4 && (std::string(overlayName) == "COMBAT-OV")) // COMBAT minstall (allocate missiles)
                 {
                     auto val = Read16(0xe1f7); // Missile addr
-                    printf("missile presently set to: %u\n", val);
+                    if (val != 0xe434)
+                    {
+                        auto index = val - 0xe292;
+                        assert(index % sizeof(MissileRecord) == 0);
+                        index /= sizeof(MissileRecord);
+                        
+                        s_missileIds.emplace(index, ++s_missileNonce);
+                    }
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV")) // .AUXSYS

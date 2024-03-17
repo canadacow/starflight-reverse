@@ -609,11 +609,7 @@ struct MissileRecord {
 
 struct MissileRecordUnique {
     MissileRecord mr;
-    uint64_t hash;
-
-    uint64_t computeHash(uint16_t offset) const {
-        return offset;
-    }
+    uint64_t nonce;
 };
 
 struct LaserRecord {
