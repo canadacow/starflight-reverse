@@ -194,6 +194,27 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                 shipPixel = vessel  + (shipPixel * (1 - vessel.a));
             }
+        } else if(icon.id == 43) {
+            // Debris
+            float distance = 0.5 * ub.uniforms.zoomLevel;
+            if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {
+                vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distance * 2.0);
+
+                normUV -= 0.5;
+                // Rotate the normUVs to match the icon.id orientation
+                //float angle = (icon.id - 35) * 45.0;
+                float rad = 0.0;
+                float s = sin(rad);
+                float c = cos(rad);
+                normUV = vec2(normUV.x * c - normUV.y * s, normUV.x * s + normUV.y * c);
+
+                normUV += 0.5;
+
+                vec4 texColor = texture(ShipTexture, vec3(normUV, 2));
+                vec4 vessel = vec4(texColor.rgb * texColor.a, texColor.a);
+
+                shipPixel = vessel  + (shipPixel * (1 - vessel.a));
+            }
         } else if(icon.id < 50) {
             float distance = 0.5 * ub.uniforms.zoomLevel;
             if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distance) {

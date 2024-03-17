@@ -585,14 +585,8 @@ struct TimePoint
 };
 
 struct HeadingAndThrust {
-    std::deque<TimePoint> activeTp;
-    std::deque<TimePoint> incomingTp;
-
     std::unique_ptr<Interpolator> interp;
-
-    std::optional<TimePoint> incomingTimePoint;
-
-    std::deque<float> headings;
+    std::optional<InterpolatorPoint> lastKnownPoint;
 
     float heading;
     float thrust;

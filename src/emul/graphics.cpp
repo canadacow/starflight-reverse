@@ -1678,6 +1678,12 @@ void LoadFonts()
     image.clear();
 }
 
+static const std::vector<std::pair<std::string, vk::Format>> shipTextures = {
+    {"ship.png", vk::Format::eR8G8B8A8Unorm},
+    {"mechan-9.png", vk::Format::eR8G8B8A8Unorm},
+    {"debris.png", vk::Format::eR8G8B8A8Unorm},
+};
+
 void LoadAssets()
 {
     std::vector<uint8_t> image;
@@ -1693,7 +1699,7 @@ void LoadAssets()
 
     s_gc.shipImage = s_gc.vc.create_image_sampler(
         s_gc.vc.create_image_view(
-            s_gc.vc.create_image(512, 512, vk::Format::eR8G8B8A8Unorm, 2, avk::memory_usage::device, avk::image_usage::general_image)
+            s_gc.vc.create_image(512, 512, vk::Format::eR8G8B8A8Unorm, shipTextures.size(), avk::memory_usage::device, avk::image_usage::general_image)
         ), 
         s_gc.vc.create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_edge)
     );
@@ -3457,11 +3463,6 @@ void GraphicsUpdate()
     {
         // Ship initialization
 
-        std::vector<std::pair<std::string, vk::Format>> shipTextures = {
-            {"ship.png", vk::Format::eR8G8B8A8Unorm},
-            {"mechan-9.png", vk::Format::eR8G8B8A8Unorm}
-        };
-
         const uint32_t shipTextureSize = 512 * 512 * 4; // Assuming 512x512 RGBA images
         const uint32_t totalDataSize = shipTextureSize * shipTextures.size();
 
@@ -4062,6 +4063,8 @@ void GraphicsUpdate()
                                     auto& interp = vesselIt->second.interp;
 
                                     auto shipPos = interp->interpolate((float)frameSync.completedFrames);
+                                    vesselIt->second.lastKnownPoint.emplace(shipPos);
+
                                     icon.x = scale * shipPos.position.x;
                                     icon.y = scale * -shipPos.position.y;
                                     icon.vesselHeading = shipPos.heading;
@@ -4116,8 +4119,27 @@ void GraphicsUpdate()
                         laserIcon.bltX = laserIcon.x;
                         laserIcon.bltY = laserIcon.y;
 
-                        laserIcon.x1 = scale * laser.x1;
-                        laserIcon.y1 = scale * -laser.y1;
+                        auto targetIconIt = std::find_if(ftr.iconList.begin(), ftr.iconList.end(), [&](const auto& icon) {
+                            return icon.x == laser.x1 && icon.y == laser.y1;
+                        });
+
+                        bool shipFound = false;
+
+                        if (targetIconIt != ftr.iconList.end()) {
+                            auto targetVesselIt = frameSync.combatTheatre.find(targetIconIt->iaddr);
+                            if (targetVesselIt != frameSync.combatTheatre.end() && targetVesselIt->second.lastKnownPoint.has_value()) {
+                                // Adjust the target of the laser
+                                laserIcon.x1 = scale *  targetVesselIt->second.lastKnownPoint.value().position.x;
+                                laserIcon.y1 = scale * -targetVesselIt->second.lastKnownPoint.value().position.y;
+                                shipFound = true;
+                            }
+                        }
+                        
+                        if(!shipFound) {
+                            // No icon found, improvise
+                            laserIcon.x1 = scale * laser.x1;
+                            laserIcon.y1 = scale * -laser.y1;
+                        }
 
                         laserIcon.clr = laser.color;
                         laserIcon.id = 251;
