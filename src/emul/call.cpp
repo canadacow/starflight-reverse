@@ -1370,6 +1370,18 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     printf("frameSync.maneuvering = true\n");
                 }
 
+                if( nextInstr == 0xe72c && (std::string(overlayName) == "COMBAT-OV")) // COMBAT mdelete (free missiles)
+                {
+                    auto val = Read16(0xe1f7); // Missile addr
+                    printf("missile presently set to: %u\n", val);
+                }
+
+                if( nextInstr == 0xe6e4 && (std::string(overlayName) == "COMBAT-OV")) // COMBAT minstall (allocate missiles)
+                {
+                    auto val = Read16(0xe1f7); // Missile addr
+                    printf("missile presently set to: %u\n", val);
+                }
+
                 if(nextInstr == 0xEA81 && (std::string(overlayName) == "COMBAT-OV")) // .LASER
                 {
                     LaserRecord laser = {};
@@ -2392,6 +2404,12 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     const uint16_t cc_MPS = 0x5245;
                     printf("MPS %u\n", Read16(cc_MPS));
+                }
+
+                if( nextInstr == 0xe6e4 && (std::string(overlayName) == "COMBAT-OV")) // COMBAT minstall (allocate missiles)
+                {
+                    auto val = Read16(0xe1f7); // Missile addr
+                    printf("missile presently set to: %u\n", val);
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV")) // .AUXSYS

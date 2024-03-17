@@ -1682,6 +1682,7 @@ static const std::vector<std::pair<std::string, vk::Format>> shipTextures = {
     {"ship.png", vk::Format::eR8G8B8A8Unorm},
     {"mechan-9.png", vk::Format::eR8G8B8A8Unorm},
     {"debris.png", vk::Format::eR8G8B8A8Unorm},
+    {"missile.png", vk::Format::eR8G8B8A8Unorm},
 };
 
 void LoadAssets()
