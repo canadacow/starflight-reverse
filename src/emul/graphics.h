@@ -186,7 +186,7 @@ struct InterpolatorPoint {
 
 class Interpolator {
 public:
-    Interpolator() = default;
+    Interpolator(float _ship_velocity = 0.03f) : ship_velocity(_ship_velocity) {}
 
     void queuePoint(vec2<float> point, float queueTime)
     {
@@ -335,7 +335,7 @@ private:
     InterpolatorPoint lastPoint;
     std::deque<vec2<float>> unsplinedPoints;
 
-    static inline const float ship_velocity = 0.03f;
+    float ship_velocity;
     static inline const float ship_turningRadius = 1.0f;
 
     std::vector<vec2<float>> calculateIntermediatePoints(const vec2<float>& point0, float heading, const vec2<float>& point2, float turningRadius) {

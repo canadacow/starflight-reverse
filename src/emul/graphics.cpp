@@ -1406,7 +1406,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
 
             if (newShip)
             {
-                ship.interp = std::make_unique<Interpolator>();
+                ship.interp = std::make_unique<Interpolator>(0.06f);
                 ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)m.mr.currx, (float)m.mr.curry });
                 ship.interp->addPoint((float)frameSync.completedFrames, { (float)m.mr.destx, (float)m.mr.desty });
             }
