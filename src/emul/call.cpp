@@ -1175,7 +1175,7 @@ extern unsigned short regbx;
 extern std::atomic<bool> stopEmulationThread;
 uint16_t nparmsStackSi = 0;
 
-static uint64_t s_missileNonce = 1;
+static uint64_t s_missileNonce = 0x1000000;
 static bool s_shouldRecordText = false;
 static bool s_secondFlag = false;
 static std::string s_recordedText = "";

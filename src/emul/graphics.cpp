@@ -1391,6 +1391,27 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
 
         lasers.clear();
 
+        for (auto& m : missiles)
+        {
+            bool newShip = false;
+
+            auto vesselIt = frameSync.combatTheatre.find(m.nonce);
+            if (vesselIt == frameSync.combatTheatre.end()) {
+                frameSync.combatTheatre[m.nonce] = HeadingAndThrust();
+                newShip = true;
+            }
+
+            vesselIt = frameSync.combatTheatre.find(m.nonce);
+            auto& ship = vesselIt->second;
+
+            if (newShip)
+            {
+                ship.interp = std::make_unique<Interpolator>();
+                ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)m.mr.currx, (float)m.mr.curry });
+                ship.interp->addPoint((float)frameSync.completedFrames, { (float)m.mr.destx, (float)m.mr.desty });
+            }
+        }
+
         for (auto& icon : iconList)
         {
             if (icon.inst_type == SF_INSTANCE_VESSEL) {
@@ -4097,17 +4118,27 @@ void GraphicsUpdate()
                     uniform.worldY = shipAt.y * zoomLevel;
 
                     for (const auto& missile : ftr.missiles) {
-                        Icon missileIcon;
-                        missileIcon.x = scale * missile.mr.currx;
-                        missileIcon.y = scale * -missile.mr.curry;
-                        missileIcon.screenX = missileIcon.x;
-                        missileIcon.screenY = missileIcon.y;
-                        missileIcon.bltX = missileIcon.x;
-                        missileIcon.bltY = missileIcon.y;
-                        missileIcon.clr = missile.mr.morig == 1 ? 0x1 : 0x4;
-                        missileIcon.id = 252;
-                        
-                        combatLocale.push_back(missileIcon);
+
+                        auto vesselIt = frameSync.combatTheatre.find(missile.nonce);
+                        if (vesselIt != frameSync.combatTheatre.end())
+                        {
+                            auto& interp = vesselIt->second.interp;
+
+                            auto misPos = interp->interpolate((float)frameSync.completedFrames);
+
+                            Icon missileIcon;
+                            missileIcon.x = scale * misPos.position.x;
+                            missileIcon.y = scale * -misPos.position.y;
+                            missileIcon.screenX = missileIcon.x;
+                            missileIcon.screenY = missileIcon.y;
+                            missileIcon.bltX = missileIcon.x;
+                            missileIcon.bltY = missileIcon.y;
+                            missileIcon.clr = missile.mr.morig == 1 ? 0x1 : 0x4;
+                            missileIcon.id = 252;
+                            missileIcon.vesselHeading = misPos.heading;
+
+                            combatLocale.push_back(missileIcon);
+                        }
                     }
 
                     for(const auto& laser : frameSync.lasers) {
