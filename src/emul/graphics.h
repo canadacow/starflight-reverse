@@ -327,6 +327,14 @@ public:
         return time > times.back();
     }
 
+
+    const std::vector<float>& ActiveTimes() const {
+        return times;
+    }
+    const std::vector<vec2<float>>& ActivePoints() const {
+        return points;
+    }
+
 private:
     std::vector<float> times;
     std::vector<vec2<float>> points;
@@ -952,6 +960,7 @@ struct FrameSync {
     bool inSmallLogo = false;
     bool inDrawStarMap = false;
     bool inCombatRender = false;
+    bool inCombatKey = false;
     bool shouldSave = false;
 
     std::binary_semaphore screenshotSemaphore{0};
@@ -1033,6 +1042,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     const std::vector<MissileRecordUnique>& missiles,
     std::vector<LaserRecord>& lasers
     );
+
+void GraphicsDeleteMissile(uint64_t nonce, const MissileRecord& missile);
 
 void GraphicsReportGameFrame();
 void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);

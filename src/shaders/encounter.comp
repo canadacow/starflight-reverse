@@ -79,6 +79,18 @@ float LineSegmentDistance(vec2 p, vec2 a, vec2 b) {
     return length(pa - ba * h);
 }
 
+#define GLOW 0.55
+#define NUM_PARTICLES 75.0
+
+vec3 particles(vec2 uv, vec3 color, float radius, float offset, float yPosition)
+{        
+    // Adjust position calculation to use a fixed yPosition for horizontal banding
+    vec2 position = vec2(offset, yPosition);
+    
+    float dist = radius / distance(uv, position);
+    return color * pow(dist, 1.0 / GLOW);
+}
+
 vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
     vec4 pixel = vec4(0.);
 
@@ -232,26 +244,29 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
 
                         vec4 baseColor = colortable[icon.clr & 0xf];
 
-                        // Calculate the distance from the pixel to the line segment
+                        // Set color to a constant electric blue
+                        vec3 color = vec3(0.0, 0.3, 1.0);
+                        float radius = 0.5; // Radius of particles
+                        float yPosition = 0.0; // This positions the band in the middle of the screen vertically
+
+                        // Calculate the distance from the pixel to the line segment to determine if we should draw a particle
                         float lineDist = LineSegmentDistance(pixelPos.xy, start.xy, end.xy);
 
-                        // Use a thickness value for the core of the laser
-                        float coreThickness = 0.5 * ub.uniforms.zoomLevel; // Core thickness of the laser
+                        // Only draw particles if the pixel is close enough to the line
+                        if(lineDist <= 0.25 * ub.uniforms.zoomLevel) { // Use a fixed distance to determine "closeness"
+                            for (float i = 0.0; i < NUM_PARTICLES; i++) {
+                                // Calculate the offset along the line for each particle
+                                float t = i / NUM_PARTICLES;
+                                vec2 linePos = mix(start, end, t); // Linearly interpolate between start and end points based on t
+                                float offset = length(linePos - start) / length(end - start); // Normalize offset based on line length
 
-                        // Calculate glow effect based on distance from the line
-                        float glowDist = 0.25 * ub.uniforms.zoomLevel; // Glow distance
-                        float glowIntensity = smoothstep(glowDist, coreThickness, lineDist);
+                                // Adjust yPosition based on the line's orientation
+                                yPosition = linePos.y;
 
-                        // Adjust the base color's alpha based on the glow intensity to create a fading effect
-                        vec4 color = vec4(baseColor.rgb, baseColor.a * glowIntensity);
-
-                        // If the distance is within the glow effect range, blend the pixel color
-                        if(lineDist <= glowDist) {
-                            float coreIntensity = smoothstep(coreThickness, 0.0, lineDist);
-                            // Enhance the core's brightness
-                            vec4 coreColor = vec4(baseColor.rgb * (1.0 + coreIntensity), 1.0);
-                            // Blend the glow and core colors
-                            iconPixel += mix(color, coreColor, coreIntensity);
+                                // Draw the particle
+                                vec3 particleColor = particles(pixelPos.xy, color, radius, offset, yPosition);
+                                iconPixel += vec4(particleColor, 1.0); // Assuming iconPixel is the accumulator for the pixel color
+                            }
                         }
                     }
                     break;
@@ -264,7 +279,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                             normUV -= 0.5;
                             // Rotate the normUVs to match the icon.id orientation
                             //float angle = (icon.id - 35) * 45.0;
-                            float rad = icon.objectHeading;
+                            float rad = 0.0;
                             float s = sin(rad);
                             float c = cos(rad);
                             normUV = vec2(normUV.x * c - normUV.y * s, normUV.x * s + normUV.y * c);

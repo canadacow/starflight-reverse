@@ -1379,9 +1379,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     auto index = val - 0xe292;
                     assert(index % sizeof(MissileRecord) == 0);
                     index /= sizeof(MissileRecord);
-
                     auto it = s_missileIds.find(index);
                     assert(it != s_missileIds.end());
+
+                    const MissileRecord* mr = (const MissileRecord*)Read8Addr(0xe292);
+
+                    GraphicsDeleteMissile(it->second, mr[index]);
+
                     s_missileIds.erase(it);
                 }
 
@@ -1418,6 +1422,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 if(nextInstr == 0xee39 && (std::string(overlayName) == "GAME-OV")) // SAVEGAME 
                 {
                     frameSync.shouldSave = true;
+                }
+
+                if(nextInstr == 0xf3bc) // COMBAT-KEY
+                {
+                    frameSync.inCombatKey = true;
                 }
 
                 if(nextInstr == 0xef5a && (std::string(overlayName) == "GAME-OV")) // SET.DISPLAY.MODE
@@ -2353,6 +2362,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.inDrawStarMap = false;
                 }
 
+                if(nextInstr == 0xf3bc) // COMBAT-KEY
+                {
+                    frameSync.inCombatKey = true;
+                }
+
                 if (nextInstr == 0xdb04) // ORBSETUP
                 {
                     uint32_t lo_iaddr = Read16(0x62bf);
@@ -2395,8 +2409,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     for(const auto& missile : missiles)
                     {
-                        printf("Missile %llu - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
-                               missile.nonce, missile.mr.currx, missile.mr.curry, missile.mr.destx, missile.mr.desty, missile.mr.morig, missile.mr.mclass, missile.mr.deltax, missile.mr.deltay);
+                        printf("Missile %llu %f - CurrX: %d, CurrY: %d, DestX: %d, DestY: %d, Origin: %d, Class: %d, DeltaX: %d, DeltaY: %d\n",
+                               missile.nonce, (float)frameSync.completedFrames, missile.mr.currx, missile.mr.curry, missile.mr.destx, missile.mr.desty, missile.mr.morig, missile.mr.mclass, missile.mr.deltax, missile.mr.deltay);
                     }
 
                     s_missiles = missiles;

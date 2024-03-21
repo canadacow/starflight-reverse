@@ -783,7 +783,7 @@ public:
 
     virtual void pushKeyStroke(uint16_t key) {};
 
-    virtual bool areArrowKeysDown() { return false; }
+    virtual bool areArrowKeysAndSpaceDown() { return false; }
 
     virtual void update() = 0;
 
@@ -926,7 +926,7 @@ private:
         return !eventQueue.empty();
     }
 
-    static bool isArrowOrKeypadKey(const SDL_Event& event) {
+    static bool isArrowOrKeypadOrSpaceKey(const SDL_Event& event) {
         if (event.type != SDL_KEYDOWN && event.type != SDL_KEYUP) {
             return false;
         }
@@ -944,7 +944,15 @@ private:
             case SDLK_KP_9:
             case SDLK_KP_1:
             case SDLK_KP_3:
-                return true;
+            case SDLK_SPACE:
+                if(frameSync.inCombatKey)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             default:
                 return false;
         }
@@ -956,6 +964,12 @@ private:
         bool down = state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_KP_2];
         bool left = state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_KP_4];
         bool right = state[SDL_SCANCODE_RIGHT] || state[SDL_SCANCODE_KP_6];
+
+        if (state[SDL_SCANCODE_SPACE] && frameSync.inCombatKey)
+        {
+            // Set trigger
+            Write16(0x5c7e, 0x1);
+        }
 
         if (up && left) return 327; // Numpad 7 for up and left
         if (up && right) return 329; // Numpad 9 for up and right
@@ -1032,11 +1046,18 @@ private:
 public:
     SDLKeyboard() {}    
 
-    bool areArrowKeysDown() override {
+    bool areArrowKeysAndSpaceDown() override {
         const Uint8* state = (const Uint8*)s_keyboardState;
-        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
+        bool arrowKeysDown = state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
             state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6] ||
             state[SDL_SCANCODE_KP_7] || state[SDL_SCANCODE_KP_9] || state[SDL_SCANCODE_KP_1] || state[SDL_SCANCODE_KP_3];
+
+        if(frameSync.inCombatKey)
+        {
+            arrowKeysDown = arrowKeysDown || state[SDL_SCANCODE_SPACE];
+        }
+
+        return arrowKeysDown;
     }
 
     void update() override {
@@ -1068,7 +1089,7 @@ public:
                     }
                     else
                     {
-                        if (!isArrowOrKeypadKey(event))
+                        if (!isArrowOrKeypadOrSpaceKey(event))
                         {
                             pushEvent(event);
                         }
@@ -1140,7 +1161,7 @@ public:
 
     // Non-destructive read equivalent to Int 16 ah = 1
     bool checkForKeyStroke() override {
-        if(areArrowKeysDown())
+        if(areArrowKeysAndSpaceDown())
         {
             if (!frameSync.maneuvering)
             {
@@ -1406,7 +1427,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
 
             if (newShip)
             {
-                ship.interp = std::make_unique<Interpolator>(0.06f);
+                ship.interp = std::make_unique<Interpolator>(0.095f);
                 ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)m.mr.currx, (float)m.mr.curry });
                 ship.interp->addPoint((float)frameSync.completedFrames, { (float)m.mr.destx, (float)m.mr.desty });
             }
@@ -1459,6 +1480,27 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         frameSync.frameCompleted.notify_one();
 
         frameSync.combatTheatre.clear();
+    }
+}
+
+void GraphicsDeleteMissile(uint64_t nonce, const MissileRecord& missile)
+{
+    std::unique_lock<std::mutex> lock(frameSync.mutex);
+
+    auto vesselIt = frameSync.combatTheatre.find(nonce);
+
+    if(vesselIt != frameSync.combatTheatre.end())
+    {
+#if 0
+        auto& m = vesselIt->second;
+        auto interp = m.interp->interpolate((float)frameSync.completedFrames);
+        auto actualDistance = std::sqrt(std::pow(missile.currx - interp.position.x, 2) + std::pow(missile.curry - interp.position.y, 2));
+        printf("Missile %llu Distance from end: %f\n", nonce, actualDistance);
+        printf("Missile %llu interpolation start: (%f, %f) %f end: (%f, %f) %f - current (%f, %f) %f\n", nonce, 
+            m.interp->ActivePoints()[0].x, m.interp->ActivePoints()[0].y, m.interp->ActiveTimes()[0],
+            m.interp->ActivePoints()[1].x, m.interp->ActivePoints()[1].y, m.interp->ActiveTimes()[1],
+            interp.position.x, interp.position.y, (float)frameSync.completedFrames);
+#endif        
     }
 }
 
@@ -4070,6 +4112,7 @@ void GraphicsUpdate()
                                 auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
                                 if (vesselIt != frameSync.combatTheatre.end())
                                 {
+#if 0
                                     {
                                         Icon dummy = icon;
                                         dummy.x = scale * dummy.x;
@@ -4081,6 +4124,7 @@ void GraphicsUpdate()
                                         dummy.bltY = dummy.y;
                                         dummies.push_back(dummy);
                                     }
+#endif
 
                                     auto& interp = vesselIt->second.interp;
 
@@ -4105,12 +4149,6 @@ void GraphicsUpdate()
                         icon.bltX = icon.x;
                         icon.bltY = icon.y;
                     }
-
-#if 0
-                    for (const auto& dummy : dummies) {
-                        combatLocale.push_back(dummy);
-                    }
-#endif
 
                     uniform.zoomLevel = zoomLevel;
 
@@ -4178,6 +4216,12 @@ void GraphicsUpdate()
 
                         combatLocale.push_back(laserIcon);
                     }
+
+#if 0
+                    for (const auto& dummy : dummies) {
+                        combatLocale.push_back(dummy);
+                    }
+#endif
 
                     ic = IconUniform<64>(combatLocale);
                     navPipeline = s_gc.encounterPipeline;
