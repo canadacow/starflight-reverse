@@ -783,7 +783,7 @@ public:
 
     virtual void pushKeyStroke(uint16_t key) {};
 
-    virtual bool areArrowKeysAndSpaceDown() { return false; }
+    virtual bool areArrowKeysDown() { return false; }
 
     virtual void update() = 0;
 
@@ -926,35 +926,27 @@ private:
         return !eventQueue.empty();
     }
 
-    static bool isArrowOrKeypadOrSpaceKey(const SDL_Event& event) {
+    static bool isArrowOrKeypad(const SDL_Event& event) {
         if (event.type != SDL_KEYDOWN && event.type != SDL_KEYUP) {
             return false;
         }
 
         switch (event.key.keysym.sym) {
-            case SDLK_UP:
-            case SDLK_DOWN:
-            case SDLK_LEFT:
-            case SDLK_RIGHT:
-            case SDLK_KP_8:
-            case SDLK_KP_2:
-            case SDLK_KP_4:
-            case SDLK_KP_6:
-            case SDLK_KP_7:
-            case SDLK_KP_9:
-            case SDLK_KP_1:
-            case SDLK_KP_3:
-            case SDLK_SPACE:
-                if(frameSync.inCombatKey)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            default:
-                return false;
+        case SDLK_UP:
+        case SDLK_DOWN:
+        case SDLK_LEFT:
+        case SDLK_RIGHT:
+        case SDLK_KP_8:
+        case SDLK_KP_2:
+        case SDLK_KP_4:
+        case SDLK_KP_6:
+        case SDLK_KP_7:
+        case SDLK_KP_9:
+        case SDLK_KP_1:
+        case SDLK_KP_3:
+            return true;
+        default:
+            return false;
         }
     }
 
@@ -1046,18 +1038,11 @@ private:
 public:
     SDLKeyboard() {}    
 
-    bool areArrowKeysAndSpaceDown() override {
+    bool areArrowKeysDown() override {
         const Uint8* state = (const Uint8*)s_keyboardState;
-        bool arrowKeysDown = state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
+        return state[SDL_SCANCODE_UP] || state[SDL_SCANCODE_DOWN] || state[SDL_SCANCODE_LEFT] || state[SDL_SCANCODE_RIGHT] ||
             state[SDL_SCANCODE_KP_8] || state[SDL_SCANCODE_KP_2] || state[SDL_SCANCODE_KP_4] || state[SDL_SCANCODE_KP_6] ||
             state[SDL_SCANCODE_KP_7] || state[SDL_SCANCODE_KP_9] || state[SDL_SCANCODE_KP_1] || state[SDL_SCANCODE_KP_3];
-
-        if(frameSync.inCombatKey)
-        {
-            arrowKeysDown = arrowKeysDown || state[SDL_SCANCODE_SPACE];
-        }
-
-        return arrowKeysDown;
     }
 
     void update() override {
@@ -1089,7 +1074,7 @@ public:
                     }
                     else
                     {
-                        if (!isArrowOrKeypadOrSpaceKey(event))
+                        if (!isArrowOrKeypad(event))
                         {
                             pushEvent(event);
                         }
@@ -1161,7 +1146,7 @@ public:
 
     // Non-destructive read equivalent to Int 16 ah = 1
     bool checkForKeyStroke() override {
-        if(areArrowKeysAndSpaceDown())
+        if(areArrowKeysDown())
         {
             if (!frameSync.maneuvering)
             {

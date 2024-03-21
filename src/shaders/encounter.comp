@@ -73,10 +73,32 @@ layout(binding = 5) uniform IconBlock {
 #include "planet.h"
 #include "engines.h"
 
-float LineSegmentDistance(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
+vec2 LineSegmentUV(vec2 p, vec2 a, vec2 b, float glowDist) {
+    vec2 ba = b - a;
+    vec2 pa = p - a;
     float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
+    vec2 closestPoint = a + ba * h; // Closest point on the line segment to p
+    vec2 lineDir = normalize(ba); // Direction of the line
+    vec2 perpDir = vec2(-lineDir.y, lineDir.x); // Perpendicular direction to the line
+
+    // Calculate distance from p to the closest point on the line segment
+    float distToLine = length(p - closestPoint);
+
+    // Determine if the point is within the thickness of the line (glowDist)
+    if(distToLine <= glowDist) {
+        // Calculate UV coordinates
+        float u = length(closestPoint - a) / length(b - a); // Position along the line
+        float v = distToLine / glowDist; // Position across the thickness of the line
+
+        // Determine which side of the line p is on
+        float side = sign(dot(p - closestPoint, perpDir));
+        v = side < 0.0 ? 0.5 - v : 0.5 + v; // Adjust v based on the side
+
+        return vec2(u, v);
+    }
+
+    // Return a default or invalid UV if the point is not within the line's thickness
+    return vec2(-1.0, -1.0);
 }
 
 #define GLOW 0.55
@@ -250,23 +272,22 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                         float yPosition = 0.0; // This positions the band in the middle of the screen vertically
 
                         // Calculate the distance from the pixel to the line segment to determine if we should draw a particle
-                        float lineDist = LineSegmentDistance(pixelPos.xy, start.xy, end.xy);
+                        vec2 lineUV = LineSegmentUV(pixelPos.xy, start.xy, end.xy, 0.25 * ub.uniforms.zoomLevel);
 
-                        // Only draw particles if the pixel is close enough to the line
-                        if(lineDist <= 0.25 * ub.uniforms.zoomLevel) { // Use a fixed distance to determine "closeness"
-                            for (float i = 0.0; i < NUM_PARTICLES; i++) {
-                                // Calculate the offset along the line for each particle
-                                float t = i / NUM_PARTICLES;
-                                vec2 linePos = mix(start, end, t); // Linearly interpolate between start and end points based on t
-                                float offset = length(linePos - start) / length(end - start); // Normalize offset based on line length
-
-                                // Adjust yPosition based on the line's orientation
-                                yPosition = linePos.y;
-
-                                // Draw the particle
-                                vec3 particleColor = particles(pixelPos.xy, color, radius, offset, yPosition);
-                                iconPixel += vec4(particleColor, 1.0); // Assuming iconPixel is the accumulator for the pixel color
-                            }
+                        if(lineUV.x >= 0.0 && lineUV.x <= 1.0 && lineUV.y >= 0.0 && lineUV.y <= 1.0) {
+                            float verticalDistance = abs(lineUV.y - 0.5);
+                            
+                            // Compute brightness based on the vertical distance
+                            // Adjust the scale factor and power to control the falloff of the brightness
+                            float brightness = 4.5 - pow(verticalDistance * 4.0, 2.0);
+    
+                            // Clamp the brightness to a minimum of 0 to avoid negative values
+                            brightness = max(brightness, 0.0);
+    
+                            // Set the color based on the computed brightness
+                            vec3 color = vec3(0.2, 0.4, 1.0) * brightness;
+                            
+                            iconPixel += vec4(color, 1.0);
                         }
                     }
                     break;
@@ -279,7 +300,7 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                             normUV -= 0.5;
                             // Rotate the normUVs to match the icon.id orientation
                             //float angle = (icon.id - 35) * 45.0;
-                            float rad = 0.0;
+                            float rad = icon.objectHeading;
                             float s = sin(rad);
                             float c = cos(rad);
                             normUV = vec2(normUV.x * c - normUV.y * s, normUV.x * s + normUV.y * c);
