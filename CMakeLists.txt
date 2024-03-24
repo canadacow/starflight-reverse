@@ -14,6 +14,16 @@ endif()
 
 project(Starflight)
 
+include(FetchContent)
+
+FetchContent_Declare(
+  llama_cpp
+  GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
+  GIT_TAG        master
+)
+
+FetchContent_MakeAvailable(llama_cpp)
+
 # Find the Vulkan package
 find_package(Vulkan REQUIRED)
 
@@ -125,6 +135,7 @@ target_precompile_headers(emulatesdl PRIVATE src/emul/common.pch)
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS NOMINMAX)
 
 target_link_libraries(emulatesdl PRIVATE 
+        llama
         nuklear
         cereal::cereal
         Magnum::Magnum

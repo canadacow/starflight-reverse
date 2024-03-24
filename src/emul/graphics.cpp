@@ -3111,29 +3111,6 @@ std::vector<uint8_t> ExtractPngFromSaveFile(const std::filesystem::path& saveFil
     if (saveFile.gcount() != static_cast<std::streamsize>(archiveHeader.screenshotHeader.compressedSize)) {
         throw std::runtime_error("Failed to read compressed screenshot data.");
     }
-
-    // Get the timestamp from saveFilePath
-    auto ftime = std::filesystem::last_write_time(saveFilePath);
-    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
-    std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
-    std::ostringstream oss;
-    oss << std::put_time(std::localtime(&cftime), "%Y-%m-%d-%H-%M-%S");
-    std::string timestamp = oss.str();
-
-    // Construct the filename with the current timestamp
-    std::string filename = "st-debug-" + timestamp + ".png";
-
-    // Write the PNG data to the file
-    std::ofstream file(filename, std::ios::binary);
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file for writing PNG data.");
-    }
-    file.write(reinterpret_cast<const char*>(compressedScreenshot.data()), compressedScreenshot.size());
-    if (!file.good()) {
-        throw std::runtime_error("Failed to write PNG data to file.");
-    }
-    file.close();
-
     return compressedScreenshot;
 }
 
@@ -4318,18 +4295,8 @@ void GraphicsUpdate()
             s_gc.vc.record_and_submit_with_fence(screenshot, *s_gc.mQueue)->wait_until_signalled();
 
             auto address = readbackBuffer->map_memory(avk::mapping_access::read);
-
             serializedSnapshot.resize(0);
-
-            std::string fileName = "starflight-save-" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ".png";
             lodepng::encode(serializedSnapshot, static_cast<unsigned char*>(address.get()), WINDOW_WIDTH, WINDOW_HEIGHT, LCT_RGBA, 8);
-            std::ofstream snapshotFile(fileName, std::ios::binary);
-            if(snapshotFile.is_open()) {
-                snapshotFile.write(reinterpret_cast<const char*>(serializedSnapshot.data()), serializedSnapshot.size());
-                snapshotFile.close();
-            } else {
-                printf("Error: Unable to open file %s for writing.\n", fileName.c_str());
-            }
             
             frameSync.takeScreenshot = false;
             frameSync.screenshotSemaphore.release();
