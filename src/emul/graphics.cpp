@@ -945,6 +945,16 @@ private:
         case SDLK_KP_1:
         case SDLK_KP_3:
             return true;
+        case SDLK_SPACE:
+            if(frameSync.inCombatKey)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            break;
         default:
             return false;
         }
@@ -3102,6 +3112,28 @@ std::vector<uint8_t> ExtractPngFromSaveFile(const std::filesystem::path& saveFil
         throw std::runtime_error("Failed to read compressed screenshot data.");
     }
 
+    // Get the timestamp from saveFilePath
+    auto ftime = std::filesystem::last_write_time(saveFilePath);
+    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+    std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
+    std::ostringstream oss;
+    oss << std::put_time(std::localtime(&cftime), "%Y-%m-%d-%H-%M-%S");
+    std::string timestamp = oss.str();
+
+    // Construct the filename with the current timestamp
+    std::string filename = "st-debug-" + timestamp + ".png";
+
+    // Write the PNG data to the file
+    std::ofstream file(filename, std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file for writing PNG data.");
+    }
+    file.write(reinterpret_cast<const char*>(compressedScreenshot.data()), compressedScreenshot.size());
+    if (!file.good()) {
+        throw std::runtime_error("Failed to write PNG data to file.");
+    }
+    file.close();
+
     return compressedScreenshot;
 }
 
@@ -3188,7 +3220,7 @@ void DrawUI()
             nk_label(&ctx, "F3 - Switch between EGA (16 color) and CGA (4 color) modes.", NK_TEXT_LEFT);
 
             nk_layout_row_dynamic(&ctx, 30, 1);
-            nk_label(&ctx, "Save games are saved as they were in the original game, via pressing ESC while and saving the game. This will end that individual session and the game can then be restarted. This remake allows for an unlimited number of managed saves. They are now managed through the remake software accessible via this overlay.", NK_TEXT_CENTERED);
+            nk_label_wrap(&ctx, "Save games are saved as they were in the original game, via pressing ESC while and saving the game. This will end that individual session and the game can then be restarted. This remake allows for an unlimited number of managed saves. They are now managed through the remake software accessible via this overlay.");
 
             nk_layout_row_dynamic(&ctx, 30, 1); // This row is for spacing purposes, ensuring the button is at the very bottom.
 
@@ -4287,7 +4319,18 @@ void GraphicsUpdate()
 
             auto address = readbackBuffer->map_memory(avk::mapping_access::read);
 
+            serializedSnapshot.resize(0);
+
+            std::string fileName = "starflight-save-" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ".png";
             lodepng::encode(serializedSnapshot, static_cast<unsigned char*>(address.get()), WINDOW_WIDTH, WINDOW_HEIGHT, LCT_RGBA, 8);
+            std::ofstream snapshotFile(fileName, std::ios::binary);
+            if(snapshotFile.is_open()) {
+                snapshotFile.write(reinterpret_cast<const char*>(serializedSnapshot.data()), serializedSnapshot.size());
+                snapshotFile.close();
+            } else {
+                printf("Error: Unable to open file %s for writing.\n", fileName.c_str());
+            }
+            
             frameSync.takeScreenshot = false;
             frameSync.screenshotSemaphore.release();
         }
