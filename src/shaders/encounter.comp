@@ -258,6 +258,16 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             float distanceI = 2.0;
 
             switch(icon.id) {
+                case 250:
+                    {
+                        distanceI = 0.25 * ub.uniforms.zoomLevel;
+                        if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distanceI) {
+                            vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distanceI * 2.0);
+
+                            shipPixel += colortable[icon.clr & 0xf];
+                        }
+                    }
+                    break;
                 case 251:
                     {
                         vec2 start = iconPos.xy;

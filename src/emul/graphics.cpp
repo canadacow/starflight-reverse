@@ -1341,7 +1341,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     uint16_t orbitMask, 
     const StarMapSetup& starMap,
     const std::vector<MissileRecordUnique>& missiles,
-    std::vector<LaserRecord>& lasers)
+    std::vector<LaserRecord>& lasers,
+    std::vector<Explosion>& explosions)
 {
     auto WLD_to_SCR = [](vec2<int16_t> input) {
         vec2<int16_t> output;
@@ -1406,6 +1407,19 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
         }
 
         lasers.clear();
+
+        frameSync.explosions.erase(std::remove_if(frameSync.explosions.begin(), frameSync.explosions.end(),
+            [now](const Explosion& explo) {
+                return std::chrono::duration_cast<std::chrono::milliseconds>(now - explo.timestamp).count() > 1000;
+            }), frameSync.explosions.end());        
+
+        for (auto& explosion : explosions) {
+            Explosion ex = explosion;
+            ex.timestamp = now;
+            frameSync.explosions.push_back(ex);
+        }
+
+        explosions.clear();
 
         for (auto& m : missiles)
         {
@@ -4106,7 +4120,7 @@ void GraphicsUpdate()
                                 auto vesselIt = frameSync.combatTheatre.find(icon.iaddr);
                                 if (vesselIt != frameSync.combatTheatre.end())
                                 {
-#if 0
+#if 1
                                     {
                                         Icon dummy = icon;
                                         dummy.x = scale * dummy.x;
@@ -4209,6 +4223,32 @@ void GraphicsUpdate()
                         laserIcon.id = 251;
 
                         combatLocale.push_back(laserIcon);
+                    }
+
+                    for(const auto& explo : frameSync.explosions) {
+                        Icon expIcon;
+
+                        if(explo.targetsPlayer)
+                        {
+                            expIcon.x = shipAt.x;
+                            expIcon.y = shipAt.y;
+                        }
+                        else
+                        {
+                            expIcon.x = scale * explo.worldLocation.x;
+                            expIcon.y = scale * -explo.worldLocation.y;
+                        }
+
+                        expIcon.screenX = expIcon.x;
+                        expIcon.screenY = expIcon.y;
+
+                        expIcon.bltX = expIcon.x;
+                        expIcon.bltY = expIcon.y;
+
+                        expIcon.clr = 4;
+                        expIcon.id = 250;
+
+                        combatLocale.push_back(expIcon);
                     }
 
 #if 0

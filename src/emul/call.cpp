@@ -1183,6 +1183,7 @@ static std::vector<Icon> s_currentIconList;
 static std::vector<Icon> s_currentSolarSystem;
 static std::vector<MissileRecordUnique> s_missiles;
 static std::vector<LaserRecord> s_lasers;
+static std::vector<Explosion> s_explosions;
 static StarMapSetup s_currentStarMap;
 static uint16_t s_orbitMask;
 static vec2<int16_t> s_heading;
@@ -1365,6 +1366,32 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     //WaitForVBlank();
                 }
 
+                if(nextInstr == 0xf521) // DO-DAMAGE in DAMAGE overlay
+                {
+                    auto laserOrMissile = Peek16(0);
+                    auto playerOrAlien = Peek16(1);
+
+                    printf("DO-DAMAGE - missile %d, player %d\n", laserOrMissile, playerOrAlien);
+
+                    if(!playerOrAlien)
+                    {
+                        // Easy, just blow up the ship
+                        Explosion explosion({0, 0}, true);
+                        s_explosions.push_back(explosion);
+                    }
+                    else
+                    {
+                        if(!laserOrMissile)
+                        {
+                            // Find the missle who hit us and explode it.
+                        }
+                         else
+                        {
+                            // Find the target of the laser and explode it
+                        }
+                    }
+                }
+
                 if(nextInstr == 0xcbbf || (nextInstr == 0xf4bd && (std::string(overlayName) == "COMBAT-OV"))) // MANEUVER
                 {
                     frameSync.maneuvering = true;
@@ -1441,7 +1468,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     #if 1
                     for(int i = 0; i < 3; ++i)
                     {
-                        GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
+                        GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers, s_explosions);
                         std::this_thread::sleep_for(std::chrono::milliseconds(25));
                     }
                     #endif
@@ -1522,7 +1549,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     ForthCall(0x798c); // SET-CURRENT
 
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers, s_explosions);
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV"))
@@ -2000,16 +2027,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     ForthCall(0x798c); // SET-CURRENT
                 }
-
-#if 0
-                if(nextInstr == 0xf521) // DO-DAMAGE
-                {
-                    // Do nothing to prevent damage being taken
-                    Pop(); // Flag is missile or laser damage
-                    Pop(); // ?
-                }
-#endif
-                
+               
                 if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
@@ -2341,7 +2359,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if(nextInstr == 0xb0bd) // PARALLEL-TASKS
                 {
-                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
+                    GraphicsSetDeadReckoning(s_heading.x, s_heading.y, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers, s_explosions);
                 }
 
                 if(nextInstr == 0xcbbf || (nextInstr == 0xf4bd && (std::string(overlayName) == "COMBAT-OV"))) // MANEUVER
@@ -2349,7 +2367,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     frameSync.maneuvering = false;
                     frameSync.maneuveringEndTime = std::chrono::steady_clock::now();
                     printf("frameSync.maneuvering = false\n");
-                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers);
+                    GraphicsSetDeadReckoning(0, 0, s_currentIconList, s_currentSolarSystem, s_orbitMask, s_currentStarMap, s_missiles, s_lasers, s_explosions);
                 }
 
                 if(nextInstr == 0xf504 && (std::string(overlayName) == "GAME-OV")) // <GAMEOPTIONS 

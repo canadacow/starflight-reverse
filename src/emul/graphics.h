@@ -18,6 +18,7 @@
 #include <deque>
 #include <chrono>
 #include <sstream>
+#include <variant>
 
 #include <xxhash.h>
 
@@ -635,6 +636,16 @@ struct LaserRecord {
     }    
 };
 
+struct Explosion
+{
+    vec2<float> worldLocation;
+    bool targetsPlayer;
+
+    std::chrono::steady_clock::time_point timestamp;
+
+    std::optional<std::variant<MissileRecordUnique, LaserRecord>> cause;
+};
+
 static_assert(sizeof(MissileRecord) == 22, "MissileRecord size is not 22");
 
 struct StarMapSetup {
@@ -968,6 +979,7 @@ struct FrameSync {
 
     std::unordered_map<uint32_t, HeadingAndThrust> combatTheatre;
     std::vector<LaserRecord> lasers;
+    std::vector<Explosion> explosions;
 
     std::chrono::steady_clock::time_point uiTriggerTimestamp;
     Magnum::Animation::Track<Magnum::Float, Magnum::Float> uiTrigger{};
@@ -1040,7 +1052,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     uint16_t orbitMask, 
     const StarMapSetup& starMap,
     const std::vector<MissileRecordUnique>& missiles,
-    std::vector<LaserRecord>& lasers
+    std::vector<LaserRecord>& lasers,
+    std::vector<Explosion>& explosions
     );
 
 void GraphicsDeleteMissile(uint64_t nonce, const MissileRecord& missile);
