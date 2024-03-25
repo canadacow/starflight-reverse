@@ -2139,7 +2139,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
         avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u)
     );
 
     s_gc.compositorPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -2187,7 +2188,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
         avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u)
     );
 
     s_gc.textPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -3002,7 +3004,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                     avk::descriptor_binding(0, 2, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                     avk::descriptor_binding(0, 3, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                     avk::descriptor_binding(0, 4, s_gc.buffers[inFlightIndex].uniform->as_uniform_buffer()),
-                    avk::descriptor_binding(0, 5, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer())
+                    avk::descriptor_binding(0, 5, s_gc.buffers[inFlightIndex].iconUniform->as_uniform_buffer()),
+                    avk::descriptor_binding(0, 6, s_gc.fourDeeNoise->as_combined_image_sampler(avk::layout::shader_read_only_optimal))
                 })));
 
         res.push_back(
@@ -4247,6 +4250,9 @@ void GraphicsUpdate()
 
                         expIcon.clr = 4;
                         expIcon.id = 250;
+
+                        float secondsSinceExplosion = std::chrono::duration<float>(std::chrono::steady_clock::now() - explo.timestamp).count();
+                        expIcon.vesselHeading = secondsSinceExplosion;
 
                         combatLocale.push_back(expIcon);
                     }

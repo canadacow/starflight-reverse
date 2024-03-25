@@ -63,6 +63,8 @@ layout(binding = 5) uniform IconBlock {
     Icon icons[64];
 };
 
+layout(binding = 6) uniform sampler2D noiseTexture;
+
 #include "tables.h"
 #include "noise.h"
 #include "distance.h"
@@ -72,6 +74,7 @@ layout(binding = 5) uniform IconBlock {
 #include "sun.h"
 #include "planet.h"
 #include "engines.h"
+#include "explosion.h"
 
 vec2 LineSegmentUV(vec2 p, vec2 a, vec2 b, float glowDist) {
     vec2 ba = b - a;
@@ -264,7 +267,17 @@ vec4 DrawNavigationPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
                         if(calculateBoundingBoxDistanceIcon(iconPos, pixelPos) < distanceI) {
                             vec2 normUV = calculateNormalizedUVIcon(iconPos, pixelPos, distanceI * 2.0);
 
-                            shipPixel += colortable[icon.clr & 0xf];
+                            normUV -= 0.5;
+
+                            float explosionSize = 1.0; // Adjust size as needed
+                            float explosionSeed = 0.5; // Seed based on icon.id for variety
+                            vec3 explosionColor = vec3(0.0); // Initialize color
+
+                            float t = mod(icon.objectHeading, 2.0);
+
+                            explosion(normUV, explosionColor, t, explosionSize, explosionSeed);
+                            vec4 explosionPixel = vec4(explosionColor, 1.0);
+                            shipPixel = explosionPixel + (shipPixel * (1.0 - explosionPixel.a));
                         }
                     }
                     break;

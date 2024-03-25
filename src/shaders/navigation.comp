@@ -63,6 +63,8 @@ layout(binding = 5) uniform IconBlock {
     Icon icons[32];
 };
 
+layout(binding = 6) uniform sampler2D noiseTexture;
+
 #include "tables.h"
 #include "noise.h"
 #include "distance.h"
