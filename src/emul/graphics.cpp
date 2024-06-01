@@ -4233,6 +4233,7 @@ void GraphicsUpdate()
 
                         if(explo.targetsPlayer)
                         {
+                            // Will need to align somewhere along the spacecraft somewhere.
                             expIcon.x = shipAt.x;
                             expIcon.y = shipAt.y;
                         }

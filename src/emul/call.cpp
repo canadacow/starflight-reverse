@@ -1375,7 +1375,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     if(!playerOrAlien)
                     {
-                        // Easy, just blow up the ship
+                        // Player targetted, easy, just blow up the ship
                         Explosion explosion({0, 0}, true);
                         s_explosions.push_back(explosion);
                     }
@@ -1383,7 +1383,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     {
                         if(!laserOrMissile)
                         {
-                            // Find the missle who hit us and explode it.
+                            // Find the target of the missile and explode it
                         }
                          else
                         {
