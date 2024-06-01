@@ -1,8 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
-
-if(WIN32)
-    add_compile_options(/bigobj)
-endif()
+cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
     CACHE STRING "Vcpkg toolchain file")
@@ -24,6 +20,30 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(llama_cpp)
 
+set(DILIGENT_NO_DIRECT3D11 ON CACHE BOOL "Disable D3D11 support")
+set(DILIGENT_NO_DIRECT3D12 ON CACHE BOOL "Disable D3D12 support")
+set(DILIGENT_NO_OPENGL ON CACHE BOOL "Disable OpenGL support")
+set(DILIGENT_NO_METAL ON CACHE BOOL "Disable Metal support")
+set(DILIGENT_BUILD_SAMPLES OFF CACHE BOOL "Disable samples building")
+set(DILIGENT_MSVC_COMPILE_OPTIONS "" CACHE STRING "Remove warnings as errors")
+
+FetchContent_Declare(
+    DiligentCore
+    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentCore.git
+    SOURCE_DIR _deps/DiligentCore
+)
+FetchContent_Declare(
+    DiligentTools
+    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentTools.git
+    SOURCE_DIR _deps/DiligentTools
+)
+FetchContent_Declare(
+    DiligentFX
+    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentFX.git
+    SOURCE_DIR _deps/DiligentFX
+)
+FetchContent_MakeAvailable(DiligentCore DiligentTools DiligentFX)
+
 # Find the Vulkan package
 find_package(Vulkan REQUIRED)
 
@@ -40,7 +60,7 @@ set(SHADER_LIST
     "title.comp"
     # Add more shaders here
 )
-# Path to the Vulkan SDK's glslc shader compiler
+# Path to the Vulkan SDKs glslc shader compiler
 set(GLSL_COMPILER "$ENV{VULKAN_SDK}/bin/glslc")
 
 set(DUMMY_FILE "${CMAKE_CURRENT_BINARY_DIR}/always_rebuild")
@@ -130,11 +150,21 @@ add_executable(emulatesdl WIN32
     src/tts/speech.cpp
 )
 
+target_include_directories(emulatesdl
+PRIVATE
+    ${diligentcore_SOURCE_DIR}
+    ${diligenttools_SOURCE_DIR}
+    ${diligentfx_SOURCE_DIR}
+)
+
 target_precompile_headers(emulatesdl PRIVATE src/emul/common.pch)
 
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS NOMINMAX)
 
 target_link_libraries(emulatesdl PRIVATE 
+        Diligent-BuildSettings
+        Diligent-GraphicsEngineVk-shared
+        DiligentFX
         llama
         nuklear
         cereal::cereal
@@ -152,3 +182,5 @@ target_link_libraries(emulatesdl PRIVATE
 foreach(SHADER ${SHADER_LIST})
     add_dependencies(emulatesdl ${SHADER}_compilation)
 endforeach()
+
+copy_required_dlls(emulatesdl)
