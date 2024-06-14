@@ -26,6 +26,12 @@ public:
 	VulkanContext() = default;
 	~VulkanContext() = default;
 
+	vk::Instance vulkan_instance(VkInstance instance) 
+	{
+		mInstance = instance;
+		return mInstance;
+	}
+
 	vk::Instance vulkan_instance()
 	{
 		if (!mInstance) {
@@ -65,6 +71,12 @@ public:
 
 		return mInstance;
 	}
+
+	vk::PhysicalDevice& physical_device(VkPhysicalDevice pd)
+	{
+		mPhysicalDevice = pd;
+		return mPhysicalDevice;
+	}	
 	
 	vk::PhysicalDevice& physical_device() override
 	{
@@ -73,10 +85,33 @@ public:
 		}
 		return mPhysicalDevice;
 	}
+
 	const vk::PhysicalDevice& physical_device() const override
 	{
 		assert(mPhysicalDevice);
 		return mPhysicalDevice;
+	}
+
+	vk::Device& device(VkDevice device)
+	{
+		mDevice = device;
+
+		auto queueFamilyIndex = avk::queue::find_best_queue_family_for(physical_device(), {}, avk::queue_selection_preference::versatile_queue, {});
+		auto queues = avk::make_vector(avk::queue::prepare(this, 0, 0));
+
+		queues[0].assign_handle();
+
+		// Store the queue:
+		mQueue = std::move(queues[0]);
+
+		mMemoryAllocator = std::make_tuple(physical_device(), mDevice);
+
+		PFN_vkGetInstanceProcAddr getInstanceProcAddr = vkGetInstanceProcAddr;
+		PFN_vkGetDeviceProcAddr getDeviceProcAddr = vkGetDeviceProcAddr;
+
+		mDispatchLoaderCore = vk::DispatchLoaderDynamic(mInstance, getInstanceProcAddr, mDevice, getDeviceProcAddr);
+
+		return mDevice;
 	}
 	
 	vk::Device& device() override

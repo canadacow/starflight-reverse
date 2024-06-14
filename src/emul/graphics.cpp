@@ -50,6 +50,18 @@
     #undef PLANES
 #endif
 
+#include "Graphics/GraphicsEngineVulkan/interface/EngineFactoryVk.h"
+#include "Graphics/GraphicsEngineVulkan/interface/RenderDeviceVk.h"
+#include "Graphics/GraphicsEngine/interface/RenderDevice.h"
+#include "Graphics/GraphicsEngine/interface/DeviceContext.h"
+#include "Graphics/GraphicsEngine/interface/SwapChain.h"
+
+#include "Common/interface/RefCntAutoPtr.hpp"
+
+#include "AssetLoader/interface/GLTFLoader.hpp"
+
+using namespace Diligent;
+
 std::promise<void> initPromise;
 std::future<void> initFuture = initPromise.get_future();
 
@@ -116,6 +128,9 @@ static uint64_t s_frameAccelCount;
 
 struct GraphicsContext
 {
+    RefCntAutoPtr<IRenderDevice>  m_pDevice;
+    RefCntAutoPtr<IDeviceContext> m_pImmediateContext;
+
     VulkanContext vc;
     avk::queue* mQueue;
 
@@ -2001,15 +2016,39 @@ static int GraphicsInitThread()
     }
 
 #endif
-    
-    s_gc.vc.vulkan_instance();
-    s_gc.vc.physical_device();
-    s_gc.vc.device();
+
+    EngineVkCreateInfo EngineCI;
+    EngineCI.DeviceExtensionCount = 2;
+    const char* deviceExtensions[] = { "VK_KHR_create_renderpass2", "VK_KHR_synchronization2" };
+    EngineCI.ppDeviceExtensionNames = deviceExtensions;
+
+    // Initialize Vulkan synchronization features
+    VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {};
+    sync2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+    sync2Features.synchronization2 = VK_TRUE;
+
+    EngineCI.pDeviceExtensionFeatures = &sync2Features;
+
+    EngineCI.EnableValidation = true;
+
+    auto* pFactoryVk = GetEngineFactoryVk();
+    pFactoryVk->CreateDeviceAndContextsVk(EngineCI, &s_gc.m_pDevice, &s_gc.m_pImmediateContext);
+
+    RefCntAutoPtr<IRenderDeviceVk> pDeviceVk(s_gc.m_pDevice, IID_RenderDeviceVk);
+
+    s_gc.vc.vulkan_instance(pDeviceVk->GetVkInstance());
+    s_gc.vc.physical_device(pDeviceVk->GetVkPhysicalDevice());
+    s_gc.vc.device(pDeviceVk->GetVkDevice());
     s_gc.vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
+
+    GLTF::ModelCreateInfo ModelCI;
+    ModelCI.FileName = "C:/Users/Dean/Downloads/shipadip.glb";
+
+    auto m_Model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
 
     // Navigation window is 72 x 120 pixels.
     uint32_t navWidth = WINDOW_WIDTH; // (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
