@@ -1,36 +1,48 @@
-import matplotlib.pyplot as plt
+import bpy
+import bmesh
 import numpy as np
 from scipy.spatial import ConvexHull
 
-# Define the vertex data
-vertices = {
-    311: (0.22432997822761536, 1.6059694290161133, 0.3660812973976135),
-    219: (0.2558545768260956, 1.8316527605056763, 0.3660812973976135),
-    224: (-0.25585439801216125, 1.8316527605056763, 0.3660812973976135),
-    326: (-0.2243298441171646, 1.6059695482254028, 0.3660812973976135),
-    328: (-0.18546999990940094, 1.6204464435577393, 0.3660812973976135),
-    327: (-0.12405481189489365, 1.6366585493087769, 0.3660812973976135),
-    330: (-0.06215004622936249, 1.646411418914795, 0.3660812973976135),
-    329: (0.0, 1.649666666984558, 0.3660812973976135),
-    332: (0.06215004622936249, 1.646411418914795, 0.3660812973976135),
-    333: (0.12405481189489365, 1.6366585493087769, 0.3660812973976135),
-    331: (0.18546999990940094, 1.6204464435577393, 0.3660812973976135)
-}
+# Ensure we are in object mode
+bpy.ops.object.mode_set(mode='OBJECT')
 
-# Define the edges between vertices
-edges = [
-    (219, 311),
-    (219, 224),
-    (224, 326),
-    (326, 328),
-    (327, 328),
-    (327, 330),
-    (329, 330),
-    (329, 332),
-    (332, 333),
-    (331, 333),
-    (311, 331)
-]
+# Get the active mesh object
+obj = bpy.context.object
+
+# Ensure the object is a mesh
+if obj.type != 'MESH':
+    raise TypeError("Active object is not a mesh")
+
+# Get the mesh data
+mesh = obj.data
+
+# Ensure there is at least one polygon selected
+if not any(p.select for p in mesh.polygons):
+    raise ValueError("No polygon selected")
+
+# Find the first selected polygon
+selected_poly = next(p for p in mesh.polygons if p.select)
+
+# Enter edit mode
+bpy.ops.object.mode_set(mode='EDIT')
+
+# Create a bmesh object and load the mesh data
+bm = bmesh.from_edit_mesh(mesh)
+bm.verts.ensure_lookup_table()
+bm.edges.ensure_lookup_table()
+bm.faces.ensure_lookup_table()
+
+# Get vertices and edges from the selected face
+vertices = {v.index: obj.matrix_world @ v.co for v in bm.verts if v.select}
+edges = [(e.verts[0].index, e.verts[1].index) for e in bm.edges if e.select]
+
+print("Vertices:")
+for vid, coord in vertices.items():
+    print(f"Vertex {vid}: {coord}")
+
+print("\nEdges:")
+for edge in edges:
+    print(f"Edge: {edge}")
 
 # Compute the normal vector and plane equation
 vertex_ids = list(vertices.keys())
@@ -133,27 +145,40 @@ for edge_index, quad_edge in enumerate(quadrilateral_points):
             interpolated_uv = (1 - t) * start_uv + t * end_uv
             uv_coordinates[vid] = tuple(interpolated_uv)
 
-# Print the calculated UV coordinates
-print("Calculated UV Coordinates:")
+# Assign material "RingOne" to the face and set the vertex UVs
+material_name = "RingOne"
+material = bpy.data.materials.get(material_name)
+if material is None:
+    material = bpy.data.materials.new(name=material_name)
+
+# Ensure the material is linked to the object
+if material_name not in obj.data.materials:
+    obj.data.materials.append(material)
+
+# Get the material index
+material_index = obj.data.materials.find(material_name)
+
+# Assign the material to the selected polygon
+selected_poly.material_index = material_index
+
+# Ensure the object has a UV map, if not, create one
+if not obj.data.uv_layers:
+    obj.data.uv_layers.new()
+
+uv_layer = obj.data.uv_layers.active.data
+
+# Print out the uv_coordinates
 for vertex_id, uv in uv_coordinates.items():
     print(f"Vertex {vertex_id}: UV = {uv}")
 
-# Plotting for visualization
-fig, ax = plt.subplots()
-for vertex_id, (x, y) in projected_vertices.items():
-    ax.scatter(x, y, label=f'ID {vertex_id}')
+# Get the active UV layer
+uv_layer = bm.loops.layers.uv.active
 
-# Plot UV coordinates for visualization
-fig_uv, ax_uv = plt.subplots()
-for vertex_id, (u, v) in uv_coordinates.items():
-    ax_uv.scatter(u, v, label=f'ID {vertex_id} UV')
+# Assign UV coordinates to the vertices of the selected polygon
+for loop in bm.faces[selected_poly.index].loops:
+    uv_coord = uv_coordinates[loop.vert.index]
+    loop[uv_layer].uv = uv_coord
 
-ax_uv.set_xlabel('U Coordinate')
-ax_uv.set_ylabel('V Coordinate')
-ax_uv.legend()
-plt.show()
-    
-ax.set_xlabel('X Coordinate')
-ax.set_ylabel('Y Coordinate')
-ax.legend()
-plt.show()
+# Update the mesh
+bmesh.update_edit_mesh(mesh)
+bpy.ops.object.mode_set(mode='OBJECT')
