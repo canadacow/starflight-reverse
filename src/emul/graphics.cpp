@@ -52,15 +52,69 @@
 
 #include "Graphics/GraphicsEngineVulkan/interface/EngineFactoryVk.h"
 #include "Graphics/GraphicsEngineVulkan/interface/RenderDeviceVk.h"
+#include "Graphics/GraphicsEngineVulkan/include/VulkanTypeConversions.hpp"
 #include "Graphics/GraphicsEngine/interface/RenderDevice.h"
 #include "Graphics/GraphicsEngine/interface/DeviceContext.h"
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
+#include "Graphics/GraphicsTools/interface/ShaderSourceFactoryUtils.hpp"
+#include "Utilities/interface/DiligentFXShaderSourceStreamFactory.hpp"
+#include "BasicMath.hpp"
+#include "CommonlyUsedStates.h"
+
+namespace Diligent
+{
+
+namespace HLSL
+{
+
+#include "Shaders/Common/public/BasicStructures.fxh"
+#include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "Shaders/PBR/private/RenderPBR_Structures.fxh"
+#include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
+#include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
+
+} // namespace HLSL
+
+} // namespace Diligent
 
 #include "Common/interface/RefCntAutoPtr.hpp"
 
 #include "AssetLoader/interface/GLTFLoader.hpp"
 
+#include "GLTF_PBR_Renderer.hpp"
+#include "BasicMath.hpp"
+#include "GBuffer.hpp"
+
 using namespace Diligent;
+
+enum GBUFFER_RT : Uint32
+{
+    GBUFFER_RT_RADIANCE,
+    GBUFFER_RT_NORMAL,
+    GBUFFER_RT_BASE_COLOR,
+    GBUFFER_RT_MATERIAL_DATA,
+    GBUFFER_RT_MOTION_VECTORS,
+    GBUFFER_RT_SPECULAR_IBL,
+    GBUFFER_RT_DEPTH0,
+    GBUFFER_RT_DEPTH1,
+    GBUFFER_RT_COUNT,
+    GBUFFER_RT_NUM_COLOR_TARGETS = GBUFFER_RT_SPECULAR_IBL + 1,
+};
+
+enum GBUFFER_RT_FLAG : Uint32
+{
+    GBUFFER_RT_FLAG_COLOR = 1u << GBUFFER_RT_RADIANCE,
+    GBUFFER_RT_FLAG_NORMAL = 1u << GBUFFER_RT_NORMAL,
+    GBUFFER_RT_FLAG_BASE_COLOR = 1u << GBUFFER_RT_BASE_COLOR,
+    GBUFFER_RT_FLAG_MATERIAL_DATA = 1u << GBUFFER_RT_MATERIAL_DATA,
+    GBUFFER_RT_FLAG_MOTION_VECTORS = 1u << GBUFFER_RT_MOTION_VECTORS,
+    GBUFFER_RT_FLAG_SPECULAR_IBL = 1u << GBUFFER_RT_SPECULAR_IBL,
+    GBUFFER_RT_FLAG_LAST_COLOR_TARGET = GBUFFER_RT_FLAG_SPECULAR_IBL,
+    GBUFFER_RT_FLAG_ALL_COLOR_TARGETS = (GBUFFER_RT_FLAG_LAST_COLOR_TARGET << 1u) - 1u,
+    GBUFFER_RT_FLAG_DEPTH0 = 1u << GBUFFER_RT_DEPTH0,
+    GBUFFER_RT_FLAG_DEPTH1 = 1u << GBUFFER_RT_DEPTH1
+};
+DEFINE_FLAG_ENUM_OPERATORS(GBUFFER_RT_FLAG);
 
 std::promise<void> initPromise;
 std::future<void> initFuture = initPromise.get_future();
@@ -125,6 +179,100 @@ static vec2<int16_t> s_pastWorld = {};
 static std::chrono::time_point<std::chrono::steady_clock> s_deadReckoningSet;
 
 static uint64_t s_frameAccelCount;
+
+struct ApplyPosteffects
+{
+    RefCntAutoPtr<IPipelineState>         pPSO;
+    RefCntAutoPtr<IShaderResourceBinding> pSRB;
+
+    IShaderResourceVariable* ptex2DRadianceVar         = nullptr;
+    IShaderResourceVariable* ptex2DNormalVar           = nullptr;
+    IShaderResourceVariable* ptex2DSSR                 = nullptr;
+    IShaderResourceVariable* ptex2DPecularIBL          = nullptr;
+    IShaderResourceVariable* ptex2DBaseColorVar        = nullptr;
+    IShaderResourceVariable* ptex2DMaterialDataVar     = nullptr;
+    IShaderResourceVariable* ptex2DPreintegratedGGXVar = nullptr;
+
+    void Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVFormat, IBuffer* pFrameAttribsCB);
+    operator bool() const { return pPSO != nullptr; }
+};
+
+RefCntAutoPtr<IShaderSourceInputStreamFactory> SFCreateCompoundShaderSourceFactory(IRenderDevice* pDevice)
+{
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+    pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("shaders", &pShaderSourceFactory);
+    return CreateCompoundShaderSourceFactory({ &DiligentFXShaderSourceStreamFactory::GetInstance(), pShaderSourceFactory });
+}
+
+void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVFormat, IBuffer* pFrameAttribsCB)
+{
+    ShaderCreateInfo ShaderCI;
+    ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+
+    auto pCompoundSourceFactory         = SFCreateCompoundShaderSourceFactory(pDevice);
+    ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
+
+    ShaderMacroHelper Macros;
+    Macros.Add("CONVERT_OUTPUT_TO_SRGB", RTVFormat == TEX_FORMAT_RGBA8_UNORM || RTVFormat == TEX_FORMAT_BGRA8_UNORM);
+    Macros.Add("TONE_MAPPING_MODE", TONE_MAPPING_MODE_UNCHARTED2);
+    ShaderCI.Macros = Macros;
+
+    RefCntAutoPtr<IShader> pVS;
+    {
+        ShaderCI.Desc       = {"Full Screen Triangle VS", SHADER_TYPE_VERTEX, true};
+        ShaderCI.EntryPoint = "FullScreenTriangleVS";
+        ShaderCI.FilePath   = "FullScreenTriangleVS.fx";
+
+        pDevice->CreateShader(ShaderCI, &pVS);
+        VERIFY_EXPR(pVS);
+    }
+
+    RefCntAutoPtr<IShader> pPS;
+    {
+        ShaderCI.Desc       = {"Apply Post Effects PS", SHADER_TYPE_PIXEL, true};
+        ShaderCI.EntryPoint = "main";
+        ShaderCI.FilePath   = "ApplyPostEffects.psh";
+
+        pDevice->CreateShader(ShaderCI, &pPS);
+        VERIFY_EXPR(pPS);
+    }
+
+    PipelineResourceLayoutDescX ResourceLauout;
+    ResourceLauout
+        .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_tex2DPreintegratedGGX", Sam_LinearClamp);
+
+    GraphicsPipelineStateCreateInfoX PsoCI{"Apply Post Effects"};
+    PsoCI
+        .AddRenderTarget(RTVFormat)
+        .AddShader(pVS)
+        .AddShader(pPS)
+        .SetDepthStencilDesc(DSS_DisableDepth)
+        .SetRasterizerDesc(RS_SolidFillNoCull)
+        .SetResourceLayout(ResourceLauout)
+        .SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+    pDevice->CreatePipelineState(PsoCI, &pPSO);
+    VERIFY_EXPR(pPSO);
+    pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "cbFrameAttribs")->Set(pFrameAttribsCB);
+
+    pPSO->CreateShaderResourceBinding(&pSRB, true);
+
+    auto GetVariable = [&](const char* Name) {
+        IShaderResourceVariable* pVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, Name);
+        VERIFY_EXPR(pVar != nullptr);
+        return pVar;
+    };
+    ptex2DRadianceVar         = GetVariable("g_tex2DRadiance");
+    ptex2DNormalVar           = GetVariable("g_tex2DNormal");
+    ptex2DSSR                 = GetVariable("g_tex2DSSR");
+    ptex2DPecularIBL          = GetVariable("g_tex2DSpecularIBL");
+    ptex2DBaseColorVar        = GetVariable("g_tex2DBaseColor");
+    ptex2DMaterialDataVar     = GetVariable("g_tex2DMaterialData");
+    ptex2DPreintegratedGGXVar = GetVariable("g_tex2DPreintegratedGGX");
+}
+
 
 struct GraphicsContext
 {
@@ -193,6 +341,13 @@ struct GraphicsContext
 
     bool shouldInitPlanets = false;
     std::binary_semaphore planetsDone{0};
+
+    std::unique_ptr<GLTF::Model> station;
+
+    std::unique_ptr<GLTF_PBR_Renderer> pbrRenderer;
+    std::unique_ptr<GBuffer> gBuffer;
+    GLTF_PBR_Renderer::RenderInfo renderParams;
+    ApplyPosteffects applyPostFX;
 };
 
 static GraphicsContext s_gc{};
@@ -1873,6 +2028,61 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
     s_gc.planetsDone.acquire();
 }
 
+static void InitPBRRenderer()
+{
+    GBuffer::ElementDesc GBufferElems[GBUFFER_RT_COUNT];
+    GBufferElems[GBUFFER_RT_RADIANCE]       = {TEX_FORMAT_RGBA16_FLOAT};
+    GBufferElems[GBUFFER_RT_NORMAL]         = {TEX_FORMAT_RGBA16_FLOAT};
+    GBufferElems[GBUFFER_RT_BASE_COLOR]     = {TEX_FORMAT_RGBA8_UNORM};
+    GBufferElems[GBUFFER_RT_MATERIAL_DATA]  = {TEX_FORMAT_RG8_UNORM};
+    GBufferElems[GBUFFER_RT_MOTION_VECTORS] = {TEX_FORMAT_RG16_FLOAT};
+    GBufferElems[GBUFFER_RT_SPECULAR_IBL]   = {TEX_FORMAT_RGBA16_FLOAT};
+    GBufferElems[GBUFFER_RT_DEPTH0]         = {TEX_FORMAT_D32_FLOAT};
+    GBufferElems[GBUFFER_RT_DEPTH1]         = {TEX_FORMAT_D32_FLOAT};
+    static_assert(GBUFFER_RT_COUNT == 8, "Not all G-buffer elements are initialized");
+
+    s_gc.gBuffer = std::make_unique<GBuffer>(GBufferElems, _countof(GBufferElems));
+
+    GLTF_PBR_Renderer::CreateInfo RendererCI;
+
+    RendererCI.EnableClearCoat = true;
+    RendererCI.EnableSheen = true;
+    RendererCI.EnableIridescence = true;
+    RendererCI.EnableTransmission = true;
+    RendererCI.EnableAnisotropy = true;
+    RendererCI.FrontCounterClockwise = true;
+
+    s_gc.renderParams = {};
+
+    s_gc.renderParams.Flags =
+        GLTF_PBR_Renderer::PSO_FLAG_DEFAULT |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_CLEAR_COAT |
+        GLTF_PBR_Renderer::PSO_FLAG_ALL_TEXTURES |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_SHEEN |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_ANISOTROPY |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_IRIDESCENCE |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TRANSMISSION |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_VOLUME |
+        GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM;
+
+    RendererCI.NumRenderTargets = 1;
+    RendererCI.RTVFormats[0] = VkFormatToTexFormat((VkFormat)s_gc.vc.swap_chain_image_format());
+    RendererCI.DSVFormat = VkFormatToTexFormat(VK_FORMAT_D32_SFLOAT);
+
+    if (RendererCI.RTVFormats[0] == TEX_FORMAT_RGBA8_UNORM || RendererCI.RTVFormats[0] == TEX_FORMAT_BGRA8_UNORM)
+        s_gc.renderParams.Flags |= GLTF_PBR_Renderer::PSO_FLAG_CONVERT_OUTPUT_TO_SRGB;
+
+    s_gc.renderParams.Flags &= ~GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING;
+    s_gc.renderParams.Flags |= GLTF_PBR_Renderer::PSO_FLAG_COMPUTE_MOTION_VECTORS;
+
+    RendererCI.NumRenderTargets = GBUFFER_RT_NUM_COLOR_TARGETS;
+    for (Uint32 i = 0; i < RendererCI.NumRenderTargets; ++i)
+        RendererCI.RTVFormats[i] = s_gc.gBuffer->GetElementDesc(i).Format;
+    RendererCI.DSVFormat = s_gc.gBuffer->GetElementDesc(GBUFFER_RT_DEPTH0).Format;
+
+    s_gc.pbrRenderer = std::make_unique<GLTF_PBR_Renderer>(s_gc.m_pDevice, nullptr, s_gc.m_pImmediateContext, RendererCI);
+}
+
 static int GraphicsInitThread()
 {
     if(false)
@@ -2046,9 +2256,11 @@ static int GraphicsInitThread()
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/shipadip.glb";
+    ModelCI.FileName = "C:/Users/Dean/Downloads/station20.glb";
 
-    auto m_Model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+    s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+
+    InitPBRRenderer();
 
     // Navigation window is 72 x 120 pixels.
     uint32_t navWidth = WINDOW_WIDTH; // (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
