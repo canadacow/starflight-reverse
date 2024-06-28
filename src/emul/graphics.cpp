@@ -60,6 +60,8 @@
 #include "Utilities/interface/DiligentFXShaderSourceStreamFactory.hpp"
 #include "BasicMath.hpp"
 #include "CommonlyUsedStates.h"
+#include "PostFXContext.hpp"
+#include "ScreenSpaceReflection.hpp"
 
 namespace Diligent
 {
@@ -348,6 +350,9 @@ struct GraphicsContext
     std::unique_ptr<GBuffer> gBuffer;
     GLTF_PBR_Renderer::RenderInfo renderParams;
     ApplyPosteffects applyPostFX;
+    RefCntAutoPtr<IBuffer> frameAttribsCB;
+    std::unique_ptr<PostFXContext> postFXContext;
+    std::unique_ptr<ScreenSpaceReflection> ssr;
 };
 
 static GraphicsContext s_gc{};
@@ -2081,6 +2086,8 @@ static void InitPBRRenderer()
     RendererCI.DSVFormat = s_gc.gBuffer->GetElementDesc(GBUFFER_RT_DEPTH0).Format;
 
     s_gc.pbrRenderer = std::make_unique<GLTF_PBR_Renderer>(s_gc.m_pDevice, nullptr, s_gc.m_pImmediateContext, RendererCI);
+
+    CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetPRBFrameAttribsSize(), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
 }
 
 static int GraphicsInitThread()
@@ -3691,6 +3698,32 @@ static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, flo
     return calculateHeadingAndThrust({deadReckoningX, deadReckoningY}, currentHeading, currentThrust);
 }
 
+bool RenderModel()
+{
+    ITextureView*        pRTV   = nullptr; // m_pSwapChain->GetCurrentBackBufferRTV();
+    ITextureView*        pDSV   = nullptr; // m_pSwapChain->GetDepthBufferDSV();
+
+    if(!s_gc.applyPostFX)
+    {
+        s_gc.applyPostFX.Initialize(s_gc.m_pDevice, VkFormatToTexFormat((VkFormat)s_gc.vc.swap_chain_image_format()), s_gc.frameAttribsCB);
+    }
+
+    PostFXContext::FrameDesc FrameDesc;
+    FrameDesc.Index  = s_gc.vc.current_frame();
+    FrameDesc.Width  = WINDOW_WIDTH;
+    FrameDesc.Height = WINDOW_HEIGHT;
+    s_gc.postFXContext->PrepareResources(s_gc.m_pDevice, FrameDesc, PostFXContext::FEATURE_FLAG_NONE);
+
+    s_gc.ssr->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), ScreenSpaceReflection::FEATURE_FLAG_NONE);
+
+    s_gc.gBuffer->Resize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((s_gc.vc.current_frame() & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
+    s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
+
+    return true;
+}
+
 void GraphicsUpdate()
 {
     if (graphicsMode != toSetGraphicsMode)
@@ -3702,6 +3735,11 @@ void GraphicsUpdate()
         std::fill(rotoscopePixels.begin(), rotoscopePixels.end(), ClearPixel);
 
         modeChangeComplete.release();
+    }
+
+    if(RenderModel())
+    {
+        return;
     }
 
     if(s_shouldToggleMenu)
