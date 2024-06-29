@@ -345,6 +345,11 @@ struct GraphicsContext
     std::binary_semaphore planetsDone{0};
 
     std::unique_ptr<GLTF::Model> station;
+    GLTF_PBR_Renderer::ModelResourceBindings stationBindings;
+    BoundBox stationAABB;
+    std::array<GLTF::ModelTransforms, 2> stationTransforms; // [0] - current frame, [1] - previous frame
+    float4x4                             stationModelTransform;
+    float                                stationScale = 1.f;
 
     std::unique_ptr<GLTF_PBR_Renderer> pbrRenderer;
     std::unique_ptr<GBuffer> gBuffer;
@@ -2094,6 +2099,8 @@ static void InitPBRRenderer()
 
     s_gc.postFXContext = std::make_unique<PostFXContext>(s_gc.m_pDevice);
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice);
+
+    s_gc.stationBindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station, s_gc.frameAttribsCB);
 }
 
 static int GraphicsInitThread()
@@ -3704,6 +3711,29 @@ static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, flo
     return calculateHeadingAndThrust({deadReckoningX, deadReckoningY}, currentHeading, currentThrust);
 }
 
+void UpdateStation()
+{
+    s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
+    s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
+
+    // Center and scale model
+    float  MaxDim = 0;
+    float3 ModelDim{ s_gc.stationAABB.Max - s_gc.stationAABB.Min };
+    MaxDim = std::max(MaxDim, ModelDim.x);
+    MaxDim = std::max(MaxDim, ModelDim.y);
+    MaxDim = std::max(MaxDim, ModelDim.z);
+
+    s_gc.stationScale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
+    auto     Translate = -s_gc.stationAABB.Min - 0.5f * ModelDim;
+    float4x4 InvYAxis = float4x4::Identity();
+    InvYAxis._22 = -1;
+
+    s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
+    s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform);
+    s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
+    s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
+}
+
 bool RenderModel()
 {
     ITextureView*        pRTV   = nullptr; // m_pSwapChain->GetCurrentBackBufferRTV();
@@ -3726,6 +3756,10 @@ bool RenderModel()
 
     Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((s_gc.vc.current_frame() & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
     s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
+
+    s_gc.pbrRenderer->Begin(s_gc.m_pImmediateContext);
+
+    s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[0], &s_gc.stationTransforms[1], s_gc.renderParams, &s_gc.stationBindings);
 
     return true;
 }
