@@ -2048,7 +2048,7 @@ static void InitPBRRenderer()
 
     s_gc.gBuffer = std::make_unique<GBuffer>(GBufferElems, _countof(GBufferElems));
 
-    GLTF_PBR_Renderer::CreateInfo RendererCI;
+    GLTF_PBR_Renderer::CreateInfo RendererCI{};
 
     RendererCI.EnableClearCoat = true;
     RendererCI.EnableSheen = true;
@@ -2056,6 +2056,9 @@ static void InitPBRRenderer()
     RendererCI.EnableTransmission = true;
     RendererCI.EnableAnisotropy = true;
     RendererCI.FrontCounterClockwise = true;
+
+    RendererCI.SheenAlbedoScalingLUTPath    = "sheen_albedo_scaling.jpg";
+    RendererCI.PreintegratedCharlieBRDFPath = "charlie_preintegrated.jpg";
 
     s_gc.renderParams = {};
 
@@ -2088,6 +2091,9 @@ static void InitPBRRenderer()
     s_gc.pbrRenderer = std::make_unique<GLTF_PBR_Renderer>(s_gc.m_pDevice, nullptr, s_gc.m_pImmediateContext, RendererCI);
 
     CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetPRBFrameAttribsSize(), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
+
+    s_gc.postFXContext = std::make_unique<PostFXContext>(s_gc.m_pDevice);
+    s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice);
 }
 
 static int GraphicsInitThread()
