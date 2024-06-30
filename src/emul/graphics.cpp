@@ -62,6 +62,7 @@
 #include "CommonlyUsedStates.h"
 #include "PostFXContext.hpp"
 #include "ScreenSpaceReflection.hpp"
+#include "MapHelper.hpp"
 
 namespace Diligent
 {
@@ -2101,6 +2102,11 @@ static void InitPBRRenderer()
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice);
 
     s_gc.stationBindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station, s_gc.frameAttribsCB);
+
+    StateTransitionDesc Barriers[] = {
+        {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+    };
+    s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 }
 
 static int GraphicsInitThread()
@@ -3734,7 +3740,7 @@ void UpdateStation()
     s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
 }
 
-bool RenderModel()
+bool RenderStation()
 {
     ITextureView*        pRTV   = nullptr; // m_pSwapChain->GetCurrentBackBufferRTV();
     ITextureView*        pDSV   = nullptr; // m_pSwapChain->GetDepthBufferDSV();
@@ -3757,9 +3763,30 @@ bool RenderModel()
     Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((s_gc.vc.current_frame() & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
     s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
 
+    const auto& CurrTransforms = s_gc.stationTransforms[s_gc.vc.current_frame() & 0x01];
+    const auto& PrevTransforms = s_gc.stationTransforms[(s_gc.vc.current_frame() + 1) & 0x01];
+
+    MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+
+    auto RenderModel = [&](GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
+        const auto OrigAlphaModes = s_gc.renderParams.AlphaModes;
+
+        s_gc.renderParams.AlphaModes &= AlphaModes;
+        if (s_gc.renderParams.AlphaModes != GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_NONE)
+        {
+            s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *s_gc.station, CurrTransforms, &PrevTransforms, s_gc.renderParams, &s_gc.stationBindings);
+        }
+
+        s_gc.renderParams.AlphaModes = OrigAlphaModes;
+    };
+
+    s_gc.renderParams.AlphaModes = GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_ALL;
+
     s_gc.pbrRenderer->Begin(s_gc.m_pImmediateContext);
 
-    s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[0], &s_gc.stationTransforms[1], s_gc.renderParams, &s_gc.stationBindings);
+    RenderModel(GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_OPAQUE | GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_MASK);
+
+    RenderModel(GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
 
     return true;
 }
@@ -3777,8 +3804,10 @@ void GraphicsUpdate()
         modeChangeComplete.release();
     }
 
-    if(RenderModel())
+    if(true)
     {
+        UpdateStation();
+        RenderStation();
         return;
     }
 
