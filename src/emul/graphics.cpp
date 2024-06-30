@@ -3870,6 +3870,8 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
 
+    s_gc.m_pImmediateContext->Flush();
+
     return true;
 }
 
@@ -4800,6 +4802,8 @@ void GraphicsUpdate()
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
     .submit();
+
+    s_gc.m_pImmediateContext->FinishFrame();
 
     s_gc.vc.render_frame();
 
