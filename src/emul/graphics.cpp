@@ -63,6 +63,8 @@
 #include "PostFXContext.hpp"
 #include "ScreenSpaceReflection.hpp"
 #include "MapHelper.hpp"
+#include "TextureUtilities.h"
+#include "TextureLoader.h"
 
 namespace Diligent
 {
@@ -298,6 +300,9 @@ struct GraphicsContext
         avk::image_sampler starmap;
         avk::image_sampler ui;
         avk::image_sampler gameOutput;
+
+        avk::image_sampler diligentColorBuffer;
+        avk::image         diligentDepthBuffer;
     };
     
     std::vector<BufferData> buffers;
@@ -351,6 +356,7 @@ struct GraphicsContext
     std::array<GLTF::ModelTransforms, 2> stationTransforms; // [0] - current frame, [1] - previous frame
     float4x4                             stationModelTransform;
     float                                stationScale = 1.f;
+    ITextureView* stationEnv;
 
     std::unique_ptr<GLTF_PBR_Renderer> pbrRenderer;
     std::unique_ptr<GBuffer> gBuffer;
@@ -2039,6 +2045,22 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
     s_gc.planetsDone.acquire();
 }
 
+static void LoadEnvironmentMap(const char* Path)
+{
+    RefCntAutoPtr<ITexture> pEnvironmentMap;
+    CreateTextureFromFile(Path, TextureLoadInfo{"Environment map"}, s_gc.m_pDevice, &pEnvironmentMap);
+    VERIFY_EXPR(pEnvironmentMap);
+
+    s_gc.pbrRenderer->PrecomputeCubemaps(s_gc.m_pImmediateContext, pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+
+    StateTransitionDesc Barriers[] = {
+        {pEnvironmentMap, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE},
+    };
+    s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
+
+    s_gc.stationEnv = pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+}
+
 static void InitPBRRenderer()
 {
     GBuffer::ElementDesc GBufferElems[GBUFFER_RT_COUNT];
@@ -2107,6 +2129,8 @@ static void InitPBRRenderer()
         {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
+
+    LoadEnvironmentMap("papermill.ktx");
 }
 
 static int GraphicsInitThread()
@@ -2255,13 +2279,18 @@ static int GraphicsInitThread()
 
     EngineVkCreateInfo EngineCI;
     EngineCI.DeviceExtensionCount = 2;
-    const char* deviceExtensions[] = { "VK_KHR_create_renderpass2", "VK_KHR_synchronization2" };
+    const char* deviceExtensions[] = { "VK_KHR_create_renderpass2", "VK_KHR_synchronization2", "VK_KHR_maintenance4"};
     EngineCI.ppDeviceExtensionNames = deviceExtensions;
 
     // Initialize Vulkan synchronization features
     VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {};
     sync2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
     sync2Features.synchronization2 = VK_TRUE;
+
+    VkPhysicalDeviceMaintenance4FeaturesKHR maintenance4Features = {};
+    maintenance4Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR;
+    maintenance4Features.maintenance4 = VK_TRUE;
+    sync2Features.pNext = &maintenance4Features;
 
     EngineCI.pDeviceExtensionFeatures = &sync2Features;
 
@@ -2364,6 +2393,15 @@ static int GraphicsInitThread()
                 avk::memory_usage::host_coherent,
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
                 avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<700>)));
+
+        bd.diligentColorBuffer = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+        );
+
+        bd.diligentDepthBuffer = s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eD32Sfloat, 1, avk::memory_usage::device, avk::image_usage::general_depth_stencil_attachment);
 
         s_gc.vc.record_and_submit_with_fence({
             avk::sync::image_memory_barrier(bd.gameOutput->get_image(),
@@ -3788,6 +3826,22 @@ bool RenderStation()
 
     RenderModel(GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
 
+    s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    // Clear the back buffer
+    const float ClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+    s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
+    s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    s_gc.applyPostFX.ptex2DNormalVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    s_gc.applyPostFX.ptex2DSSR->Set(s_gc.ssr->GetSSRRadianceSRV());
+    s_gc.applyPostFX.ptex2DPecularIBL->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_SPECULAR_IBL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    s_gc.applyPostFX.ptex2DBaseColorVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_BASE_COLOR)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    s_gc.applyPostFX.ptex2DMaterialDataVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MATERIAL_DATA)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    s_gc.applyPostFX.ptex2DPreintegratedGGXVar->Set(s_gc.pbrRenderer->GetPreintegratedGGX_SRV());
+    s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
+
     return true;
 }
 
@@ -3808,7 +3862,6 @@ void GraphicsUpdate()
     {
         UpdateStation();
         RenderStation();
-        return;
     }
 
     if(s_shouldToggleMenu)
