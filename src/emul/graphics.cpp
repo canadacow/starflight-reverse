@@ -301,8 +301,11 @@ struct GraphicsContext
         avk::image_sampler ui;
         avk::image_sampler gameOutput;
 
-        avk::image_sampler diligentColorBuffer;
-        avk::image         diligentDepthBuffer;
+        avk::image_sampler avkdColorBuffer;
+        avk::image         avkdDepthBuffer;
+
+        ITextureView* diligentColorBuffer;
+        ITextureView* diligentDepthBuffer;
     };
     
     std::vector<BufferData> buffers;
@@ -2394,14 +2397,39 @@ static int GraphicsInitThread()
                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
                 avk::uniform_buffer_meta::create_from_size(sizeof(IconUniform<700>)));
 
-        bd.diligentColorBuffer = s_gc.vc.create_image_sampler(
+        bd.avkdColorBuffer = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
-                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image)
+                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_color_attachment)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
         );
 
-        bd.diligentDepthBuffer = s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eD32Sfloat, 1, avk::memory_usage::device, avk::image_usage::general_depth_stencil_attachment);
+        TextureDesc cbDesc{};
+        cbDesc.Type = RESOURCE_DIM_TEX_2D;
+        cbDesc.Width = WINDOW_WIDTH;
+        cbDesc.Height = WINDOW_HEIGHT;
+        cbDesc.Format = TEX_FORMAT_BGRA8_UNORM;
+        cbDesc.MipLevels = 1;
+        cbDesc.SampleCount = 1;
+        cbDesc.Usage = USAGE_DEFAULT;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
+        ITexture* dcb{};
+        pDeviceVk->CreateTextureFromVulkanImage(bd.avkdColorBuffer.get().get_image().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dcb);
+        bd.diligentColorBuffer = dcb->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+
+        bd.avkdDepthBuffer = s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eD32Sfloat, 1, avk::memory_usage::device, avk::image_usage::general_depth_stencil_attachment);
+        cbDesc = {};
+        cbDesc.Type = RESOURCE_DIM_TEX_2D;
+        cbDesc.Width = WINDOW_WIDTH;
+        cbDesc.Height = WINDOW_HEIGHT;
+        cbDesc.Format = TEX_FORMAT_D32_FLOAT;
+        cbDesc.MipLevels = 1;
+        cbDesc.SampleCount = 1;
+        cbDesc.Usage = USAGE_DEFAULT;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
+        ITexture* dd{};
+        pDeviceVk->CreateTextureFromVulkanImage(bd.avkdDepthBuffer.get().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dd);
+        bd.diligentDepthBuffer = dd->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
 
         s_gc.vc.record_and_submit_with_fence({
             avk::sync::image_memory_barrier(bd.gameOutput->get_image(),
@@ -3755,7 +3783,7 @@ static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, flo
     return calculateHeadingAndThrust({deadReckoningX, deadReckoningY}, currentHeading, currentThrust);
 }
 
-void UpdateStation()
+void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 {
     s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
     s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
@@ -3778,10 +3806,10 @@ void UpdateStation()
     s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
 }
 
-bool RenderStation()
+bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
-    ITextureView*        pRTV   = nullptr; // m_pSwapChain->GetCurrentBackBufferRTV();
-    ITextureView*        pDSV   = nullptr; // m_pSwapChain->GetDepthBufferDSV();
+    ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
+    //ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
 
     if(!s_gc.applyPostFX)
     {
@@ -3856,12 +3884,6 @@ void GraphicsUpdate()
         std::fill(rotoscopePixels.begin(), rotoscopePixels.end(), ClearPixel);
 
         modeChangeComplete.release();
-    }
-
-    if(true)
-    {
-        UpdateStation();
-        RenderStation();
     }
 
     if(s_shouldToggleMenu)
@@ -4290,6 +4312,12 @@ void GraphicsUpdate()
     const int framesPerGameFrame = GetFramesPerGameFrame();
     
     float interpolationFactor = (float)ftr.renderCount / (float)framesPerGameFrame;
+
+    if (true)
+    {
+        UpdateStation(inFlightIndex);
+        RenderStation(inFlightIndex);
+    }
 
     if (hasNavigation)
     {
