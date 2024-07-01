@@ -2317,7 +2317,7 @@ static int GraphicsInitThread()
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/station23.glb";
+    ModelCI.FileName = "C:/Users/Dean/Downloads/station24.glb";
 
     s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
 
@@ -3895,6 +3895,25 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 }
 
+struct ShaderParams
+{
+    float OcclusionStrength = 1;
+    float EmissionScale = 1;
+    float IBLScale = 1;
+    float AverageLogLum = 0.3f;
+    float MiddleGray = 0.18f;
+    float WhitePoint = 3.f;
+
+    float4 HighlightColor = float4{ 0, 0, 0, 0 };
+    float4 WireframeColor = float4{ 0.8f, 0.7f, 0.5f, 1.0f };
+
+    float SSRScale = 1;
+    float SSAOScale = 1;
+    int   PostFXDebugMode = 0;
+};
+
+static ShaderParams m_ShaderAttribs;
+
 bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
@@ -3927,6 +3946,40 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     FrameAttribs->Camera = CurrCamAttribs;
     FrameAttribs->PrevCamera = PrevCamAttribs;
+
+    int LightCount = 0;
+    auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
+    if (!s_gc.stationLights.empty())
+    {
+        LightCount = std::min(static_cast<Uint32>(s_gc.stationLights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
+        for (int i = 0; i < LightCount; ++i)
+        {
+            const auto& LightNode = *s_gc.stationLights[i];
+            const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.stationModelTransform;
+
+            // The light direction is along the negative Z axis of the light's local space.
+            // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
+            float3 Direction = -normalize(float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 });
+            float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
+
+            GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ LightNode.pLight, &Position, &Direction, s_gc.stationScale }, Lights + i);
+        }
+    }
+
+    auto& Renderer = FrameAttribs->Renderer;
+    s_gc.pbrRenderer->SetInternalShaderParameters(Renderer);
+
+    Renderer.OcclusionStrength = m_ShaderAttribs.OcclusionStrength;
+    Renderer.EmissionScale = m_ShaderAttribs.EmissionScale;
+    Renderer.AverageLogLum = m_ShaderAttribs.AverageLogLum;
+    Renderer.MiddleGray = m_ShaderAttribs.MiddleGray;
+    Renderer.WhitePoint = m_ShaderAttribs.WhitePoint;
+    Renderer.IBLScale = float4{ m_ShaderAttribs.IBLScale };
+    Renderer.HighlightColor = m_ShaderAttribs.HighlightColor;
+    Renderer.UnshadedColor = m_ShaderAttribs.WireframeColor;
+    Renderer.PointSize = 1;
+    Renderer.MipBias = 0;
+    Renderer.LightCount = LightCount;
 
     auto RenderModel = [&](GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
         const auto OrigAlphaModes = s_gc.renderParams.AlphaModes;
