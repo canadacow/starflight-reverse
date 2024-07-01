@@ -360,6 +360,9 @@ struct GraphicsContext
     float4x4                             stationModelTransform;
     float                                stationScale = 1.f;
     ITextureView* stationEnv;
+    const GLTF::Node* stationCamera;
+    std::vector<const GLTF::Node*> stationLights;
+    std::unique_ptr<HLSL::CameraAttribs[]> stationCameraAttribs;
 
     std::unique_ptr<GLTF_PBR_Renderer> pbrRenderer;
     std::unique_ptr<GBuffer> gBuffer;
@@ -2314,9 +2317,25 @@ static int GraphicsInitThread()
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/station20.glb";
+    ModelCI.FileName = "C:/Users/Dean/Downloads/station23.glb";
 
     s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+
+    s_gc.stationCameraAttribs = std::make_unique<HLSL::CameraAttribs[]>(2);
+
+    for (const auto* node : s_gc.station->Scenes[0].LinearNodes)
+    {
+        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+        {
+            s_gc.stationCamera = node;
+        }
+            
+        if (node->pLight != nullptr)
+        {
+            s_gc.stationLights.push_back(node);
+        }
+    }
+
 
     InitPBRRenderer();
 
@@ -3783,6 +3802,26 @@ static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, flo
     return calculateHeadingAndThrust({deadReckoningX, deadReckoningY}, currentHeading, currentThrust);
 }
 
+static float4x4 GetAdjustedProjectionMatrix(float FOV, float NearPlane, float FarPlane)
+{
+    float AspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+    float XScale, YScale;
+
+    YScale = 1.f / std::tan(FOV / 2.f);
+    XScale = YScale / AspectRatio;
+
+    float4x4 Proj;
+    Proj._11 = XScale;
+    Proj._22 = YScale;
+    Proj.SetNearFarClipPlanes(NearPlane, FarPlane, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+    return Proj;
+}
+
+static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
+{
+    return float4x4::Identity();
+}
+
 void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 {
     s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
@@ -3804,6 +3843,56 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform);
     s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
     s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
+
+    float YFov = PI_F / 4.0f;
+    float ZNear = 0.1f;
+    float ZFar = 100.f;
+
+    float4x4 CameraView;
+
+    const auto* pCameraNode = s_gc.stationCamera;
+    const auto* pCamera = pCameraNode->pCamera;
+    const auto& CameraGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
+
+    // GLTF camera is defined such that the local +X axis is to the right,
+    // the lens looks towards the local -Z axis, and the top of the camera
+    // is aligned with the local +Y axis.
+    // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#cameras
+    // We need to inverse the Z axis as our camera looks towards +Z.
+    float4x4 InvZAxis = float4x4::Identity();
+    InvZAxis._33 = -1;
+
+    CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
+    YFov = pCamera->Perspective.YFov;
+    ZNear = pCamera->Perspective.ZNear;
+    ZFar = pCamera->Perspective.ZFar;
+
+    s_gc.renderParams.ModelTransform = float4x4::Identity();
+
+    // Apply pretransform matrix that rotates the scene according the surface orientation
+    CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
+
+    float4x4 CameraWorld = CameraView.Inverse();
+
+    // Get projection matrix adjusted to the current screen orientation
+    const auto CameraProj = GetAdjustedProjectionMatrix(YFov, ZNear, ZFar);
+    const auto CameraViewProj = CameraView * CameraProj;
+
+    float3 CameraWorldPos = float3::MakeVector(CameraWorld[3]);
+
+    auto& CurrCamAttribs = s_gc.stationCameraAttribs[inFlightIndex & 0x01];
+
+    CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
+    CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
+    CurrCamAttribs.mViewT = CameraView.Transpose();
+    CurrCamAttribs.mProjT = CameraProj.Transpose();
+    CurrCamAttribs.mViewProjT = CameraViewProj.Transpose();
+    CurrCamAttribs.mViewInvT = CameraView.Inverse().Transpose();
+    CurrCamAttribs.mProjInvT = CameraProj.Inverse().Transpose();
+    CurrCamAttribs.mViewProjInvT = CameraViewProj.Inverse().Transpose();
+    CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
+
+    s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 }
 
 bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
@@ -3829,10 +3918,15 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((s_gc.vc.current_frame() & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
     s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
 
-    const auto& CurrTransforms = s_gc.stationTransforms[s_gc.vc.current_frame() & 0x01];
-    const auto& PrevTransforms = s_gc.stationTransforms[(s_gc.vc.current_frame() + 1) & 0x01];
+    const auto& CurrCamAttribs = s_gc.stationCameraAttribs[inFlightIndex & 0x01];
+    const auto& PrevCamAttribs = s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01];
+    const auto& CurrTransforms = s_gc.stationTransforms[inFlightIndex & 0x01];
+    const auto& PrevTransforms = s_gc.stationTransforms[(inFlightIndex + 1) & 0x01];
 
     MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+
+    FrameAttribs->Camera = CurrCamAttribs;
+    FrameAttribs->PrevCamera = PrevCamAttribs;
 
     auto RenderModel = [&](GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
         const auto OrigAlphaModes = s_gc.renderParams.AlphaModes;
