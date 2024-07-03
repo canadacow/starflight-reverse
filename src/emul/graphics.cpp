@@ -2418,7 +2418,7 @@ static int GraphicsInitThread()
 
         bd.avkdColorBuffer = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
-                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_color_attachment)
+                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Srgb, 1, avk::memory_usage::device, avk::image_usage::general_color_attachment)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
         );
@@ -2427,7 +2427,7 @@ static int GraphicsInitThread()
         cbDesc.Type = RESOURCE_DIM_TEX_2D;
         cbDesc.Width = WINDOW_WIDTH;
         cbDesc.Height = WINDOW_HEIGHT;
-        cbDesc.Format = TEX_FORMAT_BGRA8_UNORM;
+        cbDesc.Format = TEX_FORMAT_RGBA8_UNORM_SRGB;
         cbDesc.MipLevels = 1;
         cbDesc.SampleCount = 1;
         cbDesc.Usage = USAGE_DEFAULT;
@@ -3395,6 +3395,10 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
         avk::command::bind_pipeline(s_gc.rotoscopePipeline.as_reference()));
 
     res.push_back(
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::color_attachment_optimal, avk::layout::shader_read_only_optimal }));
+
+    res.push_back(
         avk::command::bind_descriptors(s_gc.rotoscopePipeline->layout(), s_gc.descriptorCache->get_or_create_descriptor_sets({
                 avk::descriptor_binding(0, 0, outputImage->get_image_view()->as_storage_image(avk::layout::general)),
                 avk::descriptor_binding(0, 1, s_gc.buffers[inFlightIndex].rotoscope->as_storage_buffer()),
@@ -3403,7 +3407,8 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
                 avk::descriptor_binding(0, 4, s_gc.FONT3->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 5, s_gc.LOGO1->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 6, s_gc.LOGO2->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
-                avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                //avk::descriptor_binding(0, 7, s_gc.PORTPIC->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
+                avk::descriptor_binding(0, 7, s_gc.buffers[inFlightIndex].avkdColorBuffer->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 8, s_gc.RACEDOSATLAS->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 9, s_gc.shipImage->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
                 avk::descriptor_binding(0, 10, s_gc.planetAlbedoImages->as_combined_image_sampler(avk::layout::shader_read_only_optimal)),
@@ -3419,6 +3424,10 @@ std::vector<avk::recorded_commands_t> GPURotoscope(VulkanContext::frame_id_t inF
 
     res.push_back(
         avk::command::dispatch((WINDOW_WIDTH + 3) / 4u, (WINDOW_HEIGHT + 3) / 4u, 1));
+
+    res.push_back(
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::shader_read_only_optimal, avk::layout::color_attachment_optimal }));
 
     res.push_back(
         avk::sync::image_memory_barrier(outputImage->get_image(),
@@ -3921,7 +3930,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     if(!s_gc.applyPostFX)
     {
-        s_gc.applyPostFX.Initialize(s_gc.m_pDevice, VkFormatToTexFormat((VkFormat)s_gc.vc.swap_chain_image_format()), s_gc.frameAttribsCB);
+        s_gc.applyPostFX.Initialize(s_gc.m_pDevice, VkFormatToTexFormat(VK_FORMAT_R8G8B8A8_SRGB), s_gc.frameAttribsCB);
     }
 
     PostFXContext::FrameDesc FrameDesc;
@@ -3947,9 +3956,18 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     FrameAttribs->Camera = CurrCamAttribs;
     FrameAttribs->PrevCamera = PrevCamAttribs;
 
+    GLTF::Light m_DefaultLight{};
+    m_DefaultLight.Type = GLTF::Light::TYPE::DIRECTIONAL;
+    m_DefaultLight.Intensity = 3.0f;
+    m_DefaultLight.Color = float3{ 1, 1, 1 };
+
+    float3      m_LightDirection{};
+    m_LightDirection = normalize(float3(0.5f, 0.6f, -0.2f));
+
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
-    if (!s_gc.stationLights.empty())
+    //if (!s_gc.stationLights.empty())
+    if(false)
     {
         LightCount = std::min(static_cast<Uint32>(s_gc.stationLights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
         for (int i = 0; i < LightCount; ++i)
@@ -3957,13 +3975,21 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             const auto& LightNode = *s_gc.stationLights[i];
             const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.stationModelTransform;
 
+            GLTF::Light l = *LightNode.pLight;
+            l.Intensity = 0.001f;
+
             // The light direction is along the negative Z axis of the light's local space.
             // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
             float3 Direction = -normalize(float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 });
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
 
-            GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ LightNode.pLight, &Position, &Direction, s_gc.stationScale }, Lights + i);
+            GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
         }
+    }
+    else
+    {
+        GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, s_gc.stationScale }, Lights);
+        LightCount = 1;
     }
 
     auto& Renderer = FrameAttribs->Renderer;
