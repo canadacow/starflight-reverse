@@ -2615,6 +2615,17 @@ float4x4 InversePerspective(float aspectRatio, float yFov, float zNear, float zF
     return result;
 }
 
+void TranslateMan(float3 manPoint)
+{
+    static const std::array<std::string, 2> targetNodeNames = {"Body", "Head"};
+    auto& nodes = s_gc.station->Nodes;
+    for (auto& node : nodes) {
+        if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
+            node.Translation = -manPoint;
+        }
+    }
+}
+
 void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
 {
     // Assuming s_gc.stationCamera is properly initialized and points to a valid camera object
@@ -2637,17 +2648,21 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     viewSpacePos /= viewSpacePos.w;
 
     // Compute the inverse of the view matrix to get to world space
+    // Apply camera rotation to the view matrix
     float4x4 invView = s_gc.stationModelTransform.Inverse();
 
     // Transform to world space
     float4 worldSpacePos = invView * viewSpacePos;
+
+    // Apply camera rotation to the camera translation
+    float3 rotatedTranslation = s_gc.stationCamera->Rotation.RotateVector(s_gc.stationCamera->Translation);
 
     // Define the plane normal (pointing along z-axis as the plane is flat on z)
     float3 planeNormal = float3(0.0f, 0.0f, 1.0f);
     float planeD = 0.0f; // Plane is at z = 0
 
     // Calculate intersection of ray from camera to worldSpacePos with the plane
-    float3 rayOrigin = s_gc.stationCamera->Translation;
+    float3 rayOrigin = rotatedTranslation;
     float3 rayDirection = normalize(float3(worldSpacePos.x, worldSpacePos.y, worldSpacePos.z) - rayOrigin);
     float denom = dot(planeNormal, rayDirection);
 
@@ -2655,7 +2670,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
         float t = -dot(planeNormal, rayOrigin) / denom;
         if (t >= 0) { // Check if the intersection is in front of the camera
             float3 intersectionPoint = rayOrigin + t * rayDirection;
-            // Use intersectionPoint for further processing
+            TranslateMan(intersectionPoint);
         }
     }
 }
