@@ -1740,6 +1740,7 @@ RotoscopeShader& RotoscopeShader::operator=(const Rotoscope& other) {
         case NavigationalPixel:
         case AuxSysPixel:
         case StarMapPixel:
+        case SpaceManPixel:
             break;
         case TextPixel:
             textData = other.textData;
@@ -2317,7 +2318,7 @@ static int GraphicsInitThread()
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/station24.glb";
+    ModelCI.FileName = "C:/Users/Dean/Downloads/station25.glb";
 
     s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
 
@@ -2601,6 +2602,64 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     return 0;
 }
 
+float4x4 InversePerspective(float aspectRatio, float yFov, float zNear, float zFar)
+{
+    float tanHalfFovy = tan(yFov / 2.0f);
+    float4x4 result = float4x4(0.0f);
+    result[0][0] = aspectRatio * tanHalfFovy;
+    result[1][1] = tanHalfFovy;
+    result[2][2] = 0.0f;
+    result[2][3] = -1.0f;
+    result[3][2] = (zFar + zNear) / (zFar - zNear);
+    result[3][3] = -(2.0f * zFar * zNear) / (zFar - zNear);
+    return result;
+}
+
+void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
+{
+    // Assuming s_gc.stationCamera is properly initialized and points to a valid camera object
+    const auto& camera = *s_gc.stationCamera->pCamera;
+
+    // Convert screen space coordinates to normalized device coordinates (NDC)
+    float ndcX = (2.0f * x / GRAPHICS_MODE_WIDTH) - 1.0f;
+    float ndcY = 1.0f - (2.0f * y / GRAPHICS_MODE_HEIGHT);
+
+    // Assuming the camera uses a perspective projection
+    float4 clipSpacePos = float4(ndcX, ndcY, 1.0f, 1.0f); // z = 1 for forward direction, w = 1 for perspective division
+
+    // Manually compute the inverse of the perspective projection matrix
+    float4x4 invProj = InversePerspective(camera.Perspective.AspectRatio, camera.Perspective.YFov, camera.Perspective.ZNear, camera.Perspective.ZFar);
+
+    // Transform to view space
+    float4 viewSpacePos = invProj * clipSpacePos;
+
+    // Perspective divide
+    viewSpacePos /= viewSpacePos.w;
+
+    // Compute the inverse of the view matrix to get to world space
+    float4x4 invView = s_gc.stationModelTransform.Inverse();
+
+    // Transform to world space
+    float4 worldSpacePos = invView * viewSpacePos;
+
+    // Define the plane normal (pointing along z-axis as the plane is flat on z)
+    float3 planeNormal = float3(0.0f, 0.0f, 1.0f);
+    float planeD = 0.0f; // Plane is at z = 0
+
+    // Calculate intersection of ray from camera to worldSpacePos with the plane
+    float3 rayOrigin = s_gc.stationCamera->Translation;
+    float3 rayDirection = normalize(float3(worldSpacePos.x, worldSpacePos.y, worldSpacePos.z) - rayOrigin);
+    float denom = dot(planeNormal, rayDirection);
+
+    if (fabs(denom) > 1e-6) { // Ensure the denominator is not too small
+        float t = -dot(planeNormal, rayOrigin) / denom;
+        if (t >= 0) { // Check if the intersection is in front of the camera
+            float3 intersectionPoint = rayOrigin + t * rayDirection;
+            // Use intersectionPoint for further processing
+        }
+    }
+}
+
 void GraphicsSplash(uint16_t seg, uint16_t fileNum)
 {
     s_gc.epoch = std::chrono::steady_clock::now();
@@ -2630,6 +2689,8 @@ std::binary_semaphore& GraphicsInit()
 
     graphicsThread = std::jthread([] {
         GraphicsInitThread();
+
+        StartEmulationThread("");
 
         while (!stopSemaphore.try_acquire()) {
             constexpr std::chrono::nanoseconds scanout_duration = std::chrono::nanoseconds(13340000); // 80% of 1/60th of a second
@@ -5463,7 +5524,6 @@ void GraphicsBLT(int16_t x1, int16_t y1, int16_t h, int16_t w, const char* image
         {
             int x0 = x;
             int y0 = y;
-
 
             Rotoscope srcPc{};
             bool hasPixel = false;

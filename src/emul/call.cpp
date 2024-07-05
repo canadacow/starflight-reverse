@@ -3620,7 +3620,17 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     rs.picData.picID = 0x8001;
                 }
-                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg<<4) + bltoffs], color, xormode, bufseg, rs);
+
+                if (std::string(overlayName) == "PORTMENU-OV")
+                {
+                    if (w == 12 && h == 9)
+                    {
+                        GraphicsMoveSpaceMan(x0 + 6, (200 - y0) - 5);
+                    }
+                    rs.content = SpaceManPixel;
+                }
+
+                GraphicsBLT(x0, y0, w, h, (char*)&m[(bltseg << 4) + bltoffs], color, xormode, bufseg, rs);
             }
             //exit(1);
         break;

@@ -469,6 +469,7 @@ enum PixelContents
     RunBitPixel,
     AuxSysPixel,
     StarMapPixel,
+    SpaceManPixel,
 };
 
 enum IconType
@@ -836,7 +837,7 @@ struct Rotoscope
 
     Rotoscope(PixelContents pixel)
     {
-        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == RunBitPixel || pixel == AuxSysPixel || pixel == StarMapPixel);
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == RunBitPixel || pixel == AuxSysPixel || pixel == StarMapPixel || pixel == SpaceManPixel);
         content = pixel;
         EGAcolor = 0;
         argb = 0;
@@ -852,17 +853,21 @@ struct Rotoscope
     {
         if (this != &other) // protect against invalid self-assignment
         {
-            content = other.content;
             EGAcolor = other.EGAcolor;
             argb = other.argb;
-            blt_x = other.blt_x;
-            blt_y = other.blt_y;
-            blt_w = other.blt_w;
-            blt_h = other.blt_h;
             bgColor = other.bgColor;
             fgColor = other.fgColor;
 
-            switch(content)
+            if(other.content != SpaceManPixel)
+            {
+                content = other.content;
+                blt_x = other.blt_x;
+                blt_y = other.blt_y;
+                blt_w = other.blt_w;
+                blt_h = other.blt_h;
+            }
+
+            switch(other.content)
             {
                 case ClearPixel:
                 case EllipsePixel:
@@ -872,6 +877,7 @@ struct Rotoscope
                 case TilePixel:
                 case AuxSysPixel:
                 case StarMapPixel:
+                case SpaceManPixel:
                     break;
                 case NavigationalPixel:
                     navigationData = other.navigationData;
@@ -900,7 +906,7 @@ struct Rotoscope
     }
 
     Rotoscope& operator=(const PixelContents& pixel) {
-        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == AuxSysPixel || pixel == StarMapPixel);
+        assert(pixel == ClearPixel || pixel == PlotPixel || pixel == PolyFillPixel || pixel == TilePixel || pixel == EllipsePixel || pixel == AuxSysPixel || pixel == StarMapPixel || pixel == SpaceManPixel);
         content = pixel;
         EGAcolor = 0;
         argb = 0;
@@ -1057,6 +1063,7 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
     );
 
 void GraphicsDeleteMissile(uint64_t nonce, const MissileRecord& missile);
+void GraphicsMoveSpaceMan(uint16_t x, uint16_t y);
 
 void GraphicsReportGameFrame();
 void GraphicsSetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);
