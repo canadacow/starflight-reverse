@@ -3625,7 +3625,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                 {
                     if (w == 12 && h == 9)
                     {
-                        GraphicsMoveSpaceMan(x0 + 6, (200 - y0) - 5);
+                        GraphicsMoveSpaceMan(x0 + 6, (200 - y0) + 9);
                     }
                     rs.content = SpaceManPixel;
                 }

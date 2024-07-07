@@ -2602,67 +2602,73 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     return 0;
 }
 
-float4x4 InversePerspective(float aspectRatio, float yFov, float zNear, float zFar)
-{
-    float tanHalfFovy = tan(yFov / 2.0f);
-    float4x4 result = float4x4(0.0f);
-    result[0][0] = aspectRatio * tanHalfFovy;
-    result[1][1] = tanHalfFovy;
-    result[2][2] = 0.0f;
-    result[2][3] = -1.0f;
-    result[3][2] = (zFar + zNear) / (zFar - zNear);
-    result[3][3] = -(2.0f * zFar * zNear) / (zFar - zNear);
-    return result;
-}
-
 void TranslateMan(float3 manPoint)
 {
-    static const std::array<std::string, 2> targetNodeNames = {"Body", "Head"};
+    static const std::vector<std::string> targetNodeNames = 
+        {"Body", 
+        "Head", 
+        "Cube.003",
+        "Cube.005",
+        "Cube.007",
+        "Cube.008",
+        "Cube.012",
+        "Cylinder",
+        "Cylinder.001",
+        "Cylinder.002",
+        "Glass",
+        "Hands",
+        "Hands.001",
+        "Legs",
+        "Torus",
+        "Bag"};
+
     auto& nodes = s_gc.station->Nodes;
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
-            node.Translation = -manPoint;
+
+            if (node.Name == "Hands")
+            {
+                node.Translation = manPoint + float3(-0.016881f, 0.066771f, 0.0f);
+            }
+            else
+            {
+                node.Translation = manPoint;
+            }
         }
     }
 }
 
 void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
 {
-    // Assuming s_gc.stationCamera is properly initialized and points to a valid camera object
-    const auto& camera = *s_gc.stationCamera->pCamera;
+    // Retrieve the current camera attributes
+    auto& camAttribs = s_gc.stationCameraAttribs[0]; // Assuming index 0 for simplicity, adjust as necessary
+
+    float3 cameraPosition = float3(camAttribs.f4Position.x, camAttribs.f4Position.y, camAttribs.f4Position.z);
+    float distanceToOrigin = length(cameraPosition);
 
     // Convert screen space coordinates to normalized device coordinates (NDC)
     float ndcX = (2.0f * x / GRAPHICS_MODE_WIDTH) - 1.0f;
     float ndcY = 1.0f - (2.0f * y / GRAPHICS_MODE_HEIGHT);
 
-    // Assuming the camera uses a perspective projection
-    float4 clipSpacePos = float4(ndcX, ndcY, 1.0f, 1.0f); // z = 1 for forward direction, w = 1 for perspective division
+    // Create clip space position
+    float4 clipSpacePos = float4(ndcX, ndcY, 1.0, 1.0f); // z = 1 for forward direction, w = 1 for perspective division
 
-    // Manually compute the inverse of the perspective projection matrix
-    float4x4 invProj = InversePerspective(camera.Perspective.AspectRatio, camera.Perspective.YFov, camera.Perspective.ZNear, camera.Perspective.ZFar);
-
-    // Transform to view space
-    float4 viewSpacePos = invProj * clipSpacePos;
+    // Transform clip space position to world space using the precomputed inverse view-projection matrix
+    float4 worldSpacePos = clipSpacePos * camAttribs.mViewProjInvT.Transpose() * s_gc.stationModelTransform.Inverse();
 
     // Perspective divide
-    viewSpacePos /= viewSpacePos.w;
+    worldSpacePos /= worldSpacePos.w;
 
-    // Compute the inverse of the view matrix to get to world space
-    // Apply camera rotation to the view matrix
-    float4x4 invView = s_gc.stationModelTransform.Inverse();
-
-    // Transform to world space
-    float4 worldSpacePos = invView * viewSpacePos;
-
-    // Apply camera rotation to the camera translation
-    float3 rotatedTranslation = s_gc.stationCamera->Rotation.RotateVector(s_gc.stationCamera->Translation);
-
-    // Define the plane normal (pointing along z-axis as the plane is flat on z)
-    float3 planeNormal = float3(0.0f, 0.0f, 1.0f);
+    // Define the plane in world space where the spaceman moves (e.g., ground plane)
+    float3 planeNormal = float3(0.0f, 1.0f, 0.045f); // Adjusted plane normal to be tilted
     float planeD = 0.0f; // Plane is at z = 0
 
+    float4 worldCam = camAttribs.f4Position * s_gc.stationModelTransform.Inverse();
+
+    worldCam /= worldCam.w;
+
     // Calculate intersection of ray from camera to worldSpacePos with the plane
-    float3 rayOrigin = rotatedTranslation;
+    float3 rayOrigin = float3(worldCam.x, worldCam.y, worldCam.z);
     float3 rayDirection = normalize(float3(worldSpacePos.x, worldSpacePos.y, worldSpacePos.z) - rayOrigin);
     float denom = dot(planeNormal, rayDirection);
 
@@ -2670,6 +2676,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
         float t = -dot(planeNormal, rayOrigin) / denom;
         if (t >= 0) { // Check if the intersection is in front of the camera
             float3 intersectionPoint = rayOrigin + t * rayDirection;
+
             TranslateMan(intersectionPoint);
         }
     }
