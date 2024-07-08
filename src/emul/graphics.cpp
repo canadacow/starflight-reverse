@@ -2618,10 +2618,24 @@ void TranslateMan(float3 manPoint)
 
         angle -= PI / 2; // Subtract 90 degrees (converted to radians)
         // Create a quaternion representing rotation around the z-axis
-        QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 1.f, 0.f }, angle);
+        QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 0.f, 1.f }, angle);
 
         // Compute the moving average of the spaceman's heading
         s_gc.spaceManCurrentHeading = slerp(s_gc.spaceManCurrentHeading, newHeading, 0.33f); // Adjust the blend factor as needed
+    }
+
+    {
+        float a = 0.38f;
+        float b = (0.25f + 0.21f) / 2.0f;
+        float centerX = 0.0f;
+        float centerY = -0.02f; // Adjusted for asymmetry in original y bounds
+
+        float dX = (manPoint.x - centerX);
+        float dY = (manPoint.y - centerY) * (a / b);
+
+        if (dX * dX + dY * dY <= (a * a)) {
+            manPoint.z += 0.027f;
+        }
     }
 
     s_gc.spaceManLocation = manPoint;
@@ -2640,7 +2654,8 @@ void TranslateMan(float3 manPoint)
         "Glass",
         "Hands",
         "Hands.001",
-        "Legs",
+        "LeftLeg",
+        "RightLeg",
         "Torus",
         "Bag"};
 
@@ -2660,15 +2675,7 @@ void TranslateMan(float3 manPoint)
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
 
-            if (node.Name == "Hands")
-            {
-                node.Translation = manPoint + float3(-0.016881f, 0.0, 0.066771f);
-            }
-            else
-            {
-                node.Translation = manPoint;
-            }
-
+            node.Translation = manPoint;
             node.Rotation = initialRotations[node.Name] * s_gc.spaceManCurrentHeading;
         }
     }
@@ -4077,16 +4084,16 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     GLTF::Light m_DefaultLight{};
     m_DefaultLight.Type = GLTF::Light::TYPE::DIRECTIONAL;
-    m_DefaultLight.Intensity = 3.0f;
+    m_DefaultLight.Intensity = 9.0f;
     m_DefaultLight.Color = float3{ 1, 1, 1 };
 
     float3      m_LightDirection{};
-    m_LightDirection = normalize(float3(0.5f, 0.6f, -0.2f));
+    m_LightDirection = normalize(float3(0.05f, 1.0f, -2.5f));
 
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
     //if (!s_gc.stationLights.empty())
-    if(false)
+    if (false)
     {
         LightCount = std::min(static_cast<Uint32>(s_gc.stationLights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
         for (int i = 0; i < LightCount; ++i)
@@ -4095,7 +4102,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.stationModelTransform;
 
             GLTF::Light l = *LightNode.pLight;
-            l.Intensity = 0.001f;
+            //l.Intensity = 0.001f;
 
             // The light direction is along the negative Z axis of the light's local space.
             // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
@@ -4104,6 +4111,8 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
         }
+
+        LightCount = 0;
     }
     else
     {
@@ -4119,7 +4128,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     Renderer.AverageLogLum = m_ShaderAttribs.AverageLogLum;
     Renderer.MiddleGray = m_ShaderAttribs.MiddleGray;
     Renderer.WhitePoint = m_ShaderAttribs.WhitePoint;
-    Renderer.IBLScale = float4{ m_ShaderAttribs.IBLScale };
+    Renderer.IBLScale = float4{ 0.01f /* m_ShaderAttribs.IBLScale */};
     Renderer.HighlightColor = m_ShaderAttribs.HighlightColor;
     Renderer.UnshadedColor = m_ShaderAttribs.WireframeColor;
     Renderer.PointSize = 1;
