@@ -371,6 +371,10 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<ScreenSpaceReflection> ssr;
+
+    float3 spaceManLocation;
+    QuaternionF spaceManCurrentHeading;
+
 };
 
 static GraphicsContext s_gc{};
@@ -2604,6 +2608,24 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
 void TranslateMan(float3 manPoint)
 {
+    float3 direction = manPoint - s_gc.spaceManLocation;
+    float magnitude = length(direction);
+    if (magnitude > 0.0f) {
+        direction /= magnitude; // Normalize the direction vector
+
+        // Compute the angle of the direction vector
+        float angle = atan2(direction.y, direction.x);
+
+        angle -= PI / 2; // Subtract 90 degrees (converted to radians)
+        // Create a quaternion representing rotation around the z-axis
+        QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 1.f, 0.f }, angle);
+
+        // Compute the moving average of the spaceman's heading
+        s_gc.spaceManCurrentHeading = slerp(s_gc.spaceManCurrentHeading, newHeading, 0.33f); // Adjust the blend factor as needed
+    }
+
+    s_gc.spaceManLocation = manPoint;
+
     static const std::vector<std::string> targetNodeNames = 
         {"Body", 
         "Head", 
@@ -2622,18 +2644,32 @@ void TranslateMan(float3 manPoint)
         "Torus",
         "Bag"};
 
+    static std::once_flag initFlag;
+    static std::unordered_map<std::string, QuaternionF> initialRotations;
+
+    std::call_once(initFlag, [&]() {
+        auto& nodes = s_gc.station->Nodes;
+        for (auto& node : nodes) {
+            if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
+                initialRotations[node.Name] = node.Rotation;
+            }
+        }
+    });
+
     auto& nodes = s_gc.station->Nodes;
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
 
             if (node.Name == "Hands")
             {
-                node.Translation = manPoint + float3(-0.016881f, 0.066771f, 0.0f);
+                node.Translation = manPoint + float3(-0.016881f, 0.0, 0.066771f);
             }
             else
             {
                 node.Translation = manPoint;
             }
+
+            node.Rotation = initialRotations[node.Name] * s_gc.spaceManCurrentHeading;
         }
     }
 }
@@ -2660,7 +2696,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     worldSpacePos /= worldSpacePos.w;
 
     // Define the plane in world space where the spaceman moves (e.g., ground plane)
-    float3 planeNormal = float3(0.0f, 1.0f, 0.045f); // Adjusted plane normal to be tilted
+    float3 planeNormal = float3(0.0f, -0.05f, 1.00f); // Adjusted plane normal to be tilted
     float planeD = 0.0f; // Plane is at z = 0
 
     float4 worldCam = camAttribs.f4Position * s_gc.stationModelTransform.Inverse();
