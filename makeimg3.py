@@ -12,6 +12,11 @@ def bezier_curve(points, num=200):
         curve += term * points[i]
     return curve
 
+def scale_shape(points, scale):
+    """ Scale the shape by moving points towards the centroid. """
+    centroid = np.mean(points, axis=0)
+    return (points - centroid) * scale + centroid
+
 # Define the coordinates for the doors
 doors = np.array([
     [-0.594366, 0.465715],  # Door One
@@ -39,13 +44,14 @@ for i in range(len(doors) - 1):
     control_points = np.array([p1, control_point, p2])
     bezier = bezier_curve(control_points, num=100)
     all_beziers.append(bezier)
-    plt.plot(bezier[:, 0], bezier[:, 1], color='#0000AA')  # EGA blue for the curves
 
-# Collect all bezier endpoints to form the complete shape
+# Draw a line around the complete shape
 complete_shape = np.vstack([bezier[:, :] for bezier in all_beziers])
+plt.plot(complete_shape[:, 0], complete_shape[:, 1], color='#0000AA')  # EGA blue for the line
 
-# Fill the complete shape
-plt.fill(complete_shape[:, 0], complete_shape[:, 1], color='#0000AA')  # EGA blue for the filled curves
+# Create a scaled-down version of the shape
+scaled_shape = scale_shape(complete_shape, 0.90)
+plt.fill(scaled_shape[:, 0], scaled_shape[:, 1], color='#0000AA')  # Fill the scaled shape with solid blue
 
 plt.xlim(-1, 1)
 plt.ylim(-1, 1)
