@@ -13,18 +13,20 @@ def bezier_curve(points, num=200):
     return curve
 
 def scale_shape(points, scale):
-    """ Scale the shape by moving points towards the centroid. """
+    """ Scale the shape by moving points towards or away from the centroid along the line connecting each point to the centroid. """
     centroid = np.mean(points, axis=0)
-    return (points - centroid) * scale + centroid
+    directions = points - centroid  # Vector from centroid to each point
+    scaled_points = centroid + directions * scale  # Scale along the direction vector
+    return scaled_points
 
 # Define the coordinates for the doors
 doors = np.array([
-    [-0.594366, 0.465715],  # Door One
-    [0.0, 0.66054],         # Door Two
-    [0.59437, 0.50572],     # Door Three
-    [0.85678, -0.21302],    # Door Four
-    [0.0, -0.75936],        # Door Five
-    [-0.85441, -0.22189]    # Door Six
+    [-0.54, 0.40],  # Door One
+    [0.0, 0.59],         # Door Two
+    [0.54, 0.40],     # Door Three
+    [0.82, -0.21302],    # Door Four
+    [0.0, -0.73],        # Door Five
+    [-0.82, -0.22189]    # Door Six
 ])
 
 # Close the loop by repeating the first point at the end
@@ -40,7 +42,7 @@ for i in range(len(doors) - 1):
     # Generate control points for more dramatic curves
     mid_point = (p1 + p2) / 2
     direction = np.array([p2[1] - p1[1], p1[0] - p2[0]])  # Perpendicular to the line segment
-    control_point = mid_point + 0.3 * direction / np.linalg.norm(direction)  # Increase the control point distance
+    control_point = mid_point + 0.45 * direction / np.linalg.norm(direction)  # Increase the control point distance
     control_points = np.array([p1, control_point, p2])
     bezier = bezier_curve(control_points, num=100)
     all_beziers.append(bezier)
@@ -50,7 +52,7 @@ complete_shape = np.vstack([bezier[:, :] for bezier in all_beziers])
 plt.plot(complete_shape[:, 0], complete_shape[:, 1], color='#0000AA')  # EGA blue for the line
 
 # Create a scaled-down version of the shape
-scaled_shape = scale_shape(complete_shape, 0.90)
+scaled_shape = scale_shape(complete_shape, 0.85)
 plt.fill(scaled_shape[:, 0], scaled_shape[:, 1], color='#0000AA')  # Fill the scaled shape with solid blue
 
 plt.xlim(-1, 1)
