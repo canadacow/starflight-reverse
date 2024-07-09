@@ -13,20 +13,20 @@ def bezier_curve(points, num=200):
     return curve
 
 def scale_shape(points, scale):
-    """ Scale the shape by moving points towards or away from the centroid along the line connecting each point to the centroid. """
-    centroid = np.mean(points, axis=0)
-    directions = points - centroid  # Vector from centroid to each point
+    """ Scale the shape by moving points towards or away from the fixed centroid along the line connecting each point to the centroid. """
+    centroid = np.array([0, -0.08])  # Fixed centroid at (0, -0.08)
+    directions = points - centroid  # Vector from fixed centroid to each point
     scaled_points = centroid + directions * scale  # Scale along the direction vector
     return scaled_points
 
 # Define the coordinates for the doors
 doors = np.array([
-    [-0.54, 0.40],  # Door One
+    [-0.57, 0.40],  # Door One
     [0.0, 0.59],         # Door Two
-    [0.54, 0.40],     # Door Three
-    [0.82, -0.21302],    # Door Four
+    [0.56, 0.40],     # Door Three
+    [0.81, -0.22],    # Door Four
     [0.0, -0.73],        # Door Five
-    [-0.82, -0.22189]    # Door Six
+    [-0.81, -0.22]    # Door Six
 ])
 
 # Close the loop by repeating the first point at the end
