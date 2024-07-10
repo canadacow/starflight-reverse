@@ -65,6 +65,7 @@
 #include "MapHelper.hpp"
 #include "TextureUtilities.h"
 #include "TextureLoader.h"
+#include "EnvMapRenderer.hpp"
 
 namespace Diligent
 {
@@ -359,7 +360,7 @@ struct GraphicsContext
     std::array<GLTF::ModelTransforms, 2> stationTransforms; // [0] - current frame, [1] - previous frame
     float4x4                             stationModelTransform;
     float                                stationScale = 1.f;
-    ITextureView* stationEnv;
+    RefCntAutoPtr<ITextureView> stationEnv;
     const GLTF::Node* stationCamera;
     std::vector<const GLTF::Node*> stationLights;
     std::unique_ptr<HLSL::CameraAttribs[]> stationCameraAttribs;
@@ -371,6 +372,7 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<ScreenSpaceReflection> ssr;
+    std::unique_ptr<EnvMapRenderer> envMapRenderer;
 
     float3 spaceManLocation;
     QuaternionF spaceManCurrentHeading;
@@ -2056,8 +2058,34 @@ void GraphicsInitPlanets(std::unordered_map<uint32_t, PlanetSurface> surfaces)
     s_gc.planetsDone.acquire();
 }
 
+static constexpr char EnvMapPSMain[] = R"(
+void main(in  float4 Pos          : SV_Position,
+          in  float4 ClipPos      : CLIP_POS,
+          out float4 Color        : SV_Target0,
+          out float4 MotionVec    : SV_Target4)
+{
+    SampleEnvMapOutput EnvMap = SampleEnvMap(ClipPos);
+    Color     = EnvMap.Color;
+    MotionVec = float4(EnvMap.MotionVector, 0.0, 1.0);
+}
+)";
+
+
 static void LoadEnvironmentMap(const char* Path)
 {
+
+    EnvMapRenderer::CreateInfo EnvMapRendererCI;
+    EnvMapRendererCI.pDevice          = s_gc.m_pDevice;
+    EnvMapRendererCI.pCameraAttribsCB = s_gc.frameAttribsCB;
+
+    EnvMapRendererCI.NumRenderTargets = GBUFFER_RT_NUM_COLOR_TARGETS;
+    for (Uint32 i = 0; i < EnvMapRendererCI.NumRenderTargets; ++i)
+        EnvMapRendererCI.RTVFormats[i] = s_gc.gBuffer->GetElementDesc(i).Format;
+    EnvMapRendererCI.DSVFormat = s_gc.gBuffer->GetElementDesc(GBUFFER_RT_DEPTH0).Format;
+
+    EnvMapRendererCI.PSMainSource = EnvMapPSMain;
+    s_gc.envMapRenderer = std::make_unique<EnvMapRenderer>(EnvMapRendererCI);
+
     RefCntAutoPtr<ITexture> pEnvironmentMap;
     CreateTextureFromFile(Path, TextureLoadInfo{"Environment map"}, s_gc.m_pDevice, &pEnvironmentMap);
     VERIFY_EXPR(pEnvironmentMap);
@@ -2070,6 +2098,8 @@ static void LoadEnvironmentMap(const char* Path)
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
     s_gc.stationEnv = pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+    s_gc.m_pImmediateContext->Flush();
 }
 
 static void InitPBRRenderer()
@@ -2141,7 +2171,7 @@ static void InitPBRRenderer()
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    LoadEnvironmentMap("papermill.ktx");
+    LoadEnvironmentMap("starfield.ktx");
 }
 
 static int GraphicsInitThread()
@@ -2621,7 +2651,7 @@ void TranslateMan(float3 manPoint)
         QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 0.f, 1.f }, angle);
 
         // Compute the moving average of the spaceman's heading
-        s_gc.spaceManCurrentHeading = slerp(s_gc.spaceManCurrentHeading, newHeading, 0.33f); // Adjust the blend factor as needed
+        s_gc.spaceManCurrentHeading = slerp(s_gc.spaceManCurrentHeading, newHeading, 0.5f); // Adjust the blend factor as needed
     }
 
     {
@@ -4052,7 +4082,8 @@ static ShaderParams m_ShaderAttribs;
 bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
-    //ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
+    ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
+    ITextureView*        pPrevDSV = s_gc.buffers[(inFlightIndex + 1) & 0x01].diligentDepthBuffer;
 
     if(!s_gc.applyPostFX)
     {
@@ -4069,7 +4100,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.gBuffer->Resize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((s_gc.vc.current_frame() & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
+    Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((inFlightIndex & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
     s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
 
     const auto& CurrCamAttribs = s_gc.stationCameraAttribs[inFlightIndex & 0x01];
@@ -4088,7 +4119,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     m_DefaultLight.Color = float3{ 1, 1, 1 };
 
     float3      m_LightDirection{};
-    m_LightDirection = normalize(float3(0.05f, 1.0f, -2.5f));
+    m_LightDirection = normalize(float3(0.00f, 1.0f, -1.5f));
 
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
@@ -4128,7 +4159,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     Renderer.AverageLogLum = m_ShaderAttribs.AverageLogLum;
     Renderer.MiddleGray = m_ShaderAttribs.MiddleGray;
     Renderer.WhitePoint = m_ShaderAttribs.WhitePoint;
-    Renderer.IBLScale = float4{ 0.01f /* m_ShaderAttribs.IBLScale */};
+    Renderer.IBLScale = float4{ m_ShaderAttribs.IBLScale };
     Renderer.HighlightColor = m_ShaderAttribs.HighlightColor;
     Renderer.UnshadedColor = m_ShaderAttribs.WireframeColor;
     Renderer.PointSize = 1;
@@ -4153,7 +4184,72 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     RenderModel(GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_OPAQUE | GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_MASK);
 
+    {
+        ITextureView* pEnvMapSRV = s_gc.stationEnv;
+
+        HLSL::ToneMappingAttribs TMAttribs;
+        TMAttribs.iToneMappingMode     = (s_gc.renderParams.Flags & GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING) ? TONE_MAPPING_MODE_UNCHARTED2 : TONE_MAPPING_MODE_NONE;
+        TMAttribs.bAutoExposure        = 0;
+        TMAttribs.fMiddleGray          = m_ShaderAttribs.MiddleGray;
+        TMAttribs.bLightAdaptation     = 0;
+        TMAttribs.fWhitePoint          = m_ShaderAttribs.WhitePoint;
+        TMAttribs.fLuminanceSaturation = 1.0;
+
+        EnvMapRenderer::RenderAttribs EnvMapAttribs;
+        EnvMapAttribs.pEnvMap       = pEnvMapSRV;
+        EnvMapAttribs.AverageLogLum = m_ShaderAttribs.AverageLogLum;
+        EnvMapAttribs.MipLevel      = 0.0f;  //m_EnvMapMipLevel;
+        // It is essential to write zero alpha because we use alpha channel
+        // to attenuate SSR for transparent surfaces.
+        EnvMapAttribs.Alpha                = 0.0;
+        EnvMapAttribs.ConvertOutputToSRGB  = (s_gc.renderParams.Flags & GLTF_PBR_Renderer::PSO_FLAG_CONVERT_OUTPUT_TO_SRGB) != 0;
+        EnvMapAttribs.ComputeMotionVectors = true;
+
+        s_gc.envMapRenderer->Prepare(s_gc.m_pImmediateContext, EnvMapAttribs, TMAttribs);
+        s_gc.envMapRenderer->Render(s_gc.m_pImmediateContext);
+    }    
+
     RenderModel(GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
+
+    {
+        s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        StateTransitionDesc Barriers[GBUFFER_RT_COUNT];
+        for (Uint32 i = 0; i < GBUFFER_RT_COUNT; ++i)
+            Barriers[i] = StateTransitionDesc{ s_gc.gBuffer->GetBuffer(i), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE };
+        s_gc.m_pImmediateContext->TransitionResourceStates(GBUFFER_RT_COUNT, Barriers);
+    }
+
+    ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    ITextureView* pPrevDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH0 : GBUFFER_RT_DEPTH1)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    {
+        PostFXContext::RenderAttributes PostFXAttibs;
+        PostFXAttibs.pDevice = s_gc.m_pDevice;
+        PostFXAttibs.pDeviceContext = s_gc.m_pImmediateContext;
+        PostFXAttibs.pCameraAttribsCB = s_gc.frameAttribsCB;
+        PostFXAttibs.pCurrDepthBufferSRV = pCurrDepthSRV;
+        PostFXAttibs.pPrevDepthBufferSRV = pPrevDepthSRV;
+        PostFXAttibs.pMotionVectorsSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_MOTION_VECTORS)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        s_gc.postFXContext->Execute(PostFXAttibs);
+    }
+
+    {
+        HLSL::ScreenSpaceReflectionAttribs SSRAttribs{};
+        SSRAttribs.RoughnessChannel = 0;
+        SSRAttribs.IsRoughnessPerceptual = true;
+
+        ScreenSpaceReflection::RenderAttributes SSRRenderAttribs{};
+        SSRRenderAttribs.pDevice = s_gc.m_pDevice;
+        SSRRenderAttribs.pDeviceContext = s_gc.m_pImmediateContext;
+        SSRRenderAttribs.pPostFXContext = s_gc.postFXContext.get();
+        SSRRenderAttribs.pColorBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        SSRRenderAttribs.pDepthBufferSRV = pCurrDepthSRV;
+        SSRRenderAttribs.pNormalBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        SSRRenderAttribs.pMaterialBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_MATERIAL_DATA)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        SSRRenderAttribs.pMotionVectorsSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_MOTION_VECTORS)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        SSRRenderAttribs.pSSRAttribs = &SSRAttribs;
+        s_gc.ssr->Execute(SSRRenderAttribs);
+    }
 
     s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Clear the back buffer
