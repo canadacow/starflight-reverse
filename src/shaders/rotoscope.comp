@@ -394,13 +394,17 @@ vec4 DrawRunBitPixel(const Rotoscope roto, vec2 uv, vec2 subUv) {
             break;
         case 44: // Port-Pic Top 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, subY * 0.5f));
+            pixel.rgb = pow(pixel.rgb, vec3(1.0 / 2.2));
+            #if 0 // We're going to try to environment map this
             if(isGreen(pixel.rgb))
             {
                 stationStarsRender(pixel, fragCoord, iTime, iResolution);
             }
+            #endif
             break;
         case 49: // Port-Pic Botton 100 pixels
             pixel = texture(PORTPICTexture, vec2(subX, (subY * 0.5f) + 0.5f));
+            pixel.rgb = pow(pixel.rgb, vec3(1.0 / 2.2));
             break;
         case 141: // First splash
             pixel = texture(LOGO1Texture, uv);

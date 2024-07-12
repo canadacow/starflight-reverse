@@ -2102,6 +2102,80 @@ static void LoadEnvironmentMap(const char* Path)
     s_gc.m_pImmediateContext->Flush();
 }
 
+static PBR_Renderer::CreateInfo::PSMainSourceInfo GetPbrPSMainSource(PBR_Renderer::PSO_FLAGS PSOFlags)
+{
+    PBR_Renderer::CreateInfo::PSMainSourceInfo PSMainInfo;
+
+    PSMainInfo.OutputStruct = R"(
+struct PSOutput
+{
+    float4 Color        : SV_Target0;
+    float4 Normal       : SV_Target1;
+    float4 BaseColor    : SV_Target2;
+    float4 MaterialData : SV_Target3;
+    float4 MotionVec    : SV_Target4;
+    float4 SpecularIBL  : SV_Target5;
+};
+)";
+
+    PSMainInfo.Footer = R"(
+    PSOutput PSOut;
+#   if UNSHADED
+    {
+        PSOut.Color        = g_Frame.Renderer.UnshadedColor + g_Frame.Renderer.HighlightColor;
+        PSOut.Normal       = float4(0.0, 0.0, 0.0, 0.0);
+        PSOut.MaterialData = float4(0.0, 0.0, 0.0, 0.0);
+        PSOut.BaseColor    = float4(0.0, 0.0, 0.0, 0.0);
+        PSOut.SpecularIBL  = float4(0.0, 0.0, 0.0, 0.0);
+    }
+#   else
+    {
+        PSOut.Color            = OutColor;
+        PSOut.Normal.xyz       = Shading.BaseLayer.Normal.xyz;
+        PSOut.MaterialData.xyz = float3(Shading.BaseLayer.Srf.PerceptualRoughness, Shading.BaseLayer.Metallic, 0.0);
+        PSOut.BaseColor.xyz    = BaseColor.xyz;
+        PSOut.SpecularIBL.xyz  = GetBaseLayerSpecularIBL(Shading, SrfLighting);
+
+#       if ENABLE_CLEAR_COAT
+	    {
+            // We clearly can't do SSR for both base layer and clear coat, so we
+            // blend the base layer properties with the clearcoat using the clearcoat factor.
+            // This way when the factor is 0.0, we get the base layer, when it is 1.0,
+            // we get the clear coat, and something in between otherwise.
+
+            PSOut.Normal.xyz      = normalize(lerp(PSOut.Normal.xyz, Shading.Clearcoat.Normal, Shading.Clearcoat.Factor));
+            PSOut.MaterialData.xy = lerp(PSOut.MaterialData.xy, float2(Shading.Clearcoat.Srf.PerceptualRoughness, 0.0), Shading.Clearcoat.Factor);
+            PSOut.BaseColor.xyz   = lerp(PSOut.BaseColor.xyz, float3(1.0, 1.0, 1.0), Shading.Clearcoat.Factor);
+
+            // Note that the base layer IBL is weighted by (1.0 - Shading.Clearcoat.Factor * ClearcoatFresnel).
+            // Here we are weighting it by (1.0 - Shading.Clearcoat.Factor), which is always smaller,
+            // so when we subtract the IBL, it can never be negative.
+            PSOut.SpecularIBL.xyz = lerp(
+                PSOut.SpecularIBL.xyz,
+                GetClearcoatIBL(Shading, SrfLighting),
+                Shading.Clearcoat.Factor);
+        }
+#       endif
+    
+        // Blend material data and IBL with background
+	    PSOut.BaseColor    = float4(PSOut.BaseColor.xyz    * BaseColor.a, BaseColor.a);
+        PSOut.MaterialData = float4(PSOut.MaterialData.xyz * BaseColor.a, BaseColor.a);
+        PSOut.SpecularIBL  = float4(PSOut.SpecularIBL.xyz  * BaseColor.a, BaseColor.a);
+    
+        // Do not blend motion vectors as it does not make sense
+        PSOut.MotionVec = float4(MotionVector, 0.0, 1.0);
+
+        // Also do not blend normal - we want normal of the top layer
+        PSOut.Normal.a = 1.0;
+	}
+#   endif
+
+    return PSOut;
+)";
+
+    return PSMainInfo;
+}
+
 static void InitPBRRenderer()
 {
     GBuffer::ElementDesc GBufferElems[GBUFFER_RT_COUNT];
@@ -2126,6 +2200,8 @@ static void InitPBRRenderer()
     RendererCI.EnableAnisotropy = true;
     RendererCI.FrontCounterClockwise = true;
 
+    RendererCI.GetPSMainSource = GetPbrPSMainSource;
+
     RendererCI.SheenAlbedoScalingLUTPath    = "sheen_albedo_scaling.jpg";
     RendererCI.PreintegratedCharlieBRDFPath = "charlie_preintegrated.jpg";
 
@@ -2141,13 +2217,6 @@ static void InitPBRRenderer()
         GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TRANSMISSION |
         GLTF_PBR_Renderer::PSO_FLAG_ENABLE_VOLUME |
         GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM;
-
-    RendererCI.NumRenderTargets = 1;
-    RendererCI.RTVFormats[0] = VkFormatToTexFormat((VkFormat)s_gc.vc.swap_chain_image_format());
-    RendererCI.DSVFormat = VkFormatToTexFormat(VK_FORMAT_D32_SFLOAT);
-
-    if (RendererCI.RTVFormats[0] == TEX_FORMAT_RGBA8_UNORM || RendererCI.RTVFormats[0] == TEX_FORMAT_BGRA8_UNORM)
-        s_gc.renderParams.Flags |= GLTF_PBR_Renderer::PSO_FLAG_CONVERT_OUTPUT_TO_SRGB;
 
     s_gc.renderParams.Flags &= ~GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING;
     s_gc.renderParams.Flags |= GLTF_PBR_Renderer::PSO_FLAG_COMPUTE_MOTION_VECTORS;
@@ -2453,7 +2522,8 @@ static int GraphicsInitThread()
 
         bd.avkdColorBuffer = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
-                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Srgb, 1, avk::memory_usage::device, avk::image_usage::general_color_attachment)
+                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR8G8B8A8Srgb, 1, avk::memory_usage::device, avk::image_usage::general_color_attachment),
+                vk::Format::eR8G8B8A8Srgb
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
         );
@@ -4112,6 +4182,13 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     FrameAttribs->Camera = CurrCamAttribs;
     FrameAttribs->PrevCamera = PrevCamAttribs;
+
+    FrameAttribs->PrevCamera.f4ExtraData[0] = float4{
+        m_ShaderAttribs.SSRScale,
+        static_cast<float>(m_ShaderAttribs.PostFXDebugMode),
+        0,
+        0,
+    };
 
     GLTF::Light m_DefaultLight{};
     m_DefaultLight.Type = GLTF::Light::TYPE::DIRECTIONAL;
