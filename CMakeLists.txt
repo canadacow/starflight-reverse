@@ -110,6 +110,12 @@ find_package(Magnum REQUIRED)
 find_package(unofficial-nuklear CONFIG REQUIRED)
 find_package(cereal CONFIG REQUIRED)
 
+# Include FidelityFX headers
+include_directories(3rdparty/ffx/include)
+
+# Link FidelityFX libraries
+link_directories(3rdparty/ffx/lib)
+
 set_source_files_properties(
     src/cpu/cpu.cpp 
     src/emul/callstack.c 
@@ -166,6 +172,15 @@ target_precompile_headers(emulatesdl PRIVATE src/emul/common.pch)
 target_compile_definitions(emulatesdl PRIVATE STARFLT1 SDL _CRT_SECURE_NO_WARNINGS NOMINMAX)
 
 target_link_libraries(emulatesdl PRIVATE 
+        $<$<CONFIG:Debug>:ffx_sssr_x64d>
+        $<$<CONFIG:Debug>:ffx_denoiser_x64d>
+        $<$<CONFIG:Debug>:ffx_backend_vk_x64d>
+        $<$<CONFIG:Release>:ffx_sssr_x64>
+        $<$<CONFIG:Release>:ffx_denoiser_x64>
+        $<$<CONFIG:Release>:ffx_backend_vk_x64>
+        $<$<CONFIG:RelWithDebInfo>:ffx_sssr_x64drel>
+        $<$<CONFIG:RelWithDebInfo>:ffx_denoiser_x64drel>
+        $<$<CONFIG:RelWithDebInfo>:ffx_backend_vk_x64drel>
         Diligent-BuildSettings
         Diligent-GraphicsEngineVk-shared
         DiligentFX

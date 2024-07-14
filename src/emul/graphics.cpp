@@ -44,6 +44,9 @@
 
 #include "nuklear.h"
 
+//#define DE_SSR 1
+#define FX_SSR 1
+
 #include "sdl2surface_rawfb.h"
 
 #if defined(PLANES)
@@ -90,6 +93,9 @@ namespace HLSL
 #include "GLTF_PBR_Renderer.hpp"
 #include "BasicMath.hpp"
 #include "GBuffer.hpp"
+
+#include "FidelityFX/host/backends/vk/ffx_vk.h"
+#include "FidelityFX/host/ffx_sssr.h"
 
 using namespace Diligent;
 
@@ -371,7 +377,10 @@ struct GraphicsContext
     ApplyPosteffects applyPostFX;
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     std::unique_ptr<PostFXContext> postFXContext;
+
+#if defined(DE_SSR)
     std::unique_ptr<ScreenSpaceReflection> ssr;
+#endif
     std::unique_ptr<EnvMapRenderer> envMapRenderer;
 
     float3 spaceManLocation;
@@ -2231,7 +2240,10 @@ static void InitPBRRenderer()
     CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetPRBFrameAttribsSize(), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
 
     s_gc.postFXContext = std::make_unique<PostFXContext>(s_gc.m_pDevice);
+
+    #if defined(DE_SSR)
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice);
+    #endif
 
     s_gc.stationBindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station, s_gc.frameAttribsCB);
 
@@ -2388,7 +2400,7 @@ static int GraphicsInitThread()
 #endif
 
     EngineVkCreateInfo EngineCI;
-    EngineCI.DeviceExtensionCount = 2;
+    EngineCI.DeviceExtensionCount = 3;
     const char* deviceExtensions[] = { "VK_KHR_create_renderpass2", "VK_KHR_synchronization2", "VK_KHR_maintenance4"};
     EngineCI.ppDeviceExtensionNames = deviceExtensions;
 
@@ -2419,6 +2431,28 @@ static int GraphicsInitThread()
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
+
+    size_t scratchBufferSize = ffxGetScratchMemorySizeVK(pDeviceVk->GetVkPhysicalDevice(), FFX_SSSR_CONTEXT_COUNT);
+    void* scratchBuffer = calloc(1, scratchBufferSize);
+
+    FfxInterface ffxInterface = {};
+
+    VkDeviceContext device_context = {};
+    device_context.vkDevice = pDeviceVk->GetVkDevice();
+    device_context.vkPhysicalDevice = pDeviceVk->GetVkPhysicalDevice();
+
+    auto ffxResult = ffxGetInterfaceVK(&ffxInterface, ffxGetDeviceVK(&device_context), scratchBuffer, scratchBufferSize, FFX_SSSR_CONTEXT_COUNT);
+    if (ffxResult != FFX_OK) {
+        // Handle error
+    }
+
+    FfxSssrContextDescription sssrDesc = {};
+    sssrDesc.flags = 0;
+    sssrDesc.renderSize.width = WINDOW_WIDTH;
+    sssrDesc.renderSize.height = WINDOW_HEIGHT;
+    sssrDesc.normalsHistoryBufferFormat = GetFfxSurfaceFormat(PixelFormat::R16G16_Float);
+    sssrDesc.backendInterface = ffxInterface;
+    ffxSssrContextCreate(&passData->Ctx, &sssrDesc);
 
     GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = "C:/Users/Dean/Downloads/station25.glb";
@@ -4166,7 +4200,9 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     FrameDesc.Height = WINDOW_HEIGHT;
     s_gc.postFXContext->PrepareResources(s_gc.m_pDevice, FrameDesc, PostFXContext::FEATURE_FLAG_NONE);
 
+    #if defined(DE_SSR)
     s_gc.ssr->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), ScreenSpaceReflection::FEATURE_FLAG_NONE);
+    #endif
 
     s_gc.gBuffer->Resize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
 
@@ -4310,6 +4346,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         s_gc.postFXContext->Execute(PostFXAttibs);
     }
 
+    #if defined(DE_SSR)
     {
         HLSL::ScreenSpaceReflectionAttribs SSRAttribs{};
         SSRAttribs.RoughnessChannel = 0;
@@ -4327,6 +4364,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         SSRRenderAttribs.pSSRAttribs = &SSRAttribs;
         s_gc.ssr->Execute(SSRRenderAttribs);
     }
+    #endif
 
     s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Clear the back buffer
@@ -4336,7 +4374,9 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
     s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     s_gc.applyPostFX.ptex2DNormalVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    #if defined(DE_SSR)
     s_gc.applyPostFX.ptex2DSSR->Set(s_gc.ssr->GetSSRRadianceSRV());
+    #endif
     s_gc.applyPostFX.ptex2DPecularIBL->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_SPECULAR_IBL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     s_gc.applyPostFX.ptex2DBaseColorVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_BASE_COLOR)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     s_gc.applyPostFX.ptex2DMaterialDataVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MATERIAL_DATA)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
