@@ -55,6 +55,7 @@
 
 #include "Graphics/GraphicsEngineVulkan/interface/EngineFactoryVk.h"
 #include "Graphics/GraphicsEngineVulkan/interface/RenderDeviceVk.h"
+#include "Graphics/GraphicsEngineVulkan/interface/DeviceContextVk.h"
 #include "Graphics/GraphicsEngineVulkan/include/VulkanTypeConversions.hpp"
 #include "Graphics/GraphicsEngine/interface/RenderDevice.h"
 #include "Graphics/GraphicsEngine/interface/DeviceContext.h"
@@ -288,8 +289,10 @@ void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVForm
 
 struct GraphicsContext
 {
-    RefCntAutoPtr<IRenderDevice>  m_pDevice;
-    RefCntAutoPtr<IDeviceContext> m_pImmediateContext;
+    RefCntAutoPtr<IRenderDevice>    m_pDevice;
+    RefCntAutoPtr<IRenderDeviceVk>  m_pDeviceVk;
+    RefCntAutoPtr<IDeviceContext>   m_pImmediateContext;
+    RefCntAutoPtr<IDeviceContextVk> m_pImmediateContextVk;
 
     VulkanContext vc;
     avk::queue* mQueue;
@@ -311,8 +314,13 @@ struct GraphicsContext
         avk::image_sampler avkdColorBuffer;
         avk::image         avkdDepthBuffer;
 
+        avk::image_sampler avkdSsrBuffer;
+
         ITextureView* diligentColorBuffer;
         ITextureView* diligentDepthBuffer;
+
+        ITextureView* diligentSsrBuffer;
+        ITextureView* diligentSsrBufferSrv;
     };
     
     std::vector<BufferData> buffers;
@@ -380,6 +388,11 @@ struct GraphicsContext
 
 #if defined(DE_SSR)
     std::unique_ptr<ScreenSpaceReflection> ssr;
+#endif
+
+#if defined(FX_SSR)
+    FfxInterface ffxInterface;
+    FfxSssrContext sssrContext;
 #endif
     std::unique_ptr<EnvMapRenderer> envMapRenderer;
 
@@ -2400,8 +2413,13 @@ static int GraphicsInitThread()
 #endif
 
     EngineVkCreateInfo EngineCI;
-    EngineCI.DeviceExtensionCount = 3;
-    const char* deviceExtensions[] = { "VK_KHR_create_renderpass2", "VK_KHR_synchronization2", "VK_KHR_maintenance4"};
+    EngineCI.DeviceExtensionCount = 4;
+    const char* deviceExtensions[] = { 
+        "VK_KHR_create_renderpass2", 
+        "VK_KHR_synchronization2", 
+        "VK_KHR_maintenance4",
+        "VK_KHR_get_memory_requirements2"
+    };
     EngineCI.ppDeviceExtensionNames = deviceExtensions;
 
     // Initialize Vulkan synchronization features
@@ -2422,37 +2440,40 @@ static int GraphicsInitThread()
     pFactoryVk->CreateDeviceAndContextsVk(EngineCI, &s_gc.m_pDevice, &s_gc.m_pImmediateContext);
 
     RefCntAutoPtr<IRenderDeviceVk> pDeviceVk(s_gc.m_pDevice, IID_RenderDeviceVk);
+    s_gc.m_pDeviceVk = pDeviceVk;
 
-    s_gc.vc.vulkan_instance(pDeviceVk->GetVkInstance());
-    s_gc.vc.physical_device(pDeviceVk->GetVkPhysicalDevice());
-    s_gc.vc.device(pDeviceVk->GetVkDevice());
+    RefCntAutoPtr<IDeviceContextVk> pDeviceContextVk(s_gc.m_pImmediateContext, IID_DeviceContextVk);
+    s_gc.m_pImmediateContextVk = pDeviceContextVk;
+
+    s_gc.vc.vulkan_instance(s_gc.m_pDeviceVk->GetVkInstance());
+    s_gc.vc.physical_device(s_gc.m_pDeviceVk->GetVkPhysicalDevice());
+    s_gc.vc.device(s_gc.m_pDeviceVk->GetVkDevice());
     s_gc.vc.create_swap_chain(VulkanContext::swapchain_creation_mode::create_new_swapchain, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
+#if defined(FX_SSR)
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 
     size_t scratchBufferSize = ffxGetScratchMemorySizeVK(pDeviceVk->GetVkPhysicalDevice(), FFX_SSSR_CONTEXT_COUNT);
     void* scratchBuffer = calloc(1, scratchBufferSize);
 
-    FfxInterface ffxInterface = {};
-
     VkDeviceContext device_context = {};
     device_context.vkDevice = pDeviceVk->GetVkDevice();
     device_context.vkPhysicalDevice = pDeviceVk->GetVkPhysicalDevice();
 
-    auto ffxResult = ffxGetInterfaceVK(&ffxInterface, ffxGetDeviceVK(&device_context), scratchBuffer, scratchBufferSize, FFX_SSSR_CONTEXT_COUNT);
-    if (ffxResult != FFX_OK) {
-        // Handle error
-    }
+    auto ffxResult = ffxGetInterfaceVK(&s_gc.ffxInterface, ffxGetDeviceVK(&device_context), scratchBuffer, scratchBufferSize, FFX_SSSR_CONTEXT_COUNT);
+    assert(ffxResult == FFX_OK);
 
     FfxSssrContextDescription sssrDesc = {};
     sssrDesc.flags = 0;
     sssrDesc.renderSize.width = WINDOW_WIDTH;
     sssrDesc.renderSize.height = WINDOW_HEIGHT;
-    sssrDesc.normalsHistoryBufferFormat = GetFfxSurfaceFormat(PixelFormat::R16G16_Float);
-    sssrDesc.backendInterface = ffxInterface;
-    ffxSssrContextCreate(&passData->Ctx, &sssrDesc);
+    sssrDesc.normalsHistoryBufferFormat = FFX_SURFACE_FORMAT_R16G16B16A16_FLOAT;
+    sssrDesc.backendInterface = s_gc.ffxInterface;
+    ffxResult = ffxSssrContextCreate(&s_gc.sssrContext, &sssrDesc);
+    assert(ffxResult == FFX_OK);
+#endif
 
     GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = "C:/Users/Dean/Downloads/station25.glb";
@@ -2562,6 +2583,13 @@ static int GraphicsInitThread()
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
         );
 
+        bd.avkdSsrBuffer = s_gc.vc.create_image_sampler(
+            s_gc.vc.create_image_view(
+                s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eR16G16B16A16Sfloat, 1, avk::memory_usage::device, avk::image_usage::general_color_attachment)
+            ),
+            s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+        );
+
         TextureDesc cbDesc{};
         cbDesc.Type = RESOURCE_DIM_TEX_2D;
         cbDesc.Width = WINDOW_WIDTH;
@@ -2574,6 +2602,19 @@ static int GraphicsInitThread()
         ITexture* dcb{};
         pDeviceVk->CreateTextureFromVulkanImage(bd.avkdColorBuffer.get().get_image().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dcb);
         bd.diligentColorBuffer = dcb->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+
+        cbDesc.Type = RESOURCE_DIM_TEX_2D;
+        cbDesc.Width = WINDOW_WIDTH;
+        cbDesc.Height = WINDOW_HEIGHT;
+        cbDesc.Format = TEX_FORMAT_RGBA16_FLOAT;
+        cbDesc.MipLevels = 1;
+        cbDesc.SampleCount = 1;
+        cbDesc.Usage = USAGE_DEFAULT;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
+        dcb = {};
+        pDeviceVk->CreateTextureFromVulkanImage(bd.avkdSsrBuffer.get().get_image().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dcb);
+        bd.diligentSsrBuffer = dcb->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+        bd.diligentSsrBufferSrv = dcb->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 
         bd.avkdDepthBuffer = s_gc.vc.create_image(WINDOW_WIDTH, WINDOW_HEIGHT, vk::Format::eD32Sfloat, 1, avk::memory_usage::device, avk::image_usage::general_depth_stencil_attachment);
         cbDesc = {};
@@ -4183,6 +4224,111 @@ struct ShaderParams
 
 static ShaderParams m_ShaderAttribs;
 
+
+namespace Diligent
+{
+
+VkImageCreateInfo TextureDescToVkImageCreateInfo(const TextureDesc& Desc, const RefCntAutoPtr<IRenderDeviceVk>& pRenderDeviceVk) noexcept
+{
+    const auto  IsMemoryless = (Desc.MiscFlags & MISC_TEXTURE_FLAG_MEMORYLESS) != 0;
+    const auto& FmtAttribs = GetTextureFormatAttribs(Desc.Format);
+    const auto  ImageView2DSupported = !Desc.Is3D() || pRenderDeviceVk->GetAdapterInfo().Texture.TextureView2DOn3DSupported;
+
+    VkImageCreateInfo ImageCI = {};
+
+    ImageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ImageCI.pNext = nullptr;
+    ImageCI.flags = 0;
+    if (Desc.Type == RESOURCE_DIM_TEX_CUBE || Desc.Type == RESOURCE_DIM_TEX_CUBE_ARRAY)
+        ImageCI.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    if (FmtAttribs.IsTypeless)
+        ImageCI.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT; // Specifies that the image can be used to create a
+    // VkImageView with a different format from the image.
+
+    if (Desc.Is1D())
+        ImageCI.imageType = VK_IMAGE_TYPE_1D;
+    else if (Desc.Is2D())
+        ImageCI.imageType = VK_IMAGE_TYPE_2D;
+    else if (Desc.Is3D())
+    {
+        ImageCI.imageType = VK_IMAGE_TYPE_3D;
+        if (ImageView2DSupported)
+            ImageCI.flags |= VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
+    }
+    else
+    {
+        LOG_ERROR_AND_THROW("Unknown texture type");
+    }
+
+    TEXTURE_FORMAT InternalTexFmt = Desc.Format;
+    if (FmtAttribs.IsTypeless)
+    {
+        TEXTURE_VIEW_TYPE PrimaryViewType;
+        if (Desc.BindFlags & BIND_DEPTH_STENCIL)
+            PrimaryViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+        else if (Desc.BindFlags & BIND_UNORDERED_ACCESS)
+            PrimaryViewType = TEXTURE_VIEW_UNORDERED_ACCESS;
+        else if (Desc.BindFlags & BIND_RENDER_TARGET)
+            PrimaryViewType = TEXTURE_VIEW_RENDER_TARGET;
+        else
+            PrimaryViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+        InternalTexFmt = GetDefaultTextureViewFormat(Desc, PrimaryViewType);
+    }
+
+    ImageCI.format = TexFormatToVkFormat(InternalTexFmt);
+
+    ImageCI.extent.width = Desc.GetWidth();
+    ImageCI.extent.height = Desc.GetHeight();
+    ImageCI.extent.depth = Desc.GetDepth();
+    ImageCI.mipLevels = Desc.MipLevels;
+    ImageCI.arrayLayers = Desc.GetArraySize();
+
+    ImageCI.samples = static_cast<VkSampleCountFlagBits>(Desc.SampleCount);
+    ImageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+
+    ImageCI.usage = BindFlagsToVkImageUsage(Desc.BindFlags, IsMemoryless, true);
+    // TRANSFER_SRC_BIT and TRANSFER_DST_BIT are required by CopyTexture
+    ImageCI.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+    if (Desc.BindFlags & (BIND_DEPTH_STENCIL | BIND_RENDER_TARGET))
+        DEV_CHECK_ERR(ImageView2DSupported, "imageView2DOn3DImage in VkPhysicalDevicePortabilitySubsetFeaturesKHR is not enabled, can not create depth-stencil target with 2D image view");
+
+    if (Desc.MiscFlags & MISC_TEXTURE_FLAG_GENERATE_MIPS)
+    {
+        VERIFY_EXPR(!IsMemoryless);
+    }
+    if (Desc.MiscFlags & MISC_TEXTURE_FLAG_SUBSAMPLED)
+    {
+        ImageCI.usage &= ~(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+        ImageCI.flags |= VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
+    }
+
+    ImageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ImageCI.queueFamilyIndexCount = 0;
+    ImageCI.pQueueFamilyIndices = nullptr;
+
+    if (Desc.Usage == USAGE_SPARSE)
+    {
+        ImageCI.flags &= ~VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT; // not compatible
+        ImageCI.flags |=
+            VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+            VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
+            (Desc.MiscFlags & MISC_TEXTURE_FLAG_SPARSE_ALIASING ? VK_IMAGE_CREATE_SPARSE_ALIASED_BIT : 0);
+    }
+
+    return ImageCI;
+}
+}
+
+static FfxResource ffxGetResource(ITextureView* textureView)
+{
+    VkImage image = (VkImage)textureView->GetTexture()->GetNativeHandle();
+
+    VkImageCreateInfo vkici = TextureDescToVkImageCreateInfo(textureView->GetTexture()->GetDesc(), s_gc.m_pDeviceVk);
+
+    return ffxGetResourceVK((void*)image, ffxGetImageResourceDescriptionVK(image, vkici, FFX_RESOURCE_USAGE_RENDERTARGET), nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+}
+
 bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
@@ -4365,6 +4511,66 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         s_gc.ssr->Execute(SSRRenderAttribs);
     }
     #endif
+    #if defined(FX_SSR)
+    {
+        struct SSSRSettings
+        {
+            float TemporalStabilityFactor = 0.7f;
+            float DepthBufferThickness = 0.015f;
+            float RoughnessThreshold = 0.2f;
+            float VarianceThreshold = 0.0f;
+            uint32_t MaxTraversalIntersections = 128;
+            uint32_t MinTraversalOccupancy = 4;
+            uint32_t MostDetailedMip = 0;
+            uint32_t SamplesPerQuad = 1;
+            bool TemporalVarianceGuidedTracingEnabled = true;
+        };
+
+        SSSRSettings outSettings;
+
+        FfxSssrDispatchDescription desc = {};
+        desc.commandList = ffxGetCommandListVK(s_gc.m_pImmediateContextVk->GetVkCommandBuffer());
+
+        // Assuming the resources are correctly set up and accessible
+        desc.color = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        desc.depth = ffxGetResource(pCurrDepthSRV);
+        desc.motionVectors = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MOTION_VECTORS)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        desc.normal = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        desc.materialParameters = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MATERIAL_DATA)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        desc.environmentMap = ffxGetResource(s_gc.stationEnv);
+        desc.brdfTexture = ffxGetResource(s_gc.pbrRenderer->GetPreintegratedGGX_SRV());
+        desc.output = ffxGetResource(s_gc.buffers[inFlightIndex].diligentSsrBuffer);
+
+        auto& camAttribs = s_gc.stationCameraAttribs[0];
+
+        *reinterpret_cast<float4x4*>(desc.invViewProjection) = camAttribs.mViewProjInvT.Transpose();
+        *reinterpret_cast<float4x4*>(desc.projection) = camAttribs.mProjT.Transpose();
+        *reinterpret_cast<float4x4*>(desc.invProjection) = camAttribs.mProjInvT.Transpose();
+        *reinterpret_cast<float4x4*>(desc.view) = camAttribs.mViewT.Transpose();
+        *reinterpret_cast<float4x4*>(desc.invView) = camAttribs.mViewInvT.Transpose();
+        *reinterpret_cast<float4x4*>(desc.prevViewProjection) = camAttribs.mViewProjT.Transpose();
+
+        desc.renderSize = { WINDOW_WIDTH, WINDOW_HEIGHT };
+        desc.motionVectorScale = { -0.5f, -0.5f };
+        desc.iblFactor = 1.0f; //
+        desc.normalUnPackMul = 1.0f;
+        desc.normalUnPackAdd = 0.0f;
+        desc.roughnessChannel = 0;
+        desc.isRoughnessPerceptual = true;
+        desc.temporalStabilityFactor = outSettings.TemporalStabilityFactor;
+        desc.depthBufferThickness = outSettings.DepthBufferThickness;
+        desc.roughnessThreshold = outSettings.RoughnessThreshold;
+        desc.varianceThreshold = outSettings.VarianceThreshold;
+        desc.maxTraversalIntersections = outSettings.MaxTraversalIntersections;
+        desc.minTraversalOccupancy = outSettings.MinTraversalOccupancy;
+        desc.mostDetailedMip = outSettings.MostDetailedMip;
+        desc.samplesPerQuad = outSettings.SamplesPerQuad;
+        desc.temporalVarianceGuidedTracingEnabled = outSettings.TemporalVarianceGuidedTracingEnabled;
+
+        auto ffxResult = ffxSssrContextDispatch(&s_gc.sssrContext, &desc);
+        assert(ffxResult == FFX_OK);
+    }
+    #endif
 
     s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Clear the back buffer
@@ -4376,6 +4582,9 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.applyPostFX.ptex2DNormalVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     #if defined(DE_SSR)
     s_gc.applyPostFX.ptex2DSSR->Set(s_gc.ssr->GetSSRRadianceSRV());
+    #endif
+    #if defined(FX_SSR)
+    s_gc.applyPostFX.ptex2DSSR->Set(s_gc.buffers[inFlightIndex].diligentSsrBufferSrv);
     #endif
     s_gc.applyPostFX.ptex2DPecularIBL->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_SPECULAR_IBL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     s_gc.applyPostFX.ptex2DBaseColorVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_BASE_COLOR)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
