@@ -44,8 +44,8 @@
 
 #include "nuklear.h"
 
-//#define DE_SSR 1
-#define FX_SSR 1
+#define DE_SSR 1
+//#define FX_SSR 1
 
 #include "sdl2surface_rawfb.h"
 
@@ -2452,9 +2452,8 @@ static int GraphicsInitThread()
 
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
-#if defined(FX_SSR)
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
-
+#if defined(FX_SSR)
     size_t scratchBufferSize = ffxGetScratchMemorySizeVK(pDeviceVk->GetVkPhysicalDevice(), FFX_SSSR_CONTEXT_COUNT);
     void* scratchBuffer = calloc(1, scratchBufferSize);
 
@@ -4172,15 +4171,29 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
+#if 0
     CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
+    s_gc.renderParams.ModelTransform = float4x4::Identity();
+#else
+    auto trans = float4x4::Translation(0.f, -0.05f, 0.25f);
+    auto cam = QuaternionF(0.0f, 0.2164396f, 0.976296f, 0.0f);
+
+    CameraView = cam.ToMatrix() * trans;
+    s_gc.renderParams.ModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+
+#endif
+
     YFov = pCamera->Perspective.YFov;
     ZNear = pCamera->Perspective.ZNear;
     ZFar = pCamera->Perspective.ZFar;
 
-    s_gc.renderParams.ModelTransform = float4x4::Identity();
-
     // Apply pretransform matrix that rotates the scene according the surface orientation
     CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
+
+    // Rotate the camera up by 15 degrees around the y-axis
+    //float angle = 45.0f * (M_PI / 180.0f); // Convert degrees to radians
+    //float4x4 RotateX = float4x4::RotationX(angle);
+    //CameraView = RotateX * CameraView;    
 
     float4x4 CameraWorld = CameraView.Inverse();
 
@@ -4378,7 +4391,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     m_DefaultLight.Color = float3{ 1, 1, 1 };
 
     float3      m_LightDirection{};
-    m_LightDirection = normalize(float3(0.00f, 1.0f, -1.5f));
+    m_LightDirection = normalize(float3(0.00f, 1.0f, 1.5f));
 
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
@@ -4516,8 +4529,8 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         struct SSSRSettings
         {
             float TemporalStabilityFactor = 0.7f;
-            float DepthBufferThickness = 0.015f;
-            float RoughnessThreshold = 0.2f;
+            float DepthBufferThickness = 0.025f;
+            float RoughnessThreshold = 0.5f;
             float VarianceThreshold = 0.0f;
             uint32_t MaxTraversalIntersections = 128;
             uint32_t MinTraversalOccupancy = 4;
@@ -4556,7 +4569,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         desc.normalUnPackMul = 1.0f;
         desc.normalUnPackAdd = 0.0f;
         desc.roughnessChannel = 0;
-        desc.isRoughnessPerceptual = true;
+        desc.isRoughnessPerceptual = false;
         desc.temporalStabilityFactor = outSettings.TemporalStabilityFactor;
         desc.depthBufferThickness = outSettings.DepthBufferThickness;
         desc.roughnessThreshold = outSettings.RoughnessThreshold;
