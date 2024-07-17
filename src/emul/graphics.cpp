@@ -44,8 +44,8 @@
 
 #include "nuklear.h"
 
-#define DE_SSR 1
-//#define FX_SSR 1
+//#define DE_SSR 1
+#define FX_SSR 1
 
 #include "sdl2surface_rawfb.h"
 
@@ -2857,10 +2857,42 @@ void TranslateMan(float3 manPoint)
 
 void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
 {
+    /*
+        x	0.0	float
+        y	-0.217814416	float
+        z	0.159155563	float
+        w	1.00000000	float
+
+        _11	-0.0254427418	float
+        _12	-2.02661399e-09	float
+        _13	-5.28284115e-14	float
+        _14	-5.16243448e-09	float
+        _21	-2.70215739e-09	float
+        _22	0.00776134850	float
+        _23	2.17596197	float
+        _24	-2.10976076	float
+        _31	-1.75479875e-09	float
+        _32	0.0174322892	float
+        _33	-1.58996093	float
+        _34	1.56110823	float
+        _41	-0.00000000	float
+        _42	2.51905496e-21	float
+        _43	-9.98998070	float
+        _44	9.99998188	float
+    */
+
+    float4 easyCameraf4Position = float4(0.0f, -0.217814416f, 0.159155563f, 1.0f);
+    float4x4 easyViewProjInvT = Matrix4x4(
+        -0.0254427418f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.00776134850f, 2.17596197f, -2.10976076f,
+        0.0f, 0.0174322892f, -1.58996093f, 1.56110823f,
+        0.0f, 0.0f, -9.98998070f, 9.99998188f
+    );
+
     // Retrieve the current camera attributes
     auto& camAttribs = s_gc.stationCameraAttribs[0]; // Assuming index 0 for simplicity, adjust as necessary
 
-    float3 cameraPosition = float3(camAttribs.f4Position.x, camAttribs.f4Position.y, camAttribs.f4Position.z);
+    float3 cameraPosition = float3(easyCameraf4Position.x, easyCameraf4Position.y, easyCameraf4Position.z);
     float distanceToOrigin = length(cameraPosition);
 
     // Convert screen space coordinates to normalized device coordinates (NDC)
@@ -2871,7 +2903,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     float4 clipSpacePos = float4(ndcX, ndcY, 1.0, 1.0f); // z = 1 for forward direction, w = 1 for perspective division
 
     // Transform clip space position to world space using the precomputed inverse view-projection matrix
-    float4 worldSpacePos = clipSpacePos * camAttribs.mViewProjInvT.Transpose() * s_gc.stationModelTransform.Inverse();
+    float4 worldSpacePos = clipSpacePos * easyViewProjInvT.Transpose() * s_gc.stationModelTransform.Inverse();
 
     // Perspective divide
     worldSpacePos /= worldSpacePos.w;
@@ -2880,7 +2912,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     float3 planeNormal = float3(0.0f, -0.05f, 1.00f); // Adjusted plane normal to be tilted
     float planeD = 0.0f; // Plane is at z = 0
 
-    float4 worldCam = camAttribs.f4Position * s_gc.stationModelTransform.Inverse();
+    float4 worldCam = easyCameraf4Position * s_gc.stationModelTransform.Inverse();
 
     worldCam /= worldCam.w;
 
@@ -2893,6 +2925,9 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
         float t = -dot(planeNormal, rayOrigin) / denom;
         if (t >= 0) { // Check if the intersection is in front of the camera
             float3 intersectionPoint = rayOrigin + t * rayDirection;
+
+            printf("Input Screen Coordinates: x=%u, y=%u\n", x, y);
+            printf("Intersection Point: x=%.3f, y=%.3f, z=%.3f\n", intersectionPoint.x, intersectionPoint.y, intersectionPoint.z);
 
             TranslateMan(intersectionPoint);
         }
@@ -4175,9 +4210,9 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
     s_gc.renderParams.ModelTransform = float4x4::Identity();
 #else
-    auto trans = float4x4::Translation(0.f, -0.05f, 0.25f);
-    auto cam = QuaternionF(0.0f, 0.2164396f, 0.976296f, 0.0f);
-
+    auto trans = float4x4::Translation(0.0f, -0.057f, 0.264f);
+    auto cam = QuaternionF(0.0f, 0.2079117f, 0.9781476f, 0.0f);
+    
     CameraView = cam.ToMatrix() * trans;
     s_gc.renderParams.ModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
 
@@ -4529,7 +4564,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         struct SSSRSettings
         {
             float TemporalStabilityFactor = 0.7f;
-            float DepthBufferThickness = 0.025f;
+            float DepthBufferThickness = 0.015f;
             float RoughnessThreshold = 0.5f;
             float VarianceThreshold = 0.0f;
             uint32_t MaxTraversalIntersections = 128;
@@ -4569,7 +4604,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         desc.normalUnPackMul = 1.0f;
         desc.normalUnPackAdd = 0.0f;
         desc.roughnessChannel = 0;
-        desc.isRoughnessPerceptual = false;
+        desc.isRoughnessPerceptual = true;
         desc.temporalStabilityFactor = outSettings.TemporalStabilityFactor;
         desc.depthBufferThickness = outSettings.DepthBufferThickness;
         desc.roughnessThreshold = outSettings.RoughnessThreshold;
