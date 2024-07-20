@@ -70,6 +70,7 @@
 #include "TextureUtilities.h"
 #include "TextureLoader.h"
 #include "EnvMapRenderer.hpp"
+#include "DiligentShadowMapManager.hpp"
 
 namespace Diligent
 {
