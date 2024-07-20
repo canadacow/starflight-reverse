@@ -44,8 +44,8 @@
 
 #include "nuklear.h"
 
-//#define DE_SSR 1
-#define FX_SSR 1
+#define DE_SSR 1
+//#define FX_SSR 1
 
 #include "sdl2surface_rawfb.h"
 
@@ -4212,10 +4212,14 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 #else
     auto trans = float4x4::Translation(0.0f, -0.057f, 0.264f);
     auto cam = QuaternionF(0.0f, 0.2079117f, 0.9781476f, 0.0f);
+
+    auto modelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+
+    //auto invModelTransform = modelTransform.Inverse();
     
     CameraView = cam.ToMatrix() * trans;
-    s_gc.renderParams.ModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
-
+    s_gc.renderParams.ModelTransform = modelTransform; // QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+    //s_gc.renderParams.ModelTransform = float4x4::Identity();
 #endif
 
     YFov = pCamera->Perspective.YFov;
@@ -4422,25 +4426,25 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     GLTF::Light m_DefaultLight{};
     m_DefaultLight.Type = GLTF::Light::TYPE::DIRECTIONAL;
-    m_DefaultLight.Intensity = 9.0f;
+    m_DefaultLight.Intensity = 4.0f;
     m_DefaultLight.Color = float3{ 1, 1, 1 };
 
     float3      m_LightDirection{};
-    m_LightDirection = normalize(float3(0.00f, 1.0f, 1.5f));
+    m_LightDirection = normalize(float3(0.00f, 1.0f, 1.0f));
 
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
-    //if (!s_gc.stationLights.empty())
-    if (false)
+    if (!s_gc.stationLights.empty())
+    //if(false)
     {
         LightCount = std::min(static_cast<Uint32>(s_gc.stationLights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
         for (int i = 0; i < LightCount; ++i)
         {
             const auto& LightNode = *s_gc.stationLights[i];
-            const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.stationModelTransform;
+            const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.renderParams.ModelTransform;
 
             GLTF::Light l = *LightNode.pLight;
-            //l.Intensity = 0.001f;
+            l.Intensity /= 256.0f;
 
             // The light direction is along the negative Z axis of the light's local space.
             // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
@@ -4449,8 +4453,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
         }
-
-        LightCount = 0;
     }
     else
     {
@@ -4564,7 +4566,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         struct SSSRSettings
         {
             float TemporalStabilityFactor = 0.7f;
-            float DepthBufferThickness = 0.015f;
+            float DepthBufferThickness = 0.025f;
             float RoughnessThreshold = 0.5f;
             float VarianceThreshold = 0.0f;
             uint32_t MaxTraversalIntersections = 128;
