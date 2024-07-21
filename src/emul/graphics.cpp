@@ -62,6 +62,8 @@
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
 #include "Graphics/GraphicsTools/interface/ShaderSourceFactoryUtils.hpp"
 #include "Utilities/interface/DiligentFXShaderSourceStreamFactory.hpp"
+#include "RenderStateNotation/interface/RenderStateNotationLoader.h"
+#include "AssetLoader/interface/DXSDKMeshLoader.hpp"
 #include "BasicMath.hpp"
 #include "CommonlyUsedStates.h"
 #include "PostFXContext.hpp"
@@ -287,6 +289,7 @@ void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVForm
     ptex2DPreintegratedGGXVar = GetVariable("g_tex2DPreintegratedGGX");
 }
 
+struct ShadowMap;
 
 struct GraphicsContext
 {
@@ -400,9 +403,138 @@ struct GraphicsContext
     float3 spaceManLocation;
     QuaternionF spaceManCurrentHeading;
 
+    std::unique_ptr<ShadowMap> shadowMap;
 };
 
 static GraphicsContext s_gc{};
+
+struct ShadowMap
+{
+    bool           SnapCascades = true;
+    bool           StabilizeExtents = true;
+    bool           EqualizeExtents = true;
+    bool           SearchBestCascade = true;
+    bool           FilterAcrossCascades = true;
+    int            Resolution = 2048;
+    float          PartitioningFactor = 0.95f;
+    TEXTURE_FORMAT Format = TEX_FORMAT_D16_UNORM;
+    int            iShadowMode = SHADOW_MODE_PCF;
+
+    bool Is32BitFilterableFmt = true;
+
+    void Initialize();
+
+private:
+
+    HLSL::LightAttribs m_LightAttribs;
+    ShadowMapManager m_ShadowMapMgr;
+
+    RefCntAutoPtr<IBuffer>                             m_CameraAttribsCB;
+    RefCntAutoPtr<IBuffer>                             m_LightAttribsCB;
+    std::vector<Uint32>                                m_PSOIndex;
+    std::vector<RefCntAutoPtr<IPipelineState>>         m_RenderMeshPSO;
+    std::vector<RefCntAutoPtr<IPipelineState>>         m_RenderMeshShadowPSO;
+    std::vector<RefCntAutoPtr<IShaderResourceBinding>> m_SRBs;
+    std::vector<RefCntAutoPtr<IShaderResourceBinding>> m_ShadowSRBs;
+
+    RefCntAutoPtr<IRenderStateNotationLoader> m_pRSNLoader;
+
+    RefCntAutoPtr<ISampler> m_pComparisonSampler;
+    RefCntAutoPtr<ISampler> m_pFilterableShadowMapSampler;
+
+    DXSDKMesh m_Mesh;
+
+    void InitializeResourceBindings();
+};
+
+void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh)
+{
+    m_SRBs.clear();
+    m_ShadowSRBs.clear();
+    m_SRBs.resize(mesh->Materials.size());
+    m_ShadowSRBs.resize(mesh->Materials.size());
+    for (Uint32 mat = 0; mat < mesh->Materials.size(); ++mat)
+    {
+        {
+            const auto& Mat = mesh->Materials[mat];
+
+            RefCntAutoPtr<IShaderResourceBinding> pSRB;
+            m_RenderMeshPSO[0]->CreateShaderResourceBinding(&pSRB, true);
+            VERIFY(Mat.pDiffuseRV != nullptr, "Material must have diffuse color texture");
+            pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DDiffuse")->Set(Mat.p.pDiffuseRV);
+            if (iShadowMode == SHADOW_MODE_PCF)
+            {
+                pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DShadowMap")->Set(m_ShadowMapMgr.GetSRV());
+            }
+            else
+            {
+                pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DFilterableShadowMap")->Set(m_ShadowMapMgr.GetFilterableSRV());
+            }
+            m_SRBs[mat] = std::move(pSRB);
+        }
+
+        {
+            RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
+            m_RenderMeshShadowPSO[0]->CreateShaderResourceBinding(&pShadowSRB, true);
+            m_ShadowSRBs[mat] = std::move(pShadowSRB);
+        }
+    }
+}
+
+void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
+{
+    m_LightAttribs.ShadowAttribs.iNumCascades = 4;
+    m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
+    m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
+    m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
+
+    m_LightAttribs.f4Direction = float3(-0.522699475f, -0.481321275f, -0.703671455f);
+    m_LightAttribs.f4Intensity = float4(1, 0.8f, 0.5f, 1);
+    m_LightAttribs.f4AmbientLight = float4(0.125f, 0.125f, 0.125f, 1);
+
+    if (Resolution >= 2048)
+        m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
+    else if (Resolution >= 1024)
+        m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.005f;
+    else
+        m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0075f;
+
+    ShadowMapManager::InitInfo SMMgrInitInfo;
+    SMMgrInitInfo.Format = Format;
+    SMMgrInitInfo.Resolution = Resolution;
+    SMMgrInitInfo.NumCascades = static_cast<Uint32>(m_LightAttribs.ShadowAttribs.iNumCascades);
+    SMMgrInitInfo.ShadowMode = iShadowMode;
+    SMMgrInitInfo.Is32BitFilterableFmt = Is32BitFilterableFmt;
+
+    if (!m_pComparisonSampler)
+    {
+        SamplerDesc ComparsionSampler;
+        ComparsionSampler.ComparisonFunc = COMPARISON_FUNC_LESS;
+        // Note: anisotropic filtering requires SampleGrad to fix artifacts at
+        // cascade boundaries
+        ComparsionSampler.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
+        ComparsionSampler.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
+        ComparsionSampler.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
+        s_gc.m_pDevice->CreateSampler(ComparsionSampler, &m_pComparisonSampler);
+    }
+    SMMgrInitInfo.pComparisonSampler = m_pComparisonSampler;
+
+    if (!m_pFilterableShadowMapSampler)
+    {
+        SamplerDesc SamplerDesc;
+        SamplerDesc.MinFilter = FILTER_TYPE_ANISOTROPIC;
+        SamplerDesc.MagFilter = FILTER_TYPE_ANISOTROPIC;
+        SamplerDesc.MipFilter = FILTER_TYPE_ANISOTROPIC;
+        SamplerDesc.MaxAnisotropy = m_LightAttribs.ShadowAttribs.iMaxAnisotropy;
+        s_gc.m_pDevice->CreateSampler(SamplerDesc, &m_pFilterableShadowMapSampler);
+    }
+    SMMgrInitInfo.pFilterableShadowMapSampler = m_pFilterableShadowMapSampler;
+
+    m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
+
+    InitializeResourceBindings(mesh);
+}
+
 
 template<std::size_t PLANES>
 union TextureColor {
@@ -2497,6 +2629,10 @@ static int GraphicsInitThread()
 
 
     InitPBRRenderer();
+
+    s_gc.shadowMap = std::make_unique<ShadowMap>();
+
+    s_gc.shadowMap->Initialize();
 
     // Navigation window is 72 x 120 pixels.
     uint32_t navWidth = WINDOW_WIDTH; // (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
