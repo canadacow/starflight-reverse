@@ -415,25 +415,28 @@ static GraphicsContext s_gc{};
 
 struct ShadowMap
 {
-    bool           SnapCascades = true;
-    bool           StabilizeExtents = true;
-    bool           EqualizeExtents = true;
-    bool           SearchBestCascade = true;
-    bool           FilterAcrossCascades = true;
-    int            Resolution = 2048;
-    float          PartitioningFactor = 0.95f;
-    TEXTURE_FORMAT Format = TEX_FORMAT_D32_FLOAT;
-    int            iShadowMode = SHADOW_MODE_PCF;
+    struct ShadowSettings
+    {
+        bool           SnapCascades = true;
+        bool           StabilizeExtents = true;
+        bool           EqualizeExtents = true;
+        bool           SearchBestCascade = true;
+        bool           FilterAcrossCascades = true;
+        int            Resolution = 2048;
+        float          PartitioningFactor = 0.95f;
+        TEXTURE_FORMAT Format = TEX_FORMAT_D32_FLOAT;
+        int            iShadowMode = SHADOW_MODE_PCF;
 
-    bool Is32BitFilterableFmt = true;
+        bool Is32BitFilterableFmt = true;
+    } m_ShadowSettings;
 
     void Initialize(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_PBR_Renderer::ModelResourceBindings& meshBindings);
 
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const GLTF::Model& GLTFModel,
-                const GLTF::ModelTransforms& Transforms,
-                const GLTF_PBR_Renderer::RenderInfo& RenderParams,
-                ITextureView* dsv);
+                const HLSL::CameraAttribs& cameraAttribs);
+
+    void RenderShadowMap();
 
 private:
 
@@ -567,16 +570,12 @@ void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& m
     }
 }
 
-void ShadowMap::DrawMesh(IDeviceContext* pCtx,                                 
+void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const GLTF::Model& GLTFModel,
-                         const GLTF::ModelTransforms& Transforms,
-                         const GLTF_PBR_Renderer::RenderInfo& RenderParams,
-                         ITextureView* dsv)
+                         const HLSL::CameraAttribs& cameraAttribs)
 {
 
     MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-
-    s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, dsv, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     // Set the appropriate shadow pipeline state object and shader resource binding
     auto& pPSO = m_RenderMeshShadowPSO[0];
@@ -598,7 +597,6 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                     continue;
 
                 const auto& material = GLTFModel.Materials[primitive.MaterialId];
-                const auto& NodeGlobalMatrix = Transforms.NodeGlobalMatrices[pNode->Index];
 
                 // Set vertex and index buffers
                 std::array<IBuffer*, 8> pVBs;
@@ -611,8 +609,6 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 {
                     pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
                 }
-
-
 
                 IShaderResourceBinding* pSRB = m_ShadowSRBs[primitive.MaterialId];
                 pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
@@ -746,19 +742,19 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_
     m_LightAttribs.f4Intensity = float4(1, 0.8f, 0.5f, 1);
     m_LightAttribs.f4AmbientLight = float4(0.125f, 0.125f, 0.125f, 1);
 
-    if (Resolution >= 2048)
+    if (m_ShadowSettings.Resolution >= 2048)
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
-    else if (Resolution >= 1024)
+    else if (m_ShadowSettings.Resolution >= 1024)
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.005f;
     else
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0075f;
 
     ShadowMapManager::InitInfo SMMgrInitInfo;
-    SMMgrInitInfo.Format = Format;
-    SMMgrInitInfo.Resolution = Resolution;
+    SMMgrInitInfo.Format = m_ShadowSettings.Format;
+    SMMgrInitInfo.Resolution = m_ShadowSettings.Resolution;
     SMMgrInitInfo.NumCascades = static_cast<Uint32>(m_LightAttribs.ShadowAttribs.iNumCascades);
-    SMMgrInitInfo.ShadowMode = iShadowMode;
-    SMMgrInitInfo.Is32BitFilterableFmt = Is32BitFilterableFmt;
+    SMMgrInitInfo.ShadowMode = m_ShadowSettings.iShadowMode;
+    SMMgrInitInfo.Is32BitFilterableFmt = m_ShadowSettings.Is32BitFilterableFmt;
 
     if (!m_pComparisonSampler)
     {
@@ -789,6 +785,34 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_
     InitializeResourceBindings(mesh, meshBindings);
 }
 
+void ShadowMap::RenderShadowMap()
+{
+    const int iNumShadowCascades = m_LightAttribs.ShadowAttribs.iNumCascades;
+    for (int iCascade = 0; iCascade < iNumShadowCascades; ++iCascade)
+    {
+        const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(iCascade).Proj;
+
+        auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightViewT.Transpose();
+        auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;
+
+        HLSL::CameraAttribs ShadowCameraAttribs = {};
+
+        ShadowCameraAttribs.mViewT = m_LightAttribs.ShadowAttribs.mWorldToLightViewT;
+        ShadowCameraAttribs.mProjT = CascadeProjMatr.Transpose();
+        ShadowCameraAttribs.mViewProjT = WorldToLightProjSpaceMatr.Transpose();
+
+        ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
+        ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
+        ShadowCameraAttribs.f4ViewportSize.z = 1.f / ShadowCameraAttribs.f4ViewportSize.x;
+        ShadowCameraAttribs.f4ViewportSize.w = 1.f / ShadowCameraAttribs.f4ViewportSize.y;
+
+        auto* pCascadeDSV = m_ShadowMapMgr.GetCascadeDSV(iCascade);
+        s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, ShadowCameraAttribs);
+    }
+}
 
 template<std::size_t PLANES>
 union TextureColor {
@@ -4855,6 +4879,8 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
 
             GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
+
+            //RenderStationShadowMap();
         }
     }
     else
@@ -4862,8 +4888,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, s_gc.stationScale }, Lights);
         LightCount = 1;
     }
-
-    s_gc.shadowMap->DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, CurrTransforms, s_gc.renderParams, pShadowDSV);
 
     Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((inFlightIndex & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
     s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
