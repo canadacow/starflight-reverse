@@ -60,6 +60,7 @@
 #include "Graphics/GraphicsEngine/interface/RenderDevice.h"
 #include "Graphics/GraphicsEngine/interface/DeviceContext.h"
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
+#include "Graphics/GraphicsEngine/interface/Shader.h"
 #include "Graphics/GraphicsTools/interface/ShaderSourceFactoryUtils.hpp"
 #include "Utilities/interface/DiligentFXShaderSourceStreamFactory.hpp"
 #include "RenderStateNotation/interface/RenderStateNotationLoader.h"
@@ -325,6 +326,9 @@ struct GraphicsContext
 
         ITextureView* diligentSsrBuffer;
         ITextureView* diligentSsrBufferSrv;
+
+        avk::image    avkdShadowDepthBuffer;
+        ITextureView* diligentShadowDepthBuffer;
     };
     
     std::vector<BufferData> buffers;
@@ -388,6 +392,7 @@ struct GraphicsContext
     GLTF_PBR_Renderer::RenderInfo renderParams;
     ApplyPosteffects applyPostFX;
     RefCntAutoPtr<IBuffer> frameAttribsCB;
+    RefCntAutoPtr<IBuffer> cameraAttribsCB;
     std::unique_ptr<PostFXContext> postFXContext;
 
 #if defined(DE_SSR)
@@ -417,24 +422,27 @@ struct ShadowMap
     bool           FilterAcrossCascades = true;
     int            Resolution = 2048;
     float          PartitioningFactor = 0.95f;
-    TEXTURE_FORMAT Format = TEX_FORMAT_D16_UNORM;
+    TEXTURE_FORMAT Format = TEX_FORMAT_D32_FLOAT;
     int            iShadowMode = SHADOW_MODE_PCF;
 
     bool Is32BitFilterableFmt = true;
 
-    void Initialize();
+    void Initialize(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_PBR_Renderer::ModelResourceBindings& meshBindings);
+
+    void DrawMesh(IDeviceContext* pCtx,                                 
+                const GLTF::Model& GLTFModel,
+                const GLTF::ModelTransforms& Transforms,
+                const GLTF_PBR_Renderer::RenderInfo& RenderParams,
+                ITextureView* dsv);
 
 private:
 
     HLSL::LightAttribs m_LightAttribs;
     ShadowMapManager m_ShadowMapMgr;
 
-    RefCntAutoPtr<IBuffer>                             m_CameraAttribsCB;
     RefCntAutoPtr<IBuffer>                             m_LightAttribsCB;
     std::vector<Uint32>                                m_PSOIndex;
-    std::vector<RefCntAutoPtr<IPipelineState>>         m_RenderMeshPSO;
     std::vector<RefCntAutoPtr<IPipelineState>>         m_RenderMeshShadowPSO;
-    std::vector<RefCntAutoPtr<IShaderResourceBinding>> m_SRBs;
     std::vector<RefCntAutoPtr<IShaderResourceBinding>> m_ShadowSRBs;
 
     RefCntAutoPtr<IRenderStateNotationLoader> m_pRSNLoader;
@@ -442,47 +450,293 @@ private:
     RefCntAutoPtr<ISampler> m_pComparisonSampler;
     RefCntAutoPtr<ISampler> m_pFilterableShadowMapSampler;
 
-    DXSDKMesh m_Mesh;
+    //DXSDKMesh m_Mesh;
 
-    void InitializeResourceBindings();
+    void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_PBR_Renderer::ModelResourceBindings& meshBindings);
 };
 
-void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh)
+/*
+
+void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
+                                        GLTF::Material&         Material,
+                                        IBuffer*                pFrameAttribs,
+                                        IShaderResourceBinding* pMaterialSRB)
 {
-    m_SRBs.clear();
-    m_ShadowSRBs.clear();
-    m_SRBs.resize(mesh->Materials.size());
-    m_ShadowSRBs.resize(mesh->Materials.size());
-    for (Uint32 mat = 0; mat < mesh->Materials.size(); ++mat)
+    if (pMaterialSRB == nullptr)
     {
-        {
-            const auto& Mat = mesh->Materials[mat];
+        LOG_ERROR_MESSAGE("Failed to create material SRB");
+        return;
+    }
 
-            RefCntAutoPtr<IShaderResourceBinding> pSRB;
-            m_RenderMeshPSO[0]->CreateShaderResourceBinding(&pSRB, true);
-            VERIFY(Mat.pDiffuseRV != nullptr, "Material must have diffuse color texture");
-            pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DDiffuse")->Set(Mat.p.pDiffuseRV);
-            if (iShadowMode == SHADOW_MODE_PCF)
-            {
-                pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DShadowMap")->Set(m_ShadowMapMgr.GetSRV());
-            }
-            else
-            {
-                pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DFilterableShadowMap")->Set(m_ShadowMapMgr.GetFilterableSRV());
-            }
-            m_SRBs[mat] = std::move(pSRB);
+    InitCommonSRBVars(pMaterialSRB, pFrameAttribs);
+
+    auto SetTexture = [&](TEXTURE_ATTRIB_ID ID, ITextureView* pDefaultTexSRV) //
+    {
+        const int TexAttribId = m_Settings.TextureAttribIndices[ID];
+        if (TexAttribId < 0)
+        {
+            UNEXPECTED("Texture attribute is not initialized");
+            return;
         }
 
+        RefCntAutoPtr<ITextureView> pTexSRV;
+
+        auto TexIdx = Material.GetTextureId(TexAttribId);
+        if (TexIdx >= 0)
         {
-            RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
-            m_RenderMeshShadowPSO[0]->CreateShaderResourceBinding(&pShadowSRB, true);
-            m_ShadowSRBs[mat] = std::move(pShadowSRB);
+            if (auto* pTexture = Model.GetTexture(TexIdx))
+            {
+                if (pTexture->GetDesc().Type == RESOURCE_DIM_TEX_2D_ARRAY)
+                    pTexSRV = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+                else
+                {
+                    TextureViewDesc SRVDesc;
+                    SRVDesc.ViewType   = TEXTURE_VIEW_SHADER_RESOURCE;
+                    SRVDesc.TextureDim = RESOURCE_DIM_TEX_2D_ARRAY;
+                    pTexture->CreateView(SRVDesc, &pTexSRV);
+                }
+            }
         }
+
+        if (pTexSRV == nullptr)
+            pTexSRV = pDefaultTexSRV;
+
+        this->SetMaterialTexture(pMaterialSRB, pTexSRV, ID);
+    };
+
+    SetTexture(TEXTURE_ATTRIB_ID_BASE_COLOR, m_pWhiteTexSRV);
+    SetTexture(TEXTURE_ATTRIB_ID_PHYS_DESC, m_pDefaultPhysDescSRV);
+    SetTexture(TEXTURE_ATTRIB_ID_NORMAL, m_pDefaultNormalMapSRV);
+
+    if (m_Settings.EnableAO)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_OCCLUSION, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableEmissive)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_EMISSIVE, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableClearCoat)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_CLEAR_COAT, m_pWhiteTexSRV);
+        SetTexture(TEXTURE_ATTRIB_ID_CLEAR_COAT_ROUGHNESS, m_pWhiteTexSRV);
+        SetTexture(TEXTURE_ATTRIB_ID_CLEAR_COAT_NORMAL, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableSheen)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_SHEEN_COLOR, m_pWhiteTexSRV);
+        SetTexture(TEXTURE_ATTRIB_ID_SHEEN_ROUGHNESS, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableAnisotropy)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_ANISOTROPY, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableIridescence)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_IRIDESCENCE, m_pWhiteTexSRV);
+        SetTexture(TEXTURE_ATTRIB_ID_IRIDESCENCE_THICKNESS, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableTransmission)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_TRANSMISSION, m_pWhiteTexSRV);
+    }
+
+    if (m_Settings.EnableVolume)
+    {
+        SetTexture(TEXTURE_ATTRIB_ID_THICKNESS, m_pWhiteTexSRV);
     }
 }
 
-void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
+*/
+
+void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_PBR_Renderer::ModelResourceBindings& meshBindings)
 {
+    m_ShadowSRBs.clear();
+    m_ShadowSRBs.resize(mesh->Materials.size());
+    for (Uint32 mat = 0; mat < mesh->Materials.size(); ++mat)
+    {
+        RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
+        m_RenderMeshShadowPSO[0]->CreateShaderResourceBinding(&pShadowSRB, true);
+        m_ShadowSRBs[mat] = std::move(pShadowSRB);
+    }
+}
+
+void ShadowMap::DrawMesh(IDeviceContext* pCtx,                                 
+                         const GLTF::Model& GLTFModel,
+                         const GLTF::ModelTransforms& Transforms,
+                         const GLTF_PBR_Renderer::RenderInfo& RenderParams,
+                         ITextureView* dsv)
+{
+
+    MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+
+    s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, dsv, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+    // Set the appropriate shadow pipeline state object and shader resource binding
+    auto& pPSO = m_RenderMeshShadowPSO[0];
+
+    pCtx->SetPipelineState(pPSO);
+
+    // Iterate through each scene node
+    for (const auto& Scene : GLTFModel.Scenes)
+    {
+        for (const auto* pNode : Scene.LinearNodes)
+        {
+            if (pNode->pMesh == nullptr)
+                continue;
+
+            // Iterate through each primitive in the mesh
+            for (const auto& primitive : pNode->pMesh->Primitives)
+            {
+                if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
+                    continue;
+
+                const auto& material = GLTFModel.Materials[primitive.MaterialId];
+                const auto& NodeGlobalMatrix = Transforms.NodeGlobalMatrices[pNode->Index];
+
+                // Set vertex and index buffers
+                std::array<IBuffer*, 8> pVBs;
+                const auto NumVBs = static_cast<Uint32>(GLTFModel.GetVertexBufferCount());
+                for (Uint32 i = 0; i < NumVBs; ++i)
+                    pVBs[i] = GLTFModel.GetVertexBuffer(i);
+                pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
+
+                if (auto* pIndexBuffer = GLTFModel.GetIndexBuffer())
+                {
+                    pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                }
+
+
+
+                IShaderResourceBinding* pSRB = m_ShadowSRBs[primitive.MaterialId];
+                pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+                // Draw the primitive
+                if (primitive.HasIndices())
+                {
+                    DrawIndexedAttribs drawAttrs{primitive.IndexCount, VT_UINT32, DRAW_FLAG_VERIFY_ALL};
+                    drawAttrs.FirstIndexLocation = GLTFModel.GetFirstIndexLocation() + primitive.FirstIndex;
+                    drawAttrs.BaseVertex = GLTFModel.GetBaseVertex();
+                    pCtx->DrawIndexed(drawAttrs);
+                }
+                else
+                {
+                    DrawAttribs drawAttrs{primitive.VertexCount, DRAW_FLAG_VERIFY_ALL};
+                    drawAttrs.StartVertexLocation = GLTFModel.GetBaseVertex();
+                    pCtx->Draw(drawAttrs);
+                }
+            }
+        }
+    }
+
+    s_gc.m_pImmediateContext->Flush();
+}
+
+void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const GLTF_PBR_Renderer::ModelResourceBindings& meshBindings)
+{
+    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "cbCameraAttribs", &s_gc.cameraAttribsCB);
+
+    GraphicsPipelineStateCreateInfo PSOCreateInfo{};
+
+    PipelineResourceLayoutDescX ResourceLayout;
+    ResourceLayout
+        .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_VERTEX, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+
+    PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
+
+    // This is a graphics pipeline
+    PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+    // clang-format off
+    // Shadow pass doesn't use any render target outputs
+    PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 0;
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
+    // The DSV format is the shadow map format
+    PSOCreateInfo.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT; // m_ShadowMapFormat;
+    PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    // Cull back faces
+    PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
+    // Enable depth testing
+    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = True;
+    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+    // clang-format on
+
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+    s_gc.m_pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("shaders", &pShaderSourceFactory);
+
+    ShaderCreateInfo ShaderCI;
+    ShaderCI.pShaderSourceStreamFactory = pShaderSourceFactory;
+    // Tell the system that the shader source code is in HLSL.
+    // For OpenGL, the engine will convert this into GLSL under the hood.
+    ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+    // OpenGL backend requires emulated combined HLSL texture samplers (g_Texture + g_Texture_sampler combination)
+    ShaderCI.Desc.UseCombinedTextureSamplers = true;
+
+    ShaderMacroHelper Macros;
+    Macros.AddShaderMacro("SHADOW_MODE", SHADOW_MODE_PCF);
+    Macros.AddShaderMacro("PCF_FILTER_SIZE", 5);
+    Macros.AddShaderMacro("FILTER_ACROSS_CASCADES", true);
+    Macros.AddShaderMacro("BEST_CASCADE_SEARCH", true);
+    Macros.AddShaderMacro("SHADOW_PASS", true);
+
+    // Create shadow vertex shader
+    RefCntAutoPtr<IShader> pShadowVS;
+    {
+        ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+        ShaderCI.EntryPoint = "MeshVS";
+        ShaderCI.Desc.Name = "Mesh VS";
+        ShaderCI.FilePath = "MeshVS.vsh";
+        ShaderCI.Macros = Macros;
+        s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowVS);
+    }
+    PSOCreateInfo.pVS = pShadowVS;
+
+    // clang-format off
+    // Define vertex shader input layout
+    LayoutElement LayoutElems[] =
+    {
+        // Attribute 0 - vertex position
+        LayoutElement{0, 0, 3, VT_FLOAT32, False},
+        // Attribute 1 - normal
+        LayoutElement{2, 0, 3, VT_FLOAT32, False},
+        // Attribute 2 - texture coordinates
+        LayoutElement{1, 0, 2, VT_FLOAT32, False}
+    };
+    // clang-format on
+
+    PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
+    PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
+
+    PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
+
+    if (s_gc.m_pDevice->GetDeviceInfo().Features.DepthClamp)
+    {
+        // Disable depth clipping to render objects that are closer than near
+        // clipping plane. This is not required for this tutorial, but real applications
+        // will most likely want to do this.
+        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.DepthClipEnable = False;
+    }
+
+    RefCntAutoPtr<IPipelineState> pRenderMeshShadowPSO;
+
+    s_gc.m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &pRenderMeshShadowPSO);
+
+    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
+    m_RenderMeshShadowPSO.emplace_back(std::move(pRenderMeshShadowPSO));
+
+    StateTransitionDesc Barriers[] = {
+    {
+            s_gc.cameraAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+    };
+    s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
+
     m_LightAttribs.ShadowAttribs.iNumCascades = 4;
     m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
@@ -532,7 +786,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
 
     m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
 
-    InitializeResourceBindings(mesh);
+    InitializeResourceBindings(mesh, meshBindings);
 }
 
 
@@ -2632,7 +2886,7 @@ static int GraphicsInitThread()
 
     s_gc.shadowMap = std::make_unique<ShadowMap>();
 
-    s_gc.shadowMap->Initialize();
+    s_gc.shadowMap->Initialize(s_gc.station, s_gc.stationBindings);
 
     // Navigation window is 72 x 120 pixels.
     uint32_t navWidth = WINDOW_WIDTH; // (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
@@ -2765,6 +3019,20 @@ static int GraphicsInitThread()
         ITexture* dd{};
         pDeviceVk->CreateTextureFromVulkanImage(bd.avkdDepthBuffer.get().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dd);
         bd.diligentDepthBuffer = dd->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
+
+        bd.avkdShadowDepthBuffer = s_gc.vc.create_image(2048, 2048, vk::Format::eD32Sfloat, 1, avk::memory_usage::device, avk::image_usage::general_depth_stencil_attachment);
+        cbDesc = {};
+        cbDesc.Type = RESOURCE_DIM_TEX_2D;
+        cbDesc.Width = 2048;
+        cbDesc.Height = 2048;
+        cbDesc.Format = TEX_FORMAT_D32_FLOAT;
+        cbDesc.MipLevels = 1;
+        cbDesc.SampleCount = 1;
+        cbDesc.Usage = USAGE_DEFAULT;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
+        dd = {};
+        pDeviceVk->CreateTextureFromVulkanImage(bd.avkdShadowDepthBuffer.get().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dd);
+        bd.diligentShadowDepthBuffer = dd->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
 
         s_gc.vc.record_and_submit_with_fence({
             avk::sync::image_memory_barrier(bd.gameOutput->get_image(),
@@ -4523,6 +4791,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
     ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
     ITextureView*        pPrevDSV = s_gc.buffers[(inFlightIndex + 1) & 0x01].diligentDepthBuffer;
+    ITextureView*        pShadowDSV = s_gc.buffers[inFlightIndex].diligentShadowDepthBuffer;
 
     if(!s_gc.applyPostFX)
     {
@@ -4540,9 +4809,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     #endif
 
     s_gc.gBuffer->Resize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
-
-    Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((inFlightIndex & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
-    s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
 
     const auto& CurrCamAttribs = s_gc.stationCameraAttribs[inFlightIndex & 0x01];
     const auto& PrevCamAttribs = s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01];
@@ -4596,6 +4862,11 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, s_gc.stationScale }, Lights);
         LightCount = 1;
     }
+
+    s_gc.shadowMap->DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, CurrTransforms, s_gc.renderParams, pShadowDSV);
+
+    Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((inFlightIndex & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);
+    s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMask, nullptr, BuffersMask);
 
     auto& Renderer = FrameAttribs->Renderer;
     s_gc.pbrRenderer->SetInternalShaderParameters(Renderer);
