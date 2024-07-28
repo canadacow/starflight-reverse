@@ -68,6 +68,7 @@
 #include "BasicMath.hpp"
 #include "CommonlyUsedStates.h"
 #include "PostFXContext.hpp"
+#include "Bloom.hpp"
 #include "ScreenSpaceReflection.hpp"
 #include "MapHelper.hpp"
 #include "TextureUtilities.h"
@@ -84,6 +85,7 @@ namespace HLSL
 #include "Shaders/Common/public/BasicStructures.fxh"
 #include "Shaders/PBR/public/PBR_Structures.fxh"
 #include "Shaders/PBR/private/RenderPBR_Structures.fxh"
+#include "Shaders/PostProcess/Bloom/public/BloomStructures.fxh"
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
 
@@ -394,6 +396,9 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
     std::unique_ptr<PostFXContext> postFXContext;
+    std::unique_ptr<Bloom> bloom;
+
+    HLSL::BloomAttribs bloomSettings{};
 
 #if defined(DE_SSR)
     std::unique_ptr<ScreenSpaceReflection> ssr;
@@ -2664,6 +2669,10 @@ static void InitPBRRenderer()
     CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetPRBFrameAttribsSize(), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
 
     s_gc.postFXContext = std::make_unique<PostFXContext>(s_gc.m_pDevice);
+    s_gc.bloom = std::make_unique<Bloom>(s_gc.m_pDevice);
+    s_gc.bloomSettings.Intensity = 0.05f;
+    s_gc.bloomSettings.Threshold = 1.25f;
+    // s_gc.bloomSettings.Radius = 1.5f;
 
     #if defined(DE_SSR)
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice);
@@ -4828,6 +4837,8 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     FrameDesc.Height = WINDOW_HEIGHT;
     s_gc.postFXContext->PrepareResources(s_gc.m_pDevice, FrameDesc, PostFXContext::FEATURE_FLAG_NONE);
 
+    s_gc.bloom->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), Bloom::FEATURE_FLAG_NONE);
+
     #if defined(DE_SSR)
     s_gc.ssr->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), ScreenSpaceReflection::FEATURE_FLAG_NONE);
     #endif
@@ -4871,7 +4882,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.renderParams.ModelTransform;
 
             GLTF::Light l = *LightNode.pLight;
-            l.Intensity /= 256.0f;
+            l.Intensity /= 512.0f;
 
             // The light direction is along the negative Z axis of the light's local space.
             // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
@@ -5054,13 +5065,21 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     }
     #endif
 
+    Bloom::RenderAttributes BloomRenderAttribs{};
+    BloomRenderAttribs.pDevice = s_gc.m_pDevice;
+    BloomRenderAttribs.pDeviceContext = s_gc.m_pImmediateContext;
+    BloomRenderAttribs.pPostFXContext = s_gc.postFXContext.get();
+    BloomRenderAttribs.pColorBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    BloomRenderAttribs.pBloomAttribs = &s_gc.bloomSettings;
+    s_gc.bloom->Execute(BloomRenderAttribs);
+
     s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Clear the back buffer
     const float ClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
     s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
-    s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.bloom->GetBloomTextureSRV());
     s_gc.applyPostFX.ptex2DNormalVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     #if defined(DE_SSR)
     s_gc.applyPostFX.ptex2DSSR->Set(s_gc.ssr->GetSSRRadianceSRV());
