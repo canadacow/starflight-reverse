@@ -18,6 +18,7 @@ Texture2D<float4> g_tex2DSSR;
 Texture2D<float4> g_tex2DSpecularIBL;
 Texture2D<float4> g_tex2DMaterialData;
 Texture2D<float4> g_tex2DBaseColor;
+Texture2D<float>  g_tex2DSSAO;
 
 Texture2D<float4> g_tex2DPreintegratedGGX;
 SamplerState      g_tex2DPreintegratedGGX_sampler;
@@ -30,6 +31,7 @@ float4 main(in FullScreenTriangleVSOutput VSOut) : SV_Target
     float4 SpecularIBL = g_tex2DSpecularIBL.Load(int3(VSOut.f4PixelPos.xy, 0));
     float4 BaseColor   = g_tex2DBaseColor.Load(int3(VSOut.f4PixelPos.xy, 0));
     float4 Material    = g_tex2DMaterialData.Load(int3(VSOut.f4PixelPos.xy, 0));
+    float SSAOValue    = g_tex2DSSAO.Load(int3(VSOut.f4PixelPos.xy, 0)).r;
     
     float SSRScale  = g_Frame.PrevCamera.f4ExtraData[0].x;
     float DebugMode = g_Frame.PrevCamera.f4ExtraData[0].y;
@@ -52,6 +54,7 @@ float4 main(in FullScreenTriangleVSOutput VSOut) : SV_Target
     if (DebugMode == 0.0)
     {
         OutColor.rgb += (SSR.rgb - SpecularIBL.rgb) * SSRRadiance.w * OutColor.a * SSRScale;
+        OutColor.rgb *= SSAOValue;
     }
     else if (DebugMode == 1.0)
     {

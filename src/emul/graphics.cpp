@@ -70,6 +70,7 @@
 #include "PostFXContext.hpp"
 #include "Bloom.hpp"
 #include "ScreenSpaceReflection.hpp"
+#include "ScreenSpaceAmbientOcclusion.hpp"
 #include "MapHelper.hpp"
 #include "TextureUtilities.h"
 #include "TextureLoader.h"
@@ -88,6 +89,7 @@ namespace HLSL
 #include "Shaders/PostProcess/Bloom/public/BloomStructures.fxh"
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
+#include "Shaders/PostProcess/ScreenSpaceAmbientOcclusion/public/ScreenSpaceAmbientOcclusionStructures.fxh"
 
 } // namespace HLSL
 
@@ -211,6 +213,7 @@ struct ApplyPosteffects
     IShaderResourceVariable* ptex2DBaseColorVar        = nullptr;
     IShaderResourceVariable* ptex2DMaterialDataVar     = nullptr;
     IShaderResourceVariable* ptex2DPreintegratedGGXVar = nullptr;
+    IShaderResourceVariable* ptex2DSSAOVar             = nullptr;
 
     void Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVFormat, IBuffer* pFrameAttribsCB);
     operator bool() const { return pPSO != nullptr; }
@@ -290,6 +293,7 @@ void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVForm
     ptex2DBaseColorVar        = GetVariable("g_tex2DBaseColor");
     ptex2DMaterialDataVar     = GetVariable("g_tex2DMaterialData");
     ptex2DPreintegratedGGXVar = GetVariable("g_tex2DPreintegratedGGX");
+    ptex2DSSAOVar             = GetVariable("g_tex2DSSAO");
 }
 
 struct ShadowMap;
@@ -397,6 +401,7 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<Bloom> bloom;
+    std::unique_ptr<ScreenSpaceAmbientOcclusion> ssao;
 
     HLSL::BloomAttribs bloomSettings{};
 
@@ -2658,6 +2663,7 @@ static void InitPBRRenderer()
 
     s_gc.renderParams.Flags &= ~GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING;
     s_gc.renderParams.Flags |= GLTF_PBR_Renderer::PSO_FLAG_COMPUTE_MOTION_VECTORS;
+    s_gc.renderParams.Flags |= GLTF_PBR_Renderer::PSO_FLAG_USE_AO_MAP;
 
     RendererCI.NumRenderTargets = GBUFFER_RT_NUM_COLOR_TARGETS;
     for (Uint32 i = 0; i < RendererCI.NumRenderTargets; ++i)
@@ -2670,9 +2676,7 @@ static void InitPBRRenderer()
 
     s_gc.postFXContext = std::make_unique<PostFXContext>(s_gc.m_pDevice);
     s_gc.bloom = std::make_unique<Bloom>(s_gc.m_pDevice);
-    s_gc.bloomSettings.Intensity = 0.05f;
-    s_gc.bloomSettings.Threshold = 1.25f;
-    // s_gc.bloomSettings.Radius = 1.5f;
+    s_gc.ssao = std::make_unique<ScreenSpaceAmbientOcclusion>(s_gc.m_pDevice);
 
     #if defined(DE_SSR)
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice);
@@ -4839,6 +4843,11 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.bloom->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), Bloom::FEATURE_FLAG_NONE);
 
+    if (s_gc.ssao)
+    {
+        s_gc.ssao->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), ScreenSpaceAmbientOcclusion::FEATURE_FLAG_NONE);
+    }
+    
     #if defined(DE_SSR)
     s_gc.ssr->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), ScreenSpaceReflection::FEATURE_FLAG_NONE);
     #endif
@@ -5073,6 +5082,20 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     BloomRenderAttribs.pBloomAttribs = &s_gc.bloomSettings;
     s_gc.bloom->Execute(BloomRenderAttribs);
 
+    if (s_gc.ssao)
+    {
+        HLSL::ScreenSpaceAmbientOcclusionAttribs SSAOSettings{};
+
+        ScreenSpaceAmbientOcclusion::RenderAttributes SSAORenderAttribs{};
+        SSAORenderAttribs.pDevice = s_gc.m_pDevice;
+        SSAORenderAttribs.pDeviceContext = s_gc.m_pImmediateContext;
+        SSAORenderAttribs.pPostFXContext = s_gc.postFXContext.get();
+        SSAORenderAttribs.pDepthBufferSRV = pCurrDepthSRV;
+        SSAORenderAttribs.pNormalBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        SSAORenderAttribs.pSSAOAttribs = &SSAOSettings;
+        s_gc.ssao->Execute(SSAORenderAttribs);
+    }
+
     s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Clear the back buffer
     const float ClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -5091,6 +5114,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.applyPostFX.ptex2DBaseColorVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_BASE_COLOR)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     s_gc.applyPostFX.ptex2DMaterialDataVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MATERIAL_DATA)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
     s_gc.applyPostFX.ptex2DPreintegratedGGXVar->Set(s_gc.pbrRenderer->GetPreintegratedGGX_SRV());
+    s_gc.applyPostFX.ptex2DSSAOVar->Set(s_gc.ssao->GetAmbientOcclusionSRV());
     s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
 
