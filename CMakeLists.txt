@@ -139,6 +139,7 @@ set(HEADER_FILES
     src/tts/speech.h
     src/emul/platform.h
     src/emul/common.pch
+    src/pbr/SF_PBR_Renderer.hpp
     ${CURL_INCLUDE_DIRS}
 )
 
@@ -158,6 +159,7 @@ add_executable(emulatesdl WIN32
     src/emul/sdl_helper.cpp
     src/emul/vulkan_helper.cpp
     src/tts/speech.cpp
+    src/pbr/SF_PBR_Renderer.cpp
 )
 
 target_include_directories(emulatesdl
