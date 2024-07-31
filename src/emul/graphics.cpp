@@ -2549,7 +2549,12 @@ static void LoadEnvironmentMap(const char* Path)
         void CSMain(uint3 DTid : SV_DispatchThreadID)
         {
             float4 color = g_Texture[DTid.xyz];
-            color *= 256.0; // Example multiplier
+            float expFactor = 2.0;
+            float maxIntensity = 511.0; // Maximum intensity for bright stars
+
+            // Apply the power function to scale the color
+            color.rgb = maxIntensity * pow(color.rgb, expFactor) + color.rgb;
+
             g_Texture[DTid.xyz] = color;
         }
     )";
