@@ -2533,10 +2533,71 @@ static void LoadEnvironmentMap(const char* Path)
     s_gc.envMapRenderer = std::make_unique<EnvMapRenderer>(EnvMapRendererCI);
 
     RefCntAutoPtr<ITexture> pEnvironmentMap;
-    CreateTextureFromFile(Path, TextureLoadInfo{"Environment map"}, s_gc.m_pDevice, &pEnvironmentMap);
+
+    TextureLoadInfo tli = {};
+    tli.Name = "Environment map";
+    tli.Usage = USAGE_DEFAULT;
+    tli.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+
+    CreateTextureFromFile(Path, tli, s_gc.m_pDevice, &pEnvironmentMap);
     VERIFY_EXPR(pEnvironmentMap);
 
-    s_gc.pbrRenderer->PrecomputeCubemaps(s_gc.m_pImmediateContext, pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+    const char* csSource = R"(
+        RWTexture2DArray<float4> g_Texture : register(u0);
+
+        [numthreads(16, 16, 1)]
+        void CSMain(uint3 DTid : SV_DispatchThreadID)
+        {
+            float4 color = g_Texture[DTid.xyz];
+            color *= 256.0; // Example multiplier
+            g_Texture[DTid.xyz] = color;
+        }
+    )";
+
+    ShaderCreateInfo ShaderCI;
+    ShaderCI.Source = csSource;
+    ShaderCI.EntryPoint = "CSMain";
+    ShaderCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+    ShaderCI.Desc.Name = "Multiply Pixels Compute Shader";
+    ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+
+    RefCntAutoPtr<IShader> pShader;
+    s_gc.m_pDevice->CreateShader(ShaderCI, &pShader);
+    VERIFY_EXPR(pShader);
+
+    PipelineResourceSignatureDescX SignatureDesc{ "Multiply Pixels Compute PSO" };
+    SignatureDesc
+        .AddResource(SHADER_TYPE_COMPUTE, "g_Texture", SHADER_RESOURCE_TYPE_TEXTURE_UAV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+
+    RefCntAutoPtr<IPipelineResourceSignature> pResSig;
+    s_gc.m_pDevice->CreatePipelineResourceSignature(SignatureDesc, &pResSig);
+    VERIFY_EXPR(pResSig);
+
+    ComputePipelineStateCreateInfoX CPSOCreateInfo{ "Multiply Pixels Compute PSO" };
+    CPSOCreateInfo.AddShader(pShader);
+    CPSOCreateInfo.AddSignature(pResSig);
+
+    RefCntAutoPtr<IPipelineState> pPSO;
+    s_gc.m_pDevice->CreatePipelineState(CPSOCreateInfo, &pPSO);
+    VERIFY_EXPR(pPSO);
+
+    RefCntAutoPtr<IShaderResourceBinding> pSRB;
+    pResSig->CreateShaderResourceBinding(&pSRB, true);
+    VERIFY_EXPR(pSRB);
+
+    pSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Texture")->Set(pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS));
+
+    DispatchComputeAttribs DispatchAttrs;
+    DispatchAttrs.ThreadGroupCountX = (pEnvironmentMap->GetDesc().Width + 15) / 16;
+    DispatchAttrs.ThreadGroupCountY = (pEnvironmentMap->GetDesc().Height + 15) / 16;
+    DispatchAttrs.ThreadGroupCountZ = pEnvironmentMap->GetDesc().Depth;
+
+    s_gc.m_pImmediateContext->SetPipelineState(pPSO);
+    s_gc.m_pImmediateContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    s_gc.m_pImmediateContext->DispatchCompute(DispatchAttrs);
+    s_gc.m_pImmediateContext->Flush();
+    
+    s_gc.pbrRenderer->PrecomputeCubemaps(s_gc.m_pImmediateContext, pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), 8192, 1024, true);
 
     StateTransitionDesc Barriers[] = {
         {pEnvironmentMap, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE},
