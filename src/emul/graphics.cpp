@@ -4788,7 +4788,7 @@ struct ShaderParams
 {
     float OcclusionStrength = 1;
     float EmissionScale = 1;
-    float IBLScale = 1;
+    float IBLScale = 2.0f;
     float AverageLogLum = 0.3f;
     float MiddleGray = 0.18f;
     float WhitePoint = 3.f;
