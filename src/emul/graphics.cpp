@@ -4685,8 +4685,13 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
     return float4x4::Identity();
 }
 
-void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
+void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
 {
+    float rotationAngle = (float)frameCount * 0.0003f;
+
+    float4x4 RotationMatrixCam = float4x4::RotationZ(-rotationAngle);
+    float4x4 RotationMatrixModel = float4x4::RotationY(rotationAngle);
+
     s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
     s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
 
@@ -4736,8 +4741,8 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 
     //auto invModelTransform = modelTransform.Inverse();
     
-    CameraView = cam.ToMatrix() * trans;
-    s_gc.renderParams.ModelTransform = modelTransform; // QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+    CameraView = RotationMatrixCam * cam.ToMatrix() * trans;
+    s_gc.renderParams.ModelTransform = RotationMatrixModel * modelTransform; // QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
     //s_gc.renderParams.ModelTransform = float4x4::Identity();
 #endif
 
@@ -5642,7 +5647,7 @@ void GraphicsUpdate()
 
     if (true)
     {
-        UpdateStation(inFlightIndex);
+        UpdateStation(inFlightIndex, s_gc.vc.current_frame());
         RenderStation(inFlightIndex);
     }
 
