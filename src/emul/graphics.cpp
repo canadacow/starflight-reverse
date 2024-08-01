@@ -4688,6 +4688,7 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
 {
     float rotationAngle = (float)frameCount * 0.00005f;
+    //float rotationAngle = (float)frameCount * 0.001f;
 
     float axisOne = rotationAngle;
     float axisTwo = rotationAngle / 3.0f;
@@ -4969,11 +4970,23 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     if (!s_gc.stationLights.empty())
     //if(false)
     {
+        auto baseModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+
         LightCount = std::min(static_cast<Uint32>(s_gc.stationLights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
         for (int i = 0; i < LightCount; ++i)
         {
             const auto& LightNode = *s_gc.stationLights[i];
-            const auto  LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index] * s_gc.renderParams.ModelTransform;
+            auto LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
+
+            if (LightNode.Name == "Sun")
+            {
+                // Don't rotate the sun with the rest of the model.
+                LightGlobalTransform *= baseModelTransform;
+            }
+            else
+            {
+                LightGlobalTransform *= s_gc.renderParams.ModelTransform;
+            }
 
             GLTF::Light l = *LightNode.pLight;
             l.Intensity /= 512.0f;
