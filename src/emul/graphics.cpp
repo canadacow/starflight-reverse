@@ -4687,10 +4687,13 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 
 void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
 {
-    float rotationAngle = (float)frameCount * 0.0003f;
+    float rotationAngle = (float)frameCount * 0.00005f;
 
-    float4x4 RotationMatrixCam = float4x4::RotationZ(-rotationAngle);
-    float4x4 RotationMatrixModel = float4x4::RotationY(rotationAngle);
+    float axisOne = rotationAngle;
+    float axisTwo = rotationAngle / 3.0f;
+
+    float4x4 RotationMatrixCam = float4x4::RotationY(axisOne) * float4x4::RotationZ(-axisTwo);
+    float4x4 RotationMatrixModel = float4x4::RotationY(axisTwo) * float4x4::RotationZ(axisOne);
 
     s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
     s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
