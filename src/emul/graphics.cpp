@@ -418,6 +418,7 @@ struct GraphicsContext
 #endif
     std::unique_ptr<EnvMapRenderer> envMapRenderer;
 
+    std::mutex spaceManMutex;
     float3 spaceManLocation;
     QuaternionF spaceManCurrentHeading;
     Interpolator spaceMan;
@@ -3406,6 +3407,8 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     if (fabs(denom) > 1e-6) { // Ensure the denominator is not too small
         float t = -dot(planeNormal, rayOrigin) / denom;
         if (t >= 0) { // Check if the intersection is in front of the camera
+            std::lock_guard<std::mutex> lg(s_gc.spaceManMutex);
+
             double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
             double nextTime = currentTimeInSeconds + 0.15f;
 
@@ -4668,7 +4671,15 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
 {
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
-    auto spacePoint = s_gc.spaceMan.interpolate(currentTimeInSeconds);
+
+    InterpolatorPoint spacePoint{};
+
+    {
+        std::lock_guard<std::mutex> lg(s_gc.spaceManMutex);
+        spacePoint = s_gc.spaceMan.interpolate(currentTimeInSeconds);
+        s_gc.spaceMan.expire(currentTimeInSeconds);
+    }
+
     TranslateMan({ spacePoint.position.x, spacePoint.position.y, 0.0f });
 
     float rotationAngle = (float)frameCount * 0.00005f;
@@ -4698,10 +4709,6 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
     if (s_gc.station->Animations.size())
     {
-        static std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
-        auto currentTime = std::chrono::steady_clock::now();
-        float timeElapsed = std::chrono::duration<float>(currentTime - startTime).count();
-
         const GLTF::Animation* anim = nullptr;
         int animIndex = -1;
         for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
@@ -4712,11 +4719,11 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
             }
         }
 
-        float animationLength = anim->End - anim->Start;
+        double animationLength = anim->End - anim->Start;
 
-        timeElapsed = std::fmod(timeElapsed, animationLength) + anim->Start;
+        double timeElapsed = std::fmod(currentTimeInSeconds, animationLength) + anim->Start;
 
-        s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform, animIndex, 0.0f);
+        s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform, animIndex, timeElapsed);
     }
     else
     {

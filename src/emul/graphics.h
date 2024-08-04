@@ -314,7 +314,7 @@ public:
     }
 
     // Computes the current position, velocity, and heading at a given time
-    InterpolatorPoint interpolate(float time) {
+    InterpolatorPoint interpolate(double time) {
         if (times.size() < 1) {
             throw std::runtime_error("Interpolator requires at least a point.");
         }
@@ -332,13 +332,24 @@ public:
         return interpolateInternal(time);
     }
 
+    void expire(double expirationTime) {
+        // Remove points and times older than the specified expiration time
+        // Ensure at least 3 points are kept if more than 3 points initially existed
+        size_t initialSize = times.size();
+        size_t minSize = initialSize > 3 ? 3 : initialSize;
+
+        while (times.size() > minSize && !times.empty() && times.front() < expirationTime) {
+            times.erase(times.begin());
+            points.erase(points.begin());
+        }
+    }
+
     bool isExtrapolating(double time) const {
         if (times.size() < 2) {
             return true;
         }
         return time > times.back();
     }
-
 
     const std::vector<double>& ActiveTimes() const {
         return times;
