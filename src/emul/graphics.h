@@ -180,31 +180,34 @@ private:
 };
 
 struct InterpolatorPoint {
-    vec2<float> position;
-    vec2<float> velocity;
+    vec3<float> position;
+    vec3<float> velocity;
     float heading;
 };
+
 
 class Interpolator {
 public:
     Interpolator(float _ship_velocity = 0.03f, bool _noExtrapolation = false) : ship_velocity(_ship_velocity), noExtrapolation(_noExtrapolation) {}
 
-    void queuePoint(vec2<float> point, float queueTime)
+    void queuePoint(vec3<float> point, float queueTime)
     {
         bool shouldQueue = false;
         if (unsplinedPoints.empty() || 
             static_cast<int>(unsplinedPoints.back().x) != static_cast<int>(point.x) || 
-            static_cast<int>(unsplinedPoints.back().y) != static_cast<int>(point.y)) {
+            static_cast<int>(unsplinedPoints.back().y) != static_cast<int>(point.y) ||
+            static_cast<int>(unsplinedPoints.back().z) != static_cast<int>(point.z)) {
             shouldQueue = true;
         }
         if (points.size() < 3 && 
             (static_cast<int>(points.back().x) != static_cast<int>(point.x) || 
-            static_cast<int>(points.back().y) != static_cast<int>(point.y))) {
+            static_cast<int>(points.back().y) != static_cast<int>(point.y) ||
+            static_cast<int>(points.back().z) != static_cast<int>(point.z))) {
             shouldQueue = true;
         }
         if (isExtrapolating(queueTime) && unsplinedPoints.empty()) {
             auto lastPoint = interpolateInternal(queueTime);
-            if (std::sqrt(std::pow(lastPoint.position.x - point.x, 2) + std::pow(lastPoint.position.y - point.y, 2)) > 0.01f) {
+            if (std::sqrt(std::pow(lastPoint.position.x - point.x, 2) + std::pow(lastPoint.position.y - point.y, 2) + std::pow(lastPoint.position.z - point.z, 2)) > 0.01f) {
                 shouldQueue = true;
             }
         }
@@ -214,7 +217,7 @@ public:
     }
 
     // Adds a new point with its corresponding time
-    void addPointWithTime(float time, vec2<float> point) {
+    void addPointWithTime(float time, vec3<float> point) {
 
         if (times.size())
         {
@@ -227,6 +230,7 @@ public:
         // Invalidate the splines to force re-computation when needed
         splineX.reset();
         splineY.reset();
+        splineZ.reset();
 
         // If we have exactly two points, we can directly compute the linear parameters
         if (times.size() == 2) {
@@ -238,17 +242,17 @@ public:
         }
     }
 
-    void addPoint(float anchorTime, vec2<float> point) {
+    void addPoint(float anchorTime, vec3<float> point) {
         if (points.empty()) {
             throw std::runtime_error("At least one time anchor is required.");
         }
 
-        if (!points.empty() && static_cast<int>(point.x) == static_cast<int>(points.back().x) && static_cast<int>(point.y) == static_cast<int>(points.back().y)) {
+        if (!points.empty() && static_cast<int>(point.x) == static_cast<int>(points.back().x) && static_cast<int>(point.y) == static_cast<int>(points.back().y) && static_cast<int>(point.z) == static_cast<int>(points.back().z)) {
             return;
         }
 
         if (points.size() == 1) {
-            vec2<float> lastPoint = points.back();
+            vec3<float> lastPoint = points.back();
             auto timeToDest = timeToReach(lastPoint, point, anchorTime, ship_velocity);
             addPointWithTime(timeToDest, point);
         
@@ -264,7 +268,7 @@ public:
 
             auto intermediate = calculateIntermediatePoints(currentPos.position, currentPos.heading, point, ship_turningRadius);
 
-            vec2<float> pos = currentPos.position;
+            vec3<float> pos = currentPos.position;
             float curTime = anchorTime;
 
             for (const auto& interPoint : intermediate) {
@@ -296,8 +300,10 @@ public:
             float deltaTime = time - times.back(); // Time since the last known point
             point.position.x += std::cos(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
             point.position.y += std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
+            point.position.z += std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime; // Assuming some z-movement
             point.velocity = { std::cos(lastPoint.heading) * ship_velocity * coastingVelocityFactor, 
-                            std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor };
+                            std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor,
+                            std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor }; // Assuming some z-velocity
             return point;
         }
 
@@ -354,35 +360,36 @@ public:
     const std::vector<double>& ActiveTimes() const {
         return times;
     }
-    const std::vector<vec2<float>>& ActivePoints() const {
+    const std::vector<vec3<float>>& ActivePoints() const {
         return points;
     }
 
 private:
     std::vector<double> times;
-    std::vector<vec2<float>> points;
-    std::optional<cubic_spline> splineX, splineY;
-    float linearSlopeX = 0, linearSlopeY = 0, linearInterceptX = 0, linearInterceptY = 0;
+    std::vector<vec3<float>> points;
+    std::optional<cubic_spline> splineX, splineY, splineZ;
+    float linearSlopeX = 0, linearSlopeY = 0, linearSlopeZ = 0, linearInterceptX = 0, linearInterceptY = 0, linearInterceptZ = 0;
     InterpolatorPoint lastPoint;
-    std::deque<vec2<float>> unsplinedPoints;
+    std::deque<vec3<float>> unsplinedPoints;
 
     float ship_velocity;
     bool noExtrapolation;
     static inline const float ship_turningRadius = 1.0f;
 
-    std::vector<vec2<float>> calculateIntermediatePoints(const vec2<float>& point0, float heading, const vec2<float>& point2, float turningRadius) {
-        std::vector<vec2<float>> intermediatePoints;
+    std::vector<vec3<float>> calculateIntermediatePoints(const vec3<float>& point0, float heading, const vec3<float>& point2, float turningRadius) {
+        std::vector<vec3<float>> intermediatePoints;
 
         // Calculate vector from current position to target position
-        vec2<float> toTarget = point2 - point0;
+        vec3<float> toTarget = point2 - point0;
 
         // Normalize the toTarget vector
-        float toTargetLength = std::sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y);
+        float toTargetLength = std::sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y + toTarget.z * toTarget.z);
         if (toTargetLength == 0) {
             throw std::runtime_error("Directly on top of the target, cannot calculate intermediate points.");
         }
         toTarget.x /= toTargetLength;
         toTarget.y /= toTargetLength;
+        toTarget.z /= toTargetLength;
 
         // Calculate the angle to the target from the current heading
         float targetAngle = std::atan2(toTarget.y, toTarget.x);
@@ -402,7 +409,7 @@ private:
             float fraction = static_cast<float>(i) / static_cast<float>(numPoints);
             float angle = currentAngle + angleDifference * fraction;
             float distance = turningRadius * std::abs(std::sin(angleDifference * fraction)); // Use sine to gradually increase distance
-            vec2<float> arcPoint = point0 + vec2<float>(std::cos(angle), std::sin(angle)) * distance;
+            vec3<float> arcPoint = point0 + vec3<float>(std::cos(angle), std::sin(angle), std::sin(angle)) * distance; // Assuming some z-movement
             intermediatePoints.push_back(arcPoint);
         }
 
@@ -412,10 +419,10 @@ private:
         return intermediatePoints;
     }
 
-    double timeToReach(const vec2<float>& start, const vec2<float>& end, double startTime, float speed) {
+    double timeToReach(const vec3<float>& start, const vec3<float>& end, double startTime, float speed) {
         // Calculate the distance between the start and end points
-        vec2<float> delta = end - start;
-        float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+        vec3<float> delta = end - start;
+        float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
 
         // If speed is zero, return an infinite time as it's impossible to reach the destination
         if (speed == 0.0f) {
@@ -433,29 +440,31 @@ private:
         double dt = times[1] - times[0];
         linearSlopeX = (points[1].x - points[0].x) / dt;
         linearSlopeY = (points[1].y - points[0].y) / dt;
+        linearSlopeZ = (points[1].z - points[0].z) / dt;
         linearInterceptX = points[0].x - linearSlopeX * times[0];
         linearInterceptY = points[0].y - linearSlopeY * times[0];
+        linearInterceptZ = points[0].z - linearSlopeZ * times[0];
     }
 
     InterpolatorPoint deadStop() {
-        vec2<float> position(points.back());
-        vec2<float> velocity(0.0f, 0.0f);
+        vec3<float> position(points.back());
+        vec3<float> velocity(0.0f, 0.0f, 0.0f);
         float heading = 0.0f;
         lastPoint = { position, velocity, heading };
         return lastPoint;
     }
 
     InterpolatorPoint pointInterpolation() {
-        vec2<float> position(points[0]);
-        vec2<float> velocity(0.0f, 0.0f);
+        vec3<float> position(points[0]);
+        vec3<float> velocity(0.0f, 0.0f, 0.0f);
         float heading = 0.0f;
         lastPoint = {position, velocity, heading};
         return lastPoint;
     }
 
     InterpolatorPoint linearInterpolation(float time) {
-        vec2<float> position(linearSlopeX * time + linearInterceptX, linearSlopeY * time + linearInterceptY);
-        vec2<float> velocity(linearSlopeX, linearSlopeY);
+        vec3<float> position(linearSlopeX * time + linearInterceptX, linearSlopeY * time + linearInterceptY, linearSlopeZ * time + linearInterceptZ);
+        vec3<float> velocity(linearSlopeX, linearSlopeY, linearSlopeZ);
         float heading = std::atan2(velocity.y, velocity.x);
         lastPoint = {position, velocity, heading};
         return lastPoint;
@@ -463,28 +472,31 @@ private:
 
     void computeSpline() {
         std::vector<double> t(times.begin(), times.end());
-        std::vector<double> x, y;
+        std::vector<double> x, y, z;
         for (const auto& p : points) {
             x.push_back(p.x);
             y.push_back(p.y);
+            z.push_back(p.z);
         }
         splineX.emplace(t, x, cubic_spline::natural);
         splineY.emplace(t, y, cubic_spline::natural);
+        splineZ.emplace(t, z, cubic_spline::natural);
     }
 
     InterpolatorPoint splineInterpolation(float time) {
         double x = splineX->operator()(time);
         double y = splineY->operator()(time);
+        double z = splineZ->operator()(time);
         double dx = splineX->derivative(time);
         double dy = splineY->derivative(time);
-        vec2<float> position(x, y);
-        vec2<float> velocity(dx, dy);
-        float heading = std::atan2(dy, dx);
+        double dz = splineZ->derivative(time);
+        vec3<float> position(x, y, z);
+        vec3<float> velocity(dx, dy, dz);
+        float heading = std::atan2(velocity.y, velocity.x);
         lastPoint = {position, velocity, heading};
         return lastPoint;
     }
 };
-
 enum PixelContents
 {
     ClearPixel = 0,

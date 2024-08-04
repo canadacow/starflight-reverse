@@ -419,7 +419,6 @@ struct GraphicsContext
     std::unique_ptr<EnvMapRenderer> envMapRenderer;
 
     std::mutex spaceManMutex;
-    float3 spaceManLocation;
     QuaternionF spaceManCurrentHeading;
     Interpolator spaceMan;
 
@@ -2084,8 +2083,8 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
             if (newShip)
             {
                 ship.interp = std::make_unique<Interpolator>(0.095f);
-                ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)m.mr.currx, (float)m.mr.curry });
-                ship.interp->addPoint((float)frameSync.completedFrames, { (float)m.mr.destx, (float)m.mr.desty });
+                ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)m.mr.currx, (float)m.mr.curry, 0.0f });
+                ship.interp->addPoint((float)frameSync.completedFrames, { (float)m.mr.destx, (float)m.mr.desty, 0.0f });
             }
         }
 
@@ -2107,11 +2106,11 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
                 if(newShip)
                 {
                     ship.interp = std::make_unique<Interpolator>();
-                    ship.interp->addPointWithTime((float)frameSync.completedFrames, {icon.x, icon.y });
+                    ship.interp->addPointWithTime((float)frameSync.completedFrames, {icon.x, icon.y, 0.0f });
                 }
                 else
                 {
-                    ship.interp->queuePoint({ icon.x, icon.y }, (float)frameSync.completedFrames);
+                    ship.interp->queuePoint({ icon.x, icon.y, 0.0f }, (float)frameSync.completedFrames);
                 }
             }
         }
@@ -2779,27 +2778,27 @@ static int GraphicsInitThread()
         std::ofstream outFile("interpolated_points_with_heading.txt");
 
         // Lambda function to add the first point with a specified time and mark it as a key point in the file
-        auto addFirstPointAndMark = [&interpolator, &outFile](float time, vec2<float> point) {
+        auto addFirstPointAndMark = [&interpolator, &outFile](float time, vec3<float> point) {
             interpolator.addPointWithTime(time, point);
             outFile << point.x << " " << point.y << " 0.0 1" << std::endl; // 1 marks this as a key point
         };
 
         // Lambda function for adding subsequent points without specifying time, marking them as key points in the file
-        auto addSubsequentPointAndMark = [&interpolator, &outFile](vec2<float> point) {
+        auto addSubsequentPointAndMark = [&interpolator, &outFile](vec3<float> point) {
             interpolator.queuePoint(point, 0.0f); // Assuming this method exists and computes time automatically
             outFile << point.x << " " << point.y << " 0.0 1" << std::endl; // 1 marks this as a key point
         };
 
         // Use the first lambda function to add the first point with a specified time
-        addFirstPointAndMark(0, {0, 0});
+        addFirstPointAndMark(0, {0, 0, 0});
 
         // Use the second lambda function to add all subsequent points, letting their times be computed automatically
-        addSubsequentPointAndMark({10, 10});
-        addSubsequentPointAndMark({9, 10});
-        addSubsequentPointAndMark({ 8, 10 });
-        addSubsequentPointAndMark({ 7, 9 });
-        addSubsequentPointAndMark({ 6, 10 });
-        addSubsequentPointAndMark({ 0, 0 });
+        addSubsequentPointAndMark({10, 10, 0});
+        addSubsequentPointAndMark({9, 10, 0 });
+        addSubsequentPointAndMark({ 8, 10, 0 });
+        addSubsequentPointAndMark({ 7, 9, 0 });
+        addSubsequentPointAndMark({ 6, 10, 0 });
+        addSubsequentPointAndMark({ 0, 0, 0 });
 
         float t = 0.0f;
 
@@ -2956,7 +2955,7 @@ static int GraphicsInitThread()
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
     s_gc.spaceMan = Interpolator(0.09f, true);
-    s_gc.spaceMan.addPointWithTime(0.0f, { 0.912174284f, -0.268656492f });
+    s_gc.spaceMan.addPointWithTime(0.0f, { 0.912174284f, -0.268656492f, -0.013f });
 
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 #if defined(FX_SSR)
@@ -3304,7 +3303,7 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     return 0;
 }
 
-void TranslateMan(float3 manPoint)
+void TranslateMan(InterpolatorPoint manPoint)
 {
     static const std::vector<std::string> targetNodeNames = { "Astronaut" };
 
@@ -3320,6 +3319,7 @@ void TranslateMan(float3 manPoint)
         }
     });
 
+#if 0
     float3 direction = manPoint - s_gc.spaceManLocation;
     float magnitude = length(direction);
     if (magnitude > 0.0f) {
@@ -3335,6 +3335,12 @@ void TranslateMan(float3 manPoint)
         // Compute the moving average of the spaceman's heading
         s_gc.spaceManCurrentHeading = slerp(s_gc.spaceManCurrentHeading, newHeading, 0.5f); // Adjust the blend factor as needed
     }
+#else
+    float angle = manPoint.heading;
+    angle -= PI / 2;
+    QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 0.f, 1.f }, angle);
+    s_gc.spaceManCurrentHeading = newHeading;
+#endif
 
     {
         float a = 0.38f;
@@ -3342,21 +3348,19 @@ void TranslateMan(float3 manPoint)
         float centerX = 0.0f;
         float centerY = -0.02f; // Adjusted for asymmetry in original y bounds
 
-        float dX = (manPoint.x - centerX);
-        float dY = (manPoint.y - centerY) * (a / b);
+        float dX = (manPoint.position.x - centerX);
+        float dY = (manPoint.position.y - centerY) * (a / b);
 
         if (dX * dX + dY * dY <= (a * a)) {
-            manPoint.z += 0.027f;
+            manPoint.position.z += 0.027f;
         }
     }
-
-    s_gc.spaceManLocation = manPoint;
 
     auto& nodes = s_gc.station->Nodes;
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
 
-            node.Translation = manPoint;
+            node.Translation = { manPoint.position.x, manPoint.position.y, manPoint.position.z };
             node.Rotation = initialRotations[node.Name] * s_gc.spaceManCurrentHeading;
         }
     }
@@ -3422,7 +3426,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
                 auto point = s_gc.spaceMan.interpolate(currentTimeInSeconds);
                 //printf("Spaceman is extrapolating at %f. Adding anchor point at %f for %f, %f\n", currentTimeInSeconds, currentTimeInSeconds, point.position.x, point.position.y);
                 s_gc.spaceMan.addPointWithTime(currentTimeInSeconds, point.position);
-                s_gc.spaceMan.addPointWithTime(nextTime, { intersectionPoint.x, intersectionPoint.y });
+                s_gc.spaceMan.addPointWithTime(nextTime, { intersectionPoint.x, intersectionPoint.y, intersectionPoint.z });
                 //printf("Spaceman is extrapolating at %f. Adding point at %f for %f, %f\n", currentTimeInSeconds, nextTime, intersectionPoint.x, intersectionPoint.y);
             }
             else
@@ -4680,7 +4684,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
         s_gc.spaceMan.expire(currentTimeInSeconds);
     }
 
-    TranslateMan({ spacePoint.position.x, spacePoint.position.y, 0.0f });
+    TranslateMan(spacePoint);
 
     float rotationAngle = (float)frameCount * 0.00005f;
     //float rotationAngle = (float)frameCount * 0.001f;
