@@ -187,7 +187,7 @@ struct InterpolatorPoint {
 
 class Interpolator {
 public:
-    Interpolator(float _ship_velocity = 0.03f) : ship_velocity(_ship_velocity) {}
+    Interpolator(float _ship_velocity = 0.03f, bool _noExtrapolation = false) : ship_velocity(_ship_velocity), noExtrapolation(_noExtrapolation) {}
 
     void queuePoint(vec2<float> point, float queueTime)
     {
@@ -215,6 +215,12 @@ public:
 
     // Adds a new point with its corresponding time
     void addPointWithTime(float time, vec2<float> point) {
+
+        if (times.size())
+        {
+            assert(time > times.back());
+        }
+
         times.push_back(time);
         points.push_back(point);
 
@@ -279,6 +285,11 @@ public:
 
         if (isExtrapolating(time))
         {
+            if (noExtrapolation)
+            {
+                return deadStop();
+            }
+
             auto point = lastPoint;
             // Coast at a very slow velocity, a fraction of ship_velocity, using the last good heading
             float coastingVelocityFactor = 1.0f; // Adjust this factor to control the coasting speed
@@ -321,7 +332,7 @@ public:
         return interpolateInternal(time);
     }
 
-    bool isExtrapolating(float time) const {
+    bool isExtrapolating(double time) const {
         if (times.size() < 2) {
             return true;
         }
@@ -329,7 +340,7 @@ public:
     }
 
 
-    const std::vector<float>& ActiveTimes() const {
+    const std::vector<double>& ActiveTimes() const {
         return times;
     }
     const std::vector<vec2<float>>& ActivePoints() const {
@@ -337,7 +348,7 @@ public:
     }
 
 private:
-    std::vector<float> times;
+    std::vector<double> times;
     std::vector<vec2<float>> points;
     std::optional<cubic_spline> splineX, splineY;
     float linearSlopeX = 0, linearSlopeY = 0, linearInterceptX = 0, linearInterceptY = 0;
@@ -345,6 +356,7 @@ private:
     std::deque<vec2<float>> unsplinedPoints;
 
     float ship_velocity;
+    bool noExtrapolation;
     static inline const float ship_turningRadius = 1.0f;
 
     std::vector<vec2<float>> calculateIntermediatePoints(const vec2<float>& point0, float heading, const vec2<float>& point2, float turningRadius) {
@@ -389,7 +401,7 @@ private:
         return intermediatePoints;
     }
 
-    float timeToReach(const vec2<float>& start, const vec2<float>& end, float startTime, float speed) {
+    double timeToReach(const vec2<float>& start, const vec2<float>& end, double startTime, float speed) {
         // Calculate the distance between the start and end points
         vec2<float> delta = end - start;
         float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
@@ -400,18 +412,26 @@ private:
         }
 
         // Calculate the time it will take to cover the distance at the given speed
-        float time = distance / speed;
+        double time = distance / speed;
 
         // Return the total time including the starting time
         return startTime + time;
     }
 
     void computeLinearParameters() {
-        float dt = times[1] - times[0];
+        double dt = times[1] - times[0];
         linearSlopeX = (points[1].x - points[0].x) / dt;
         linearSlopeY = (points[1].y - points[0].y) / dt;
         linearInterceptX = points[0].x - linearSlopeX * times[0];
         linearInterceptY = points[0].y - linearSlopeY * times[0];
+    }
+
+    InterpolatorPoint deadStop() {
+        vec2<float> position(points.back());
+        vec2<float> velocity(0.0f, 0.0f);
+        float heading = 0.0f;
+        lastPoint = { position, velocity, heading };
+        return lastPoint;
     }
 
     InterpolatorPoint pointInterpolation() {

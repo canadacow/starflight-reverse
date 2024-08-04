@@ -420,6 +420,7 @@ struct GraphicsContext
 
     float3 spaceManLocation;
     QuaternionF spaceManCurrentHeading;
+    Interpolator spaceMan;
 
     std::unique_ptr<ShadowMap> shadowMap;
 };
@@ -2953,6 +2954,9 @@ static int GraphicsInitThread()
 
     s_gc.mQueue = s_gc.vc.getAVKQueue();
 
+    s_gc.spaceMan = Interpolator(0.09f, true);
+    s_gc.spaceMan.addPointWithTime(0.0f, { 0.912174284f, -0.268656492f });
+
     auto& commandPool = s_gc.vc.get_command_pool_for_resettable_command_buffers(*s_gc.mQueue);
 #if defined(FX_SSR)
     size_t scratchBufferSize = ffxGetScratchMemorySizeVK(pDeviceVk->GetVkPhysicalDevice(), FFX_SSSR_CONTEXT_COUNT);
@@ -2976,7 +2980,7 @@ static int GraphicsInitThread()
 #endif
 
     GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/station25.glb";
+    ModelCI.FileName = "C:/Users/Dean/Downloads/station29.glb";
 
     s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
 
@@ -3301,6 +3305,20 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
 
 void TranslateMan(float3 manPoint)
 {
+    static const std::vector<std::string> targetNodeNames = { "Astronaut" };
+
+    static std::once_flag initFlag;
+    static std::unordered_map<std::string, QuaternionF> initialRotations;
+
+    std::call_once(initFlag, [&]() {
+        auto& nodes = s_gc.station->Nodes;
+        for (auto& node : nodes) {
+            if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
+                initialRotations[node.Name] = node.Rotation;
+            }
+        }
+    });
+
     float3 direction = manPoint - s_gc.spaceManLocation;
     float magnitude = length(direction);
     if (magnitude > 0.0f) {
@@ -3333,37 +3351,6 @@ void TranslateMan(float3 manPoint)
 
     s_gc.spaceManLocation = manPoint;
 
-    static const std::vector<std::string> targetNodeNames = 
-        {"Body", 
-        "Head", 
-        "Cube.003",
-        "Cube.005",
-        "Cube.007",
-        "Cube.008",
-        "Cube.012",
-        "Cylinder",
-        "Cylinder.001",
-        "Cylinder.002",
-        "Glass",
-        "Hands",
-        "Hands.001",
-        "LeftLeg",
-        "RightLeg",
-        "Torus",
-        "Bag"};
-
-    static std::once_flag initFlag;
-    static std::unordered_map<std::string, QuaternionF> initialRotations;
-
-    std::call_once(initFlag, [&]() {
-        auto& nodes = s_gc.station->Nodes;
-        for (auto& node : nodes) {
-            if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
-                initialRotations[node.Name] = node.Rotation;
-            }
-        }
-    });
-
     auto& nodes = s_gc.station->Nodes;
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
@@ -3376,30 +3363,6 @@ void TranslateMan(float3 manPoint)
 
 void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
 {
-    /*
-        x	0.0	float
-        y	-0.217814416	float
-        z	0.159155563	float
-        w	1.00000000	float
-
-        _11	-0.0254427418	float
-        _12	-2.02661399e-09	float
-        _13	-5.28284115e-14	float
-        _14	-5.16243448e-09	float
-        _21	-2.70215739e-09	float
-        _22	0.00776134850	float
-        _23	2.17596197	float
-        _24	-2.10976076	float
-        _31	-1.75479875e-09	float
-        _32	0.0174322892	float
-        _33	-1.58996093	float
-        _34	1.56110823	float
-        _41	-0.00000000	float
-        _42	2.51905496e-21	float
-        _43	-9.98998070	float
-        _44	9.99998188	float
-    */
-
     float4 easyCameraf4Position = float4(0.0f, -0.217814416f, 0.159155563f, 1.0f);
     float4x4 easyViewProjInvT = Matrix4x4(
         -0.0254427418f, 0.0f, 0.0f, 0.0f,
@@ -3443,12 +3406,29 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     if (fabs(denom) > 1e-6) { // Ensure the denominator is not too small
         float t = -dot(planeNormal, rayOrigin) / denom;
         if (t >= 0) { // Check if the intersection is in front of the camera
+            double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+            double nextTime = currentTimeInSeconds + 0.15f;
+
             float3 intersectionPoint = rayOrigin + t * rayDirection;
 
             printf("Input Screen Coordinates: x=%u, y=%u\n", x, y);
-            printf("Intersection Point: x=%.3f, y=%.3f, z=%.3f\n", intersectionPoint.x, intersectionPoint.y, intersectionPoint.z);
+            printf("Intersection Point: x=%.3f, y=%.3f, z=%.3f at time %f\n", intersectionPoint.x, intersectionPoint.y, intersectionPoint.z, currentTimeInSeconds);
 
-            TranslateMan(intersectionPoint);
+            if (s_gc.spaceMan.isExtrapolating(currentTimeInSeconds))
+            {
+                auto point = s_gc.spaceMan.interpolate(currentTimeInSeconds);
+                //printf("Spaceman is extrapolating at %f. Adding anchor point at %f for %f, %f\n", currentTimeInSeconds, currentTimeInSeconds, point.position.x, point.position.y);
+                s_gc.spaceMan.addPointWithTime(currentTimeInSeconds, point.position);
+                s_gc.spaceMan.addPointWithTime(nextTime, { intersectionPoint.x, intersectionPoint.y });
+                //printf("Spaceman is extrapolating at %f. Adding point at %f for %f, %f\n", currentTimeInSeconds, nextTime, intersectionPoint.x, intersectionPoint.y);
+            }
+            else
+            {
+                printf("Spaceman is not extrapolating at %f. Adding point at %f for %f, %f\n", currentTimeInSeconds, nextTime, intersectionPoint.x, intersectionPoint.y);
+                //s_gc.spaceMan.addPoint(nextTime, { intersectionPoint.x, intersectionPoint.y });
+            }
+
+            //TranslateMan(intersectionPoint);
         }
     }
 }
@@ -4687,6 +4667,10 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 
 void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
 {
+    double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+    auto spacePoint = s_gc.spaceMan.interpolate(currentTimeInSeconds);
+    TranslateMan({ spacePoint.position.x, spacePoint.position.y, 0.0f });
+
     float rotationAngle = (float)frameCount * 0.00005f;
     //float rotationAngle = (float)frameCount * 0.001f;
 
@@ -4712,7 +4696,33 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     InvYAxis._22 = -1;
 
     s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
-    s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform);
+    if (s_gc.station->Animations.size())
+    {
+        static std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
+        auto currentTime = std::chrono::steady_clock::now();
+        float timeElapsed = std::chrono::duration<float>(currentTime - startTime).count();
+
+        const GLTF::Animation* anim = nullptr;
+        int animIndex = -1;
+        for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
+            if (s_gc.station->Animations[i].Name == "RestingPose") {
+                anim = &s_gc.station->Animations[i];
+                animIndex = i;
+                break;
+            }
+        }
+
+        float animationLength = anim->End - anim->Start;
+
+        timeElapsed = std::fmod(timeElapsed, animationLength) + anim->Start;
+
+        s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform, animIndex, 0.0f);
+    }
+    else
+    {
+        s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform);
+    }
+    
     s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
     s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
 
