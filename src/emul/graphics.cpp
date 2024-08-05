@@ -437,15 +437,17 @@ struct GraphicsContext
         AnimationState currentState = AnimationState::Standing;
         std::chrono::steady_clock::time_point stateChangeTimestamp = std::chrono::steady_clock::now();
         double restingPoseLength = 0.0;
+        double restingPoseStart = 0.0;
         double walkingAnimationLength = 0.0;
+        double walkingAnimationStart = 0.0;
         AnimationDirection currentDirection = AnimationDirection::Forward;
 
         double getTimeSinceStateChange() const {
             auto now = std::chrono::steady_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - stateChangeTimestamp);
+            auto duration = std::chrono::duration_cast<std::chrono::duration<double>>(now - stateChangeTimestamp);
             return duration.count();
         }
-
+        
         void changeState(AnimationState newState) {
             if (currentState != newState) {
                 currentState = newState;
@@ -3073,11 +3075,13 @@ static int GraphicsInitThread()
         auto& anim = s_gc.station->Animations[i];
         if (anim.Name == "ArmatureAction") {
             s_gc.spaceManState.walkingAnimationLength = anim.End - anim.Start;
-            break;
+            s_gc.spaceManState.walkingAnimationStart = anim.Start;
+            continue;
         }
         if (anim.Name == "RestingPose") {
             s_gc.spaceManState.restingPoseLength = anim.End - anim.Start;
-            break;
+            s_gc.spaceManState.restingPoseStart = anim.Start;
+            continue;
         }
     }
 
@@ -4736,10 +4740,22 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     {
         std::lock_guard<std::mutex> lg(s_gc.spaceManMutex);
         spacePoint = s_gc.spaceMan.interpolate(currentTimeInSeconds);
-        auto isExtrapolating = s_gc.spaceMan.isExtrapolating(currentTimeInSeconds);
+        auto isWalking = !s_gc.spaceMan.isExtrapolating(currentTimeInSeconds);
+
+        auto points = s_gc.spaceMan.ActivePoints();
+        if (isWalking && points.size() > 0)
+        {
+            if (points.back().x == spacePoint.position.x &&
+                points.back().y == spacePoint.position.y &&
+                points.back().z == spacePoint.position.z)
+            {
+                isWalking = false;
+            }
+        }
+
         s_gc.spaceMan.expire(currentTimeInSeconds);
 
-        spaceManState = s_gc.spaceManState.getAnimationState(!isExtrapolating);
+        spaceManState = s_gc.spaceManState.getAnimationState(isWalking);
     }
 
     TranslateMan(spacePoint);
@@ -4810,6 +4826,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
             break;
         case GraphicsContext::SpaceManState::AnimationState::Walking:
             animIndex = 0;
+            timeElapsed += s_gc.spaceManState.walkingAnimationStart;
             break;
     }
 
