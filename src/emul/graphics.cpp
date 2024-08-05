@@ -419,8 +419,78 @@ struct GraphicsContext
     std::unique_ptr<EnvMapRenderer> envMapRenderer;
 
     std::mutex spaceManMutex;
-    QuaternionF spaceManCurrentHeading;
     Interpolator spaceMan;
+
+    struct SpaceManState {
+        enum class AnimationState {
+            Standing,
+            StartingWalking,
+            Walking,
+            StoppingWalking
+        };
+
+        enum class AnimationDirection {
+            Forward,
+            Reverse
+        };
+
+        AnimationState currentState = AnimationState::Standing;
+        std::chrono::steady_clock::time_point stateChangeTimestamp = std::chrono::steady_clock::now();
+        double restingPoseLength = 0.0;
+        double walkingAnimationLength = 0.0;
+        AnimationDirection currentDirection = AnimationDirection::Forward;
+
+        double getTimeSinceStateChange() const {
+            auto now = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - stateChangeTimestamp);
+            return duration.count();
+        }
+
+        void changeState(AnimationState newState) {
+            if (currentState != newState) {
+                currentState = newState;
+                stateChangeTimestamp = std::chrono::steady_clock::now();
+                currentDirection = (newState == AnimationState::Walking || newState == AnimationState::StartingWalking) 
+                                ? AnimationDirection::Forward : AnimationDirection::Reverse;
+            }
+        }
+
+        std::pair<AnimationState, double> getAnimationState(bool continueWalking) {
+            double timeSinceChange = getTimeSinceStateChange();
+            switch (currentState) {
+                case AnimationState::Standing:
+                    if (continueWalking) {
+                        changeState(AnimationState::StartingWalking);
+                        return {AnimationState::StartingWalking, 0.0};
+                    }
+                    return {AnimationState::Standing, 0.0};
+
+                case AnimationState::StartingWalking:
+                    if (timeSinceChange >= restingPoseLength) {
+                        changeState(AnimationState::Walking);
+                        return {AnimationState::Walking, 0.0};
+                    }
+                    return {AnimationState::StartingWalking, timeSinceChange};
+
+                case AnimationState::Walking:
+                    if (!continueWalking) {
+                        changeState(AnimationState::StoppingWalking);
+                        return {AnimationState::StoppingWalking, 0.0};
+                    }
+                    return {AnimationState::Walking, fmod(timeSinceChange, walkingAnimationLength)};
+
+                case AnimationState::StoppingWalking:
+                    if (timeSinceChange >= restingPoseLength) {
+                        changeState(AnimationState::Standing);
+                        return {AnimationState::Standing, 0.0};
+                    }
+                    return {AnimationState::StoppingWalking, restingPoseLength - timeSinceChange};
+            }
+            return {currentState, 0.0}; // Default return, should not be reached
+        }
+    };
+
+    SpaceManState spaceManState;
 
     std::unique_ptr<ShadowMap> shadowMap;
 };
@@ -2999,6 +3069,17 @@ static int GraphicsInitThread()
         }
     }
 
+    for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
+        auto& anim = s_gc.station->Animations[i];
+        if (anim.Name == "ArmatureAction") {
+            s_gc.spaceManState.walkingAnimationLength = anim.End - anim.Start;
+            break;
+        }
+        if (anim.Name == "RestingPose") {
+            s_gc.spaceManState.restingPoseLength = anim.End - anim.Start;
+            break;
+        }
+    }
 
     InitPBRRenderer();
 
@@ -3319,28 +3400,9 @@ void TranslateMan(InterpolatorPoint manPoint)
         }
     });
 
-#if 0
-    float3 direction = manPoint - s_gc.spaceManLocation;
-    float magnitude = length(direction);
-    if (magnitude > 0.0f) {
-        direction /= magnitude; // Normalize the direction vector
-
-        // Compute the angle of the direction vector
-        float angle = atan2(direction.y, direction.x);
-
-        angle -= PI / 2; // Subtract 90 degrees (converted to radians)
-        // Create a quaternion representing rotation around the z-axis
-        QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 0.f, 1.f }, angle);
-
-        // Compute the moving average of the spaceman's heading
-        s_gc.spaceManCurrentHeading = slerp(s_gc.spaceManCurrentHeading, newHeading, 0.5f); // Adjust the blend factor as needed
-    }
-#else
     float angle = manPoint.heading;
     angle -= PI / 2;
     QuaternionF newHeading = QuaternionF::RotationFromAxisAngle({ 0.f, 0.f, 1.f }, angle);
-    s_gc.spaceManCurrentHeading = newHeading;
-#endif
 
     {
         float a = 0.38f;
@@ -3361,7 +3423,7 @@ void TranslateMan(InterpolatorPoint manPoint)
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
 
             node.Translation = { manPoint.position.x, manPoint.position.y, manPoint.position.z };
-            node.Rotation = initialRotations[node.Name] * s_gc.spaceManCurrentHeading;
+            node.Rotation = initialRotations[node.Name] * newHeading;
         }
     }
 }
@@ -3418,24 +3480,16 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
 
             float3 intersectionPoint = rayOrigin + t * rayDirection;
 
-            printf("Input Screen Coordinates: x=%u, y=%u\n", x, y);
-            printf("Intersection Point: x=%.3f, y=%.3f, z=%.3f at time %f\n", intersectionPoint.x, intersectionPoint.y, intersectionPoint.z, currentTimeInSeconds);
-
             if (s_gc.spaceMan.isExtrapolating(currentTimeInSeconds))
             {
                 auto point = s_gc.spaceMan.interpolate(currentTimeInSeconds);
-                //printf("Spaceman is extrapolating at %f. Adding anchor point at %f for %f, %f\n", currentTimeInSeconds, currentTimeInSeconds, point.position.x, point.position.y);
                 s_gc.spaceMan.addPointWithTime(currentTimeInSeconds, point.position);
                 s_gc.spaceMan.addPointWithTime(nextTime, { intersectionPoint.x, intersectionPoint.y, intersectionPoint.z });
-                //printf("Spaceman is extrapolating at %f. Adding point at %f for %f, %f\n", currentTimeInSeconds, nextTime, intersectionPoint.x, intersectionPoint.y);
             }
             else
             {
-                printf("Spaceman is not extrapolating at %f. Adding point at %f for %f, %f\n", currentTimeInSeconds, nextTime, intersectionPoint.x, intersectionPoint.y);
-                //s_gc.spaceMan.addPoint(nextTime, { intersectionPoint.x, intersectionPoint.y });
+                s_gc.spaceMan.addPoint(nextTime, { intersectionPoint.x, intersectionPoint.y, intersectionPoint.z });
             }
-
-            //TranslateMan(intersectionPoint);
         }
     }
 }
@@ -4677,11 +4731,15 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
     InterpolatorPoint spacePoint{};
+    std::pair<GraphicsContext::SpaceManState::AnimationState, double> spaceManState{};
 
     {
         std::lock_guard<std::mutex> lg(s_gc.spaceManMutex);
         spacePoint = s_gc.spaceMan.interpolate(currentTimeInSeconds);
+        auto isExtrapolating = s_gc.spaceMan.isExtrapolating(currentTimeInSeconds);
         s_gc.spaceMan.expire(currentTimeInSeconds);
+
+        spaceManState = s_gc.spaceManState.getAnimationState(!isExtrapolating);
     }
 
     TranslateMan(spacePoint);
@@ -4711,12 +4769,13 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     InvYAxis._22 = -1;
 
     s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
+#if 0
     if (s_gc.station->Animations.size())
     {
         const GLTF::Animation* anim = nullptr;
         int animIndex = -1;
         for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
-            if (s_gc.station->Animations[i].Name == "RestingPose") {
+            if (s_gc.station->Animations[i].Name == "ArmatureAction") {
                 anim = &s_gc.station->Animations[i];
                 animIndex = i;
                 break;
@@ -4733,7 +4792,29 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     {
         s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform);
     }
-    
+#endif
+
+    int animIndex = -1;
+    double timeElapsed = spaceManState.second;
+    switch (spaceManState.first)
+    {
+        case GraphicsContext::SpaceManState::AnimationState::Standing:
+            animIndex = 1;
+            break;
+        case GraphicsContext::SpaceManState::AnimationState::StartingWalking:
+            animIndex = 1;
+            break;
+        case GraphicsContext::SpaceManState::AnimationState::StoppingWalking:
+            timeElapsed = s_gc.spaceManState.restingPoseLength - timeElapsed;
+            animIndex = 1;
+            break;
+        case GraphicsContext::SpaceManState::AnimationState::Walking:
+            animIndex = 0;
+            break;
+    }
+
+    s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform, animIndex, timeElapsed);
+        
     s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
     s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
 

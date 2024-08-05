@@ -449,7 +449,7 @@ private:
     InterpolatorPoint deadStop() {
         vec3<float> position(points.back());
         vec3<float> velocity(0.0f, 0.0f, 0.0f);
-        float heading = 0.0f;
+        float heading = lastPoint.heading;
         lastPoint = { position, velocity, heading };
         return lastPoint;
     }
@@ -457,7 +457,7 @@ private:
     InterpolatorPoint pointInterpolation() {
         vec3<float> position(points[0]);
         vec3<float> velocity(0.0f, 0.0f, 0.0f);
-        float heading = 0.0f;
+        float heading = lastPoint.heading;
         lastPoint = {position, velocity, heading};
         return lastPoint;
     }
