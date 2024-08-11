@@ -441,6 +441,7 @@ struct GraphicsContext
         double walkingAnimationLength = 0.0;
         double walkingAnimationStart = 0.0;
         AnimationDirection currentDirection = AnimationDirection::Forward;
+        std::optional<std::chrono::steady_clock::time_point> walkingEndTimestamp;
 
         double getTimeSinceStateChange() const {
             auto now = std::chrono::steady_clock::now();
@@ -454,6 +455,9 @@ struct GraphicsContext
                 stateChangeTimestamp = std::chrono::steady_clock::now();
                 currentDirection = (newState == AnimationState::Walking || newState == AnimationState::StartingWalking) 
                                 ? AnimationDirection::Forward : AnimationDirection::Reverse;
+                if (newState != AnimationState::Walking) {
+                    walkingEndTimestamp.reset();
+                }
             }
         }
 
@@ -475,7 +479,15 @@ struct GraphicsContext
                     return {AnimationState::StartingWalking, timeSinceChange};
 
                 case AnimationState::Walking:
-                    if (!continueWalking) {
+                    if (!continueWalking && !walkingEndTimestamp) {
+                        double timeInCurrentCycle = fmod(timeSinceChange, walkingAnimationLength);
+                        double remainingTime = walkingAnimationLength - timeInCurrentCycle;
+                        walkingEndTimestamp = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(remainingTime));
+                    }
+                    if (continueWalking) {
+                        walkingEndTimestamp.reset();
+                    }
+                    if (walkingEndTimestamp && std::chrono::steady_clock::now() >= *walkingEndTimestamp) {
                         changeState(AnimationState::StoppingWalking);
                         return {AnimationState::StoppingWalking, 0.0};
                     }
@@ -491,7 +503,7 @@ struct GraphicsContext
             return {currentState, 0.0}; // Default return, should not be reached
         }
     };
-
+    
     SpaceManState spaceManState;
 
     std::unique_ptr<ShadowMap> shadowMap;
