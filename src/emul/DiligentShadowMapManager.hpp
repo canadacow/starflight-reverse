@@ -39,6 +39,62 @@
 namespace Diligent
 {
 
+struct CascadeAttribs
+{
+	float4 f4LightSpaceScale;
+	float4 f4LightSpaceScaledBias;
+    float4 f4StartEndZ;
+
+    // Cascade margin in light projection space ([-1, +1] x [-1, +1] x [-1(GL) or 0, +1])
+    float4 f4MarginProjSpace;
+};
+
+#define MAX_CASCADES 8
+struct ShadowMapAttribs
+{
+    // 0
+#ifdef __cplusplus
+    float4x4 mWorldToLightViewT; // Matrices in HLSL are COLUMN-major while float4x4 is ROW major
+#else
+    matrix mWorldToLightView;  // Transform from view space to light projection space
+#endif
+    // 16
+    CascadeAttribs Cascades[MAX_CASCADES];
+
+#ifdef __cplusplus
+    float4x4 mWorldToShadowMapUVDepthT[MAX_CASCADES];
+    float fCascadeCamSpaceZEnd[MAX_CASCADES];
+#else
+    matrix mWorldToShadowMapUVDepth[MAX_CASCADES];
+    float4 f4CascadeCamSpaceZEnd[MAX_CASCADES/4];
+#endif
+
+    float4 f4ShadowMapDim;    // Width, Height, 1/Width, 1/Height
+
+    // Number of shadow cascades
+    int   iNumCascades                  DEFAULT_VALUE(0);
+    float fNumCascades                  DEFAULT_VALUE(0);
+    // Do not use bool, because sizeof(bool)==1 !
+	BOOL  bVisualizeCascades            DEFAULT_VALUE(0);
+    BOOL  bVisualizeShadowing           DEFAULT_VALUE(0);
+
+    float fReceiverPlaneDepthBiasClamp  DEFAULT_VALUE(10);
+    float fFixedDepthBias               DEFAULT_VALUE(1e-5f);
+    float fCascadeTransitionRegion      DEFAULT_VALUE(0.1f);
+    int   iMaxAnisotropy                DEFAULT_VALUE(4);
+
+    float fVSMBias                      DEFAULT_VALUE(1e-4f);
+    float fVSMLightBleedingReduction    DEFAULT_VALUE(0);
+    float fEVSMPositiveExponent         DEFAULT_VALUE(40);
+    float fEVSMNegativeExponent         DEFAULT_VALUE(5);
+
+    BOOL  bIs32BitEVSM                  DEFAULT_VALUE(1);
+    int   iFixedFilterSize              DEFAULT_VALUE(3); // 3x3 filter
+    float fFilterWorldSize              DEFAULT_VALUE(0);
+    BOOL  fDummy;
+};
+#undef MAX_CASCADES
+
 namespace HLSL
 {
 #include "Shaders/Common/public/BasicStructures.fxh"
@@ -144,7 +200,7 @@ public:
     };
 
     void DistributeCascades(const DistributeCascadeInfo& Info,
-                            HLSL::ShadowMapAttribs&            shadowMapAttribs);
+                            ShadowMapAttribs&            shadowMapAttribs);
 
     void ConvertToFilterable(IDeviceContext* pCtx, const HLSL::ShadowMapAttribs & ShadowAttribs);
 

@@ -534,7 +534,7 @@ struct ShadowMap
                 const GLTF::Model& GLTFModel,
                 const HLSL::CameraAttribs& cameraAttribs);
 
-    void RenderShadowMap();
+    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction);
 
 private:
 
@@ -674,6 +674,8 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 {
 
     MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+
+    *CameraAttribs = cameraAttribs;
 
     // Set the appropriate shadow pipeline state object and shader resource binding
     auto& pPSO = m_RenderMeshShadowPSO[0];
@@ -883,21 +885,35 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PB
     InitializeResourceBindings(mesh, meshBindings);
 }
 
-void ShadowMap::RenderShadowMap()
+void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction)
 {
+    ShadowMapManager::DistributeCascadeInfo DistrInfo;
+    auto mView = CurrCamAttribs.mView;
+    auto mProj = CurrCamAttribs.mProj;
+    DistrInfo.pCameraView = &mView;
+    DistrInfo.pCameraProj = &mProj;
+    DistrInfo.pLightDir = &Direction;
+    DistrInfo.fPartitioningFactor = 0.95f;
+
+    assert(sizeof(Diligent::ShadowMapAttribs) == sizeof(m_LightAttribs.ShadowAttribs));
+    Diligent::ShadowMapAttribs sma;
+    memcpy(&sma, &m_LightAttribs.ShadowAttribs, sizeof(Diligent::ShadowMapAttribs));
+
+    m_ShadowMapMgr.DistributeCascades(DistrInfo, sma);
+
     const int iNumShadowCascades = m_LightAttribs.ShadowAttribs.iNumCascades;
     for (int iCascade = 0; iCascade < iNumShadowCascades; ++iCascade)
     {
         const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(iCascade).Proj;
 
-        auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightViewT.Transpose();
+        auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;
 
         HLSL::CameraAttribs ShadowCameraAttribs = {};
 
-        ShadowCameraAttribs.mViewT = m_LightAttribs.ShadowAttribs.mWorldToLightViewT;
-        ShadowCameraAttribs.mProjT = CascadeProjMatr.Transpose();
-        ShadowCameraAttribs.mViewProjT = WorldToLightProjSpaceMatr.Transpose();
+        ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
+        ShadowCameraAttribs.mProj = CascadeProjMatr;
+        ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr;
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
         ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
@@ -3395,6 +3411,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
     textPixels = std::vector<uint32_t>();
     textPixels.resize(TEXT_MODE_WIDTH * TEXT_MODE_HEIGHT);
 
+    s_gc.m_pImmediateContext->Flush();
+
     initPromise.set_value();
 
     return 0;
@@ -4742,6 +4760,21 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
     return float4x4::Identity();
 }
 
+static std::once_flag s_animIndexFlag;
+static int s_restingPoseIndex = -1;
+static int s_armatureActionIndex = -1;
+
+void InitializeAnimationIndices()
+{
+    for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
+        if (s_gc.station->Animations[i].Name == "RestingPose") {
+            s_restingPoseIndex = i;
+        } else if (s_gc.station->Animations[i].Name == "ArmatureAction") {
+            s_armatureActionIndex = i;
+        }
+    }
+}
+
 void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
 {
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
@@ -4822,22 +4855,24 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     }
 #endif
 
+    std::call_once(s_animIndexFlag, InitializeAnimationIndices);
+
     int animIndex = -1;
     double timeElapsed = spaceManState.second;
     switch (spaceManState.first)
     {
         case GraphicsContext::SpaceManState::AnimationState::Standing:
-            animIndex = 1;
+            animIndex = s_restingPoseIndex;
             break;
         case GraphicsContext::SpaceManState::AnimationState::StartingWalking:
-            animIndex = 1;
+            animIndex = s_restingPoseIndex;
             break;
         case GraphicsContext::SpaceManState::AnimationState::StoppingWalking:
             timeElapsed = s_gc.spaceManState.restingPoseLength - timeElapsed;
-            animIndex = 1;
+            animIndex = s_restingPoseIndex;
             break;
         case GraphicsContext::SpaceManState::AnimationState::Walking:
-            animIndex = 0;
+            animIndex = s_armatureActionIndex;
             timeElapsed += s_gc.spaceManState.walkingAnimationStart;
             break;
     }
@@ -4905,12 +4940,12 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
 
     CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
     CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
-    CurrCamAttribs.mViewT = CameraView.Transpose();
-    CurrCamAttribs.mProjT = CameraProj.Transpose();
-    CurrCamAttribs.mViewProjT = CameraViewProj.Transpose();
-    CurrCamAttribs.mViewInvT = CameraView.Inverse().Transpose();
-    CurrCamAttribs.mProjInvT = CameraProj.Inverse().Transpose();
-    CurrCamAttribs.mViewProjInvT = CameraViewProj.Inverse().Transpose();
+    CurrCamAttribs.mView = CameraView;
+    CurrCamAttribs.mProj = CameraProj;
+    CurrCamAttribs.mViewProj = CameraViewProj;
+    CurrCamAttribs.mViewInv = CameraView.Inverse();
+    CurrCamAttribs.mProjInv = CameraProj.Inverse();
+    CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse();
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
 
     s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
@@ -5129,7 +5164,10 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             SF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
 
-            //RenderStationShadowMap();
+            if (LightNode.Name == "Sun")
+            {
+                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction);
+            }
         }
     }
     else
@@ -5573,6 +5611,7 @@ void GraphicsUpdate()
     bool hasNavigation = false;
     bool hasAuxSysPixel = false;
     bool hasStarMap = false;
+    bool hasPortPixel = false;
     static uint32_t activeAlien = 0;
 
     std::vector<avk::recorded_commands_t> commands{};
@@ -5700,6 +5739,9 @@ void GraphicsUpdate()
                         case 9: // MECHAN 9
                             setActiveAlien(shaderBackBuffer[i].runBitData.tag);
                             break;
+                        case 44: // Spaceport
+                            hasPortPixel = true;
+                            break;
                         default:
                         break;
                     }
@@ -5792,7 +5834,7 @@ void GraphicsUpdate()
     
     float interpolationFactor = (float)ftr.renderCount / (float)framesPerGameFrame;
 
-    if (true)
+    if (hasPortPixel)
     {
         UpdateStation(inFlightIndex, s_gc.vc.current_frame());
         RenderStation(inFlightIndex);

@@ -3075,6 +3075,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
             Write16Long(0, bx*4+0, ax);
             Write16Long(0, bx*4+2, cx);
 
+            #if 0 // Uncomment to continue to dump files
             // Write out 1024 bytes at ax,cx to a file
             char filename[64];
             sprintf(filename, "%04x-%04x.bin", cx, ax);
@@ -3101,6 +3102,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     fclose(fp);
                 }
             }
+            #endif
         }
         break;
 
