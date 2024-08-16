@@ -677,10 +677,6 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const SF_PBR_Renderer::RenderInfo& RenderParams)
 {
 
-    MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-
-    *CameraAttribs = cameraAttribs;
-
     // Set the appropriate shadow pipeline state object and shader resource binding
     auto& pPSO = m_RenderMeshShadowPSO[0];
 
@@ -694,12 +690,17 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             if (pNode->pMesh == nullptr)
                 continue;
 
+            // Need to make sure we're updating the CameraAttribs properly
+
             const auto& NodeGlobalMatrix = Transforms.NodeGlobalMatrices[pNode->Index];
 
             const float4x4 NodeTransform = NodeGlobalMatrix * RenderParams.ModelTransform;
 
-            float4x4 CombinedMatrix = cameraAttribs.mViewProj * NodeTransform;
+            float4x4 CombinedMatrix = NodeTransform * cameraAttribs.mViewProj;
 
+            MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+
+            *CameraAttribs = cameraAttribs;
             CameraAttribs->mViewProj = CombinedMatrix.Transpose();
 
             // Iterate through each primitive in the mesh
@@ -4826,13 +4827,8 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     MaxDim = std::max(MaxDim, ModelDim.y);
     MaxDim = std::max(MaxDim, ModelDim.z);
 
-#if 0
     s_gc.stationScale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
     auto     Translate = -s_gc.stationAABB.Min - 0.5f * ModelDim;
-#else
-    s_gc.stationScale = 1.0f;
-    float3 Translate = { 0.f, 0.f, 0.f };
-#endif
 
     float4x4 InvYAxis = float4x4::Identity();
     InvYAxis._22 = -1;
