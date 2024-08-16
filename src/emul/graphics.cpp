@@ -532,14 +532,16 @@ struct ShadowMap
 
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const GLTF::Model& GLTFModel,
-                const HLSL::CameraAttribs& cameraAttribs);
+                const GLTF::ModelTransforms& Transforms,
+                const HLSL::CameraAttribs& cameraAttribs,
+                const SF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction);
+    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams);
 
 private:
 
     HLSL::LightAttribs m_LightAttribs;
-    ShadowMapManager m_ShadowMapMgr;
+    DiligentShadowMapManager m_ShadowMapMgr;
 
     RefCntAutoPtr<IBuffer>                             m_LightAttribsCB;
     std::vector<Uint32>                                m_PSOIndex;
@@ -670,7 +672,9 @@ void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& m
 
 void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const GLTF::Model& GLTFModel,
-                         const HLSL::CameraAttribs& cameraAttribs)
+                         const GLTF::ModelTransforms& Transforms,
+                         const HLSL::CameraAttribs& cameraAttribs,
+                         const SF_PBR_Renderer::RenderInfo& RenderParams)
 {
 
     MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
@@ -690,14 +694,20 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             if (pNode->pMesh == nullptr)
                 continue;
 
+            const auto& NodeGlobalMatrix = Transforms.NodeGlobalMatrices[pNode->Index];
+
+            const float4x4 NodeTransform = NodeGlobalMatrix * RenderParams.ModelTransform;
+
+            float4x4 CombinedMatrix = cameraAttribs.mViewProj * NodeTransform;
+
+            CameraAttribs->mViewProj = CombinedMatrix.Transpose();
+
             // Iterate through each primitive in the mesh
             for (const auto& primitive : pNode->pMesh->Primitives)
             {
                 if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                     continue;
-
-                const auto& material = GLTFModel.Materials[primitive.MaterialId];
-
+                
                 // Set vertex and index buffers
                 std::array<IBuffer*, 8> pVBs;
                 const auto NumVBs = static_cast<Uint32>(GLTFModel.GetVertexBufferCount());
@@ -838,10 +848,6 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PB
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
-    m_LightAttribs.f4Direction = float3(-0.522699475f, -0.481321275f, -0.703671455f);
-    m_LightAttribs.f4Intensity = float4(1, 0.8f, 0.5f, 1);
-    m_LightAttribs.f4AmbientLight = float4(0.125f, 0.125f, 0.125f, 1);
-
     if (m_ShadowSettings.Resolution >= 2048)
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
     else if (m_ShadowSettings.Resolution >= 1024)
@@ -849,7 +855,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PB
     else
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0075f;
 
-    ShadowMapManager::InitInfo SMMgrInitInfo;
+    DiligentShadowMapManager::InitInfo SMMgrInitInfo;
     SMMgrInitInfo.Format = m_ShadowSettings.Format;
     SMMgrInitInfo.Resolution = m_ShadowSettings.Resolution;
     SMMgrInitInfo.NumCascades = static_cast<Uint32>(m_LightAttribs.ShadowAttribs.iNumCascades);
@@ -885,34 +891,30 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PB
     InitializeResourceBindings(mesh, meshBindings);
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction)
+void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams)
 {
-    ShadowMapManager::DistributeCascadeInfo DistrInfo;
-    auto mView = CurrCamAttribs.mView;
-    auto mProj = CurrCamAttribs.mProj;
-    DistrInfo.pCameraView = &mView;
-    DistrInfo.pCameraProj = &mProj;
+    DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
+    auto view = CurrCamAttribs.mView.Transpose();
+    auto proj = CurrCamAttribs.mProj.Transpose();
+    DistrInfo.pCameraView = &view;
+    DistrInfo.pCameraProj = &proj;
     DistrInfo.pLightDir = &Direction;
     DistrInfo.fPartitioningFactor = 0.95f;
 
-    assert(sizeof(Diligent::ShadowMapAttribs) == sizeof(m_LightAttribs.ShadowAttribs));
-    Diligent::ShadowMapAttribs sma;
-    memcpy(&sma, &m_LightAttribs.ShadowAttribs, sizeof(Diligent::ShadowMapAttribs));
-
-    m_ShadowMapMgr.DistributeCascades(DistrInfo, sma);
+    m_ShadowMapMgr.DistributeCascades(DistrInfo, m_LightAttribs.ShadowAttribs);
 
     const int iNumShadowCascades = m_LightAttribs.ShadowAttribs.iNumCascades;
     for (int iCascade = 0; iCascade < iNumShadowCascades; ++iCascade)
     {
         const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(iCascade).Proj;
 
-        auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightView;
+        auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightView.Transpose();
         auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;
 
         HLSL::CameraAttribs ShadowCameraAttribs = {};
 
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
-        ShadowCameraAttribs.mProj = CascadeProjMatr;
+        ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
         ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr;
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
@@ -924,7 +926,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-        DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, ShadowCameraAttribs);
+        DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
     }
 }
 
@@ -4824,8 +4826,14 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     MaxDim = std::max(MaxDim, ModelDim.y);
     MaxDim = std::max(MaxDim, ModelDim.z);
 
+#if 0
     s_gc.stationScale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
     auto     Translate = -s_gc.stationAABB.Min - 0.5f * ModelDim;
+#else
+    s_gc.stationScale = 1.0f;
+    float3 Translate = { 0.f, 0.f, 0.f };
+#endif
+
     float4x4 InvYAxis = float4x4::Identity();
     InvYAxis._22 = -1;
 
@@ -4940,12 +4948,12 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
 
     CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
     CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
-    CurrCamAttribs.mView = CameraView;
-    CurrCamAttribs.mProj = CameraProj;
-    CurrCamAttribs.mViewProj = CameraViewProj;
-    CurrCamAttribs.mViewInv = CameraView.Inverse();
-    CurrCamAttribs.mProjInv = CameraProj.Inverse();
-    CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse();
+    CurrCamAttribs.mView = CameraView.Transpose();
+    CurrCamAttribs.mProj = CameraProj.Transpose();
+    CurrCamAttribs.mViewProj = CameraViewProj.Transpose();
+    CurrCamAttribs.mViewInv = CameraView.Inverse().Transpose();
+    CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
+    CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
 
     s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
@@ -5159,14 +5167,15 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             // The light direction is along the negative Z axis of the light's local space.
             // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
-            float3 Direction = -normalize(float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 });
+            float3 lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+            float3 Direction = -normalize(lightDir);
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
 
             SF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
 
             if (LightNode.Name == "Sun")
             {
-                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction);
+                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, lightDir, inFlightIndex, s_gc.renderParams);
             }
         }
     }

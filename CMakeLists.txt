@@ -140,6 +140,7 @@ set(HEADER_FILES
     src/emul/platform.h
     src/emul/common.pch
     src/pbr/SF_PBR_Renderer.hpp
+    src/emul/DiligentShadowMapManager.hpp
     ${CURL_INCLUDE_DIRS}
 )
 
@@ -158,6 +159,7 @@ add_executable(emulatesdl WIN32
     src/util/lodepng.cpp
     src/emul/sdl_helper.cpp
     src/emul/vulkan_helper.cpp
+    src/emul/DiligentShadowMapManager.cpp
     src/tts/speech.cpp
     src/pbr/SF_PBR_Renderer.cpp
 )
