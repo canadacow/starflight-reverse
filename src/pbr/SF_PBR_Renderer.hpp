@@ -146,7 +146,8 @@ public:
 
     /// Creates resource bindings for a given GLTF model
     ModelResourceBindings CreateResourceBindings(GLTF::Model& GLTFModel,
-                                                 IBuffer*     pFrameAttribs);
+                                                 IBuffer*     pFrameAttribs,
+                                                 ITextureView* pShadowMap);
 
 
     /// Initializes a shader resource binding for the given material.
@@ -158,7 +159,8 @@ public:
     void InitMaterialSRB(GLTF::Model&            Model,
                          GLTF::Material&         Material,
                          IBuffer*                pFrameAttribs,
-                         IShaderResourceBinding* pMaterialSRB);
+                         IShaderResourceBinding* pMaterialSRB,
+                         ITextureView*           pShadowMap);
 
     /// GLTF resource cache use information.
     struct ResourceCacheUseInfo

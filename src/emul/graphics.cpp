@@ -391,6 +391,7 @@ struct GraphicsContext
     std::array<GLTF::ModelTransforms, 2> stationTransforms; // [0] - current frame, [1] - previous frame
     float4x4                             stationModelTransform;
     float                                stationScale = 1.f;
+    float4x4                             stationScaleAndTransform;
     RefCntAutoPtr<ITextureView> stationEnv;
     const GLTF::Node* stationCamera;
     std::vector<const GLTF::Node*> stationLights;
@@ -528,7 +529,7 @@ struct ShadowMap
         bool Is32BitFilterableFmt = true;
     } m_ShadowSettings;
 
-    void Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PBR_Renderer::ModelResourceBindings& meshBindings);
+    void Initialize(const std::unique_ptr<GLTF::Model>& mesh);
 
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const GLTF::Model& GLTFModel,
@@ -537,6 +538,11 @@ struct ShadowMap
                 const SF_PBR_Renderer::RenderInfo & RenderParams);
 
     void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams);
+
+    ITextureView* GetShadowMap()
+    {
+        return m_ShadowMapMgr.GetSRV();
+    }
 
 private:
 
@@ -555,7 +561,7 @@ private:
 
     //DXSDKMesh m_Mesh;
 
-    void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh, const SF_PBR_Renderer::ModelResourceBindings& meshBindings);
+    void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh);
 };
 
 /*
@@ -658,7 +664,7 @@ void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
 
 */
 
-void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh, const SF_PBR_Renderer::ModelResourceBindings& meshBindings)
+void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh)
 {
     m_ShadowSRBs.clear();
     m_ShadowSRBs.resize(mesh->Materials.size());
@@ -694,7 +700,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
             const auto& NodeGlobalMatrix = Transforms.NodeGlobalMatrices[pNode->Index];
 
-            const float4x4 NodeTransform = NodeGlobalMatrix * RenderParams.ModelTransform;
+            const float4x4 NodeTransform = NodeGlobalMatrix * s_gc.stationScaleAndTransform.Inverse() * RenderParams.ModelTransform;
 
             float4x4 CombinedMatrix = NodeTransform * cameraAttribs.mViewProj;
 
@@ -745,7 +751,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     s_gc.m_pImmediateContext->Flush();
 }
 
-void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PBR_Renderer::ModelResourceBindings& meshBindings)
+void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
 {
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "cbCameraAttribs", &s_gc.cameraAttribsCB);
 
@@ -889,7 +895,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh, const SF_PB
 
     m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
 
-    InitializeResourceBindings(mesh, meshBindings);
+    InitializeResourceBindings(mesh);
 }
 
 void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams)
@@ -2792,7 +2798,7 @@ struct PSOutput
     return PSMainInfo;
 }
 
-static void InitPBRRenderer()
+static void InitPBRRenderer(ITextureView* shadowMap)
 {
     GBuffer::ElementDesc GBufferElems[GBUFFER_RT_COUNT];
     GBufferElems[GBUFFER_RT_RADIANCE]       = {TEX_FORMAT_RGBA16_FLOAT};
@@ -2815,6 +2821,7 @@ static void InitPBRRenderer()
     RendererCI.EnableTransmission = true;
     RendererCI.EnableAnisotropy = true;
     RendererCI.FrontCounterClockwise = true;
+    RendererCI.EnableShadows = true;
 
     RendererCI.GetPSMainSource = GetPbrPSMainSource;
 
@@ -2862,7 +2869,7 @@ static void InitPBRRenderer()
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice, ssrci);
     #endif
 
-    s_gc.stationBindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station, s_gc.frameAttribsCB);
+    s_gc.stationBindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station, s_gc.frameAttribsCB, shadowMap);
 
     StateTransitionDesc Barriers[] = {
         {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
@@ -3116,11 +3123,10 @@ static int GraphicsInitThread()
         }
     }
 
-    InitPBRRenderer();
-
     s_gc.shadowMap = std::make_unique<ShadowMap>();
+    s_gc.shadowMap->Initialize(s_gc.station);
 
-    s_gc.shadowMap->Initialize(s_gc.station, s_gc.stationBindings);
+    InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
 
     // Navigation window is 72 x 120 pixels.
     uint32_t navWidth = WINDOW_WIDTH; // (uint32_t)ceilf((float(NagivationWindowWidth) / 160.0f) * (float)WINDOW_WIDTH);
@@ -4828,17 +4834,18 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     MaxDim = std::max(MaxDim, ModelDim.z);
 
     float4x4 InvYAxis = float4x4::Identity();
-#if 0
+    InvYAxis._22 = -1;
+#if 1
     s_gc.stationScale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
     auto     Translate = -s_gc.stationAABB.Min - 0.5f * ModelDim;
     InvYAxis._22 = -1;
 #else
     s_gc.stationScale = 1.0f;
     float3 Translate = { 0.f, 0.f, 0.f };
-    InvYAxis._22 = -1;
 #endif
 
     s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
+    s_gc.stationScaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale);
 #if 0
     if (s_gc.station->Animations.size())
     {
@@ -5132,6 +5139,14 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         0,
     };
 
+    {
+        StateTransitionDesc Barriers[] = {
+        {
+            s_gc.shadowMap->GetShadowMap()->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE, STATE_TRANSITION_FLAG_UPDATE_STATE},
+        };
+        s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
+    }
+
     GLTF::Light m_DefaultLight{};
     m_DefaultLight.Type = GLTF::Light::TYPE::DIRECTIONAL;
     m_DefaultLight.Intensity = 4.0f;
@@ -5184,6 +5199,14 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     {
         SF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, s_gc.stationScale }, Lights);
         LightCount = 1;
+    }
+
+    {
+        StateTransitionDesc Barriers[] = {
+        {
+            s_gc.shadowMap->GetShadowMap()->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_READ, STATE_TRANSITION_FLAG_UPDATE_STATE},
+        };
+        s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
     }
 
     Uint32 BuffersMask = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS | ((inFlightIndex & 0x01) ? GBUFFER_RT_FLAG_DEPTH1 : GBUFFER_RT_FLAG_DEPTH0);

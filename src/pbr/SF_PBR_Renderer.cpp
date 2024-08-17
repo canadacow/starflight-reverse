@@ -131,7 +131,8 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
 void SF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
                                         GLTF::Material&         Material,
                                         IBuffer*                pFrameAttribs,
-                                        IShaderResourceBinding* pMaterialSRB)
+                                        IShaderResourceBinding* pMaterialSRB,
+                                        ITextureView*           pShadowMap)
 {
     if (pMaterialSRB == nullptr)
     {
@@ -139,7 +140,7 @@ void SF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
         return;
     }
 
-    InitCommonSRBVars(pMaterialSRB, pFrameAttribs);
+    InitCommonSRBVars(pMaterialSRB, pFrameAttribs, true, pShadowMap);
 
     auto SetTexture = [&](TEXTURE_ATTRIB_ID ID, ITextureView* pDefaultTexSRV) //
     {
@@ -300,7 +301,8 @@ void SF_PBR_Renderer::CreateResourceCacheSRB(IRenderDevice*           pDevice,
 
 SF_PBR_Renderer::ModelResourceBindings SF_PBR_Renderer::CreateResourceBindings(
     GLTF::Model& GLTFModel,
-    IBuffer*     pFrameAttribs)
+    IBuffer*     pFrameAttribs,
+    ITextureView* pShadowMap)
 {
     ModelResourceBindings ResourceBindings;
     ResourceBindings.MaterialSRB.resize(GLTFModel.Materials.size());
@@ -308,7 +310,7 @@ SF_PBR_Renderer::ModelResourceBindings SF_PBR_Renderer::CreateResourceBindings(
     {
         auto& pMatSRB = ResourceBindings.MaterialSRB[mat];
         CreateResourceBinding(&pMatSRB);
-        InitMaterialSRB(GLTFModel, GLTFModel.Materials[mat], pFrameAttribs, pMatSRB);
+        InitMaterialSRB(GLTFModel, GLTFModel.Materials[mat], pFrameAttribs, pMatSRB, pShadowMap);
     }
     return ResourceBindings;
 }
@@ -569,6 +571,8 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             }
 
             PSOFlags &= RenderParams.Flags;
+
+            PSOFlags |= PSO_FLAG_ENABLE_SHADOWS;
 
             if (RenderParams.Wireframe)
                 PSOFlags |= PSO_FLAG_UNSHADED;
