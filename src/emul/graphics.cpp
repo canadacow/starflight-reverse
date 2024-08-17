@@ -4827,11 +4827,16 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
     MaxDim = std::max(MaxDim, ModelDim.y);
     MaxDim = std::max(MaxDim, ModelDim.z);
 
+    float4x4 InvYAxis = float4x4::Identity();
+#if 0
     s_gc.stationScale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
     auto     Translate = -s_gc.stationAABB.Min - 0.5f * ModelDim;
-
-    float4x4 InvYAxis = float4x4::Identity();
     InvYAxis._22 = -1;
+#else
+    s_gc.stationScale = 1.0f;
+    float3 Translate = { 0.f, 0.f, 0.f };
+    InvYAxis._22 = -1;
+#endif
 
     s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
 #if 0
@@ -5171,7 +5176,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             if (LightNode.Name == "Sun")
             {
-                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, lightDir, inFlightIndex, s_gc.renderParams);
+                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams);
             }
         }
     }
