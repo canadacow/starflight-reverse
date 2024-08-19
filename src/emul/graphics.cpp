@@ -703,7 +703,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
             const auto& NodeGlobalMatrix = Transforms.NodeGlobalMatrices[pNode->Index];
 
-            const float4x4 NodeTransform = NodeGlobalMatrix * s_gc.stationScaleAndTransform.Inverse() * RenderParams.ModelTransform;
+            const float4x4 NodeTransform = NodeGlobalMatrix /* * s_gc.stationScaleAndTransform.Inverse() */ * RenderParams.ModelTransform;
 
             float4x4 CombinedMatrix = NodeTransform * cameraAttribs.mViewProj;
 
