@@ -686,7 +686,6 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const HLSL::CameraAttribs& cameraAttribs,
                          const SF_PBR_Renderer::RenderInfo& RenderParams)
 {
-
     // Set the appropriate shadow pipeline state object and shader resource binding
     auto& pPSO = m_RenderMeshShadowPSO[0];
 
@@ -936,13 +935,20 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         auto* pCascadeDSV = m_ShadowMapMgr.GetCascadeDSV(iCascade);
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        //s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 0.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
         DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
-
-        shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
-        shadowInfo->UVScale = { 1.0f, 1.0f };
-        shadowInfo->UVBias = { 0.0f, 0.0f };
     }
+
+    const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(0).Proj;
+
+    auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightView.Transpose();
+    auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;    
+
+    shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
+    shadowInfo->UVScale = { 1.0f, 1.0f };
+    shadowInfo->UVBias = { 0.0f, 0.0f };
+    shadowInfo->ShadowMapSlice = 0.0f;    
 }
 
 template<std::size_t PLANES>
@@ -5203,6 +5209,9 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             if (LightNode.Name == "Sun")
             {
+                lightDir = float3{ 0.0f, -1.0f, 0.0f };
+                Direction = -normalize(lightDir);
+
                 s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0]);
                 AttribsData.ShadowMapIndex = 0;
             }
