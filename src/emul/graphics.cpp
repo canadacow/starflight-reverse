@@ -853,7 +853,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    m_LightAttribs.ShadowAttribs.iNumCascades = 4;
+    m_LightAttribs.ShadowAttribs.iNumCascades = 8;
     m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
@@ -935,7 +935,6 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         auto* pCascadeDSV = m_ShadowMapMgr.GetCascadeDSV(iCascade);
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        //s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 0.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
         DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
     }
