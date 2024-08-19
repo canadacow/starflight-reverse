@@ -85,7 +85,11 @@ namespace HLSL
 
 #include "Shaders/Common/public/BasicStructures.fxh"
 #include "Shaders/PBR/public/PBR_Structures.fxh"
+//#define ENABLE_SHADOWS 1
+//#define PBR_MAX_SHADOW_MAPS 8
 #include "Shaders/PBR/private/RenderPBR_Structures.fxh"
+//#undef PBR_MAX_SHADOW_MAPS
+//#undef ENABLE_SHADOWS
 #include "Shaders/PostProcess/Bloom/public/BloomStructures.fxh"
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
@@ -537,7 +541,7 @@ struct ShadowMap
                 const HLSL::CameraAttribs& cameraAttribs,
                 const SF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams);
+    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo);
 
     ITextureView* GetShadowMap()
     {
@@ -898,7 +902,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     InitializeResourceBindings(mesh);
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams)
+void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
     auto view = CurrCamAttribs.mView.Transpose();
@@ -934,6 +938,10 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
         DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+
+        shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
+        shadowInfo->UVScale = { 1.0f, 1.0f };
+        shadowInfo->UVBias = { 0.0f, 0.0f };
     }
 }
 
@@ -2839,7 +2847,8 @@ static void InitPBRRenderer(ITextureView* shadowMap)
         SF_PBR_Renderer::PSO_FLAG_ENABLE_IRIDESCENCE |
         SF_PBR_Renderer::PSO_FLAG_ENABLE_TRANSMISSION |
         SF_PBR_Renderer::PSO_FLAG_ENABLE_VOLUME |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM;
+        SF_PBR_Renderer::PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM |
+        SF_PBR_Renderer::PSO_FLAG_ENABLE_SHADOWS;
 
     s_gc.renderParams.Flags &= ~SF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING;
     s_gc.renderParams.Flags |= SF_PBR_Renderer::PSO_FLAG_COMPUTE_MOTION_VECTORS;
@@ -5155,8 +5164,11 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     float3      m_LightDirection{};
     m_LightDirection = normalize(float3(0.00f, 1.0f, 1.0f));
 
+    const size_t MaxLightCount = s_gc.pbrRenderer->GetSettings().MaxLightCount;
+
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
+    auto* ShadowMaps = reinterpret_cast<HLSL::PBRShadowMapInfo*>(Lights + MaxLightCount);
     if (!s_gc.stationLights.empty())
     //if(false)
     {
@@ -5187,12 +5199,19 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             float3 Direction = -normalize(lightDir);
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
 
-            SF_PBR_Renderer::WritePBRLightShaderAttribs({ &l, &Position, &Direction, s_gc.stationScale }, Lights + i);
+            SF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, s_gc.stationScale };
 
             if (LightNode.Name == "Sun")
             {
-                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams);
+                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0]);
+                AttribsData.ShadowMapIndex = 0;
             }
+            else
+            {
+                AttribsData.ShadowMapIndex = -1;
+            }
+
+            SF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + i);
         }
     }
     else
