@@ -853,17 +853,19 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    m_LightAttribs.ShadowAttribs.iNumCascades = 8;
+    m_LightAttribs.ShadowAttribs.iNumCascades = 1;
     m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
+    /*
     if (m_ShadowSettings.Resolution >= 2048)
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
     else if (m_ShadowSettings.Resolution >= 1024)
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.005f;
     else
         m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0075f;
+    */
 
     DiligentShadowMapManager::InitInfo SMMgrInitInfo;
     SMMgrInitInfo.Format = m_ShadowSettings.Format;
@@ -909,7 +911,18 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pCameraView = &view;
     DistrInfo.pCameraProj = &proj;
     DistrInfo.pLightDir = &Direction;
-    DistrInfo.fPartitioningFactor = 0.95f;
+    DistrInfo.fPartitioningFactor = 0.97f;
+
+    DistrInfo.AdjustCascadeRange = [view](int CascadeIdx, float& MinZ, float& MaxZ) {
+        // Adjust the whole range only
+        if(CascadeIdx == -1)
+        {
+            float3 stationMinViewSpace = (float4(s_gc.stationAABB.Min, 1.0f) * view);
+            float3 stationMaxViewSpace = (float4(s_gc.stationAABB.Max, 1.0f) * view);
+            MinZ = std::max(MinZ, stationMinViewSpace.z);
+            MaxZ = std::min(MaxZ, stationMaxViewSpace.z);
+        }
+    };
 
     m_ShadowMapMgr.DistributeCascades(DistrInfo, m_LightAttribs.ShadowAttribs);
 
