@@ -43,7 +43,8 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
     DiligentFX
-    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentFX.git
+    GIT_REPOSITORY https://github.com/canadacow/DiligentFX.git
+    GIT_TAG b11c4e6c
     SOURCE_DIR _deps/DiligentFX
 )
 FetchContent_MakeAvailable(DiligentCore DiligentTools DiligentFX)

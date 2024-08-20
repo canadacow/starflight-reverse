@@ -80,6 +80,7 @@ public:
     ITextureView* GetSRV()                     { return m_pShadowMapSRV;           }
     ITextureView* GetCascadeDSV(Uint32 Cascade){ return m_pShadowMapDSVs[Cascade]; }
     ITextureView* GetFilterableSRV()           { return m_pFilterableShadowMapSRV; }
+    ITextureView* GetUAV()                     { return m_pShadowMapUAV; }
 
     struct DistributeCascadeInfo
     {
@@ -161,6 +162,7 @@ private:
     RefCntAutoPtr<IRenderDevice>             m_pDevice;
     RefCntAutoPtr<IRenderStateCache>         m_pStateCache;
     RefCntAutoPtr<ITextureView>              m_pShadowMapSRV;
+    RefCntAutoPtr<ITextureView>              m_pShadowMapUAV;
     std::vector<RefCntAutoPtr<ITextureView>> m_pShadowMapDSVs;
     RefCntAutoPtr<ITextureView>              m_pFilterableShadowMapSRV;
     std::vector<RefCntAutoPtr<ITextureView>> m_pFilterableShadowMapRTVs;

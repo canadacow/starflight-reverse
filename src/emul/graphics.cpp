@@ -85,11 +85,7 @@ namespace HLSL
 
 #include "Shaders/Common/public/BasicStructures.fxh"
 #include "Shaders/PBR/public/PBR_Structures.fxh"
-//#define ENABLE_SHADOWS 1
-//#define PBR_MAX_SHADOW_MAPS 8
 #include "Shaders/PBR/private/RenderPBR_Structures.fxh"
-//#undef PBR_MAX_SHADOW_MAPS
-//#undef ENABLE_SHADOWS
 #include "Shaders/PostProcess/Bloom/public/BloomStructures.fxh"
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
@@ -911,7 +907,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pCameraView = &view;
     DistrInfo.pCameraProj = &proj;
     DistrInfo.pLightDir = &Direction;
-    DistrInfo.fPartitioningFactor = 0.97f;
+    DistrInfo.fPartitioningFactor = 0.95f;
 
     DistrInfo.AdjustCascadeRange = [view](int CascadeIdx, float& MinZ, float& MaxZ) {
         // Adjust the whole range only
@@ -960,7 +956,8 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
     shadowInfo->UVScale = { 1.0f, 1.0f };
     shadowInfo->UVBias = { 0.0f, 0.0f };
-    shadowInfo->ShadowMapSlice = 0.0f;    
+    shadowInfo->ShadowMapSlice = 0.0f;
+    shadowInfo->FixedDepthBias = m_LightAttribs.ShadowAttribs.fFixedDepthBias;
 }
 
 template<std::size_t PLANES>
@@ -4841,7 +4838,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
 
     TranslateMan(spacePoint);
 
-    float rotationAngle = (float)frameCount * 0.00005f;
+    float rotationAngle = currentTimeInSeconds * 0.005f;
     //float rotationAngle = (float)frameCount * 0.001f;
 
     float axisOne = rotationAngle;
@@ -5221,9 +5218,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             if (LightNode.Name == "Sun")
             {
-                lightDir = float3{ 0.0f, -1.0f, 0.0f };
-                Direction = -normalize(lightDir);
-
                 s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0]);
                 AttribsData.ShadowMapIndex = 0;
             }
