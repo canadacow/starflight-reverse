@@ -851,6 +851,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
 
     m_LightAttribs.ShadowAttribs.iNumCascades = 1;
     m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
+    //m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0000f;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
@@ -5195,25 +5196,34 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             const auto& LightNode = *s_gc.stationLights[i];
             auto LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
 
+            GLTF::Light l = *LightNode.pLight;
+            l.Intensity /= 512.0f;
+
+            float3 lightDir = {};
+            float3 Direction = {};
+
             if (LightNode.Name == "Sun")
             {
                 // Don't rotate the sun with the rest of the model.
-                LightGlobalTransform *= baseModelTransform;
+                //LightGlobalTransform *= baseModelTransform;
+                LightGlobalTransform *= s_gc.renderParams.ModelTransform;
+                // Convert from POINT to DIRECTION light
+                lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+                Direction = -normalize(lightDir);
+                l.Type = GLTF::Light::TYPE::DIRECTIONAL;
+                l.Intensity = 1.0f;
             }
             else
             {
                 LightGlobalTransform *= s_gc.renderParams.ModelTransform;
+                // The light direction is along the negative Z axis of the light's local space.
+                // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
+                lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+                Direction = -normalize(lightDir);
             }
 
-            GLTF::Light l = *LightNode.pLight;
-            l.Intensity /= 512.0f;
-
-            // The light direction is along the negative Z axis of the light's local space.
-            // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
-            float3 lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
-            float3 Direction = -normalize(lightDir);
+            
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
-
             SF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, s_gc.stationScale };
 
             if (LightNode.Name == "Sun")
@@ -5225,7 +5235,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
             {
                 AttribsData.ShadowMapIndex = -1;
             }
-
+            
             SF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + i);
         }
     }
