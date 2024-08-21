@@ -5210,8 +5210,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
                 // Convert from POINT to DIRECTION light
                 lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
                 Direction = -normalize(lightDir);
-                l.Type = GLTF::Light::TYPE::DIRECTIONAL;
-                l.Intensity = 1.0f;
             }
             else
             {
