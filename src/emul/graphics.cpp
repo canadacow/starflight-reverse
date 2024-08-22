@@ -775,6 +775,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     // Cull back faces
     PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
+    PSOCreateInfo.GraphicsPipeline.RasterizerDesc.SlopeScaledDepthBias = 2.0f;
     // Enable depth testing
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = True;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
@@ -850,8 +851,6 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
     m_LightAttribs.ShadowAttribs.iNumCascades = 1;
-    m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0025f;
-    //m_LightAttribs.ShadowAttribs.fFixedDepthBias = 0.0000f;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
@@ -903,22 +902,30 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
 void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
+    auto camWorld = CurrCamAttribs.f4Position;
     auto view = CurrCamAttribs.mView.Transpose();
     auto proj = CurrCamAttribs.mProj.Transpose();
+    auto viewProj = CurrCamAttribs.mViewProj.Transpose();
     DistrInfo.pCameraView = &view;
     DistrInfo.pCameraProj = &proj;
     DistrInfo.pLightDir = &Direction;
     DistrInfo.fPartitioningFactor = 0.95f;
 
-    DistrInfo.AdjustCascadeRange = [view](int CascadeIdx, float& MinZ, float& MaxZ) {
+    DistrInfo.AdjustCascadeRange = [view, proj, viewProj](int CascadeIdx, float& MinZ, float& MaxZ) {
+
         // Adjust the whole range only
         if(CascadeIdx == -1)
         {
-            float3 stationMinViewSpace = (float4(s_gc.stationAABB.Min, 1.0f) * view);
-            float3 stationMaxViewSpace = (float4(s_gc.stationAABB.Max, 1.0f) * view);
-            MinZ = std::max(MinZ, stationMinViewSpace.z);
-            MaxZ = std::min(MaxZ, stationMaxViewSpace.z);
+            float4 stationMinViewSpace = (float4(s_gc.stationAABB.Min, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
+            float4 stationMaxViewSpace = (float4(s_gc.stationAABB.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
+
+            float maxZ = stationMaxViewSpace.z - stationMinViewSpace.z;
+
+            VERIFY(maxZ > 0.f, "Far plane distance can't be negative");
+            MinZ = 0.18f;
+            MaxZ = maxZ;
         }
+
     };
 
     m_ShadowMapMgr.DistributeCascades(DistrInfo, m_LightAttribs.ShadowAttribs);
@@ -4839,8 +4846,8 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
 
     TranslateMan(spacePoint);
 
-    float rotationAngle = currentTimeInSeconds * 0.005f;
-    //float rotationAngle = (float)frameCount * 0.001f;
+    //float rotationAngle = currentTimeInSeconds * 0.005f;
+    float rotationAngle = (float)frameCount * 0.01f;
 
     float axisOne = rotationAngle;
     float axisTwo = rotationAngle / 3.0f;
