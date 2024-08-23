@@ -919,7 +919,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             float4 stationMinViewSpace = (float4(s_gc.stationAABB.Min, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
             float4 stationMaxViewSpace = (float4(s_gc.stationAABB.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
 
-            float maxZ = stationMaxViewSpace.z - stationMinViewSpace.z;
+            float maxZ = stationMaxViewSpace.z + 0.10f;
 
             VERIFY(maxZ > 0.f, "Far plane distance can't be negative");
             MinZ = 0.18f;
@@ -942,7 +942,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
 
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
-        ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr;
+        ShadowCameraAttribs.mViewProj = viewProj;// WorldToLightProjSpaceMatr;
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
         ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
