@@ -5246,7 +5246,8 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
                 //LightGlobalTransform *= baseModelTransform;
                 LightGlobalTransform *= s_gc.renderParams.ModelTransform;
                 // Convert from POINT to DIRECTION light
-                lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+                //lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+                lightDir = float3{ 0.0f, -0.07f, -0.07f };
                 Direction = -normalize(lightDir);
 
                 double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
