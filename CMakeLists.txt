@@ -4,6 +4,11 @@ if(WIN32)
     add_compile_options(/bigobj)
 endif()
 
+if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GL-")
+    set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} /LTCG- /INCREMENTAL")
+endif()
+
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
     CACHE STRING "Vcpkg toolchain file")
 if(WIN32)
@@ -25,7 +30,7 @@ set(DILIGENT_MSVC_COMPILE_OPTIONS "" CACHE STRING "Remove warnings as errors")
 
 FetchContent_Declare(
     DiligentCore
-    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentCore.git
+    GIT_REPOSITORY https://github.com/canadacow/DiligentCore.git
     SOURCE_DIR _deps/DiligentCore
 )
 FetchContent_Declare(
