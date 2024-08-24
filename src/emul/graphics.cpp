@@ -701,10 +701,29 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
             *CameraAttribs = cameraAttribs;
 
+            MapHelper<float4x4> pJoints{ pCtx, s_gc.jointsBuffer, MAP_WRITE, MAP_FLAG_DISCARD };
+
+            size_t JointCount = 0;
+            if (pNode->SkinTransformsIndex >= 0 && pNode->SkinTransformsIndex < static_cast<int>(Transforms.Skins.size()))
+            {
+                const auto& JointMatrices = Transforms.Skins[pNode->SkinTransformsIndex].JointMatrices;
+
+                JointCount = JointMatrices.size();
+
+                if (JointCount != 0)
+                {
+                    WriteShaderMatrices(pJoints, JointMatrices.data(), JointCount, true);
+                }
+            }            
+
             MapHelper<HLSL::GLTFNodeShaderTransforms> GLTFNodeShaderTransforms{ pCtx, s_gc.PBRPrimitiveAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+            GLTFNodeShaderTransforms->JointCount = JointCount; 
 
-            MapHelper<float4x4> JointTransforms{ pCtx, s_gc.jointsBuffer, MAP_WRITE, MAP_FLAG_DISCARD };
+            const auto& NodeGlobalMatrix      = Transforms.NodeGlobalMatrices[pNode->Index];
+            const float4x4  NodeTransform     = NodeGlobalMatrix * RenderParams.ModelTransform;
 
+            WriteShaderMatrix(&GLTFNodeShaderTransforms->NodeMatrix, NodeTransform, true);            
+            
             // Iterate through each primitive in the mesh
             for (const auto& primitive : pNode->pMesh->Primitives)
             {
@@ -750,8 +769,8 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
 {
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "cbCameraAttribs", &s_gc.cameraAttribsCB);
-    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &m_PBRPrimitiveAttribsCB);
-    const size_t JointsBufferSize = sizeof(float4x4) * /* m_Settings.MaxJointCount */ 64 * 2
+    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
+    const size_t JointsBufferSize = sizeof(float4x4) * /* m_Settings.MaxJointCount */ 64 * 2;
     CreateUniformBuffer(s_gc.m_pDevice, JointsBufferSize, "cbJointTransforms", &s_gc.jointsBuffer);
 
     GraphicsPipelineStateCreateInfo PSOCreateInfo{};
@@ -762,7 +781,6 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
         .AddVariable(SHADER_TYPE_VERTEX, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
-
 
     PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
 
@@ -825,9 +843,9 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
         // Attribute 2 - texture coordinates
         LayoutElement{1, 0, 2, VT_FLOAT32, False},
         // Attribute 3 - joint indices
-        LayoutElement{3, 0, 4, VT_FLOAT32, False},
+        LayoutElement{3, 1, 4, VT_FLOAT32, False},
         // Attribute 4 - joint weights
-        LayoutElement{4, 0, 4, VT_FLOAT32, False}
+        LayoutElement{4, 1, 4, VT_FLOAT32, False}
     };
     // clang-format on
 
@@ -851,14 +869,15 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     auto count = pRenderMeshShadowPSO->GetStaticVariableCount(SHADER_TYPE_VERTEX);
 
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.cameraAttribsCB);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.cameraAttribsCB);
+    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
+    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
 
     m_RenderMeshShadowPSO.emplace_back(std::move(pRenderMeshShadowPSO));
 
     StateTransitionDesc Barriers[] = {
-    {
-            s_gc.cameraAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+            {s_gc.cameraAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+            {s_gc.PBRPrimitiveAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.jointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
@@ -954,7 +973,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
 
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
-        ShadowCameraAttribs.mViewProj = viewProj;// WorldToLightProjSpaceMatr;
+        ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr;
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
         ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
@@ -977,7 +996,6 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     shadowInfo->UVScale = { 1.0f, 1.0f };
     shadowInfo->UVBias = { 0.0f, 0.0f };
     shadowInfo->ShadowMapSlice = 0.0f;
-    shadowInfo->FixedDepthBias = m_LightAttribs.ShadowAttribs.fFixedDepthBias;
 }
 
 template<std::size_t PLANES>
