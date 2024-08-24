@@ -56,7 +56,7 @@ void VulkanContext::create_swap_chain(swapchain_creation_mode aCreationMode, voi
         mSwapChainExtent = vk::Extent2D{ width, height };
     }
 
-    VkSurfaceKHR surface;
+    VkSurfaceKHR surface{};
 #ifdef _WIN32
     createWindowSurfaceWin32(mInstance, nullptr, &surface, windowObject);
 #endif

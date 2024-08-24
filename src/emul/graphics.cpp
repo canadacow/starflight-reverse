@@ -1126,7 +1126,7 @@ void StartEmulationThread(std::filesystem::path path)
 
         InitCPU();
         InitEmulator(path);
-        enum RETURNCODE ret;
+        enum RETURNCODE ret = OK;
         do
         {
             if(pauseEmulationThread)
@@ -2237,24 +2237,24 @@ void GraphicsSetDeadReckoning(int16_t deadX, int16_t deadY,
 
         explosions.clear();
 
-        for (auto& m : missiles)
+        for (auto& mi : missiles)
         {
             bool newShip = false;
 
-            auto vesselIt = frameSync.combatTheatre.find(m.nonce);
+            auto vesselIt = frameSync.combatTheatre.find(mi.nonce);
             if (vesselIt == frameSync.combatTheatre.end()) {
-                frameSync.combatTheatre[m.nonce] = HeadingAndThrust();
+                frameSync.combatTheatre[mi.nonce] = HeadingAndThrust();
                 newShip = true;
             }
 
-            vesselIt = frameSync.combatTheatre.find(m.nonce);
+            vesselIt = frameSync.combatTheatre.find(mi.nonce);
             auto& ship = vesselIt->second;
 
             if (newShip)
             {
                 ship.interp = std::make_unique<Interpolator>(0.095f);
-                ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)m.mr.currx, (float)m.mr.curry, 0.0f });
-                ship.interp->addPoint((float)frameSync.completedFrames, { (float)m.mr.destx, (float)m.mr.desty, 0.0f });
+                ship.interp->addPointWithTime((float)frameSync.completedFrames, { (float)mi.mr.currx, (float)mi.mr.curry, 0.0f });
+                ship.interp->addPoint((float)frameSync.completedFrames, { (float)mi.mr.destx, (float)mi.mr.desty, 0.0f });
             }
         }
 
@@ -4876,8 +4876,8 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame
 
     TranslateMan(spacePoint);
 
-    //float rotationAngle = currentTimeInSeconds * 0.005f;
-    float rotationAngle = (float)frameCount * 0.01f;
+    float rotationAngle = currentTimeInSeconds * 0.005f;
+    //float rotationAngle = (float)frameCount * 0.01f;
 
     float axisOne = rotationAngle;
     float axisTwo = rotationAngle / 3.0f;
@@ -5247,6 +5247,13 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
                 // Convert from POINT to DIRECTION light
                 lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
                 Direction = -normalize(lightDir);
+
+                double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+
+                float rotationAngle = currentTimeInSeconds * 0.025f;
+                float4x4 rotationMatrix = float4x4::RotationZ(rotationAngle);
+                float4 rotatedDirection = rotationMatrix * float4(Direction, 0.0f);
+                Direction = float3(rotatedDirection);
             }
             else
             {

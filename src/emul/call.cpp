@@ -3285,7 +3285,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
             case 0x367F: // ??? something with file content. Probably traverse directory of STARA.COM or STARB.COM
             {
-                unsigned short ax;
+                unsigned short ax = 0;
                 dx = Pop();
                 //printf("search %i\n", dx);
                 Push(regdi);

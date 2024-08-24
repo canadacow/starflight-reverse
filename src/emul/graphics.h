@@ -206,8 +206,8 @@ public:
             shouldQueue = true;
         }
         if (isExtrapolating(queueTime) && unsplinedPoints.empty()) {
-            auto lastPoint = interpolateInternal(queueTime);
-            if (std::sqrt(std::pow(lastPoint.position.x - point.x, 2) + std::pow(lastPoint.position.y - point.y, 2) + std::pow(lastPoint.position.z - point.z, 2)) > 0.01f) {
+            auto _lastPoint = interpolateInternal(queueTime);
+            if (std::sqrt(std::pow(_lastPoint.position.x - point.x, 2) + std::pow(_lastPoint.position.y - point.y, 2) + std::pow(_lastPoint.position.z - point.z, 2)) > 0.01f) {
                 shouldQueue = true;
             }
         }
@@ -254,7 +254,7 @@ public:
         if (points.size() == 1) {
             vec3<float> lastPoint = points.back();
             auto timeToDest = timeToReach(lastPoint, point, anchorTime, ship_velocity);
-            addPointWithTime(timeToDest, point);
+            addPointWithTime((float)timeToDest, point);
         
         } else {
             // New point and we have an established heading. Compute that now.
@@ -273,7 +273,7 @@ public:
 
             for (const auto& interPoint : intermediate) {
                 auto destTime = timeToReach(pos, interPoint, curTime, ship_velocity) + 1.0f;
-                addPointWithTime(destTime, interPoint);
+                addPointWithTime((float)destTime, interPoint);
 
                 curTime = destTime;
                 pos = interPoint;
@@ -297,7 +297,7 @@ public:
             auto point = lastPoint;
             // Coast at a very slow velocity, a fraction of ship_velocity, using the last good heading
             float coastingVelocityFactor = 1.0f; // Adjust this factor to control the coasting speed
-            float deltaTime = time - times.back(); // Time since the last known point
+            float deltaTime = time - (float)times.back(); // Time since the last known point
             point.position.x += std::cos(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
             point.position.y += std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime;
             point.position.z += std::sin(lastPoint.heading) * ship_velocity * coastingVelocityFactor * deltaTime; // Assuming some z-movement
