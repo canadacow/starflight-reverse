@@ -16,14 +16,6 @@ project(Starflight)
 
 include(FetchContent)
 
-FetchContent_Declare(
-  llama_cpp
-  GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
-  GIT_TAG        master
-)
-
-FetchContent_MakeAvailable(llama_cpp)
-
 set(DILIGENT_NO_DIRECT3D11 ON CACHE BOOL "Disable D3D11 support")
 set(DILIGENT_NO_DIRECT3D12 ON CACHE BOOL "Disable D3D12 support")
 set(DILIGENT_NO_OPENGL ON CACHE BOOL "Disable OpenGL support")
@@ -43,8 +35,7 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
     DiligentFX
-    GIT_REPOSITORY https://github.com/canadacow/DiligentFX.git
-    GIT_TAG b11c4e6c
+    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentFX.git
     SOURCE_DIR _deps/DiligentFX
 )
 FetchContent_MakeAvailable(DiligentCore DiligentTools DiligentFX)
@@ -189,7 +180,6 @@ target_link_libraries(emulatesdl PRIVATE
         Diligent-BuildSettings
         Diligent-GraphicsEngineVk-shared
         DiligentFX
-        llama
         nuklear
         cereal::cereal
         Magnum::Magnum
