@@ -491,8 +491,8 @@ struct GraphicsContext
                         walkingEndTimestamp.reset();
                     }
                     if (walkingEndTimestamp && std::chrono::steady_clock::now() >= *walkingEndTimestamp) {
-                        changeState(AnimationState::StoppingWalking);
-                        return {AnimationState::StoppingWalking, 0.0};
+                        changeState(AnimationState::Standing);
+                        return {AnimationState::Standing, 0.0};
                     }
                     return {AnimationState::Walking, fmod(timeSinceChange, walkingAnimationLength)};
 
@@ -953,7 +953,8 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             float maxZ = stationMaxViewSpace.z + 0.10f;
 
             VERIFY(maxZ > 0.f, "Far plane distance can't be negative");
-            MinZ = 0.18f;
+            //MinZ = 0.18f;
+            MinZ = 0.14f;
             MaxZ = maxZ;
         }
 
@@ -5251,7 +5252,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
                 double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
                 float rotationAngle = currentTimeInSeconds * 0.025f;
-                float4x4 rotationMatrix = float4x4::RotationZ(rotationAngle);
+                float4x4 rotationMatrix = float4x4::RotationY(rotationAngle);
                 float4 rotatedDirection = rotationMatrix * float4(Direction, 0.0f);
                 Direction = float3(rotatedDirection);
             }
