@@ -3630,7 +3630,8 @@ std::binary_semaphore& GraphicsInit()
     graphicsThread = std::jthread([] {
         GraphicsInitThread();
 
-        StartEmulationThread("");
+        // Uncomment to start the game immediately
+        //StartEmulationThread("");
 
         while (!stopSemaphore.try_acquire()) {
             constexpr std::chrono::nanoseconds scanout_duration = std::chrono::nanoseconds(13340000); // 80% of 1/60th of a second
@@ -4123,6 +4124,50 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
 
         avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::general, avk::layout::shader_read_only_optimal })
+    };
+}
+
+std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform)
+{
+    ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
+    ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
+
+    {
+        StateTransitionDesc Barriers[] = {
+        {
+            pRTV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_COPY_DEST, STATE_TRANSITION_FLAG_UPDATE_STATE},
+        };
+        s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
+    }
+
+    const float clearColor[] = { 0.0f, 1.0f, 0.0f, 1.0f }; // Green color
+    s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, clearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    s_gc.m_pImmediateContext->Flush();
+
+    return {
+
+        s_gc.buffers[inFlightIndex].uniform->fill(&uniform, 0, 0, sizeof(UniformBlock)),
+
+        avk::sync::buffer_memory_barrier(s_gc.buffers[inFlightIndex].uniform.as_reference(),
+            avk::stage::auto_stage >> avk::stage::auto_stage,
+            avk::access::auto_access >> avk::access::auto_access
+        ),
+
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_dst }),
+
+
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_src }),
+
+        avk::copy_image_to_another(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(), avk::layout::transfer_src, s_gc.buffers[inFlightIndex].gameOutput->get_image(), avk::layout::transfer_dst, vk::ImageAspectFlagBits::eColor),
+
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_src, avk::layout::transfer_dst }),
+
+        avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }),
+
     };
 }
 
@@ -6048,8 +6093,13 @@ void GraphicsUpdate()
 
     if (!emulationThreadRunning)
     {
+#if 0
         auto titleCommands = TitlePass(inFlightIndex, uniform);
         commands.insert(commands.end(), titleCommands.begin(), titleCommands.end());
+#else
+        auto planetCommands = PlanetPass(inFlightIndex, uniform);
+        commands.insert(commands.end(), planetCommands.begin(), planetCommands.end());
+#endif
     }
     else if (graphicsMode == SFGraphicsMode::Text)
     {

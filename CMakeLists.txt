@@ -31,16 +31,19 @@ set(DILIGENT_MSVC_COMPILE_OPTIONS "" CACHE STRING "Remove warnings as errors")
 FetchContent_Declare(
     DiligentCore
     GIT_REPOSITORY https://github.com/canadacow/DiligentCore.git
+    GIT_TAG canadacow-development
     SOURCE_DIR _deps/DiligentCore
 )
 FetchContent_Declare(
     DiligentTools
-    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentTools.git
+    GIT_REPOSITORY https://github.com/canadacow/DiligentTools.git
+    GIT_TAG canadacow-development
     SOURCE_DIR _deps/DiligentTools
 )
 FetchContent_Declare(
     DiligentFX
-    GIT_REPOSITORY https://github.com/DiligentGraphics/DiligentFX.git
+    GIT_REPOSITORY https://github.com/canadacow/DiligentFX.git
+    GIT_TAG canadacow-development
     SOURCE_DIR _deps/DiligentFX
 )
 FetchContent_MakeAvailable(DiligentCore DiligentTools DiligentFX)
