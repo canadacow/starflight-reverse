@@ -385,17 +385,24 @@ struct GraphicsContext
     bool shouldInitPlanets = false;
     std::binary_semaphore planetsDone{0};
 
-    std::unique_ptr<GLTF::Model> station;
-    SF_PBR_Renderer::ModelResourceBindings stationBindings;
-    BoundBox stationAABB;
-    std::array<GLTF::ModelTransforms, 2> stationTransforms; // [0] - current frame, [1] - previous frame
-    float4x4                             stationModelTransform;
-    float                                stationScale = 1.f;
-    float4x4                             stationScaleAndTransform;
-    RefCntAutoPtr<ITextureView> stationEnv;
-    const GLTF::Node* stationCamera;
-    std::vector<const GLTF::Node*> stationLights;
-    std::unique_ptr<HLSL::CameraAttribs[]> stationCameraAttribs;
+    struct SFModel
+    {
+        std::unique_ptr<GLTF::Model> model;
+        SF_PBR_Renderer::ModelResourceBindings bindings;
+        BoundBox aabb;
+        std::array<GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
+        float4x4                             modelTransform;
+        float                                scale = 1.f;
+        float4x4                             scaleAndTransform;
+        RefCntAutoPtr<ITextureView> env;
+        const GLTF::Node* camera;
+        std::vector<const GLTF::Node*> lights;
+    };
+
+    SFModel station{};
+    SFModel planet{};
+
+    std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
 
     std::unique_ptr<SF_PBR_Renderer> pbrRenderer;
     std::unique_ptr<GBuffer> gBuffer;
@@ -539,7 +546,7 @@ struct ShadowMap
                 const HLSL::CameraAttribs& cameraAttribs,
                 const SF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo);
+    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model);
 
     ITextureView* GetShadowMap()
     {
@@ -568,6 +575,7 @@ private:
 
 void InitStation();
 void InitPlanet();
+void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model);
 
 /*
 
@@ -933,7 +941,7 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     InitializeResourceBindings(mesh);
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo)
+void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
     auto camWorld = CurrCamAttribs.f4Position;
@@ -945,13 +953,13 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pLightDir = &Direction;
     DistrInfo.fPartitioningFactor = 0.95f;
 
-    DistrInfo.AdjustCascadeRange = [view, proj, viewProj](int CascadeIdx, float& MinZ, float& MaxZ) {
+    DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model](int CascadeIdx, float& MinZ, float& MaxZ) {
 
         // Adjust the whole range only
         if(CascadeIdx == -1)
         {
-            float4 stationMinViewSpace = (float4(s_gc.stationAABB.Min, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
-            float4 stationMaxViewSpace = (float4(s_gc.stationAABB.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
+            float4 stationMinViewSpace = (float4(model.aabb.Min, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
+            float4 stationMaxViewSpace = (float4(model.aabb.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
 
             float maxZ = stationMaxViewSpace.z + 0.10f;
 
@@ -988,7 +996,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-        DrawMesh(s_gc.m_pImmediateContext, *s_gc.station, s_gc.stationTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+        DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
     }
 
     const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(0).Proj;
@@ -2692,7 +2700,7 @@ void main(in  float4 Pos          : SV_Position,
 )";
 
 
-static void LoadEnvironmentMap(const char* Path)
+static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model)
 {
 
     EnvMapRenderer::CreateInfo EnvMapRendererCI;
@@ -2784,7 +2792,7 @@ static void LoadEnvironmentMap(const char* Path)
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    s_gc.stationEnv = pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    model.env = pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 
     s_gc.m_pImmediateContext->Flush();
 }
@@ -2935,14 +2943,14 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice, ssrci);
     #endif
 
-    s_gc.stationBindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station, s_gc.frameAttribsCB, shadowMap);
+    s_gc.station.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station.model, s_gc.frameAttribsCB, shadowMap);
 
     StateTransitionDesc Barriers[] = {
         {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    LoadEnvironmentMap("starfield.ktx");
+    LoadEnvironmentMap("starfield.ktx", s_gc.station);
     //LoadEnvironmentMap("papermill.ktx");
 }
 
@@ -3158,8 +3166,10 @@ static int GraphicsInitThread()
     InitStation();
     InitPlanet();
 
+    s_gc.cameraAttribs = std::make_unique<HLSL::CameraAttribs[]>(2);
+
     s_gc.shadowMap = std::make_unique<ShadowMap>();
-    s_gc.shadowMap->Initialize(s_gc.station);
+    s_gc.shadowMap->Initialize(s_gc.station.model);
 
     InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
 
@@ -3470,7 +3480,7 @@ void TranslateMan(InterpolatorPoint manPoint)
     static std::unordered_map<std::string, QuaternionF> initialRotations;
 
     std::call_once(initFlag, [&]() {
-        auto& nodes = s_gc.station->Nodes;
+        auto& nodes = s_gc.station.model->Nodes;
         for (auto& node : nodes) {
             if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
                 initialRotations[node.Name] = node.Rotation;
@@ -3496,7 +3506,7 @@ void TranslateMan(InterpolatorPoint manPoint)
         }
     }
 
-    auto& nodes = s_gc.station->Nodes;
+    auto& nodes = s_gc.station.model->Nodes;
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
 
@@ -3517,7 +3527,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     );
 
     // Retrieve the current camera attributes
-    auto& camAttribs = s_gc.stationCameraAttribs[0]; // Assuming index 0 for simplicity, adjust as necessary
+    auto& camAttribs = s_gc.cameraAttribs[0]; // Assuming index 0 for simplicity, adjust as necessary
 
     float3 cameraPosition = float3(easyCameraf4Position.x, easyCameraf4Position.y, easyCameraf4Position.z);
     float distanceToOrigin = length(cameraPosition);
@@ -3530,7 +3540,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     float4 clipSpacePos = float4(ndcX, ndcY, 1.0, 1.0f); // z = 1 for forward direction, w = 1 for perspective division
 
     // Transform clip space position to world space using the precomputed inverse view-projection matrix
-    float4 worldSpacePos = clipSpacePos * easyViewProjInvT.Transpose() * s_gc.stationModelTransform.Inverse();
+    float4 worldSpacePos = clipSpacePos * easyViewProjInvT.Transpose() * s_gc.station.modelTransform.Inverse();
 
     // Perspective divide
     worldSpacePos /= worldSpacePos.w;
@@ -3539,7 +3549,7 @@ void GraphicsMoveSpaceMan(uint16_t x, uint16_t y)
     float3 planeNormal = float3(0.0f, -0.05f, 1.00f); // Adjusted plane normal to be tilted
     float planeD = 0.0f; // Plane is at z = 0
 
-    float4 worldCam = easyCameraf4Position * s_gc.stationModelTransform.Inverse();
+    float4 worldCam = easyCameraf4Position * s_gc.station.modelTransform.Inverse();
 
     worldCam /= worldCam.w;
 
@@ -4874,10 +4884,10 @@ static int s_armatureActionIndex = -1;
 
 void InitializeAnimationIndices()
 {
-    for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
-        if (s_gc.station->Animations[i].Name == "RestingPose") {
+    for (int i = 0; i < s_gc.station.model->Animations.size(); ++i) {
+        if (s_gc.station.model->Animations[i].Name == "RestingPose") {
             s_restingPoseIndex = i;
-        } else if (s_gc.station->Animations[i].Name == "ArmatureAction") {
+        } else if (s_gc.station.model->Animations[i].Name == "ArmatureAction") {
             s_armatureActionIndex = i;
         }
     }
@@ -4888,25 +4898,23 @@ void InitStation()
     GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = "C:/Users/Dean/Downloads/station29.glb";
 
-    s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+    s_gc.station.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
 
-    s_gc.stationCameraAttribs = std::make_unique<HLSL::CameraAttribs[]>(2);
-
-    for (const auto* node : s_gc.station->Scenes[0].LinearNodes)
+    for (const auto* node : s_gc.station.model->Scenes[0].LinearNodes)
     {
         if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
         {
-            s_gc.stationCamera = node;
+            s_gc.station.camera = node;
         }
             
         if (node->pLight != nullptr)
         {
-            s_gc.stationLights.push_back(node);
+            s_gc.station.lights.push_back(node);
         }
     }
 
-    for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
-        auto& anim = s_gc.station->Animations[i];
+    for (int i = 0; i < s_gc.station.model->Animations.size(); ++i) {
+        auto& anim = s_gc.station.model->Animations[i];
         if (anim.Name == "ArmatureAction") {
             s_gc.spaceManState.walkingAnimationLength = anim.End - anim.Start;
             s_gc.spaceManState.walkingAnimationStart = anim.Start;
@@ -4961,12 +4969,12 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     float4x4 RotationMatrixCam = float4x4::RotationY(axisOne) * float4x4::RotationZ(-axisTwo);
     float4x4 RotationMatrixModel = float4x4::RotationY(axisTwo) * float4x4::RotationZ(axisOne);
 
-    s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
-    s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
+    s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
+    s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
 
     // Center and scale model
     float  MaxDim = 0;
-    float3 ModelDim{ s_gc.stationAABB.Max - s_gc.stationAABB.Min };
+    float3 ModelDim{ s_gc.station.aabb.Max - s_gc.station.aabb.Min };
     MaxDim = std::max(MaxDim, ModelDim.x);
     MaxDim = std::max(MaxDim, ModelDim.y);
     MaxDim = std::max(MaxDim, ModelDim.z);
@@ -4974,24 +4982,24 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvYAxis = float4x4::Identity();
     InvYAxis._22 = -1;
 #if 1
-    s_gc.stationScale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
-    auto     Translate = -s_gc.stationAABB.Min - 0.5f * ModelDim;
+    s_gc.station.scale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
+    auto     Translate = -s_gc.station.aabb.Min - 0.5f * ModelDim;
     InvYAxis._22 = -1;
 #else
-    s_gc.stationScale = 1.0f;
+    s_gc.station.scale = 1.0f;
     float3 Translate = { 0.f, 0.f, 0.f };
 #endif
 
-    s_gc.stationModelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale) * InvYAxis;
-    s_gc.stationScaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.stationScale);
+    s_gc.station.modelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.station.scale) * InvYAxis;
+    s_gc.station.scaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.station.scale);
 #if 0
-    if (s_gc.station->Animations.size())
+    if (s_gc.station.model->Animations.size())
     {
         const GLTF::Animation* anim = nullptr;
         int animIndex = -1;
-        for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
-            if (s_gc.station->Animations[i].Name == "ArmatureAction") {
-                anim = &s_gc.station->Animations[i];
+        for (int i = 0; i < s_gc.station.model->Animations.size(); ++i) {
+            if (s_gc.station.model->Animations[i].Name == "ArmatureAction") {
+                anim = &s_gc.station.model->Animations[i];
                 animIndex = i;
                 break;
             }
@@ -5001,11 +5009,11 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 
         double timeElapsed = std::fmod(currentTimeInSeconds, animationLength) + anim->Start;
 
-        s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform, animIndex, timeElapsed);
+        s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], s_gc.station.modelTransform, animIndex, timeElapsed);
     }
     else
     {
-        s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform);
+        s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], s_gc.station.modelTransform);
     }
 #endif
 
@@ -5031,10 +5039,10 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
             break;
     }
 
-    s_gc.station->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0], s_gc.stationModelTransform, animIndex, timeElapsed);
+    s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], s_gc.station.modelTransform, animIndex, timeElapsed);
         
-    s_gc.stationAABB = s_gc.station->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.stationTransforms[0]);
-    s_gc.stationTransforms[1] = s_gc.stationTransforms[0];
+    s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
+    s_gc.station.transforms[1] = s_gc.station.transforms[0];
 
     float YFov = PI_F / 4.0f;
     float ZNear = 0.1f;
@@ -5042,9 +5050,9 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 
     float4x4 CameraView;
 
-    const auto* pCameraNode = s_gc.stationCamera;
+    const auto* pCameraNode = s_gc.station.camera;
     const auto* pCamera = pCameraNode->pCamera;
-    const auto& CameraGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
+    const auto& CameraGlobalTransform = s_gc.station.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
 
     // GLTF camera is defined such that the local +X axis is to the right,
     // the lens looks towards the local -Z axis, and the top of the camera
@@ -5090,7 +5098,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 
     float3 CameraWorldPos = float3::MakeVector(CameraWorld[3]);
 
-    auto& CurrCamAttribs = s_gc.stationCameraAttribs[inFlightIndex & 0x01];
+    auto& CurrCamAttribs = s_gc.cameraAttribs[inFlightIndex & 0x01];
 
     CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
     CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
@@ -5102,7 +5110,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
 
-    s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
+    s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 }
 
 struct ShaderParams
@@ -5229,7 +5237,12 @@ static FfxResource ffxGetResource(ITextureView* textureView)
     return ffxGetResourceVK((void*)image, ffxGetImageResourceDescriptionVK(image, vkici, FFX_RESOURCE_USAGE_RENDERTARGET), nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 }
 
-bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
+void RenderStation(VulkanContext::frame_id_t inFlightIndex)
+{
+    RenderSFModel(inFlightIndex, s_gc.station);
+}
+
+void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model)
 {
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
     ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
@@ -5260,10 +5273,10 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.gBuffer->Resize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    const auto& CurrCamAttribs = s_gc.stationCameraAttribs[inFlightIndex & 0x01];
-    const auto& PrevCamAttribs = s_gc.stationCameraAttribs[(inFlightIndex + 1) & 0x01];
-    const auto& CurrTransforms = s_gc.stationTransforms[inFlightIndex & 0x01];
-    const auto& PrevTransforms = s_gc.stationTransforms[(inFlightIndex + 1) & 0x01];
+    const auto& CurrCamAttribs = s_gc.cameraAttribs[inFlightIndex & 0x01];
+    const auto& PrevCamAttribs = s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01];
+    const auto& CurrTransforms = model.transforms[inFlightIndex & 0x01];
+    const auto& PrevTransforms = model.transforms[(inFlightIndex + 1) & 0x01];
 
     MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
 
@@ -5298,15 +5311,15 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     int LightCount = 0;
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
     auto* ShadowMaps = reinterpret_cast<HLSL::PBRShadowMapInfo*>(Lights + MaxLightCount);
-    if (!s_gc.stationLights.empty())
+    if (!model.lights.empty())
     {
         auto baseModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
 
-        LightCount = std::min(static_cast<Uint32>(s_gc.stationLights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
+        LightCount = std::min(static_cast<Uint32>(model.lights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
         for (int i = 0; i < LightCount; ++i)
         {
-            const auto& LightNode = *s_gc.stationLights[i];
-            auto LightGlobalTransform = s_gc.stationTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
+            const auto& LightNode = *model.lights[i];
+            auto LightGlobalTransform = model.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
 
             GLTF::Light l = *LightNode.pLight;
             l.Intensity /= 512.0f;
@@ -5342,11 +5355,11 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
             
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
-            SF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, s_gc.stationScale };
+            SF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, model.scale };
 
             if (LightNode.Name == "Sun")
             {
-                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0]);
+                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model);
                 AttribsData.ShadowMapIndex = 0;
             }
             else
@@ -5359,7 +5372,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     }
     else
     {
-        SF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, s_gc.stationScale }, Lights);
+        SF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, model.scale }, Lights);
         LightCount = 1;
     }
 
@@ -5395,7 +5408,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         s_gc.renderParams.AlphaModes &= AlphaModes;
         if (s_gc.renderParams.AlphaModes != SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_NONE)
         {
-            s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *s_gc.station, CurrTransforms, &PrevTransforms, s_gc.renderParams, &s_gc.stationBindings);
+            s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.model, CurrTransforms, &PrevTransforms, s_gc.renderParams, &model.bindings);
         }
 
         s_gc.renderParams.AlphaModes = OrigAlphaModes;
@@ -5408,7 +5421,7 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     RenderModel(SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_OPAQUE | SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_MASK);
 
     {
-        ITextureView* pEnvMapSRV = s_gc.stationEnv;
+        ITextureView* pEnvMapSRV = model.env;
 
         HLSL::ToneMappingAttribs TMAttribs;
         TMAttribs.iToneMappingMode     = (s_gc.renderParams.Flags & SF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING) ? TONE_MAPPING_MODE_UNCHARTED2 : TONE_MAPPING_MODE_NONE;
@@ -5501,11 +5514,11 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
         desc.motionVectors = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MOTION_VECTORS)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
         desc.normal = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
         desc.materialParameters = ffxGetResource(s_gc.gBuffer->GetBuffer(GBUFFER_RT_MATERIAL_DATA)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-        desc.environmentMap = ffxGetResource(s_gc.stationEnv);
+        desc.environmentMap = ffxGetResource(model.env);
         desc.brdfTexture = ffxGetResource(s_gc.pbrRenderer->GetPreintegratedGGX_SRV());
         desc.output = ffxGetResource(s_gc.buffers[inFlightIndex].diligentSsrBuffer);
 
-        auto& camAttribs = s_gc.stationCameraAttribs[0];
+        auto& camAttribs = s_gc.cameraAttribs[0];
 
         *reinterpret_cast<float4x4*>(desc.invViewProjection) = camAttribs.mViewProjInvT.Transpose();
         *reinterpret_cast<float4x4*>(desc.projection) = camAttribs.mProjT.Transpose();
@@ -5581,8 +5594,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
 
     s_gc.m_pImmediateContext->Flush();
-
-    return true;
 }
 
 void GraphicsUpdate()
@@ -6122,7 +6133,7 @@ void GraphicsUpdate()
 
     if (!emulationThreadRunning)
     {
-#if 1
+#if 0
         auto titleCommands = TitlePass(inFlightIndex, uniform);
         commands.insert(commands.end(), titleCommands.begin(), titleCommands.end());
 #else
