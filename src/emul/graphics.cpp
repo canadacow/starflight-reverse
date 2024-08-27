@@ -4127,6 +4127,16 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
     };
 }
 
+void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
+{
+
+}
+
+bool RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
+{
+
+}
+
 std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform)
 {
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
@@ -4143,6 +4153,9 @@ std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFli
     const float clearColor[] = { 0.0f, 1.0f, 0.0f, 1.0f }; // Green color
     s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, clearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Flush();
+
+    UpdatePlanet();
+    RenderPlanet();
 
     return {
 
@@ -5269,7 +5282,6 @@ bool RenderStation(VulkanContext::frame_id_t inFlightIndex)
     auto* Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
     auto* ShadowMaps = reinterpret_cast<HLSL::PBRShadowMapInfo*>(Lights + MaxLightCount);
     if (!s_gc.stationLights.empty())
-    //if(false)
     {
         auto baseModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
 
