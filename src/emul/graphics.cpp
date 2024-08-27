@@ -566,6 +566,9 @@ private:
     void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh);
 };
 
+void InitStation();
+void InitPlanet();
+
 /*
 
 void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
@@ -3152,39 +3155,8 @@ static int GraphicsInitThread()
     assert(ffxResult == FFX_OK);
 #endif
 
-    GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/station29.glb";
-
-    s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
-
-    s_gc.stationCameraAttribs = std::make_unique<HLSL::CameraAttribs[]>(2);
-
-    for (const auto* node : s_gc.station->Scenes[0].LinearNodes)
-    {
-        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
-        {
-            s_gc.stationCamera = node;
-        }
-            
-        if (node->pLight != nullptr)
-        {
-            s_gc.stationLights.push_back(node);
-        }
-    }
-
-    for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
-        auto& anim = s_gc.station->Animations[i];
-        if (anim.Name == "ArmatureAction") {
-            s_gc.spaceManState.walkingAnimationLength = anim.End - anim.Start;
-            s_gc.spaceManState.walkingAnimationStart = anim.Start;
-            continue;
-        }
-        if (anim.Name == "RestingPose") {
-            s_gc.spaceManState.restingPoseLength = anim.End - anim.Start;
-            s_gc.spaceManState.restingPoseStart = anim.Start;
-            continue;
-        }
-    }
+    InitStation();
+    InitPlanet();
 
     s_gc.shadowMap = std::make_unique<ShadowMap>();
     s_gc.shadowMap->Initialize(s_gc.station);
@@ -4127,12 +4099,17 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
     };
 }
 
-void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
+void InitPlanet()
 {
 
 }
 
-bool RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
+void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
+{
+
+}
+
+void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
 {
 
 }
@@ -4152,10 +4129,11 @@ std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFli
 
     const float clearColor[] = { 0.0f, 1.0f, 0.0f, 1.0f }; // Green color
     s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, clearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-    s_gc.m_pImmediateContext->Flush();
 
-    UpdatePlanet();
-    RenderPlanet();
+    UpdatePlanet(inFlightIndex);
+    RenderPlanet(inFlightIndex);
+
+    s_gc.m_pImmediateContext->Flush();
 
     return {
 
@@ -4905,8 +4883,47 @@ void InitializeAnimationIndices()
     }
 }
 
-void UpdateStation(VulkanContext::frame_id_t inFlightIndex, VulkanContext::frame_id_t frameCount)
+void InitStation()
 {
+    GLTF::ModelCreateInfo ModelCI;
+    ModelCI.FileName = "C:/Users/Dean/Downloads/station29.glb";
+
+    s_gc.station = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+
+    s_gc.stationCameraAttribs = std::make_unique<HLSL::CameraAttribs[]>(2);
+
+    for (const auto* node : s_gc.station->Scenes[0].LinearNodes)
+    {
+        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+        {
+            s_gc.stationCamera = node;
+        }
+            
+        if (node->pLight != nullptr)
+        {
+            s_gc.stationLights.push_back(node);
+        }
+    }
+
+    for (int i = 0; i < s_gc.station->Animations.size(); ++i) {
+        auto& anim = s_gc.station->Animations[i];
+        if (anim.Name == "ArmatureAction") {
+            s_gc.spaceManState.walkingAnimationLength = anim.End - anim.Start;
+            s_gc.spaceManState.walkingAnimationStart = anim.Start;
+            continue;
+        }
+        if (anim.Name == "RestingPose") {
+            s_gc.spaceManState.restingPoseLength = anim.End - anim.Start;
+            s_gc.spaceManState.restingPoseStart = anim.Start;
+            continue;
+        }
+    }
+}
+
+void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
+{
+    VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
+
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
     InterpolatorPoint spacePoint{};
@@ -6014,7 +6031,7 @@ void GraphicsUpdate()
 
     if (hasPortPixel)
     {
-        UpdateStation(inFlightIndex, s_gc.vc.current_frame());
+        UpdateStation(inFlightIndex);
         RenderStation(inFlightIndex);
     }
 
@@ -6105,7 +6122,7 @@ void GraphicsUpdate()
 
     if (!emulationThreadRunning)
     {
-#if 0
+#if 1
         auto titleCommands = TitlePass(inFlightIndex, uniform);
         commands.insert(commands.end(), titleCommands.begin(), titleCommands.end());
 #else
