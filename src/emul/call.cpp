@@ -1670,6 +1670,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         const uint8_t* palette = GetPlanetColorMap(p.second.species);
 
+                        auto toAlbedo = [palette](int val) -> uint32_t {
+                            int c = val;
+                            c = c < 0 ? 0 : ((c >> 1) & 0x38);
+                            c = palette[c] & 0xF;
+
+                            uint32_t argb = colortable[c & 0xf] | 0xFF000000;
+                            uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
+                                            ((argb & 0xFF) << 16) | // Move red to third position
+                                            ((argb & 0xFF00)) | // Keep green as is
+                                            ((argb & 0xFF0000) >> 16); // Move blue to rightmost
+                            return abgr;
+                        };
+
                         uint32_t t = 0;
                         for (int j = 23; j >= 0; j--)
                         {
@@ -1683,28 +1696,101 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 else
                                 {
                                     val = (int32_t)(int8_t)earthmap[j * 48 + i];
+                                    Write8Long(seg, j * 48 + i, val);
                                 }
                                 
                                 ps.relief[t] = val + 128;
-
-                                int c = val;
-                                c = c < 0 ? 0 : ((c >> 1) & 0x38);
-                                c = palette[c] & 0xF;
-
-                                uint32_t argb = colortable[c & 0xf] | 0xFF000000;
-                                uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
-                                    ((argb & 0xFF) << 16) | // Move red to third position
-                                    ((argb & 0xFF00)) | // Keep green as is
-                                    ((argb & 0xFF0000) >> 16); // Move blue to rightmost
-
-                                ps.albedo[t] = abgr;
+                                ps.albedo[t] = toAlbedo(val);
                                 ++t;
                             }
                         }
 
                         surfaces.emplace(p.second.seed, std::move(ps));
+
+                        //if (p.second.species != 18)
+                            continue;
+
+                        //for(int16_t yscale = 100; yscale < 110; ++yscale)
+                        {
+                            //const int16_t xscale = 48;
+                            //const int16_t yscale = 40;
+
+                            const int16_t xscale = 61;
+                            const int16_t yscale = 101;
+
+                            const int16_t mercator_width = 48;
+                            const int16_t mercator_height = 24;
+
+                            const int16_t usable_width = 38;
+                            const int16_t usable_height = 9;
+
+                            // 2318 / 61 = 38
+                            // 909 / 101 = 9
+
+                            const int contour_width = 61;
+                            const int contour_height = 101;
+                            std::vector<uint8_t> image(contour_width * contour_height * usable_width * usable_height);
+                            std::vector<uint32_t> albedo(contour_width * contour_height * usable_width * usable_height);
+
+                            for (int16_t ycon = 0; ycon < usable_height * yscale; ycon += yscale)
+                            {
+                                for (int16_t xcon = 0; xcon < usable_width * xscale; xcon += xscale)
+                                {
+                                    Write16(0x5916, xcon);
+                                    Write16(0x5921, ycon);
+
+                                    ForthCall(0xc317); // NEWCONTOUR writen to segment 0x7cbe
+
+                                    uint16_t segment = 0x7cbe; // NEWCONTOUR segment
+
+                                    for (int y = 0; y < contour_height; ++y)
+                                    {
+                                        for (int x = 0; x < contour_width; ++x)
+                                        {
+                                            int8_t val = static_cast<int8_t>(Read8Long(segment, y * contour_width + x));
+                                            int8_t relief_val = val + 128;
+                                            uint8_t casted_val = static_cast<uint8_t>(relief_val);
+
+                                            int image_x = ((xcon / xscale) * contour_width) + x;
+                                            int image_y = (usable_height * yscale - 1) - (((ycon / yscale) * contour_height) + y);
+                                            int image_index = image_y * (contour_width * usable_width) + image_x;
+                                            image[image_index] = casted_val;
+                                            albedo[image_index] = toAlbedo(val);
+                                        }
+                                    }
+
+                                }
+                            }
+
+                            {
+                                std::vector<unsigned char> png;
+                                unsigned error = lodepng::encode(png, image, contour_width * usable_width, contour_height * usable_height, LCT_GREY, 8);
+                                if (!error)
+                                {
+                                    lodepng::save_file(png, "output.png");
+                                }
+                                else
+                                {
+                                    fprintf(stderr, "Error encoding PNG: %u: %s\n", error, lodepng_error_text(error));
+                                }
+
+                                std::vector<unsigned char> albedo_png;
+                                error = lodepng::encode(albedo_png, (uint8_t*)albedo.data(), contour_width * usable_width, contour_height * usable_height, LCT_RGBA, 8);
+                                if (!error)
+                                {
+                                    lodepng::save_file(albedo_png, "albedo_output.png");
+                                }
+                                else
+                                {
+                                    fprintf(stderr, "Error encoding albedo PNG: %u: %s\n", error, lodepng_error_text(error));
+                                }
+                            }
+                        }
+
+                        //_exit(0);
                     }
 
+                    
                     GraphicsInitPlanets(surfaces);
                 }
 

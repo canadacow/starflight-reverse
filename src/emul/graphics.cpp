@@ -573,6 +573,7 @@ private:
     void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh);
 };
 
+void InitModel(std::string modelPath, GraphicsContext::SFModel& model);
 void InitStation();
 void InitPlanet();
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model);
@@ -2700,7 +2701,7 @@ void main(in  float4 Pos          : SV_Position,
 )";
 
 
-static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model)
+static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model, bool blowUp)
 {
 
     EnvMapRenderer::CreateInfo EnvMapRendererCI;
@@ -2725,7 +2726,9 @@ static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model
     CreateTextureFromFile(Path, tli, s_gc.m_pDevice, &pEnvironmentMap);
     VERIFY_EXPR(pEnvironmentMap);
 
-    const char* csSource = R"(
+    if (blowUp)
+    {
+        const char* csSource = R"(
         RWTexture2DArray<float4> g_Texture : register(u0);
 
         [numthreads(16, 16, 1)]
@@ -2740,50 +2743,51 @@ static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model
 
             g_Texture[DTid.xyz] = color;
         }
-    )";
+        )";
 
-    ShaderCreateInfo ShaderCI;
-    ShaderCI.Source = csSource;
-    ShaderCI.EntryPoint = "CSMain";
-    ShaderCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
-    ShaderCI.Desc.Name = "Multiply Pixels Compute Shader";
-    ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        ShaderCreateInfo ShaderCI;
+        ShaderCI.Source = csSource;
+        ShaderCI.EntryPoint = "CSMain";
+        ShaderCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+        ShaderCI.Desc.Name = "Multiply Pixels Compute Shader";
+        ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 
-    RefCntAutoPtr<IShader> pShader;
-    s_gc.m_pDevice->CreateShader(ShaderCI, &pShader);
-    VERIFY_EXPR(pShader);
+        RefCntAutoPtr<IShader> pShader;
+        s_gc.m_pDevice->CreateShader(ShaderCI, &pShader);
+        VERIFY_EXPR(pShader);
 
-    PipelineResourceSignatureDescX SignatureDesc{ "Multiply Pixels Compute PSO" };
-    SignatureDesc
-        .AddResource(SHADER_TYPE_COMPUTE, "g_Texture", SHADER_RESOURCE_TYPE_TEXTURE_UAV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        PipelineResourceSignatureDescX SignatureDesc{ "Multiply Pixels Compute PSO" };
+        SignatureDesc
+            .AddResource(SHADER_TYPE_COMPUTE, "g_Texture", SHADER_RESOURCE_TYPE_TEXTURE_UAV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
 
-    RefCntAutoPtr<IPipelineResourceSignature> pResSig;
-    s_gc.m_pDevice->CreatePipelineResourceSignature(SignatureDesc, &pResSig);
-    VERIFY_EXPR(pResSig);
+        RefCntAutoPtr<IPipelineResourceSignature> pResSig;
+        s_gc.m_pDevice->CreatePipelineResourceSignature(SignatureDesc, &pResSig);
+        VERIFY_EXPR(pResSig);
 
-    ComputePipelineStateCreateInfoX CPSOCreateInfo{ "Multiply Pixels Compute PSO" };
-    CPSOCreateInfo.AddShader(pShader);
-    CPSOCreateInfo.AddSignature(pResSig);
+        ComputePipelineStateCreateInfoX CPSOCreateInfo{ "Multiply Pixels Compute PSO" };
+        CPSOCreateInfo.AddShader(pShader);
+        CPSOCreateInfo.AddSignature(pResSig);
 
-    RefCntAutoPtr<IPipelineState> pPSO;
-    s_gc.m_pDevice->CreatePipelineState(CPSOCreateInfo, &pPSO);
-    VERIFY_EXPR(pPSO);
+        RefCntAutoPtr<IPipelineState> pPSO;
+        s_gc.m_pDevice->CreatePipelineState(CPSOCreateInfo, &pPSO);
+        VERIFY_EXPR(pPSO);
 
-    RefCntAutoPtr<IShaderResourceBinding> pSRB;
-    pResSig->CreateShaderResourceBinding(&pSRB, true);
-    VERIFY_EXPR(pSRB);
+        RefCntAutoPtr<IShaderResourceBinding> pSRB;
+        pResSig->CreateShaderResourceBinding(&pSRB, true);
+        VERIFY_EXPR(pSRB);
 
-    pSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Texture")->Set(pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS));
+        pSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Texture")->Set(pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS));
 
-    DispatchComputeAttribs DispatchAttrs;
-    DispatchAttrs.ThreadGroupCountX = (pEnvironmentMap->GetDesc().Width + 15) / 16;
-    DispatchAttrs.ThreadGroupCountY = (pEnvironmentMap->GetDesc().Height + 15) / 16;
-    DispatchAttrs.ThreadGroupCountZ = pEnvironmentMap->GetDesc().Depth;
+        DispatchComputeAttribs DispatchAttrs;
+        DispatchAttrs.ThreadGroupCountX = (pEnvironmentMap->GetDesc().Width + 15) / 16;
+        DispatchAttrs.ThreadGroupCountY = (pEnvironmentMap->GetDesc().Height + 15) / 16;
+        DispatchAttrs.ThreadGroupCountZ = pEnvironmentMap->GetDesc().Depth;
 
-    s_gc.m_pImmediateContext->SetPipelineState(pPSO);
-    s_gc.m_pImmediateContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-    s_gc.m_pImmediateContext->DispatchCompute(DispatchAttrs);
-    s_gc.m_pImmediateContext->Flush();
+        s_gc.m_pImmediateContext->SetPipelineState(pPSO);
+        s_gc.m_pImmediateContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->DispatchCompute(DispatchAttrs);
+        s_gc.m_pImmediateContext->Flush();
+    }
     
     s_gc.pbrRenderer->PrecomputeCubemaps(s_gc.m_pImmediateContext, pEnvironmentMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), 8192, 1024, true);
 
@@ -2944,14 +2948,15 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     #endif
 
     s_gc.station.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station.model, s_gc.frameAttribsCB, shadowMap);
+    s_gc.planet.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.planet.model, s_gc.frameAttribsCB, shadowMap);
 
     StateTransitionDesc Barriers[] = {
         {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    LoadEnvironmentMap("starfield.ktx", s_gc.station);
-    //LoadEnvironmentMap("papermill.ktx");
+    LoadEnvironmentMap("starfield.ktx", s_gc.station, true);
+    LoadEnvironmentMap("starfield.ktx", s_gc.planet, false);
 }
 
 static int GraphicsInitThread()
@@ -3210,7 +3215,7 @@ static int GraphicsInitThread()
 
         bd.gameOutput = s_gc.vc.create_image_sampler(
             s_gc.vc.create_image_view(
-                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eB8G8R8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
+                s_gc.vc.create_image(navWidth, navHeight, vk::Format::eR8G8B8A8Unorm, 1, avk::memory_usage::device, avk::image_usage::general_image | avk::image_usage::shader_storage)
             ),
             s_gc.vc.create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge));
 
@@ -3389,7 +3394,8 @@ std::array<vk::DescriptorSetLayoutBinding, 8> bindings = {
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 2, 1u),
         avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 3, 1u),
         avk::descriptor_binding<avk::buffer>(0, 4, s_gc.buffers[0].uniform),
-        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform)
+        avk::descriptor_binding<avk::buffer>(0, 5, s_gc.buffers[0].iconUniform),
+        avk::descriptor_binding<avk::combined_image_sampler_descriptor_info>(0, 6, 1u)
     );
 
     s_gc.orreryPipeline = s_gc.vc.create_compute_pipeline_for(
@@ -4109,37 +4115,172 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
     };
 }
 
+static float4x4 GetAdjustedProjectionMatrix(float FOV, float NearPlane, float FarPlane)
+{
+    float AspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+    float XScale, YScale;
+
+    YScale = 1.f / std::tan(FOV / 2.f);
+    XScale = YScale / AspectRatio;
+
+    float4x4 Proj;
+    Proj._11 = XScale;
+    Proj._22 = YScale;
+    Proj.SetNearFarClipPlanes(NearPlane, FarPlane, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+    return Proj;
+}
+
+static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
+{
+    return float4x4::Identity();
+}
+
+void InitModel(std::string modelPath, GraphicsContext::SFModel& model)
+{
+    GLTF::ModelCreateInfo ModelCI;
+    ModelCI.FileName = modelPath.c_str();
+
+    model.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+
+    for (const auto* node : model.model->Scenes[0].LinearNodes)
+    {
+        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+        {
+            model.camera = node;
+        }
+
+        if (node->pLight != nullptr)
+        {
+            model.lights.push_back(node);
+        }
+    }
+}
+
 void InitPlanet()
 {
-
+    InitModel("C:/Users/Dean/Downloads/earth.glb", s_gc.planet);
 }
 
 void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
 {
+    VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
+    double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+
+    float rotationAngle = currentTimeInSeconds * 0.1f;
+    //float rotationAngle = (float)frameCount * 0.01f;
+
+    float axisOne = rotationAngle;
+
+    float4x4 RotationMatrixCam = float4x4::Identity();
+    float4x4 RotationMatrixModel = float4x4::RotationY(axisOne);
+
+    s_gc.planet.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
+    s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
+
+    // Center and scale model
+    float  MaxDim = 0;
+    float3 ModelDim{ s_gc.planet.aabb.Max - s_gc.planet.aabb.Min };
+    MaxDim = std::max(MaxDim, ModelDim.x);
+    MaxDim = std::max(MaxDim, ModelDim.y);
+    MaxDim = std::max(MaxDim, ModelDim.z);
+
+    float4x4 InvYAxis = float4x4::Identity();
+    InvYAxis._22 = -1;
+
+#if 1
+    s_gc.planet.scale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
+    auto     Translate = -s_gc.planet.aabb.Min - 0.5f * ModelDim;
+    InvYAxis._22 = -1;
+#else
+    s_gc.planet.scale = 1.0f;
+    float3 Translate = { 0.f, 0.f, 0.f };
+#endif
+
+    s_gc.planet.modelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.planet.scale) * InvYAxis;
+    s_gc.planet.scaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.planet.scale);
+
+    s_gc.planet.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0], s_gc.planet.modelTransform);
+        
+    s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
+    s_gc.planet.transforms[1] = s_gc.planet.transforms[0];
+
+    float YFov = PI_F / 4.0f;
+    float ZNear = 0.1f;
+    float ZFar = 100.f;
+
+    float4x4 CameraView;
+
+    const auto* pCameraNode = s_gc.planet.camera;
+    const auto* pCamera = pCameraNode->pCamera;
+    const auto& CameraGlobalTransform = s_gc.planet.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
+
+    // GLTF camera is defined such that the local +X axis is to the right,
+    // the lens looks towards the local -Z axis, and the top of the camera
+    // is aligned with the local +Y axis.
+    // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#cameras
+    // We need to inverse the Z axis as our camera looks towards +Z.
+    float4x4 InvZAxis = float4x4::Identity();
+    InvZAxis._33 = -1;
+
+#if 1
+    CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
+    s_gc.renderParams.ModelTransform = RotationMatrixModel;
+#else
+    auto trans = float4x4::Translation(0.0f, -0.057f, 0.264f);
+    auto cam = QuaternionF(0.0f, 0.2079117f, 0.9781476f, 0.0f);
+
+    auto modelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+
+    //auto invModelTransform = modelTransform.Inverse();
+    
+    CameraView = RotationMatrixCam * cam.ToMatrix() * trans;
+    s_gc.renderParams.ModelTransform = RotationMatrixModel * modelTransform; // QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+    //s_gc.renderParams.ModelTransform = float4x4::Identity();
+#endif
+
+    YFov = pCamera->Perspective.YFov;
+    ZNear = pCamera->Perspective.ZNear;
+    ZFar = pCamera->Perspective.ZFar;
+
+    // Apply pretransform matrix that rotates the scene according the surface orientation
+    CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
+
+    // Rotate the camera up by 15 degrees around the y-axis
+    //float angle = 45.0f * (M_PI / 180.0f); // Convert degrees to radians
+    //float4x4 RotateX = float4x4::RotationX(angle);
+    //CameraView = RotateX * CameraView;    
+
+    float4x4 CameraWorld = CameraView.Inverse();
+
+    // Get projection matrix adjusted to the current screen orientation
+    const auto CameraProj = GetAdjustedProjectionMatrix(YFov, ZNear, ZFar);
+    const auto CameraViewProj = CameraView * CameraProj;
+
+    float3 CameraWorldPos = float3::MakeVector(CameraWorld[3]);
+
+    auto& CurrCamAttribs = s_gc.cameraAttribs[inFlightIndex & 0x01];
+
+    CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
+    CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
+    CurrCamAttribs.mView = CameraView.Transpose();
+    CurrCamAttribs.mProj = CameraProj.Transpose();
+    CurrCamAttribs.mViewProj = CameraViewProj.Transpose();
+    CurrCamAttribs.mViewInv = CameraView.Inverse().Transpose();
+    CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
+    CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
+    CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
+
+    s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;    
 }
 
 void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
 {
-
+    RenderSFModel(inFlightIndex, s_gc.planet);
 }
 
 std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform)
 {
-    ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
-    ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
-
-    {
-        StateTransitionDesc Barriers[] = {
-        {
-            pRTV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_COPY_DEST, STATE_TRANSITION_FLAG_UPDATE_STATE},
-        };
-        s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
-    }
-
-    const float clearColor[] = { 0.0f, 1.0f, 0.0f, 1.0f }; // Green color
-    s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, clearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
     UpdatePlanet(inFlightIndex);
     RenderPlanet(inFlightIndex);
 
@@ -4159,12 +4300,12 @@ std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFli
 
 
         avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::undefined, avk::layout::transfer_src }),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::color_attachment_optimal, avk::layout::transfer_src }),
 
         avk::copy_image_to_another(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(), avk::layout::transfer_src, s_gc.buffers[inFlightIndex].gameOutput->get_image(), avk::layout::transfer_dst, vk::ImageAspectFlagBits::eColor),
 
         avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].avkdColorBuffer->get_image(),
-            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_src, avk::layout::transfer_dst }),
+            avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_src, avk::layout::color_attachment_optimal }),
 
         avk::sync::image_memory_barrier(s_gc.buffers[inFlightIndex].gameOutput->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({ avk::layout::transfer_dst, avk::layout::shader_read_only_optimal }),
@@ -4858,26 +4999,6 @@ static HeadingAndThrust calculateHeadingAndSpeedToDeadReckoning(int heading, flo
     return calculateHeadingAndThrust({deadReckoningX, deadReckoningY}, currentHeading, currentThrust);
 }
 
-static float4x4 GetAdjustedProjectionMatrix(float FOV, float NearPlane, float FarPlane)
-{
-    float AspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
-    float XScale, YScale;
-
-    YScale = 1.f / std::tan(FOV / 2.f);
-    XScale = YScale / AspectRatio;
-
-    float4x4 Proj;
-    Proj._11 = XScale;
-    Proj._22 = YScale;
-    Proj.SetNearFarClipPlanes(NearPlane, FarPlane, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
-    return Proj;
-}
-
-static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
-{
-    return float4x4::Identity();
-}
-
 static std::once_flag s_animIndexFlag;
 static int s_restingPoseIndex = -1;
 static int s_armatureActionIndex = -1;
@@ -4895,23 +5016,7 @@ void InitializeAnimationIndices()
 
 void InitStation()
 {
-    GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = "C:/Users/Dean/Downloads/station29.glb";
-
-    s_gc.station.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
-
-    for (const auto* node : s_gc.station.model->Scenes[0].LinearNodes)
-    {
-        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
-        {
-            s_gc.station.camera = node;
-        }
-            
-        if (node->pLight != nullptr)
-        {
-            s_gc.station.lights.push_back(node);
-        }
-    }
+    InitModel("C:/Users/Dean/Downloads/station29.glb", s_gc.station);
 
     for (int i = 0; i < s_gc.station.model->Animations.size(); ++i) {
         auto& anim = s_gc.station.model->Animations[i];
@@ -5304,7 +5409,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     m_DefaultLight.Color = float3{ 1, 1, 1 };
 
     float3      m_LightDirection{};
-    m_LightDirection = normalize(float3(0.00f, 1.0f, 1.0f));
+    m_LightDirection = normalize(float3(-0.7f, 0.0f, 1.0f));
 
     const size_t MaxLightCount = s_gc.pbrRenderer->GetSettings().MaxLightCount;
 
