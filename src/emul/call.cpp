@@ -1707,7 +1707,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         surfaces.emplace(p.second.seed, std::move(ps));
 
-                        //if (p.second.species != 18)
+                        bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
+                        bool isEarth = p.second.species == 18;
+
+                        if (!isHeaven)
                             continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
@@ -1748,19 +1751,71 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                         for (int x = 0; x < contour_width; ++x)
                                         {
                                             int8_t val = static_cast<int8_t>(Read8Long(segment, y * contour_width + x));
-                                            int8_t relief_val = val + 128;
-                                            uint8_t casted_val = static_cast<uint8_t>(relief_val);
 
                                             int image_x = ((xcon / xscale) * contour_width) + x;
                                             int image_y = (usable_height * yscale - 1) - (((ycon / yscale) * contour_height) + y);
                                             int image_index = image_y * (contour_width * usable_width) + image_x;
-                                            image[image_index] = casted_val;
-                                            albedo[image_index] = toAlbedo(val);
+                                            image[image_index] = val;
+                                            
                                         }
                                     }
 
                                 }
                             }
+
+                            #if 0
+                            {
+                                std::vector<unsigned char> png;
+                                unsigned width, height;
+                                unsigned error = lodepng::decode(png, width, height, "lofi_earth.png", LCT_GREY, 8);
+                                if (!error)
+                                {
+                                    if (width == contour_width * usable_width && height == contour_height * usable_height)
+                                    {
+                                        image.assign(png.begin(), png.end());
+                                    }
+                                    else
+                                    {
+                                        fprintf(stderr, "Error: Image dimensions do not match expected size.\n");
+                                    }
+                                }
+                                else
+                                {
+                                    fprintf(stderr, "Error decoding PNG: %u: %s\n", error, lodepng_error_text(error));
+                                }
+                            }
+                            #endif      
+
+                            for (int16_t ycon = 0; ycon < usable_height * yscale; ++ycon)
+                            {
+                                for (int16_t xcon = 0; xcon < usable_width * xscale; ++xcon)
+                                {
+                                    int image_index = ycon * (contour_width * usable_width) + xcon;
+                                    int val = image[image_index];
+
+#if 0
+                                    if(val == 0)
+                                    {
+                                        val = -1;
+                                    }
+                                    else
+                                    {
+                                        float normalized_val = static_cast<float>(val) / 255.0f;
+
+                                        normalized_val = cbrt(normalized_val);
+                                        val = static_cast<int>(normalized_val * 255.0f);
+
+                                        // ((c >> 1) & 0x38);
+                                        val = ((val - 1) >> 5) & 0x07;
+                                        val = val == 0 ? 1 : val;
+
+                                        val = (val << 4);
+                                        image[image_index] = val;
+                                    }
+#endif
+                                    albedo[image_index] = toAlbedo(val);
+                                }
+                            }                            
 
                             {
                                 std::vector<unsigned char> png;
