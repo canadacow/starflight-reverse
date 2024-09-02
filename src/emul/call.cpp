@@ -1662,6 +1662,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if (nextInstr == 0xb5aa) // HIMUS
                 {
+                    auto toAlbedo = [](const uint8_t* palette, int val) -> uint32_t {
+                        int c = val;
+                        c = c < 0 ? 0 : ((c >> 1) & 0x38);
+                        c = palette[c] & 0xF;
+
+                        uint32_t argb = colortable[c & 0xf] | 0xFF000000;
+                        uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
+                            ((argb & 0xFF) << 16) | // Move red to third position
+                            ((argb & 0xFF00)) | // Keep green as is
+                            ((argb & 0xFF0000) >> 16); // Move blue to rightmost
+                        return abgr;
+                    };
+
                     std::vector<unsigned char> png;
                     unsigned width, height;
                     unsigned error = lodepng::decode(png, width, height, "lofi_earth.png", LCT_GREY, 8);
@@ -1670,6 +1683,52 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         if (width == planet_contour_width * planet_usable_width && height == planet_contour_height * planet_usable_height)
                         {
                             planet_image.assign(png.begin(), png.end());
+
+                            const uint8_t* palette = GetPlanetColorMap(18);
+
+                            for (int16_t ycon = 0; ycon < planet_usable_height * planet_contour_height; ++ycon)
+                            {
+                                for (int16_t xcon = 0; xcon < planet_usable_width * planet_contour_width; ++xcon)
+                                {
+                                    int image_index = ycon * (planet_contour_width * planet_usable_width) + xcon;
+                                    int val = planet_image[image_index];
+
+                                    if (val == 0)
+                                    {
+                                        val = -1;
+                                        planet_image[image_index] = 0x92; // Water
+                                    }
+                                    else
+                                    {
+                                        float normalized_val = static_cast<float>(val) / 255.0f;
+
+                                        //normalized_val = cbrt(normalized_val);
+                                        val = static_cast<int>(normalized_val * 8.0f);
+
+                                        if (val > 6) {
+                                            val = 6;
+                                        }
+
+                                        val += 1;
+
+                                        val <<= 4;
+
+                                        planet_image[image_index] = val;
+                                    }
+                                    planet_albedo[image_index] = toAlbedo(palette, val);
+                                }
+                            }
+
+                            std::vector<unsigned char> albedo_png;
+                            error = lodepng::encode(albedo_png, (uint8_t*)planet_albedo.data(), planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_RGBA, 8);
+                            if (!error)
+                            {
+                                lodepng::save_file(albedo_png, "albedo_output.png");
+                            }
+                            else
+                            {
+                                fprintf(stderr, "Error encoding albedo PNG: %u: %s\n", error, lodepng_error_text(error));
+                            }
                         }
                         else
                         {
@@ -1680,6 +1739,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                     {
                         fprintf(stderr, "Error decoding PNG: %u: %s\n", error, lodepng_error_text(error));
                     }
+
 
                     std::unordered_map<uint32_t, PlanetSurface> surfaces{};
 
@@ -1695,19 +1755,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         uint16_t seg = 0x7e51;
 
                         const uint8_t* palette = GetPlanetColorMap(p.second.species);
-
-                        auto toAlbedo = [palette](int val) -> uint32_t {
-                            int c = val;
-                            c = c < 0 ? 0 : ((c >> 1) & 0x38);
-                            c = palette[c] & 0xF;
-
-                            uint32_t argb = colortable[c & 0xf] | 0xFF000000;
-                            uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
-                                            ((argb & 0xFF) << 16) | // Move red to third position
-                                            ((argb & 0xFF00)) | // Keep green as is
-                                            ((argb & 0xFF0000) >> 16); // Move blue to rightmost
-                            return abgr;
-                        };
 
                         std::vector<unsigned char> mini_png;
                         if (p.second.species == 18)
@@ -1736,18 +1783,20 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 }
                                 
                                 ps.relief[t] = val + 128;
-                                ps.albedo[t] = toAlbedo(val);
+                                ps.albedo[t] = toAlbedo(palette, val);
                                 ++t;
                             }
                         }
 
                         surfaces.emplace(p.second.seed, std::move(ps));
 
+                        continue;
+
                         bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
                         bool isEarth = p.second.species == 18;
 
                         //if(true)
-                        if (!isEarth)
+                        //if (!isEarth)
                             continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
@@ -1785,41 +1834,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                         }
                                     }
 
-                                }
-                            }
-
-                            for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ++ycon)
-                            {
-                                for (int16_t xcon = 0; xcon < planet_usable_width * xscale; ++xcon)
-                                {
-                                    int image_index = ycon * (planet_contour_width * planet_usable_width) + xcon;
-                                    int val = planet_image[image_index];
-
-#if 1
-                                    if(val == 0)
-                                    {
-                                        val = -1;
-                                        planet_image[image_index] = 0x92; // Water
-                                    }
-                                    else
-                                    {
-                                        float normalized_val = static_cast<float>(val) / 255.0f;
-
-                                        //normalized_val = cbrt(normalized_val);
-                                        val = static_cast<int>(normalized_val * 8.0f);
-
-                                        if (val > 6) {
-                                            val = 6;
-                                        }
-
-                                        val += 1;
-
-                                        val <<= 4;
-
-                                        planet_image[image_index] = val;
-                                    }
-#endif
-                                    planet_albedo[image_index] = toAlbedo(val);
                                 }
                             }
 
