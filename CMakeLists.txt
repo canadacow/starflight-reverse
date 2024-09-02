@@ -120,7 +120,7 @@ set_source_files_properties(
     src/cpu/cpu.cpp 
     src/emul/callstack.c 
     src/disasOV/global.c 
-    src/emul/fract.c
+    src/emul/fract.cpp
     PROPERTIES LANGUAGE CXX
 )
 
@@ -154,7 +154,7 @@ add_executable(emulatesdl WIN32
     src/emul/callstack.c 
     src/disasOV/global.c 
     src/emul/graphics.cpp 
-    src/emul/fract.c
+    src/emul/fract.cpp
     src/cpu/8086emu.cpp
     src/util/lodepng.cpp
     src/emul/sdl_helper.cpp

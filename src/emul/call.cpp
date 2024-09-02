@@ -47,6 +47,13 @@ static uint16_t CurrentImageTagForHybridBlit = 0;
 extern std::vector<uint8_t> serializedRotoscope;
 extern std::vector<uint8_t> serializedSnapshot;
 
+const int16_t planet_usable_width = 38;
+const int16_t planet_usable_height = 9;
+
+const int planet_contour_width = 61;
+const int planet_contour_height = 101;
+std::vector<uint8_t> planet_image(planet_contour_width * planet_contour_height * planet_usable_width * planet_usable_height);
+std::vector<uint32_t> planet_albedo(planet_contour_width * planet_contour_height * planet_usable_width * planet_usable_height);
 
 // ------------------------------------------------
 
@@ -1655,6 +1662,25 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if (nextInstr == 0xb5aa) // HIMUS
                 {
+                    std::vector<unsigned char> png;
+                    unsigned width, height;
+                    unsigned error = lodepng::decode(png, width, height, "lofi_earth.png", LCT_GREY, 8);
+                    if (!error)
+                    {
+                        if (width == planet_contour_width * planet_usable_width && height == planet_contour_height * planet_usable_height)
+                        {
+                            planet_image.assign(png.begin(), png.end());
+                        }
+                        else
+                        {
+                            fprintf(stderr, "Error: Image dimensions do not match expected size.\n");
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Error decoding PNG: %u: %s\n", error, lodepng_error_text(error));
+                    }
+
                     std::unordered_map<uint32_t, PlanetSurface> surfaces{};
 
                     for (const auto& p : planets)
@@ -1683,6 +1709,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             return abgr;
                         };
 
+                        std::vector<unsigned char> mini_png;
+                        if (p.second.species == 18)
+                        {
+                            unsigned mini_width, mini_height;
+                            unsigned mini_error = lodepng::decode(mini_png, mini_width, mini_height, "mini_earth.png", LCT_GREY, 8);
+                            if (mini_error) {
+                                fprintf(stderr, "Error decoding mini PNG: %u: %s\n", mini_error, lodepng_error_text(mini_error));
+                            }
+                        }
+
                         uint32_t t = 0;
                         for (int j = 23; j >= 0; j--)
                         {
@@ -1695,8 +1731,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 }
                                 else
                                 {
-                                    val = (int32_t)(int8_t)earthmap[j * 48 + i];
-                                    Write8Long(seg, j * 48 + i, val);
+                                    auto jat = 23 - j;
+                                    val = mini_png[jat * 48 + i];
                                 }
                                 
                                 ps.relief[t] = val + 128;
@@ -1710,34 +1746,23 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
                         bool isEarth = p.second.species == 18;
 
-                        if (!isHeaven)
+                        //if(true)
+                        if (!isEarth)
                             continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
                         {
                             //const int16_t xscale = 48;
                             //const int16_t yscale = 40;
+                            // 2318 / 61 = 38
+                            // 909 / 101 = 9
 
                             const int16_t xscale = 61;
                             const int16_t yscale = 101;
 
-                            const int16_t mercator_width = 48;
-                            const int16_t mercator_height = 24;
-
-                            const int16_t usable_width = 38;
-                            const int16_t usable_height = 9;
-
-                            // 2318 / 61 = 38
-                            // 909 / 101 = 9
-
-                            const int contour_width = 61;
-                            const int contour_height = 101;
-                            std::vector<uint8_t> image(contour_width * contour_height * usable_width * usable_height);
-                            std::vector<uint32_t> albedo(contour_width * contour_height * usable_width * usable_height);
-
-                            for (int16_t ycon = 0; ycon < usable_height * yscale; ycon += yscale)
+                            for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ycon += yscale)
                             {
-                                for (int16_t xcon = 0; xcon < usable_width * xscale; xcon += xscale)
+                                for (int16_t xcon = 0; xcon < planet_usable_width * xscale; xcon += xscale)
                                 {
                                     Write16(0x5916, xcon);
                                     Write16(0x5921, ycon);
@@ -1746,16 +1771,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                                     uint16_t segment = 0x7cbe; // NEWCONTOUR segment
 
-                                    for (int y = 0; y < contour_height; ++y)
+                                    for (int y = 0; y < planet_contour_height; ++y)
                                     {
-                                        for (int x = 0; x < contour_width; ++x)
+                                        for (int x = 0; x < planet_contour_width; ++x)
                                         {
-                                            int8_t val = static_cast<int8_t>(Read8Long(segment, y * contour_width + x));
+                                            uint8_t val = static_cast<uint8_t>(Read8Long(segment, y * planet_contour_width + x));
 
-                                            int image_x = ((xcon / xscale) * contour_width) + x;
-                                            int image_y = (usable_height * yscale - 1) - (((ycon / yscale) * contour_height) + y);
-                                            int image_index = image_y * (contour_width * usable_width) + image_x;
-                                            image[image_index] = val;
+                                            int image_x = ((xcon / xscale) * planet_contour_width) + x;
+                                            int image_y = (planet_usable_height * yscale - 1) - (((ycon / yscale) * planet_contour_height) + y);
+                                            int image_index = image_y * (planet_contour_width * planet_usable_width) + image_x;
+                                            planet_image[image_index] = val;
                                             
                                         }
                                     }
@@ -1763,63 +1788,44 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 }
                             }
 
-                            #if 0
+                            for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ++ycon)
                             {
-                                std::vector<unsigned char> png;
-                                unsigned width, height;
-                                unsigned error = lodepng::decode(png, width, height, "lofi_earth.png", LCT_GREY, 8);
-                                if (!error)
+                                for (int16_t xcon = 0; xcon < planet_usable_width * xscale; ++xcon)
                                 {
-                                    if (width == contour_width * usable_width && height == contour_height * usable_height)
-                                    {
-                                        image.assign(png.begin(), png.end());
-                                    }
-                                    else
-                                    {
-                                        fprintf(stderr, "Error: Image dimensions do not match expected size.\n");
-                                    }
-                                }
-                                else
-                                {
-                                    fprintf(stderr, "Error decoding PNG: %u: %s\n", error, lodepng_error_text(error));
-                                }
-                            }
-                            #endif      
+                                    int image_index = ycon * (planet_contour_width * planet_usable_width) + xcon;
+                                    int val = planet_image[image_index];
 
-                            for (int16_t ycon = 0; ycon < usable_height * yscale; ++ycon)
-                            {
-                                for (int16_t xcon = 0; xcon < usable_width * xscale; ++xcon)
-                                {
-                                    int image_index = ycon * (contour_width * usable_width) + xcon;
-                                    int val = image[image_index];
-
-#if 0
+#if 1
                                     if(val == 0)
                                     {
                                         val = -1;
+                                        planet_image[image_index] = 0x92; // Water
                                     }
                                     else
                                     {
                                         float normalized_val = static_cast<float>(val) / 255.0f;
 
-                                        normalized_val = cbrt(normalized_val);
-                                        val = static_cast<int>(normalized_val * 255.0f);
+                                        //normalized_val = cbrt(normalized_val);
+                                        val = static_cast<int>(normalized_val * 8.0f);
 
-                                        // ((c >> 1) & 0x38);
-                                        val = ((val - 1) >> 5) & 0x07;
-                                        val = val == 0 ? 1 : val;
+                                        if (val > 6) {
+                                            val = 6;
+                                        }
 
-                                        val = (val << 4);
-                                        image[image_index] = val;
+                                        val += 1;
+
+                                        val <<= 4;
+
+                                        planet_image[image_index] = val;
                                     }
 #endif
-                                    albedo[image_index] = toAlbedo(val);
+                                    planet_albedo[image_index] = toAlbedo(val);
                                 }
-                            }                            
+                            }
 
                             {
                                 std::vector<unsigned char> png;
-                                unsigned error = lodepng::encode(png, image, contour_width * usable_width, contour_height * usable_height, LCT_GREY, 8);
+                                unsigned error = lodepng::encode(png, planet_image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
                                 if (!error)
                                 {
                                     lodepng::save_file(png, "output.png");
@@ -1830,7 +1836,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 }
 
                                 std::vector<unsigned char> albedo_png;
-                                error = lodepng::encode(albedo_png, (uint8_t*)albedo.data(), contour_width * usable_width, contour_height * usable_height, LCT_RGBA, 8);
+                                error = lodepng::encode(albedo_png, (uint8_t*)planet_albedo.data(), planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_RGBA, 8);
                                 if (!error)
                                 {
                                     lodepng::save_file(albedo_png, "albedo_output.png");
@@ -1845,8 +1851,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         //_exit(0);
                     }
 
-                    
                     GraphicsInitPlanets(surfaces);
+
+                    frameSync.pastHimus = true;
                 }
 
                 if (nextInstr == 0x7339) // FILE<
@@ -2461,6 +2468,52 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         ret = OK;
                 }
 
+                if (nextInstr == 0xea97 && frameSync.pastHimus) // FRACT-CONTOUR
+                {
+                    int16_t xcon = (int16_t)Read16(0x5916);
+                    int16_t ycon = (int16_t)Read16(0x5921);
+
+                    uint16_t segment = 0x7cbe; // NEWCONTOUR segment
+
+                    printf("XCON: %d, YCON: %d { \n", xcon, ycon);
+
+                    for(int y = 0; y < planet_contour_height; ++y)
+                    {
+                        for(int x = 0; x < planet_contour_width; ++x)
+                        {
+                            int xat = xcon + x;
+                            int yat = ycon + y;
+
+                            if (xat < 0) {
+                                xat = 2318 + (xat % 2318);
+                            } else if (xat >= 2318) {
+                                xat = xat % 2318;
+                            }
+
+                            if (yat < 0) {
+                                yat = 909 + (yat % 909);
+                            } else if (yat >= 909) {
+                                yat = yat % 909;
+                            }
+
+                            yat = 908 - yat;
+
+                            int image_index = yat * (planet_contour_width * planet_usable_width) + xat;
+
+                            uint8_t val = planet_image[image_index];
+
+                            uint8_t actualVal = Read8Long(segment, y * planet_contour_width + x);
+
+                            Write8Long(segment, y * planet_contour_width + x, val);
+
+                            //printf("0x%02x (0x%02x), ", actualVal, val);
+                        }
+                        printf("\n");
+                    }
+                    fflush(stdout);
+                    printf("\n");                  
+                }
+
                 if (nextInstr == 0xef37) // SET-DESTINATION
                 {
                     int16_t worldCoordsX = (int16_t)Read16(0x5dae);
@@ -2599,6 +2652,28 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         
                         s_missileIds.emplace(index, ++s_missileNonce);
                     }
+                }
+
+                if (nextInstr == 0x7339 && CurrentImageTagForHybridBlit == 0x008a)
+                {
+                    uint16_t seg = 0x7e51;
+
+                    std::vector<unsigned char> mini_png;
+                    unsigned mini_width, mini_height;
+                    unsigned mini_error = lodepng::decode(mini_png, mini_width, mini_height, "mini_earth.png", LCT_GREY, 8);
+                    if (mini_error) {
+                        fprintf(stderr, "Error decoding mini PNG: %u: %s\n", mini_error, lodepng_error_text(mini_error));
+                    }
+
+                    for (int j = 23; j >= 0; j--)
+                    {
+                        for (int i = 0; i < 48; i++)
+                        {
+                            auto jat = 23 - j;
+                            auto val = mini_png[jat * 48 + i];
+                            Write8Long(seg, j * 48 + i, val);
+                        }
+                    }                    
                 }
 
                 if(nextInstr == 0xe0a3 && (std::string(overlayName) == "HYPER-OV")) // .AUXSYS

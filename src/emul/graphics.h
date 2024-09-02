@@ -1022,6 +1022,8 @@ struct FrameSync {
     bool inCombatRender = false;
     bool inCombatKey = false;
     bool shouldSave = false;
+    bool pastHimus = false;
+    bool wroteToEarth = false;
 
     std::binary_semaphore screenshotSemaphore{0};
     bool takeScreenshot = false;

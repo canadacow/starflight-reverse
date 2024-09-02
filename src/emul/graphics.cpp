@@ -1510,6 +1510,12 @@ void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optio
 
     if(state == OrbitState::Insertion)
     {
+        if (!optionalCamPos.has_value())
+        {
+            auto pos = vec3<float>(0.0f, 0.0f, 0.0f);
+            optionalCamPos.emplace(pos);
+        }
+
         auto pole = Magnum::Vector3( frameSync.staringPos.x, frameSync.staringPos.y, frameSync.staringPos.z );
         auto dest = Magnum::Vector3( optionalCamPos->x, optionalCamPos->y, optionalCamPos->z );
 
@@ -1526,6 +1532,12 @@ void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optio
 
     if(state == OrbitState::Landing)
     {
+        if (!orbitCamPos.has_value())
+        {
+            auto pos = vec3<float>(0.0f, 0.0f, 0.0f);
+            orbitCamPos.emplace(pos);
+        }
+
         auto start = Magnum::Vector3( orbitCamPos->x, orbitCamPos->y, orbitCamPos->z );
         auto end = Magnum::Vector3(0.0f, 1.0f, 0.0f);
 
