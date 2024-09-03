@@ -413,6 +413,7 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
     RefCntAutoPtr<IBuffer> PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> jointsBuffer;
+    RefCntAutoPtr<IBuffer> dummyVertexBuffer;
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<Bloom> bloom;
     std::unique_ptr<ScreenSpaceAmbientOcclusion> ssao;
@@ -749,6 +750,12 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 const auto NumVBs = static_cast<Uint32>(GLTFModel.GetVertexBufferCount());
                 for (Uint32 i = 0; i < NumVBs; ++i)
                     pVBs[i] = GLTFModel.GetVertexBuffer(i);
+
+                if (pVBs[1] == nullptr)
+                {
+                    pVBs[1] = s_gc.dummyVertexBuffer;
+                }
+
                 pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
 
                 if (auto* pIndexBuffer = GLTFModel.GetIndexBuffer())
@@ -787,6 +794,19 @@ void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
     const size_t JointsBufferSize = sizeof(float4x4) * /* m_Settings.MaxJointCount */ 64 * 2;
     CreateUniformBuffer(s_gc.m_pDevice, JointsBufferSize, "cbJointTransforms", &s_gc.jointsBuffer);
 
+    BufferDesc VertBuffDesc;
+    VertBuffDesc.Name = "Dummy vertex buffer";
+    VertBuffDesc.Usage = USAGE_IMMUTABLE;
+    VertBuffDesc.BindFlags = BIND_VERTEX_BUFFER;
+    VertBuffDesc.Size = sizeof(float) * 3;
+
+    BufferData VBData;
+    float DummyVertex[] = {0.0f, 0.0f, 0.0f};
+    VBData.pData = DummyVertex;
+    VBData.DataSize = sizeof(DummyVertex);
+
+    s_gc.m_pDevice->CreateBuffer(VertBuffDesc, &VBData, &s_gc.dummyVertexBuffer);
+    
     GraphicsPipelineStateCreateInfo PSOCreateInfo{};
 
     PipelineResourceLayoutDescX ResourceLayout;
@@ -964,7 +984,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             float4 stationMinViewSpace = (float4(model.aabb.Min, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
             float4 stationMaxViewSpace = (float4(model.aabb.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
 
-            float maxZ = stationMaxViewSpace.z + 0.10f;
+            float maxZ = std::max(stationMinViewSpace.z, stationMaxViewSpace.z) + 0.10f;
 
             VERIFY(maxZ > 0.f, "Far plane distance can't be negative");
             //MinZ = 0.18f;
