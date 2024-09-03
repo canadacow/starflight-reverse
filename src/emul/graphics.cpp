@@ -401,6 +401,7 @@ struct GraphicsContext
 
     SFModel station{};
     SFModel planet{};
+    SFModel terrain{};
 
     std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
 
@@ -573,9 +574,10 @@ private:
     void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh);
 };
 
-void InitModel(std::string modelPath, GraphicsContext::SFModel& model);
+void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex = 0);
 void InitStation();
 void InitPlanet();
+void InitTerrain();
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model);
 
 /*
@@ -2960,7 +2962,15 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     #endif
 
     s_gc.station.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station.model, s_gc.frameAttribsCB, shadowMap);
-    s_gc.planet.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.planet.model, s_gc.frameAttribsCB, shadowMap);
+    if (frameSync.demoMode == 1)
+    {
+        s_gc.planet.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.planet.model, s_gc.frameAttribsCB, shadowMap);
+    }
+    else if (frameSync.demoMode == 2)
+    {
+        s_gc.terrain.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.terrain.model, s_gc.frameAttribsCB, shadowMap);
+    }
+    
 
     StateTransitionDesc Barriers[] = {
         {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
@@ -2968,7 +2978,15 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
     LoadEnvironmentMap("starfield.ktx", s_gc.station, true);
-    LoadEnvironmentMap("starfield.ktx", s_gc.planet, false);
+    if (frameSync.demoMode == 1)
+    {
+        LoadEnvironmentMap("starfield.ktx", s_gc.planet, false);
+    }
+    else if(frameSync.demoMode == 2)
+    {
+        LoadEnvironmentMap("starfield.ktx", s_gc.terrain, false);
+    }
+
 }
 
 static int GraphicsInitThread()
@@ -3181,7 +3199,19 @@ static int GraphicsInitThread()
 #endif
 
     InitStation();
-    InitPlanet();
+    switch (frameSync.demoMode)
+    {
+        case 0:
+            break;
+        case 1:
+            InitPlanet();
+            break;
+        case 2:
+            InitTerrain();
+            break;
+        default:
+            break;
+    }
 
     s_gc.cameraAttribs = std::make_unique<HLSL::CameraAttribs[]>(2);
 
@@ -4147,24 +4177,31 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
     return float4x4::Identity();
 }
 
-void InitModel(std::string modelPath, GraphicsContext::SFModel& model)
+void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex)
 {
     GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = modelPath.c_str();
 
     model.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
 
+    std::vector<const Diligent::GLTF::Node*> cameras;
+
     for (const auto* node : model.model->Scenes[0].LinearNodes)
     {
         if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
         {
-            model.camera = node;
+            cameras.push_back(node);
         }
 
         if (node->pLight != nullptr)
         {
             model.lights.push_back(node);
         }
+    }
+
+    if (!cameras.empty() && defaultCameraIndex < cameras.size())
+    {
+        model.camera = cameras[defaultCameraIndex];
     }
 }
 
@@ -4291,10 +4328,137 @@ void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
     RenderSFModel(inFlightIndex, s_gc.planet);
 }
 
-std::vector<avk::recorded_commands_t> PlanetPass(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform)
+void InitTerrain()
 {
-    UpdatePlanet(inFlightIndex);
-    RenderPlanet(inFlightIndex);
+    InitModel("61x61plane.glb", s_gc.terrain, 1);
+}
+
+void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
+{
+    VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
+
+    double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+
+    float4x4 RotationMatrixCam = float4x4::Identity();
+    float4x4 RotationMatrixModel = float4x4::Identity();
+
+    s_gc.terrain.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
+    s_gc.terrain.aabb = s_gc.terrain.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
+
+    // Center and scale model
+    float  MaxDim = 0;
+    float3 ModelDim{ s_gc.terrain.aabb.Max - s_gc.terrain.aabb.Min };
+    MaxDim = std::max(MaxDim, ModelDim.x);
+    MaxDim = std::max(MaxDim, ModelDim.y);
+    MaxDim = std::max(MaxDim, ModelDim.z);
+
+    float4x4 InvYAxis = float4x4::Identity();
+    InvYAxis._22 = -1;
+
+#if 1
+    s_gc.terrain.scale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
+    auto     Translate = -s_gc.terrain.aabb.Min - 0.5f * ModelDim;
+    InvYAxis._22 = -1;
+#else
+    s_gc.terrain.scale = 1.0f;
+    float3 Translate = { 0.f, 0.f, 0.f };
+#endif
+
+    s_gc.terrain.modelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.terrain.scale) * InvYAxis;
+    s_gc.terrain.scaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.terrain.scale);
+
+    s_gc.terrain.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0], s_gc.terrain.modelTransform);
+
+    s_gc.terrain.aabb = s_gc.terrain.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
+    s_gc.terrain.transforms[1] = s_gc.terrain.transforms[0];
+
+    float YFov = PI_F / 4.0f;
+    float ZNear = 0.1f;
+    float ZFar = 100.f;
+
+    float4x4 CameraView;
+
+    const auto* pCameraNode = s_gc.terrain.camera;
+    const auto* pCamera = pCameraNode->pCamera;
+    const auto& CameraGlobalTransform = s_gc.terrain.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
+
+    // GLTF camera is defined such that the local +X axis is to the right,
+    // the lens looks towards the local -Z axis, and the top of the camera
+    // is aligned with the local +Y axis.
+    // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#cameras
+    // We need to inverse the Z axis as our camera looks towards +Z.
+    float4x4 InvZAxis = float4x4::Identity();
+    InvZAxis._33 = -1;
+
+#if 1
+    CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
+    s_gc.renderParams.ModelTransform = RotationMatrixModel;
+#else
+    auto trans = float4x4::Translation(0.0f, -0.057f, 0.264f);
+    auto cam = QuaternionF(0.0f, 0.2079117f, 0.9781476f, 0.0f);
+
+    auto modelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+
+    //auto invModelTransform = modelTransform.Inverse();
+
+    CameraView = RotationMatrixCam * cam.ToMatrix() * trans;
+    s_gc.renderParams.ModelTransform = RotationMatrixModel * modelTransform; // QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
+    //s_gc.renderParams.ModelTransform = float4x4::Identity();
+#endif
+
+    YFov = pCamera->Perspective.YFov;
+    ZNear = pCamera->Perspective.ZNear;
+    ZFar = pCamera->Perspective.ZFar;
+
+    // Apply pretransform matrix that rotates the scene according the surface orientation
+    CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
+
+    // Rotate the camera up by 15 degrees around the y-axis
+    //float angle = 45.0f * (M_PI / 180.0f); // Convert degrees to radians
+    //float4x4 RotateX = float4x4::RotationX(angle);
+    //CameraView = RotateX * CameraView;    
+
+    float4x4 CameraWorld = CameraView.Inverse();
+
+    // Get projection matrix adjusted to the current screen orientation
+    const auto CameraProj = GetAdjustedProjectionMatrix(YFov, ZNear, ZFar);
+    const auto CameraViewProj = CameraView * CameraProj;
+
+    float3 CameraWorldPos = float3::MakeVector(CameraWorld[3]);
+
+    auto& CurrCamAttribs = s_gc.cameraAttribs[inFlightIndex & 0x01];
+
+    CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
+    CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
+    CurrCamAttribs.mView = CameraView.Transpose();
+    CurrCamAttribs.mProj = CameraProj.Transpose();
+    CurrCamAttribs.mViewProj = CameraViewProj.Transpose();
+    CurrCamAttribs.mViewInv = CameraView.Inverse().Transpose();
+    CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
+    CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
+    CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
+
+    s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
+}
+
+void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
+{
+    RenderSFModel(inFlightIndex, s_gc.terrain);
+}
+
+
+std::vector<avk::recorded_commands_t> DemoPass(VulkanContext::frame_id_t inFlightIndex, UniformBlock& uniform)
+{
+    if (frameSync.demoMode == 1)
+    {
+        UpdatePlanet(inFlightIndex);
+        RenderPlanet(inFlightIndex);
+    }
+    else if (frameSync.demoMode == 2)
+    {
+        UpdateTerrain(inFlightIndex);
+        RenderTerrain(inFlightIndex);
+    }
 
     s_gc.m_pImmediateContext->Flush();
 
@@ -6250,13 +6414,16 @@ void GraphicsUpdate()
 
     if (!emulationThreadRunning)
     {
-#if 0
-        auto titleCommands = TitlePass(inFlightIndex, uniform);
-        commands.insert(commands.end(), titleCommands.begin(), titleCommands.end());
-#else
-        auto planetCommands = PlanetPass(inFlightIndex, uniform);
-        commands.insert(commands.end(), planetCommands.begin(), planetCommands.end());
-#endif
+        if (frameSync.demoMode == 0)
+        {
+            auto titleCommands = TitlePass(inFlightIndex, uniform);
+            commands.insert(commands.end(), titleCommands.begin(), titleCommands.end());
+        }
+        else
+        {
+            auto planetCommands = DemoPass(inFlightIndex, uniform);
+            commands.insert(commands.end(), planetCommands.begin(), planetCommands.end());
+        }
     }
     else if (graphicsMode == SFGraphicsMode::Text)
     {

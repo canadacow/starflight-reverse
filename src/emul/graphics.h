@@ -996,6 +996,11 @@ struct FrameSync {
     uint64_t completedFrames = 0;
     uint64_t completedFramesPerGameFrame = 0;
 
+    // 0 = No demo
+    // 1 = planet
+    // 2 = terrain
+    uint32_t demoMode = 2;
+
     // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
     // (3 = hyperspace, 4 = encounter, 5 = starport)
     uint32_t gameContext = 0;
