@@ -999,11 +999,14 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             float4 stationMaxViewSpace = (float4(model.aabb.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
 
             float maxZ = std::max(stationMinViewSpace.z, stationMaxViewSpace.z) + 0.10f;
+            float minZ = std::min(stationMinViewSpace.z, stationMaxViewSpace.z);
+            minZ = std::max(minZ, 0.10f);
 
-            VERIFY(maxZ > 0.f, "Far plane distance can't be negative");
-            //MinZ = 0.18f;
-            MinZ = 0.14f;
-            MaxZ = maxZ;
+            MinZ = minZ;
+            if (maxZ > minZ)
+            {
+                MaxZ = maxZ;
+            }
         }
 
     };
