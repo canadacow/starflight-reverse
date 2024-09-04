@@ -403,8 +403,18 @@ struct GraphicsContext
     SFModel planet{};
     SFModel terrain{};
 
+    struct MouseState
+    {
+        float2 pos = float2(-1.0f, -1.0f);
+        bool leftDown;
+    };
+
     float3 terrainDelta{};
     float3 terrainMovement{};
+    MouseState mouseState;
+    float FPVyawAngle{};
+    float FPVpitchAngle{};
+    float4x4 terrainFPVRotation = float4x4::Identity();
 
     std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
 
@@ -1969,7 +1979,10 @@ public:
                     {
                         //std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
                         //s_deadReckoning = { 0 , 0 };
-                        s_gc.terrainDelta = {};
+                        if (!emulationThreadRunning)
+                        {
+                            DoDemoKeys(event, s_gc.vc.in_flight_index_for_frame());
+                        }
                     }
                     break;
                 case SDL_WINDOWEVENT:
@@ -1995,12 +2008,15 @@ public:
                     GraphicsQuit();
                     break;
                 case SDL_MOUSEMOTION:
+                    DoDemoKeys(event, s_gc.vc.in_flight_index_for_frame());
                     nk_input_motion(&(nk_context->ctx), event.motion.x, event.motion.y);
                     break;
                 case SDL_MOUSEBUTTONDOWN:
+                    DoDemoKeys(event, s_gc.vc.in_flight_index_for_frame());
                     nk_input_button(&(nk_context->ctx), sdl_button_to_nk(event.button.button), event.button.x, event.button.y, 1);
                     break;
                 case SDL_MOUSEBUTTONUP:
+                    DoDemoKeys(event, s_gc.vc.in_flight_index_for_frame());
                     nk_input_button(&(nk_context->ctx), sdl_button_to_nk(event.button.button), event.button.x, event.button.y, 0);
                     break;
                 case SDL_MOUSEWHEEL:
@@ -4363,17 +4379,60 @@ void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
 
 void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 {
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
+    bool menuVisible = frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration)) > 0.0f;
 
     float3 MoveDirection = float3(0, 0, 0);
+
+    std::vector<const Diligent::GLTF::Node*> cameras;
+
+    for (const auto* node : s_gc.terrain.model->Scenes[0].LinearNodes)
+    {
+        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+        {
+            cameras.push_back(node);
+        }
+    }
+
+    int currentCameraIndex = -1;
+    for (size_t i = 0; i < cameras.size(); ++i)
+    {
+        if (cameras[i] == s_gc.terrain.camera)
+        {
+            currentCameraIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    const float rotationSpeed = 0.005f;
+    const float handness = s_gc.cameraAttribs[inFlightIndex & 0x01].fHandness;
+
+    const float3 referenceRightAxis = float3{ 1, 0, 0 };
+    const float3 referenceUpAxis = float3{ 0, 1, 0 };
 
     switch (event.type) {
         case SDL_KEYDOWN:
             switch (event.key.keysym.sym) {
                 case SDLK_w:
-                    MoveDirection.z -= 1.0f;
+                    if (currentCameraIndex == 0)
+                    {
+                        MoveDirection.y -= 1.0f;
+                    }
+                    else
+                    {
+                        MoveDirection.z -= 1.0f;
+                    }
                     break;
                 case SDLK_s:
-                    MoveDirection.z += 1.0f;
+                    if (currentCameraIndex == 0)
+                    {
+                        MoveDirection.y += 1.0f;
+                    }
+                    else
+                    {
+                        MoveDirection.z += 1.0f;
+                    }
                     break;
                 case SDLK_a:
                     MoveDirection.x += 1.0f;
@@ -4383,32 +4442,53 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_c:
                     {
-                        std::vector<const Diligent::GLTF::Node*> cameras;
-
-                        for (const auto* node : s_gc.terrain.model->Scenes[0].LinearNodes)
-                        {
-                            if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
-                            {
-                                cameras.push_back(node);
-                            }
-                        }
-
-                        int currentCameraIndex = -1;
-                        for (size_t i = 0; i < cameras.size(); ++i)
-                        {
-                            if (cameras[i] == s_gc.terrain.camera)
-                            {
-                                currentCameraIndex = static_cast<int>(i);
-                                break;
-                            }
-                        }
-
                         s_gc.terrainMovement = {};
+                        s_gc.terrainFPVRotation = float4x4::Identity();
+                        s_gc.FPVyawAngle = 0.0f;
+                        s_gc.FPVpitchAngle = 0.0f;
+                        s_gc.mouseState = {};
                         currentCameraIndex = (currentCameraIndex + 1) % cameras.size();
                         s_gc.terrain.camera = cameras[currentCameraIndex];
                     }
                 default:
                     break;
+            }
+            break;
+        case SDL_KEYUP:
+            s_gc.terrainDelta = {};
+            break;
+        case SDL_MOUSEMOTION:
+            {
+                if (!menuVisible)
+                {
+                    GraphicsContext::MouseState mouseState{};
+                    mouseState.pos.x = event.motion.x;
+                    mouseState.pos.y = event.motion.y;
+                    mouseState.leftDown = (event.motion.state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+
+                    float MouseDeltaX = 0;
+                    float MouseDeltaY = 0;
+                    if (s_gc.mouseState.pos.x >= 0 && s_gc.mouseState.pos.x >= 0 &&
+                        s_gc.mouseState.leftDown)
+                    {
+                        MouseDeltaX = mouseState.pos.x - s_gc.mouseState.pos.x;
+                        MouseDeltaY = mouseState.pos.y - s_gc.mouseState.pos.y;
+                    }
+                    s_gc.mouseState = mouseState;
+
+                    float fYawDelta = -MouseDeltaX * rotationSpeed;
+                    float fPitchDelta = MouseDeltaY * rotationSpeed;
+                    if (mouseState.leftDown)
+                    {
+                        s_gc.FPVyawAngle += fYawDelta * -handness;
+                        s_gc.FPVpitchAngle += fPitchDelta * -handness;
+                        s_gc.FPVpitchAngle = std::max(s_gc.FPVpitchAngle, -PI_F / 2.f);
+                        s_gc.FPVpitchAngle = std::min(s_gc.FPVpitchAngle, +PI_F / 2.f);
+                    }
+
+                    s_gc.terrainFPVRotation = float4x4::RotationArbitrary(referenceUpAxis, s_gc.FPVyawAngle) *
+                        float4x4::RotationArbitrary(referenceRightAxis, s_gc.FPVpitchAngle);
+                }
             }
             break;
         default:
@@ -4417,7 +4497,8 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 
     if (MoveDirection.x != 0.0f || MoveDirection.y != 0.0f || MoveDirection.z != 0.0f)
     {
-        const auto& cam = s_gc.cameraAttribs[inFlightIndex & 0x01].mViewInv.Transpose();
+        auto view = s_gc.cameraAttribs[inFlightIndex & 0x01].mView.Transpose();
+        const auto& cam = view.Inverse();
 
         s_gc.terrainDelta = float3(
             MoveDirection.x * cam._11 + MoveDirection.y * cam._21 + MoveDirection.z * cam._31,
@@ -4493,7 +4574,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     InvZAxis._33 = -1;
 
     auto trans = float4x4::Translation(s_gc.terrainMovement);
-    CameraView = trans * CameraGlobalTransform.Inverse() * InvZAxis;
+    CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     s_gc.renderParams.ModelTransform = RotationMatrixModel;
 
     YFov = pCamera->Perspective.YFov;
