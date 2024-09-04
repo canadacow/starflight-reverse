@@ -403,6 +403,9 @@ struct GraphicsContext
     SFModel planet{};
     SFModel terrain{};
 
+    float3 terrainDelta{};
+    float3 terrainMovement{};
+
     std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
 
     std::unique_ptr<SF_PBR_Renderer> pbrRenderer;
@@ -579,6 +582,7 @@ void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defau
 void InitStation();
 void InitPlanet();
 void InitTerrain();
+void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex);
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model);
 
 /*
@@ -1947,9 +1951,16 @@ public:
                     }
                     else
                     {
-                        if (!isArrowOrKeypad(event))
+                        if (emulationThreadRunning)
                         {
-                            pushEvent(event);
+                            if (!isArrowOrKeypad(event))
+                            {
+                                pushEvent(event);
+                            }
+                        }
+                        else
+                        {
+                            DoDemoKeys(event, s_gc.vc.in_flight_index_for_frame());
                         }
                     }
                     return true;
@@ -1958,6 +1969,7 @@ public:
                     {
                         //std::lock_guard<std::mutex> lg(s_deadReckoningMutex);
                         //s_deadReckoning = { 0 , 0 };
+                        s_gc.terrainDelta = {};
                     }
                     break;
                 case SDL_WINDOWEVENT:
@@ -3154,6 +3166,7 @@ static int GraphicsInitThread()
 #endif
 
     EngineVkCreateInfo EngineCI;
+    EngineCI.DynamicHeapSize = 8 << 24;
     EngineCI.DeviceExtensionCount = 4;
     const char* deviceExtensions[] = { 
         "VK_KHR_create_renderpass2", 
@@ -4348,9 +4361,76 @@ void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
     RenderSFModel(inFlightIndex, s_gc.planet);
 }
 
+void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
+{
+
+    float3 MoveDirection = float3(0, 0, 0);
+
+    switch (event.type) {
+        case SDL_KEYDOWN:
+            switch (event.key.keysym.sym) {
+                case SDLK_w:
+                    MoveDirection.z -= 1.0f;
+                    break;
+                case SDLK_s:
+                    MoveDirection.z += 1.0f;
+                    break;
+                case SDLK_a:
+                    MoveDirection.x += 1.0f;
+                    break;
+                case SDLK_d:
+                    MoveDirection.x -= 1.0f;
+                    break;
+                case SDLK_c:
+                    {
+                        std::vector<const Diligent::GLTF::Node*> cameras;
+
+                        for (const auto* node : s_gc.terrain.model->Scenes[0].LinearNodes)
+                        {
+                            if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+                            {
+                                cameras.push_back(node);
+                            }
+                        }
+
+                        int currentCameraIndex = -1;
+                        for (size_t i = 0; i < cameras.size(); ++i)
+                        {
+                            if (cameras[i] == s_gc.terrain.camera)
+                            {
+                                currentCameraIndex = static_cast<int>(i);
+                                break;
+                            }
+                        }
+
+                        s_gc.terrainMovement = {};
+                        currentCameraIndex = (currentCameraIndex + 1) % cameras.size();
+                        s_gc.terrain.camera = cameras[currentCameraIndex];
+                    }
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
+
+    if (MoveDirection.x != 0.0f || MoveDirection.y != 0.0f || MoveDirection.z != 0.0f)
+    {
+        const auto& cam = s_gc.cameraAttribs[inFlightIndex & 0x01].mViewInv.Transpose();
+
+        s_gc.terrainDelta = float3(
+            MoveDirection.x * cam._11 + MoveDirection.y * cam._21 + MoveDirection.z * cam._31,
+            MoveDirection.x * cam._12 + MoveDirection.y * cam._22 + MoveDirection.z * cam._32,
+            MoveDirection.x * cam._13 + MoveDirection.y * cam._23 + MoveDirection.z * cam._33
+        );
+    }
+   
+}
+
 void InitTerrain()
 {
-    InitModel("61x61plane.glb", s_gc.terrain, 1);
+    InitModel("61x61plane.glb", s_gc.terrain, 0);
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
@@ -4358,6 +4438,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+
+    s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
@@ -4410,21 +4492,9 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-#if 1
-    CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
+    auto trans = float4x4::Translation(s_gc.terrainMovement);
+    CameraView = trans * CameraGlobalTransform.Inverse() * InvZAxis;
     s_gc.renderParams.ModelTransform = RotationMatrixModel;
-#else
-    auto trans = float4x4::Translation(0.0f, -0.057f, 0.264f);
-    auto cam = QuaternionF(0.0f, 0.2079117f, 0.9781476f, 0.0f);
-
-    auto modelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
-
-    //auto invModelTransform = modelTransform.Inverse();
-
-    CameraView = RotationMatrixCam * cam.ToMatrix() * trans;
-    s_gc.renderParams.ModelTransform = RotationMatrixModel * modelTransform; // QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
-    //s_gc.renderParams.ModelTransform = float4x4::Identity();
-#endif
 
     YFov = pCamera->Perspective.YFov;
     ZNear = pCamera->Perspective.ZNear;
