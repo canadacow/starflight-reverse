@@ -995,18 +995,39 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         // Adjust the whole range only
         if(CascadeIdx == -1)
         {
-            float4 stationMinViewSpace = (float4(model.aabb.Min, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
-            float4 stationMaxViewSpace = (float4(model.aabb.Max, 1.0f) * s_gc.renderParams.ModelTransform * viewProj);
+            // Get the corners of the model's bounding box
+            const auto& aabb = model.aabb;
+            std::array<float3, 8> corners = {
+                float3(aabb.Min.x, aabb.Min.y, aabb.Min.z),
+                float3(aabb.Max.x, aabb.Min.y, aabb.Min.z),
+                float3(aabb.Min.x, aabb.Max.y, aabb.Min.z),
+                float3(aabb.Max.x, aabb.Max.y, aabb.Min.z),
+                float3(aabb.Min.x, aabb.Min.y, aabb.Max.z),
+                float3(aabb.Max.x, aabb.Min.y, aabb.Max.z),
+                float3(aabb.Min.x, aabb.Max.y, aabb.Max.z),
+                float3(aabb.Max.x, aabb.Max.y, aabb.Max.z)
+            };
 
-            float maxZ = std::max(stationMinViewSpace.z, stationMaxViewSpace.z) + 0.10f;
-            float minZ = std::min(stationMinViewSpace.z, stationMaxViewSpace.z);
-            minZ = std::max(minZ, 0.10f);
+            // Transform the corners to light space
+            float minZ = std::numeric_limits<float>::max();
+            float maxZ = std::numeric_limits<float>::lowest();
+
+            for (const auto& corner : corners)
+            {
+                float4 transformed = float4(corner, 1.0f) * viewProj;
+                float z = transformed.z / transformed.w; // Perspective divide
+
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
+            }
+
+            if (minZ < 0.10f)
+            {
+                minZ = 0.10f;
+            }
 
             MinZ = minZ;
-            if (maxZ > minZ)
-            {
-                MaxZ = maxZ;
-            }
+            MaxZ = maxZ;
         }
 
     };
