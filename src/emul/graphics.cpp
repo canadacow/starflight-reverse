@@ -1579,15 +1579,19 @@ void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optio
         auto pole = Magnum::Vector3( frameSync.staringPos.x, frameSync.staringPos.y, frameSync.staringPos.z );
         auto dest = Magnum::Vector3( optionalCamPos->x, optionalCamPos->y, optionalCamPos->z );
 
-        positionTrack = {{
-            {0.0f, pole}, // Initial position at t=0
-            {3.0f, dest} // Final position at t=3
-        }, Magnum::Math::lerp};
+        positionTrack = Magnum::Animation::Track<Magnum::Float, Magnum::Vector3, Magnum::Math::Vector3<Magnum::Float>>{
+            {{0.0f, pole}, {3.0f, dest}}, // Keyframe data
+            Magnum::Math::lerp,           // Interpolator function
+            Magnum::Animation::Extrapolation::Constant, // Extrapolation before
+            Magnum::Animation::Extrapolation::Constant  // Extrapolation after
+        };
 
-        scaleTrack = {{
-            {0.0f, 100.0f}, // Initial scale at t=0
-            {3.0f, (float)currentPlanetSphereSize} // Final scale at t=3
-        }, Magnum::Math::lerp};
+        scaleTrack = Magnum::Animation::Track<Magnum::Float, Magnum::Float, Magnum::Float>{
+            {{0.0f, 100.0f}, {3.0f, static_cast<float>(currentPlanetSphereSize)}}, // Keyframe data
+            Magnum::Math::lerp,           // Interpolator function
+            Magnum::Animation::Extrapolation::Constant, // Extrapolation before
+            Magnum::Animation::Extrapolation::Constant  // Extrapolation after
+        };
     }
 
     if(state == OrbitState::Landing)
@@ -1601,15 +1605,20 @@ void FrameSync::SetOrbitState(OrbitState state, std::optional<vec3<float>> optio
         auto start = Magnum::Vector3( orbitCamPos->x, orbitCamPos->y, orbitCamPos->z );
         auto end = Magnum::Vector3(0.0f, 1.0f, 0.0f);
 
-        positionTrack = {{
-            {0.0f, start},
-            {3.0f, end}
-        }, Magnum::Math::lerp};
+        positionTrack = Magnum::Animation::Track<Magnum::Float, Magnum::Vector3, Magnum::Math::Vector3<Magnum::Float>>{
+            {{0.0f, start}, {3.0f, end}}, // Keyframe data
+            Magnum::Math::lerp,           // Interpolator function
+            Magnum::Animation::Extrapolation::Constant, // Extrapolation before
+            Magnum::Animation::Extrapolation::Constant  // Extrapolation after
+        };
 
-        scaleTrack = {{
-            {0.0f, (float)currentPlanetSphereSize},
-            {3.0f, 1000.0f} // Final scale at t=3
-        }, Magnum::Math::lerp};
+        scaleTrack = Magnum::Animation::Track<Magnum::Float, Magnum::Float, Magnum::Float>{
+            {{0.0f, static_cast<float>(currentPlanetSphereSize)}, {3.0f, 1000.0f}}, // Keyframe data
+            Magnum::Math::lerp,           // Interpolator function
+            Magnum::Animation::Extrapolation::Constant, // Extrapolation before
+            Magnum::Animation::Extrapolation::Constant  // Extrapolation after
+        };
+
     }
 
     orbitTimestamp = std::chrono::steady_clock::now();
@@ -6099,17 +6108,20 @@ void GraphicsUpdate()
 
             if (uiTriggerValue >= 1.0f) {
                 SDL_ShowCursor(SDL_ENABLE);
-                frameSync.uiTrigger = { {
-                    {0.0f, 1.0f},
-                    {menuActivationInSeconds, 0.0f}
-                }, Magnum::Math::lerp };
-            }
-            else {
+                frameSync.uiTrigger = Magnum::Animation::Track<Magnum::Float, Magnum::Float, Magnum::Float>{
+                    {{0.0f, 1.0f}, {menuActivationInSeconds, 0.0f}}, // Keyframe data
+                    Magnum::Math::lerp,           // Interpolator function
+                    Magnum::Animation::Extrapolation::Constant, // Extrapolation before
+                    Magnum::Animation::Extrapolation::Constant  // Extrapolation after
+                };
+            } else {
                 SDL_ShowCursor(SDL_DISABLE);
-                frameSync.uiTrigger = { {
-                    {0.0f, 0.0f},
-                    {menuActivationInSeconds, 1.0f}
-                }, Magnum::Math::lerp };
+                frameSync.uiTrigger = Magnum::Animation::Track<Magnum::Float, Magnum::Float, Magnum::Float>{
+                    {{0.0f, 0.0f}, {menuActivationInSeconds, 1.0f}}, // Keyframe data
+                    Magnum::Math::lerp,           // Interpolator function
+                    Magnum::Animation::Extrapolation::Constant, // Extrapolation before
+                    Magnum::Animation::Extrapolation::Constant  // Extrapolation after
+                };
             }
             s_shouldToggleMenu = false;
         }
