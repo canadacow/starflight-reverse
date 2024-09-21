@@ -162,6 +162,7 @@ add_executable(emulatesdl WIN32
     src/emul/DiligentShadowMapManager.cpp
     src/tts/speech.cpp
     src/pbr/SF_PBR_Renderer.cpp
+    src/emul/DynamicMesh.cpp
 )
 
 target_include_directories(emulatesdl

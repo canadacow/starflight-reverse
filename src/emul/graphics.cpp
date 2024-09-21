@@ -9,6 +9,7 @@
 #include <math.h>
 #include "graphics.h"
 #include "../util/lodepng.h"
+#include <direct.h> 
 
 #include <vector>
 #include <assert.h>
@@ -98,6 +99,7 @@ namespace HLSL
 #include "Common/interface/RefCntAutoPtr.hpp"
 
 #include "AssetLoader/interface/GLTFLoader.hpp"
+#include "DynamicMesh.hpp"
 
 //#define SF_PBR_Renderer GLTF_PBR_Renderer
 //#include "GLTF_PBR_Renderer.hpp"
@@ -397,6 +399,8 @@ struct GraphicsContext
         RefCntAutoPtr<ITextureView> env;
         const GLTF::Node* camera;
         std::vector<const GLTF::Node*> lights;
+
+        std::unique_ptr<DynamicMesh> dynamicMesh;
     };
 
     SFModel station{};
@@ -4264,7 +4268,28 @@ void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defau
     GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = modelPath.c_str();
 
-    model.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+    try
+    {
+        model.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+    }
+    catch (const std::exception& e)
+    {
+        char cwd[1024];
+        #ifdef _WIN32
+        if (_getcwd(cwd, sizeof(cwd)) != nullptr) // Use _getcwd on Windows
+        #else
+        if (getcwd(cwd, sizeof(cwd)) != nullptr) // Use getcwd on other platforms
+        #endif
+        {
+            printf("Current working directory: %s\n", cwd);
+        }
+        else
+        {
+            perror("getcwd() error");
+        }
+        printf("Failed to load model from path: %s\n", modelPath.c_str());
+        throw;
+    }
 
     std::vector<const Diligent::GLTF::Node*> cameras;
 
