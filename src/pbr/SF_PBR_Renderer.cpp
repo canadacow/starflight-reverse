@@ -35,7 +35,7 @@
 #include "BasicMath.hpp"
 #include "MapHelper.hpp"
 #include "GraphicsAccessories.hpp"
-#include "GLTFLoader.hpp"
+#include "SF_GLTFLoader.hpp"
 
 namespace Diligent
 {
@@ -305,12 +305,12 @@ SF_PBR_Renderer::ModelResourceBindings SF_PBR_Renderer::CreateResourceBindings(
     ITextureView* pShadowMap)
 {
     ModelResourceBindings ResourceBindings;
-    ResourceBindings.MaterialSRB.resize(GLTFModel.Materials.size());
-    for (size_t mat = 0; mat < GLTFModel.Materials.size(); ++mat)
+    ResourceBindings.MaterialSRB.resize(GLTFModel.GetMaterials().size());
+    for (size_t mat = 0; mat < GLTFModel.GetMaterials().size(); ++mat)
     {
         auto& pMatSRB = ResourceBindings.MaterialSRB[mat];
         CreateResourceBinding(&pMatSRB);
-        InitMaterialSRB(GLTFModel, GLTFModel.Materials[mat], pFrameAttribs, pMatSRB, pShadowMap);
+        InitMaterialSRB(GLTFModel, GLTFModel.GetMaterials()[mat], pFrameAttribs, pMatSRB, pShadowMap);
     }
     return ResourceBindings;
 }
@@ -450,7 +450,7 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
     static_assert(static_cast<LIGHT_TYPE>(GLTF::Light::TYPE::SPOT) == LIGHT_TYPE_SPOT, "GLTF::Light::TYPE::SPOT != LIGHT_TYPE_SPOT");
 
     DEV_CHECK_ERR((pModelBindings != nullptr) ^ (pCacheBindings != nullptr), "Either model bindings or cache bindings must not be null");
-    DEV_CHECK_ERR(pModelBindings == nullptr || pModelBindings->MaterialSRB.size() == GLTFModel.Materials.size(),
+    DEV_CHECK_ERR(pModelBindings == nullptr || pModelBindings->MaterialSRB.size() == GLTFModel.GetMaterials().size(),
                   "The number of material shader resource bindings is not consistent with the number of materials");
 
     if (!GLTFModel.CompatibleWithTransforms(Transforms))
@@ -458,12 +458,12 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
         DEV_ERROR("Model transforms are incompatible with the model");
         return;
     }
-    if (RenderParams.SceneIndex >= GLTFModel.Scenes.size())
+    if (RenderParams.SceneIndex >= GLTFModel.GetScenes().size())
     {
         DEV_ERROR("Invalid scene index ", RenderParams.SceneIndex);
         return;
     }
-    const auto& Scene = GLTFModel.Scenes[RenderParams.SceneIndex];
+    const auto& Scene = GLTFModel.GetScenes()[RenderParams.SceneIndex];
 
     m_RenderParams = RenderParams;
 
@@ -519,7 +519,7 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                 continue;
 
-            const auto& Material  = GLTFModel.Materials[primitive.MaterialId];
+            const auto& Material  = GLTFModel.GetMaterials()[primitive.MaterialId];
             const auto  AlphaMode = Material.Attribs.AlphaMode;
             if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
                 continue;
@@ -552,7 +552,7 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
         {
             const auto& Node                 = PrimRI.Node;
             const auto& primitive            = PrimRI.Primitive;
-            const auto& material             = GLTFModel.Materials[primitive.MaterialId];
+            const auto& material             = GLTFModel.GetMaterials()[primitive.MaterialId];
             const auto& NodeGlobalMatrix     = Transforms.NodeGlobalMatrices[Node.Index];
             const auto& PrevNodeGlobalMatrix = PrevTransforms->NodeGlobalMatrices[Node.Index];
 

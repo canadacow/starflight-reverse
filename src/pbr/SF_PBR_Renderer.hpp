@@ -32,7 +32,8 @@
 #include <vector>
 #include <array>
 
-#include "../../../DiligentTools/AssetLoader/interface/GLTFLoader.hpp"
+//#include "../../../DiligentTools/AssetLoader/interface/GLTFLoader.hpp"
+#include "SF_GLTFLoader.hpp"
 
 namespace Diligent
 {

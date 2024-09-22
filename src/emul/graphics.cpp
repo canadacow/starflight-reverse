@@ -98,7 +98,7 @@ namespace HLSL
 
 #include "Common/interface/RefCntAutoPtr.hpp"
 
-#include "AssetLoader/interface/GLTFLoader.hpp"
+#include "../pbr/SF_GLTFLoader.hpp"
 #include "DynamicMesh.hpp"
 
 //#define SF_PBR_Renderer GLTF_PBR_Renderer
@@ -389,7 +389,7 @@ struct GraphicsContext
 
     struct SFModel
     {
-        std::unique_ptr<GLTF::Model> model;
+        std::shared_ptr<GLTF::Model> model;
         SF_PBR_Renderer::ModelResourceBindings bindings;
         BoundBox aabb;
         std::array<GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
@@ -557,7 +557,7 @@ struct ShadowMap
         bool Is32BitFilterableFmt = true;
     } m_ShadowSettings;
 
-    void Initialize(const std::unique_ptr<GLTF::Model>& mesh);
+    void Initialize(const std::shared_ptr<GLTF::Model>& mesh);
 
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const GLTF::Model& GLTFModel,
@@ -589,7 +589,7 @@ private:
 
     //DXSDKMesh m_Mesh;
 
-    void InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh);
+    void InitializeResourceBindings(const std::shared_ptr<GLTF::Model>& mesh);
 };
 
 void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex = 0);
@@ -699,11 +699,11 @@ void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
 
 */
 
-void ShadowMap::InitializeResourceBindings(const std::unique_ptr<GLTF::Model>& mesh)
+void ShadowMap::InitializeResourceBindings(const std::shared_ptr<GLTF::Model>& mesh)
 {
     m_ShadowSRBs.clear();
-    m_ShadowSRBs.resize(mesh->Materials.size());
-    for (Uint32 mat = 0; mat < mesh->Materials.size(); ++mat)
+    m_ShadowSRBs.resize(mesh->GetMaterials().size());
+    for (Uint32 mat = 0; mat < mesh->GetMaterials().size(); ++mat)
     {
         RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
         m_RenderMeshShadowPSO[0]->CreateShaderResourceBinding(&pShadowSRB, true);
@@ -723,7 +723,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     pCtx->SetPipelineState(pPSO);
 
     // Iterate through each scene node
-    for (const auto& Scene : GLTFModel.Scenes)
+    for (const auto& Scene : GLTFModel.GetScenes())
     {
         for (const auto* pNode : Scene.LinearNodes)
         {
@@ -805,7 +805,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     s_gc.m_pImmediateContext->Flush();
 }
 
-void ShadowMap::Initialize(const std::unique_ptr<GLTF::Model>& mesh)
+void ShadowMap::Initialize(const std::shared_ptr<GLTF::Model>& mesh)
 {
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "cbCameraAttribs", &s_gc.cameraAttribsCB);
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
@@ -3614,7 +3614,7 @@ void TranslateMan(InterpolatorPoint manPoint)
     static std::unordered_map<std::string, QuaternionF> initialRotations;
 
     std::call_once(initFlag, [&]() {
-        auto& nodes = s_gc.station.model->Nodes;
+        auto& nodes = s_gc.station.model->GetNodes();
         for (auto& node : nodes) {
             if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
                 initialRotations[node.Name] = node.Rotation;
@@ -3640,7 +3640,7 @@ void TranslateMan(InterpolatorPoint manPoint)
         }
     }
 
-    auto& nodes = s_gc.station.model->Nodes;
+    auto& nodes = s_gc.station.model->GetNodes();
     for (auto& node : nodes) {
         if (std::find(targetNodeNames.begin(), targetNodeNames.end(), node.Name) != targetNodeNames.end()) {
 
@@ -4270,7 +4270,7 @@ void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defau
 
     try
     {
-        model.model = std::make_unique<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+        model.model = std::make_shared<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
     }
     catch (const std::exception& e)
     {
@@ -4293,7 +4293,7 @@ void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defau
 
     std::vector<const Diligent::GLTF::Node*> cameras;
 
-    for (const auto* node : model.model->Scenes[0].LinearNodes)
+    for (const auto* node : model.model->GetScenes()[0].LinearNodes)
     {
         if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
         {
@@ -4445,7 +4445,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 
     std::vector<const Diligent::GLTF::Node*> cameras;
 
-    for (const auto* node : s_gc.terrain.model->Scenes[0].LinearNodes)
+    for (const auto* node : s_gc.terrain.model->GetScenes()[0].LinearNodes)
     {
         if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
         {
@@ -4570,6 +4570,9 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 void InitTerrain()
 {
     InitModel("61x61plane.glb", s_gc.terrain, 0);
+
+    s_gc.terrain.dynamicMesh = std::make_unique<DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
+    s_gc.terrain.dynamicMesh->GeneratePlane(1.0f, 1.0f, 1.0f);
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
@@ -5410,10 +5413,10 @@ static int s_armatureActionIndex = -1;
 
 void InitializeAnimationIndices()
 {
-    for (int i = 0; i < s_gc.station.model->Animations.size(); ++i) {
-        if (s_gc.station.model->Animations[i].Name == "RestingPose") {
+    for (int i = 0; i < s_gc.station.model->GetAnimations().size(); ++i) {
+        if (s_gc.station.model->GetAnimations()[i].Name == "RestingPose") {
             s_restingPoseIndex = i;
-        } else if (s_gc.station.model->Animations[i].Name == "ArmatureAction") {
+        } else if (s_gc.station.model->GetAnimations()[i].Name == "ArmatureAction") {
             s_armatureActionIndex = i;
         }
     }
@@ -5423,8 +5426,8 @@ void InitStation()
 {
     InitModel("C:/Users/Dean/Downloads/station29.glb", s_gc.station);
 
-    for (int i = 0; i < s_gc.station.model->Animations.size(); ++i) {
-        auto& anim = s_gc.station.model->Animations[i];
+    for (int i = 0; i < s_gc.station.model->GetAnimations().size(); ++i) {
+        auto& anim = s_gc.station.model->GetAnimations()[i];
         if (anim.Name == "ArmatureAction") {
             s_gc.spaceManState.walkingAnimationLength = anim.End - anim.Start;
             s_gc.spaceManState.walkingAnimationStart = anim.Start;
@@ -5790,6 +5793,11 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
 
+    if (model.dynamicMesh)
+    {
+        model.dynamicMesh->PrepareResources();
+    }
+
     FrameAttribs->Camera = CurrCamAttribs;
     FrameAttribs->PrevCamera = PrevCamAttribs;
 
@@ -5919,6 +5927,11 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         if (s_gc.renderParams.AlphaModes != SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_NONE)
         {
             s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.model, CurrTransforms, &PrevTransforms, s_gc.renderParams, &model.bindings);
+
+            if(model.dynamicMesh)
+            {
+                s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, CurrTransforms, &PrevTransforms, s_gc.renderParams, &model.bindings);
+            }
         }
 
         s_gc.renderParams.AlphaModes = OrigAlphaModes;
