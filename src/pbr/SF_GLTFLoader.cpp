@@ -30,7 +30,7 @@
 #include <cmath>
 #include <limits>
 
-#include "GLTFLoader.hpp"
+#include "SF_GLTFLoader.hpp"
 #include "MapHelper.hpp"
 #include "CommonlyUsedStates.h"
 #include "DataBlobImpl.hpp"
@@ -42,7 +42,7 @@
 #include "TextureUtilities.h"
 #include "GraphicsUtilities.h"
 #include "Align.hpp"
-#include "GLTFBuilder.hpp"
+#include "SF_GLTFBuilder.hpp"
 #include "FixedLinearAllocator.hpp"
 #include "DefaultRawMemoryAllocator.hpp"
 
@@ -53,12 +53,12 @@
 #if defined(_MSC_VER) && defined(TINYGLTF_ENABLE_DRACO)
 #    pragma warning(disable : 4127) // warning C4127: conditional expression is constant
 #endif
-#include "../../ThirdParty/tinygltf/tiny_gltf.h"
+#include "ThirdParty/tinygltf/tiny_gltf.h"
 
 namespace Diligent
 {
 
-namespace GLTF
+namespace SF_GLTF
 {
 
 InputLayoutDescX VertexAttributesToInputLayout(const VertexAttributeDesc* pAttributes, size_t NumAttributes)

@@ -141,6 +141,9 @@ set(HEADER_FILES
     src/emul/platform.h
     src/emul/common.pch
     src/pbr/SF_PBR_Renderer.hpp
+    src/pbr/SF_GLTFLoader.hpp
+    src/pbr/SF_GLTFResourceManager.hpp
+    src/pbr/SF_GLTFBuilder.hpp
     src/emul/DiligentShadowMapManager.hpp
     ${CURL_INCLUDE_DIRS}
     ${nlohmann_json_INCLUDE_DIRS}/nlohmann
@@ -163,6 +166,9 @@ add_executable(emulatesdl WIN32
     src/emul/DiligentShadowMapManager.cpp
     src/tts/speech.cpp
     src/pbr/SF_PBR_Renderer.cpp
+    src/pbr/SF_GLTFLoader.cpp
+    src/pbr/SF_GLTFResourceManager.cpp
+    src/pbr/SF_GLTFBuilder.cpp
     src/emul/DynamicMesh.cpp
 )
 

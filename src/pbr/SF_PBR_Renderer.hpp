@@ -84,13 +84,13 @@ public:
             ALPHA_MODE_FLAG_NONE = 0,
 
             /// Render opaque matetrials
-            ALPHA_MODE_FLAG_OPAQUE = 1 << GLTF::Material::ALPHA_MODE_OPAQUE,
+            ALPHA_MODE_FLAG_OPAQUE = 1 << SF_GLTF::Material::ALPHA_MODE_OPAQUE,
 
             /// Render alpha-masked matetrials
-            ALPHA_MODE_FLAG_MASK = 1 << GLTF::Material::ALPHA_MODE_MASK,
+            ALPHA_MODE_FLAG_MASK = 1 << SF_GLTF::Material::ALPHA_MODE_MASK,
 
             /// Render alpha-blended matetrials
-            ALPHA_MODE_FLAG_BLEND = 1 << GLTF::Material::ALPHA_MODE_BLEND,
+            ALPHA_MODE_FLAG_BLEND = 1 << SF_GLTF::Material::ALPHA_MODE_BLEND,
 
             /// Render all materials
             ALPHA_MODE_FLAG_ALL = ALPHA_MODE_FLAG_OPAQUE | ALPHA_MODE_FLAG_MASK | ALPHA_MODE_FLAG_BLEND
@@ -138,15 +138,15 @@ public:
     /// \param [in] pCacheBindings - Shader resource cache binding information, if the
     ///                              model has been created using the cache.
     void Render(IDeviceContext*              pCtx,
-                const GLTF::Model&           GLTFModel,
-                const GLTF::ModelTransforms& Transforms,
-                const GLTF::ModelTransforms* PrevTransforms,
+                const SF_GLTF::Model&           GLTFModel,
+                const SF_GLTF::ModelTransforms& Transforms,
+                const SF_GLTF::ModelTransforms* PrevTransforms,
                 const RenderInfo&            RenderParams,
                 ModelResourceBindings*       pModelBindings,
                 ResourceCacheBindings*       pCacheBindings = nullptr);
 
     /// Creates resource bindings for a given GLTF model
-    ModelResourceBindings CreateResourceBindings(GLTF::Model& GLTFModel,
+    ModelResourceBindings CreateResourceBindings(SF_GLTF::Model& GLTFModel,
                                                  IBuffer*     pFrameAttribs,
                                                  ITextureView* pShadowMap);
 
@@ -157,8 +157,8 @@ public:
     /// \param [in] Material      - GLTF material to create SRB for.
     /// \param [in] pFrameAttribs - Frame attributes constant buffer to set in the SRB.
     /// \param [in] pMaterialSRB  - A pointer to the SRB object to initialize.
-    void InitMaterialSRB(GLTF::Model&            Model,
-                         GLTF::Material&         Material,
+    void InitMaterialSRB(SF_GLTF::Model&            Model,
+                         SF_GLTF::Material&         Material,
                          IBuffer*                pFrameAttribs,
                          IShaderResourceBinding* pMaterialSRB,
                          ITextureView*           pShadowMap);
@@ -167,10 +167,10 @@ public:
     struct ResourceCacheUseInfo
     {
         /// A pointer to the resource manager.
-        GLTF::ResourceManager* pResourceMgr = nullptr;
+        SF_GLTF::ResourceManager* pResourceMgr = nullptr;
 
         /// Vertex layout key.
-        GLTF::ResourceManager::VertexLayoutKey VtxLayoutKey;
+        SF_GLTF::ResourceManager::VertexLayoutKey VtxLayoutKey;
 
         /// Base color texture format.
         TEXTURE_FORMAT BaseColorFormat = TEX_FORMAT_RGBA8_UNORM;
@@ -265,12 +265,12 @@ public:
     static void* WritePBRPrimitiveShaderAttribs(void*                                           pDstShaderAttribs,
                                                 const PBRPrimitiveShaderAttribsData&            AttribsData,
                                                 const std::array<int, TEXTURE_ATTRIB_ID_COUNT>& TextureAttribIndices,
-                                                const GLTF::Material&                           Material,
+                                                const SF_GLTF::Material&                           Material,
                                                 bool                                            TransposeMatrices);
 
     struct PBRLightShaderAttribsData
     {
-        const GLTF::Light* Light     = nullptr;
+        const SF_GLTF::Light* Light     = nullptr;
         const float3*      Position  = nullptr;
         const float3*      Direction = nullptr;
         // Distance scaling factor.
@@ -281,26 +281,26 @@ public:
     static void WritePBRLightShaderAttribs(const PBRLightShaderAttribsData& AttribsData,
                                            HLSL::PBRLightAttribs*           pShaderAttribs);
 
-    PSO_FLAGS GetMaterialPSOFlags(const GLTF::Material& Mat) const;
+    PSO_FLAGS GetMaterialPSOFlags(const SF_GLTF::Material& Mat) const;
 
 private:
-    static ALPHA_MODE GltfAlphaModeToAlphaMode(GLTF::Material::ALPHA_MODE GltfAlphaMode);
+    static ALPHA_MODE GltfAlphaModeToAlphaMode(SF_GLTF::Material::ALPHA_MODE GltfAlphaMode);
 
 private:
     RenderInfo m_RenderParams;
 
     struct PrimitiveRenderInfo
     {
-        const GLTF::Primitive& Primitive;
-        const GLTF::Node&      Node;
+        const SF_GLTF::Primitive& Primitive;
+        const SF_GLTF::Node&      Node;
 
-        PrimitiveRenderInfo(const GLTF::Primitive& _Primitive,
-                            const GLTF::Node&      _Node) noexcept :
+        PrimitiveRenderInfo(const SF_GLTF::Primitive& _Primitive,
+                            const SF_GLTF::Node&      _Node) noexcept :
             Primitive{_Primitive},
             Node{_Node}
         {}
     };
-    std::array<std::vector<PrimitiveRenderInfo>, GLTF::Material::ALPHA_MODE_NUM_MODES> m_RenderLists;
+    std::array<std::vector<PrimitiveRenderInfo>, SF_GLTF::Material::ALPHA_MODE_NUM_MODES> m_RenderLists;
 
     PsoCacheAccessor m_PbrPSOCache;
     PsoCacheAccessor m_WireframePSOCache;

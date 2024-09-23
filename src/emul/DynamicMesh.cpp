@@ -4,7 +4,7 @@
 namespace Diligent
 {
 
-DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<GLTF::Model>& model) :
+DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model) :
     m_Model(model), m_pDevice(pDevice), m_pContext(pContext)
 {
     // Buffers will be created after generating the plane
@@ -12,8 +12,6 @@ DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const
     //GLTF::Mesh dynamicMesh;
     //dynamicMesh.Name = "DynamicMesh";
     //Meshes.push_back(dynamicMesh);
-
-    //CopyMaterials(model->Materials, Materials);
 }
 
 DynamicMesh::~DynamicMesh()

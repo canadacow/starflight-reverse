@@ -389,16 +389,16 @@ struct GraphicsContext
 
     struct SFModel
     {
-        std::shared_ptr<GLTF::Model> model;
+        std::shared_ptr<SF_GLTF::Model> model;
         SF_PBR_Renderer::ModelResourceBindings bindings;
         BoundBox aabb;
-        std::array<GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
+        std::array<SF_GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
         float4x4                             modelTransform;
         float                                scale = 1.f;
         float4x4                             scaleAndTransform;
         RefCntAutoPtr<ITextureView> env;
-        const GLTF::Node* camera;
-        std::vector<const GLTF::Node*> lights;
+        const SF_GLTF::Node* camera;
+        std::vector<const SF_GLTF::Node*> lights;
 
         std::unique_ptr<DynamicMesh> dynamicMesh;
     };
@@ -557,11 +557,11 @@ struct ShadowMap
         bool Is32BitFilterableFmt = true;
     } m_ShadowSettings;
 
-    void Initialize(const std::shared_ptr<GLTF::Model>& mesh);
+    void Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh);
 
     void DrawMesh(IDeviceContext* pCtx,                                 
-                const GLTF::Model& GLTFModel,
-                const GLTF::ModelTransforms& Transforms,
+                const SF_GLTF::Model& GLTFModel,
+                const SF_GLTF::ModelTransforms& Transforms,
                 const HLSL::CameraAttribs& cameraAttribs,
                 const SF_PBR_Renderer::RenderInfo & RenderParams);
 
@@ -589,7 +589,7 @@ private:
 
     //DXSDKMesh m_Mesh;
 
-    void InitializeResourceBindings(const std::shared_ptr<GLTF::Model>& mesh);
+    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh);
 };
 
 void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex = 0);
@@ -699,7 +699,7 @@ void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
 
 */
 
-void ShadowMap::InitializeResourceBindings(const std::shared_ptr<GLTF::Model>& mesh)
+void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh)
 {
     m_ShadowSRBs.clear();
     m_ShadowSRBs.resize(mesh->GetMaterials().size());
@@ -712,8 +712,8 @@ void ShadowMap::InitializeResourceBindings(const std::shared_ptr<GLTF::Model>& m
 }
 
 void ShadowMap::DrawMesh(IDeviceContext* pCtx,
-                         const GLTF::Model& GLTFModel,
-                         const GLTF::ModelTransforms& Transforms,
+                         const SF_GLTF::Model& GLTFModel,
+                         const SF_GLTF::ModelTransforms& Transforms,
                          const HLSL::CameraAttribs& cameraAttribs,
                          const SF_PBR_Renderer::RenderInfo& RenderParams)
 {
@@ -805,7 +805,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     s_gc.m_pImmediateContext->Flush();
 }
 
-void ShadowMap::Initialize(const std::shared_ptr<GLTF::Model>& mesh)
+void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
 {
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "cbCameraAttribs", &s_gc.cameraAttribsCB);
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
@@ -4265,12 +4265,12 @@ static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 
 void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex)
 {
-    GLTF::ModelCreateInfo ModelCI;
+    SF_GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = modelPath.c_str();
 
     try
     {
-        model.model = std::make_shared<GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
+        model.model = std::make_shared<SF_GLTF::Model>(s_gc.m_pDevice, s_gc.m_pImmediateContext, ModelCI);
     }
     catch (const std::exception& e)
     {
@@ -4291,11 +4291,11 @@ void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defau
         throw;
     }
 
-    std::vector<const Diligent::GLTF::Node*> cameras;
+    std::vector<const Diligent::SF_GLTF::Node*> cameras;
 
     for (const auto* node : model.model->GetScenes()[0].LinearNodes)
     {
-        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+        if (node->pCamera != nullptr && node->pCamera->Type == SF_GLTF::Camera::Projection::Perspective)
         {
             cameras.push_back(node);
         }
@@ -4443,11 +4443,11 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 
     float3 MoveDirection = float3(0, 0, 0);
 
-    std::vector<const Diligent::GLTF::Node*> cameras;
+    std::vector<const Diligent::SF_GLTF::Node*> cameras;
 
     for (const auto* node : s_gc.terrain.model->GetScenes()[0].LinearNodes)
     {
-        if (node->pCamera != nullptr && node->pCamera->Type == GLTF::Camera::Projection::Perspective)
+        if (node->pCamera != nullptr && node->pCamera->Type == SF_GLTF::Camera::Projection::Perspective)
         {
             cameras.push_back(node);
         }
@@ -5816,8 +5816,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
     }
 
-    GLTF::Light m_DefaultLight{};
-    m_DefaultLight.Type = GLTF::Light::TYPE::DIRECTIONAL;
+    SF_GLTF::Light m_DefaultLight{};
+    m_DefaultLight.Type = SF_GLTF::Light::TYPE::DIRECTIONAL;
     m_DefaultLight.Intensity = 4.0f;
     m_DefaultLight.Color = float3{ 1, 1, 1 };
 
@@ -5839,7 +5839,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             const auto& LightNode = *model.lights[i];
             auto LightGlobalTransform = model.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
 
-            GLTF::Light l = *LightNode.pLight;
+            SF_GLTF::Light l = *LightNode.pLight;
             l.Intensity /= 512.0f;
 
             float3 lightDir = {};

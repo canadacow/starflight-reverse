@@ -6,10 +6,10 @@
 namespace Diligent
 {
 
-class DynamicMesh : public GLTF::Model
+class DynamicMesh : public SF_GLTF::Model
 {
 public:
-    DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<GLTF::Model>& model);
+    DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model);
     ~DynamicMesh();
 
     void PrepareResources();
@@ -20,11 +20,21 @@ public:
     void UpdateIndexData(const std::vector<Uint32>& indices);
     void GeneratePlane(float width, float height, float tileHeight);
 
+    const std::vector<SF_GLTF::Material>& GetMaterials() const override
+    {
+        return m_Model->GetMaterials();
+    }
+
+    std::vector<SF_GLTF::Material>& GetMaterials() override
+    {
+        return m_Model->GetMaterials();
+    }
+
 private:
 
     RefCntAutoPtr<IBuffer> m_VertexBuffer;
     RefCntAutoPtr<IBuffer> m_IndexBuffer;
-    std::shared_ptr<GLTF::Model> m_Model;
+    std::shared_ptr<SF_GLTF::Model> m_Model;
     IRenderDevice* m_pDevice;
     IDeviceContext* m_pContext; 
 

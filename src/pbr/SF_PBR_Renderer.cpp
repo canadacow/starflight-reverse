@@ -40,12 +40,12 @@
 namespace Diligent
 {
 
-PBR_Renderer::ALPHA_MODE SF_PBR_Renderer::GltfAlphaModeToAlphaMode(GLTF::Material::ALPHA_MODE GltfAlphaMode)
+PBR_Renderer::ALPHA_MODE SF_PBR_Renderer::GltfAlphaModeToAlphaMode(SF_GLTF::Material::ALPHA_MODE GltfAlphaMode)
 {
-    static_assert(static_cast<ALPHA_MODE>(GLTF::Material::ALPHA_MODE_OPAQUE) == ALPHA_MODE_OPAQUE, "GLTF::Material::ALPHA_MODE_OPAQUE != ALPHA_MODE_OPAQUE");
-    static_assert(static_cast<ALPHA_MODE>(GLTF::Material::ALPHA_MODE_MASK) == ALPHA_MODE_MASK, "GLTF::Material::ALPHA_MODE_MASK != ALPHA_MODE_MASK");
-    static_assert(static_cast<ALPHA_MODE>(GLTF::Material::ALPHA_MODE_BLEND) == ALPHA_MODE_BLEND, "GLTF::Material::ALPHA_MODE_BLEND != ALPHA_MODE_BLEND");
-    static_assert(static_cast<ALPHA_MODE>(GLTF::Material::ALPHA_MODE_NUM_MODES) == ALPHA_MODE_NUM_MODES, "GLTF::Material::ALPHA_MODE_NUM_MODES != ALPHA_MODE_NUM_MODES");
+    static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_OPAQUE) == ALPHA_MODE_OPAQUE, "SF_GLTF::Material::ALPHA_MODE_OPAQUE != ALPHA_MODE_OPAQUE");
+    static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_MASK) == ALPHA_MODE_MASK, "SF_GLTF::Material::ALPHA_MODE_MASK != ALPHA_MODE_MASK");
+    static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_BLEND) == ALPHA_MODE_BLEND, "SF_GLTF::Material::ALPHA_MODE_BLEND != ALPHA_MODE_BLEND");
+    static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_NUM_MODES) == ALPHA_MODE_NUM_MODES, "SF_GLTF::Material::ALPHA_MODE_NUM_MODES != ALPHA_MODE_NUM_MODES");
     return static_cast<ALPHA_MODE>(GltfAlphaMode);
 }
 
@@ -66,25 +66,25 @@ struct PBRRendererCreateInfoWrapper
     {
         if (CI.InputLayout.NumElements == 0)
         {
-            InputLayout    = GLTF::VertexAttributesToInputLayout(GLTF::DefaultVertexAttributes.data(), GLTF::DefaultVertexAttributes.size());
+            InputLayout    = SF_GLTF::VertexAttributesToInputLayout(SF_GLTF::DefaultVertexAttributes.data(), SF_GLTF::DefaultVertexAttributes.size());
             CI.InputLayout = InputLayout;
         }
 
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_BASE_COLOR]            = GLTF::DefaultBaseColorTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_PHYS_DESC]             = GLTF::DefaultMetallicRoughnessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_NORMAL]                = GLTF::DefaultNormalTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_OCCLUSION]             = GLTF::DefaultOcclusionTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_EMISSIVE]              = GLTF::DefaultEmissiveTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT]            = GLTF::DefaultClearcoatTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_ROUGHNESS]  = GLTF::DefaultClearcoatRoughnessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_NORMAL]     = GLTF::DefaultClearcoatNormalTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_COLOR]           = GLTF::DefaultSheenColorTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_ROUGHNESS]       = GLTF::DefaultSheenRoughnessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_ANISOTROPY]            = GLTF::DefaultAnisotropyTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE]           = GLTF::DefaultIridescenceTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE_THICKNESS] = GLTF::DefaultIridescenceThicknessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_TRANSMISSION]          = GLTF::DefaultTransmissionTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_THICKNESS]             = GLTF::DefaultThicknessTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_BASE_COLOR]            = SF_GLTF::DefaultBaseColorTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_PHYS_DESC]             = SF_GLTF::DefaultMetallicRoughnessTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_NORMAL]                = SF_GLTF::DefaultNormalTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_OCCLUSION]             = SF_GLTF::DefaultOcclusionTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_EMISSIVE]              = SF_GLTF::DefaultEmissiveTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT]            = SF_GLTF::DefaultClearcoatTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_ROUGHNESS]  = SF_GLTF::DefaultClearcoatRoughnessTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_NORMAL]     = SF_GLTF::DefaultClearcoatNormalTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_COLOR]           = SF_GLTF::DefaultSheenColorTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_ROUGHNESS]       = SF_GLTF::DefaultSheenRoughnessTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_ANISOTROPY]            = SF_GLTF::DefaultAnisotropyTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE]           = SF_GLTF::DefaultIridescenceTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE_THICKNESS] = SF_GLTF::DefaultIridescenceThicknessTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_TRANSMISSION]          = SF_GLTF::DefaultTransmissionTextureAttribId;
+        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_THICKNESS]             = SF_GLTF::DefaultThicknessTextureAttribId;
         static_assert(PBR_Renderer::TEXTURE_ATTRIB_ID_COUNT == 17, "Please update the initializer list above");
 
         if (_CI.ShaderTexturesArrayMode == PBR_Renderer::SHADER_TEXTURE_ARRAY_MODE_DYNAMIC)
@@ -128,8 +128,8 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
     }
 }
 
-void SF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
-                                        GLTF::Material&         Material,
+void SF_PBR_Renderer::InitMaterialSRB(SF_GLTF::Model&            Model,
+                                        SF_GLTF::Material&         Material,
                                         IBuffer*                pFrameAttribs,
                                         IShaderResourceBinding* pMaterialSRB,
                                         ITextureView*           pShadowMap)
@@ -300,7 +300,7 @@ void SF_PBR_Renderer::CreateResourceCacheSRB(IRenderDevice*           pDevice,
 }
 
 SF_PBR_Renderer::ModelResourceBindings SF_PBR_Renderer::CreateResourceBindings(
-    GLTF::Model& GLTFModel,
+    SF_GLTF::Model& GLTFModel,
     IBuffer*     pFrameAttribs,
     ITextureView* pShadowMap)
 {
@@ -331,7 +331,7 @@ void SF_PBR_Renderer::Begin(IRenderDevice*         pDevice,
                               IBuffer*               pFrameAttribs)
 {
     VERIFY(CacheUseInfo.pResourceMgr != nullptr, "Resource manager must not be null.");
-    VERIFY(CacheUseInfo.VtxLayoutKey != GLTF::ResourceManager::VertexLayoutKey{}, "Vertex layout key must not be null.");
+    VERIFY(CacheUseInfo.VtxLayoutKey != SF_GLTF::ResourceManager::VertexLayoutKey{}, "Vertex layout key must not be null.");
 
     Begin(pCtx);
 
@@ -369,7 +369,7 @@ void SF_PBR_Renderer::Begin(IRenderDevice*         pDevice,
     pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 }
 
-SF_PBR_Renderer::PSO_FLAGS SF_PBR_Renderer::GetMaterialPSOFlags(const GLTF::Material& Mat) const
+SF_PBR_Renderer::PSO_FLAGS SF_PBR_Renderer::GetMaterialPSOFlags(const SF_GLTF::Material& Mat) const
 {
     // Color, normal and physical descriptor maps are always enabled
     PSO_FLAGS PSOFlags =
@@ -438,16 +438,16 @@ SF_PBR_Renderer::PSO_FLAGS SF_PBR_Renderer::GetMaterialPSOFlags(const GLTF::Mate
 
 
 void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
-                               const GLTF::Model&           GLTFModel,
-                               const GLTF::ModelTransforms& Transforms,
-                               const GLTF::ModelTransforms* PrevTransforms,
+                               const SF_GLTF::Model&           GLTFModel,
+                               const SF_GLTF::ModelTransforms& Transforms,
+                               const SF_GLTF::ModelTransforms* PrevTransforms,
                                const RenderInfo&            RenderParams,
                                ModelResourceBindings*       pModelBindings,
                                ResourceCacheBindings*       pCacheBindings)
 {
-    static_assert(static_cast<LIGHT_TYPE>(GLTF::Light::TYPE::DIRECTIONAL) == LIGHT_TYPE_DIRECTIONAL, "GLTF::Light::TYPE::DIRECTIONAL != LIGHT_TYPE_DIRECTIONAL");
-    static_assert(static_cast<LIGHT_TYPE>(GLTF::Light::TYPE::POINT) == LIGHT_TYPE_POINT, "GLTF::Light::TYPE::POINT != LIGHT_TYPE_POINT");
-    static_assert(static_cast<LIGHT_TYPE>(GLTF::Light::TYPE::SPOT) == LIGHT_TYPE_SPOT, "GLTF::Light::TYPE::SPOT != LIGHT_TYPE_SPOT");
+    static_assert(static_cast<LIGHT_TYPE>(SF_GLTF::Light::TYPE::DIRECTIONAL) == LIGHT_TYPE_DIRECTIONAL, "SF_GLTF::Light::TYPE::DIRECTIONAL != LIGHT_TYPE_DIRECTIONAL");
+    static_assert(static_cast<LIGHT_TYPE>(SF_GLTF::Light::TYPE::POINT) == LIGHT_TYPE_POINT, "SF_GLTF::Light::TYPE::POINT != LIGHT_TYPE_POINT");
+    static_assert(static_cast<LIGHT_TYPE>(SF_GLTF::Light::TYPE::SPOT) == LIGHT_TYPE_SPOT, "SF_GLTF::Light::TYPE::SPOT != LIGHT_TYPE_SPOT");
 
     DEV_CHECK_ERR((pModelBindings != nullptr) ^ (pCacheBindings != nullptr), "Either model bindings or cache bindings must not be null");
     DEV_CHECK_ERR(pModelBindings == nullptr || pModelBindings->MaterialSRB.size() == GLTFModel.GetMaterials().size(),
@@ -489,19 +489,19 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
         if (!GLTFModel.IsVertexAttributeEnabled(i))
             continue;
         const auto& Attrib = GLTFModel.GetVertexAttribute(i);
-        if (strcmp(Attrib.Name, GLTF::PositionAttributeName) == 0)
+        if (strcmp(Attrib.Name, SF_GLTF::PositionAttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_NONE; // Position is always enabled
-        else if (strcmp(Attrib.Name, GLTF::NormalAttributeName) == 0)
+        else if (strcmp(Attrib.Name, SF_GLTF::NormalAttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_USE_VERTEX_NORMALS;
-        else if (strcmp(Attrib.Name, GLTF::Texcoord0AttributeName) == 0)
+        else if (strcmp(Attrib.Name, SF_GLTF::Texcoord0AttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_USE_TEXCOORD0;
-        else if (strcmp(Attrib.Name, GLTF::Texcoord1AttributeName) == 0)
+        else if (strcmp(Attrib.Name, SF_GLTF::Texcoord1AttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_USE_TEXCOORD1;
-        else if (strcmp(Attrib.Name, GLTF::JointsAttributeName) == 0)
+        else if (strcmp(Attrib.Name, SF_GLTF::JointsAttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_USE_JOINTS;
-        else if (strcmp(Attrib.Name, GLTF::VertexColorAttributeName) == 0)
+        else if (strcmp(Attrib.Name, SF_GLTF::VertexColorAttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_USE_VERTEX_COLORS;
-        else if (strcmp(Attrib.Name, GLTF::TangentAttributeName) == 0)
+        else if (strcmp(Attrib.Name, SF_GLTF::TangentAttributeName) == 0)
             VertexAttribFlags |= PSO_FLAG_USE_VERTEX_TANGENTS;
     }
 
@@ -531,11 +531,11 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
     const auto FirstIndexLocation = GLTFModel.GetFirstIndexLocation();
     const auto BaseVertex         = GLTFModel.GetBaseVertex();
 
-    const std::array<GLTF::Material::ALPHA_MODE, 3> AlphaModes //
+    const std::array<SF_GLTF::Material::ALPHA_MODE, 3> AlphaModes //
         {
-            GLTF::Material::ALPHA_MODE_OPAQUE, // Opaque primitives - first
-            GLTF::Material::ALPHA_MODE_MASK,   // Alpha-masked primitives - second
-            GLTF::Material::ALPHA_MODE_BLEND,  // Transparent primitives - last (TODO: depth sorting)
+            SF_GLTF::Material::ALPHA_MODE_OPAQUE, // Opaque primitives - first
+            SF_GLTF::Material::ALPHA_MODE_MASK,   // Alpha-masked primitives - second
+            SF_GLTF::Material::ALPHA_MODE_BLEND,  // Transparent primitives - last (TODO: depth sorting)
         };
 
     IPipelineState*         pCurrPSO = nullptr;
@@ -648,9 +648,9 @@ void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 pCtx->MapBuffer(m_PBRPrimitiveAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD, pAttribsData);
                 if (pAttribsData != nullptr)
                 {
-                    static_assert(static_cast<PBR_WORKFLOW>(GLTF::Material::PBR_WORKFLOW_METALL_ROUGH) == PBR_WORKFLOW_METALL_ROUGH, "GLTF::Material::PBR_WORKFLOW_METALL_ROUGH != PBR_WORKFLOW_METALL_ROUGH");
-                    static_assert(static_cast<PBR_WORKFLOW>(GLTF::Material::PBR_WORKFLOW_SPEC_GLOSS) == PBR_WORKFLOW_SPEC_GLOSS, "GLTF::Material::PBR_WORKFLOW_SPEC_GLOSS != PBR_WORKFLOW_SPEC_GLOSS");
-                    static_assert(static_cast<PBR_WORKFLOW>(GLTF::Material::PBR_WORKFLOW_UNLIT) == PBR_WORKFLOW_UNLIT, "GLTF::Material::PBR_WORKFLOW_UNLIT != PBR_WORKFLOW_UNLIT");
+                    static_assert(static_cast<PBR_WORKFLOW>(SF_GLTF::Material::PBR_WORKFLOW_METALL_ROUGH) == PBR_WORKFLOW_METALL_ROUGH, "SF_GLTF::Material::PBR_WORKFLOW_METALL_ROUGH != PBR_WORKFLOW_METALL_ROUGH");
+                    static_assert(static_cast<PBR_WORKFLOW>(SF_GLTF::Material::PBR_WORKFLOW_SPEC_GLOSS) == PBR_WORKFLOW_SPEC_GLOSS, "SF_GLTF::Material::PBR_WORKFLOW_SPEC_GLOSS != PBR_WORKFLOW_SPEC_GLOSS");
+                    static_assert(static_cast<PBR_WORKFLOW>(SF_GLTF::Material::PBR_WORKFLOW_UNLIT) == PBR_WORKFLOW_UNLIT, "SF_GLTF::Material::PBR_WORKFLOW_UNLIT != PBR_WORKFLOW_UNLIT");
 
                     const float4x4  NodeTransform     = NodeGlobalMatrix * RenderParams.ModelTransform;
                     const float4x4& PrevNodeTransform = (CurrPsoKey.GetFlags() & PSO_FLAG_COMPUTE_MOTION_VECTORS) != 0 ?
@@ -714,7 +714,7 @@ Uint8* WriteShaderAttribs(Uint8* pDstPtr, HostStructType* pSrc, const char* Debu
 void* SF_PBR_Renderer::WritePBRPrimitiveShaderAttribs(void*                                           pDstShaderAttribs,
                                                         const PBRPrimitiveShaderAttribsData&            AttribsData,
                                                         const std::array<int, TEXTURE_ATTRIB_ID_COUNT>& TextureAttribIndices,
-                                                        const GLTF::Material&                           Material,
+                                                        const SF_GLTF::Material&                           Material,
                                                         bool                                            TransposeMatrices)
 {
     // When adding new members, don't forget to update PBR_Renderer::GetPBRPrimitiveAttribsSize!
@@ -810,8 +810,8 @@ void* SF_PBR_Renderer::WritePBRPrimitiveShaderAttribs(void*                     
                                      return;
                                  }
 
-                                 static_assert(sizeof(HLSL::PBRMaterialTextureAttribs) == sizeof(GLTF::Material::TextureShaderAttribs),
-                                               "The sizeof(HLSL::PBRMaterialTextureAttribs) is inconsistent with sizeof(GLTF::Material::TextureShaderAttribs)");
+                                 static_assert(sizeof(HLSL::PBRMaterialTextureAttribs) == sizeof(SF_GLTF::Material::TextureShaderAttribs),
+                                               "The sizeof(HLSL::PBRMaterialTextureAttribs) is inconsistent with sizeof(SF_GLTF::Material::TextureShaderAttribs)");
                                  memcpy(pDstTextures + CurrIndex, &Material.GetTextureAttrib(SrcAttribIndex), sizeof(HLSL::PBRMaterialTextureAttribs));
                                  ++NumTextureAttribs;
                              });

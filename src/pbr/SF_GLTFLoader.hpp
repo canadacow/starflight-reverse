@@ -45,7 +45,7 @@
 #include "../../../DiligentCore/Common/interface/RefCntAutoPtr.hpp"
 #include "../../../DiligentCore/Common/interface/AdvancedMath.hpp"
 #include "../../../DiligentCore/Common/interface/STDAllocator.hpp"
-#include "GLTFResourceManager.hpp"
+#include "SF_GLTFResourceManager.hpp"
 
 namespace tinygltf
 {
@@ -63,7 +63,7 @@ namespace Diligent
 
 enum IMAGE_FILE_FORMAT : Uint8;
 
-namespace GLTF
+namespace SF_GLTF
 {
 
 class ModelBuilder;
@@ -1065,32 +1065,32 @@ public:
     void InitMaterialTextureAddressingAttribs(Material& Mat, Uint32 TextureIndex);
 
     // Ref getters for private members
-    const std::vector<Scene>& GetScenes() const { return Scenes; }
-    std::vector<Scene>& GetScenes() { return Scenes; }
+    virtual const std::vector<Scene>& GetScenes() const { return Scenes; }
+    virtual std::vector<Scene>& GetScenes() { return Scenes; }
 
-    const std::vector<Node>& GetNodes() const { return Nodes; }
-    std::vector<Node>& GetNodes() { return Nodes; }
+    virtual const std::vector<Node>& GetNodes() const { return Nodes; }
+    virtual std::vector<Node>& GetNodes() { return Nodes; }
 
-    const std::vector<Mesh>& GetMeshes() const { return Meshes; }
-    std::vector<Mesh>& GetMeshes() { return Meshes; }
+    virtual const std::vector<Mesh>& GetMeshes() const { return Meshes; }
+    virtual std::vector<Mesh>& GetMeshes() { return Meshes; }
 
-    const std::vector<Camera>& GetCameras() const { return Cameras; }
-    std::vector<Camera>& GetCameras() { return Cameras; }
+    virtual const std::vector<Camera>& GetCameras() const { return Cameras; }
+    virtual std::vector<Camera>& GetCameras() { return Cameras; }
 
-    const std::vector<Light>& GetLights() const { return Lights; }
-    std::vector<Light>& GetLights() { return Lights; }
+    virtual const std::vector<Light>& GetLights() const { return Lights; }
+    virtual std::vector<Light>& GetLights() { return Lights; }
 
-    const std::vector<Skin>& GetSkins() const { return Skins; }
-    std::vector<Skin>& GetSkins() { return Skins; }
+    virtual const std::vector<Skin>& GetSkins() const { return Skins; }
+    virtual std::vector<Skin>& GetSkins() { return Skins; }
 
-    const std::vector<Material>& GetMaterials() const { return Materials; }
-    std::vector<Material>& GetMaterials() { return Materials; }
+    virtual const std::vector<Material>& GetMaterials() const { return Materials; }
+    virtual std::vector<Material>& GetMaterials() { return Materials; }
 
-    const std::vector<Animation>& GetAnimations() const { return Animations; }
-    std::vector<Animation>& GetAnimations() { return Animations; }
+    virtual const std::vector<Animation>& GetAnimations() const { return Animations; }
+    virtual std::vector<Animation>& GetAnimations() { return Animations; }
 
-    const std::vector<std::string>& GetExtensions() const { return Extensions; }
-    std::vector<std::string>& GetExtensions() { return Extensions; }
+    virtual const std::vector<std::string>& GetExtensions() const { return Extensions; }
+    virtual std::vector<std::string>& GetExtensions() { return Extensions; }
 
 private:
     friend ModelBuilder;
