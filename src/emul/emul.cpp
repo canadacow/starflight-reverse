@@ -5,7 +5,6 @@
 #include "../cpu/cpu.h"
 #include "call.h"
 #include "findword.h"
-#include "graphics.h"
 #include "../patch/patch.h"
 #include "../tts/speech.h"
 
@@ -14,6 +13,9 @@
 #include <semaphore>
 
 #include <SDL2/SDL.h>
+
+std::binary_semaphore& GraphicsInit();
+void GraphicsQuit();
 
 int SDL_main(int argc, char *argv[]) {
 

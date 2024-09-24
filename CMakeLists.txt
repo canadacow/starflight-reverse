@@ -109,6 +109,7 @@ find_package(CURL REQUIRED)
 find_package(Magnum REQUIRED)
 find_package(unofficial-nuklear CONFIG REQUIRED)
 find_package(cereal CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 # Include FidelityFX headers
 include_directories(3rdparty/ffx/include)
@@ -142,10 +143,10 @@ set(HEADER_FILES
     src/pbr/SF_PBR_Renderer.hpp
     src/emul/DiligentShadowMapManager.hpp
     ${CURL_INCLUDE_DIRS}
+    ${nlohmann_json_INCLUDE_DIRS}/nlohmann
 )
 
 add_executable(emulatesdl WIN32
-    ${HEADER_FILES}
     src/emul/emul.cpp 
     src/emul/call.cpp 
     src/emul/platform.cpp
@@ -170,6 +171,7 @@ PRIVATE
     ${diligentcore_SOURCE_DIR}
     ${diligenttools_SOURCE_DIR}
     ${diligentfx_SOURCE_DIR}
+    ${SDL2_INCLUDE_DIRS}
 )
 
 target_precompile_headers(emulatesdl PRIVATE src/emul/common.pch)
@@ -199,6 +201,7 @@ target_link_libraries(emulatesdl PRIVATE
         avk
         Vulkan::Vulkan
         Vulkan::Headers
+        nlohmann_json::nlohmann_json
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
         ${CURL_LIBRARIES})
 
