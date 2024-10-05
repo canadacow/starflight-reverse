@@ -4,18 +4,119 @@
 namespace Diligent
 {
 
+namespace SF_GLTF
+{
+
 DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model) :
     m_Model(model), m_pDevice(pDevice), m_pContext(pContext)
 {
     // Buffers will be created after generating the plane
-    
-    //GLTF::Mesh dynamicMesh;
-    //dynamicMesh.Name = "DynamicMesh";
-    //Meshes.push_back(dynamicMesh);
+    // Create a basic GLTF model with a node containing the dynamic mesh
+
+    // Create a new node and set its properties
+    SF_GLTF::Node dynamicMeshNode{0};
+    dynamicMeshNode.Name = "DynamicMeshNode";
+    dynamicMeshNode.pMesh = nullptr; // No mesh data for now
+    dynamicMeshNode.Parent = nullptr; // Root node
+
+    // Add the node to the model
+    Nodes.push_back(dynamicMeshNode);
+
+    // Create a scene and add the node to the scene's root nodes
+    SF_GLTF::Scene scene;
+    scene.Name = "DynamicMeshScene";
+    scene.RootNodes.push_back(&Nodes.back());
+
+    scene.LinearNodes.push_back(&Nodes.back());
+
+    // Add the scene to the model
+    Scenes.push_back(scene);
+    DefaultSceneId = static_cast<int>(Scenes.size()) - 1;
 }
 
 DynamicMesh::~DynamicMesh()
 {
+}
+
+bool DynamicMesh::CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const
+{
+    // Call the base class implementation
+    bool baseCompatible = SF_GLTF::Model::CompatibleWithTransforms(Transforms);
+
+    // Additional checks specific to DynamicMesh can be added here
+    // For now, we assume DynamicMesh is always compatible if the base class is
+    return baseCompatible;
+}
+
+void DynamicMesh::ComputeTransforms(Uint32           SceneIndex,
+                                    SF_GLTF::ModelTransforms& Transforms,
+                                    const float4x4& RootTransform,
+                                    Int32            AnimationIndex,
+                                    float            Time) const
+{
+    // Call the base class implementation
+    SF_GLTF::Model::ComputeTransforms(SceneIndex, Transforms, RootTransform, AnimationIndex, Time);
+
+    // Additional transformations specific to DynamicMesh can be added here
+    // For now, we assume no additional transformations are needed
+}
+
+BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::ModelTransforms& Transforms, const SF_GLTF::ModelTransforms* DynamicTransforms) const
+{
+    BoundBox ModelAABB;
+
+    if (m_Model->CompatibleWithTransforms(Transforms))
+    {
+        VERIFY_EXPR(SceneIndex < m_Model->Scenes.size());
+        const auto& scene = m_Model->Scenes[SceneIndex];
+
+        ModelAABB.Min = float3{+FLT_MAX, +FLT_MAX, +FLT_MAX};
+        ModelAABB.Max = float3{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+
+        for (const auto* pN : scene.LinearNodes)
+        {
+            VERIFY_EXPR(pN != nullptr);
+            if (pN->pMesh != nullptr && pN->pMesh->IsValidBB())
+            {
+                const auto& GlobalMatrix = Transforms.NodeGlobalMatrices[pN->Index];
+                const auto  NodeAABB     = pN->pMesh->BB.Transform(GlobalMatrix);
+
+                ModelAABB.Min = std::min(ModelAABB.Min, NodeAABB.Min);
+                ModelAABB.Max = std::max(ModelAABB.Max, NodeAABB.Max);
+            }
+        }
+    }
+    else
+    {
+        UNEXPECTED("Incompatible transforms. Please use the ComputeTransforms() method first.");
+    }
+
+    // Measure the nodes on this object directly
+    if (CompatibleWithTransforms(*DynamicTransforms))
+    {
+        VERIFY_EXPR(SceneIndex < Scenes.size());
+        const auto& scene = Scenes[SceneIndex];
+
+        for (const auto* pN : scene.LinearNodes)
+        {
+            VERIFY_EXPR(pN != nullptr);
+            if (pN->pMesh != nullptr && pN->pMesh->IsValidBB())
+            {
+                const auto& GlobalMatrix = DynamicTransforms->NodeGlobalMatrices[pN->Index];
+                const auto  NodeAABB     = pN->pMesh->BB.Transform(GlobalMatrix);
+
+                ModelAABB.Min = std::min(ModelAABB.Min, NodeAABB.Min);
+                ModelAABB.Max = std::max(ModelAABB.Max, NodeAABB.Max);
+            }
+        }
+    }
+    else
+    {
+        UNEXPECTED("Incompatible transforms. Please use the ComputeTransforms() method first.");
+    }
+
+    return ModelAABB;
+
 }
 
 void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
@@ -24,7 +125,7 @@ void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
     const int numVerticesPerRow = numTiles + 1;
     const int numVertices = numVerticesPerRow * numVerticesPerRow;
 
-    m_Vertices.resize(numVertices * 3); // 3 coordinates per vertex (x, y, z)
+    m_Vertices.resize(numVertices); // 4 coordinates per vertex (x, y, z, padding)
     m_Indices.resize(numTiles * numTiles * 6); // 6 indices per tile (2 triangles)
 
     int vertexIndex = 0;
@@ -38,9 +139,10 @@ void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
             float z = (row / static_cast<float>(numTiles)) * height;
             float y = tileHeight;
 
-            m_Vertices[vertexIndex++] = x;
-            m_Vertices[vertexIndex++] = y;
-            m_Vertices[vertexIndex++] = z;
+            auto& vert = m_Vertices[vertexIndex++];
+            vert.posX = x;
+            vert.posY = y;
+            vert.posZ = z;
 
             if (row < numTiles && col < numTiles)
             {
@@ -62,8 +164,15 @@ void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
         }
     }
 
+    m_Mesh = std::make_shared<SF_GLTF::Mesh>();
+    m_Mesh->Primitives.emplace_back(0, m_Indices.size(), m_Vertices.size() / 4, 0, float3{}, float3{});
+
+    Nodes[0].pMesh = m_Mesh.get();
+
     CreateBuffers();
     m_GPUDataInitialized = false;
+
+    InitializeVertexAndIndexData();
 }
 
 void DynamicMesh::CreateBuffers()
@@ -74,7 +183,7 @@ void DynamicMesh::CreateBuffers()
     VertBuffDesc.Usage = USAGE_DYNAMIC;
     VertBuffDesc.BindFlags = BIND_VERTEX_BUFFER;
     VertBuffDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
-    VertBuffDesc.Size = sizeof(float) * m_Vertices.size();
+    VertBuffDesc.Size = sizeof(VertexBuff) * m_Vertices.size();
     m_pDevice->CreateBuffer(VertBuffDesc, nullptr, &m_VertexBuffer);
 
     // Initialize index buffer
@@ -89,12 +198,12 @@ void DynamicMesh::CreateBuffers()
 
 void DynamicMesh::PrepareResources()
 {
-    if (m_GPUDataInitialized)
-        return;
+    //if (m_GPUDataInitialized)
+    //    return;
 
     // Update vertex buffer
     MapHelper<float> Vertices(m_pContext, m_VertexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
-    memcpy(Vertices, m_Vertices.data(), sizeof(float) * m_Vertices.size());
+    memcpy(Vertices, m_Vertices.data(), sizeof(VertexBuff) * m_Vertices.size());
 
     // Update index buffer
     MapHelper<Uint32> Indices(m_pContext, m_IndexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
@@ -103,16 +212,22 @@ void DynamicMesh::PrepareResources()
     m_GPUDataInitialized = true;
 }
 
-void DynamicMesh::UpdateVertexData(const std::vector<float>& vertices)
+void DynamicMesh::InitializeVertexAndIndexData()
 {
-    m_Vertices = vertices;
-    m_GPUDataInitialized = false;
+    // Initialize VertexData
+    VertexData.Strides = { 32 }; // Assuming 3 floats per vertex (x, y, z)
+    VertexData.Buffers = { m_VertexBuffer };
+    VertexData.pAllocation = nullptr; // Assuming no suballocation
+    VertexData.PoolId = 0;
+    VertexData.EnabledAttributeFlags = 0; // Set appropriate flags if needed
+
+    // Initialize IndexData
+    IndexData.pBuffer = m_IndexBuffer;
+    IndexData.pAllocation = nullptr; // Assuming no suballocation
+    IndexData.AllocatorId = 0;
+    IndexData.IndexSize = sizeof(Uint32);
 }
 
-void DynamicMesh::UpdateIndexData(const std::vector<Uint32>& indices)
-{
-    m_Indices = indices;
-    m_GPUDataInitialized = false;
-}
+} // namespace SF_GLTF
 
 } // namespace Diligent

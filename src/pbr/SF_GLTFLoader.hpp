@@ -841,9 +841,12 @@ struct ModelTransforms
     std::vector<AnimationTransforms> NodeAnimations;
 };
 
+class DynamicMesh;
+
 struct Model
 {
-private:
+    friend class Diligent::SF_GLTF::DynamicMesh;
+protected:
     std::vector<Scene>       Scenes;
     std::vector<Node>        Nodes;
     std::vector<Mesh>        Meshes;
@@ -1037,15 +1040,15 @@ public:
     ///       use Material.TextureIds[TextureAttributeIndex].
     int GetTextureAttributeIndex(const char* Name) const;
 
-    bool CompatibleWithTransforms(const ModelTransforms& Transforms) const;
+    virtual bool CompatibleWithTransforms(const ModelTransforms& Transforms) const;
 
-    void ComputeTransforms(Uint32           SceneIndex,
-                           ModelTransforms& Transforms,
-                           const float4x4&  RootTransform  = float4x4::Identity(),
-                           Int32            AnimationIndex = -1,
-                           float            Time           = 0) const;
+    virtual void ComputeTransforms(Uint32           SceneIndex,
+                                   ModelTransforms& Transforms,
+                                   const float4x4&  RootTransform  = float4x4::Identity(),
+                                   Int32            AnimationIndex = -1,
+                                   float            Time           = 0) const;
 
-    BoundBox ComputeBoundingBox(Uint32 SceneIndex, const ModelTransforms& Transforms) const;
+    virtual BoundBox ComputeBoundingBox(Uint32 SceneIndex, const ModelTransforms& Transforms, const ModelTransforms* DynamicTransforms) const;
 
     size_t GetTextureCount() const
     {
@@ -1113,7 +1116,7 @@ private:
     // TextureIdx is the texture index in the GLTF file and also the Textures array.
     float GetTextureAlphaCutoffValue(int TextureIdx) const;
 
-private:
+protected:
     std::atomic_bool GPUDataInitialized{false};
 
     std::unique_ptr<void, STDDeleter<void, IMemoryAllocator>> pAttributesData;

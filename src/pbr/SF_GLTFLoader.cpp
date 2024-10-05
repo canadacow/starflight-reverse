@@ -1959,7 +1959,7 @@ void Model::LoadFromFile(IRenderDevice*         pDevice,
     Extensions = gltf_model.extensionsUsed;
 }
 
-BoundBox Model::ComputeBoundingBox(Uint32 SceneIndex, const ModelTransforms& Transforms) const
+BoundBox Model::ComputeBoundingBox(Uint32 SceneIndex, const ModelTransforms& Transforms, const ModelTransforms* DynamicTransforms) const
 {
     BoundBox ModelAABB;
 

@@ -6,7 +6,10 @@
 namespace Diligent
 {
 
-class DynamicMesh : public SF_GLTF::Model
+namespace SF_GLTF
+{
+
+class DynamicMesh : public Model
 {
 public:
     DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model);
@@ -16,8 +19,6 @@ public:
 
     void CreateBuffers();
 
-    void UpdateVertexData(const std::vector<float>& vertices);
-    void UpdateIndexData(const std::vector<Uint32>& indices);
     void GeneratePlane(float width, float height, float tileHeight);
 
     const std::vector<SF_GLTF::Material>& GetMaterials() const override
@@ -30,7 +31,32 @@ public:
         return m_Model->GetMaterials();
     }
 
+
+    virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
+
+    virtual void ComputeTransforms(Uint32           SceneIndex,
+                                    SF_GLTF::ModelTransforms& Transforms,
+                                    const float4x4& RootTransform = float4x4::Identity(),
+                                    Int32            AnimationIndex = -1,
+                                    float            Time = 0) const override;
+
+    virtual BoundBox ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::ModelTransforms& Transforms, const SF_GLTF::ModelTransforms* DynamicTransforms) const override;
+
 private:
+
+    void InitializeVertexAndIndexData();
+
+    struct VertexBuff
+    {
+        float posX;
+        float posY;
+        float posZ;
+        float normalX;
+        float normalY;
+        float normalZ;
+        float texU;
+        float texV;
+    };
 
     RefCntAutoPtr<IBuffer> m_VertexBuffer;
     RefCntAutoPtr<IBuffer> m_IndexBuffer;
@@ -38,10 +64,13 @@ private:
     IRenderDevice* m_pDevice;
     IDeviceContext* m_pContext; 
 
-    std::vector<float> m_Vertices;
+    std::vector<VertexBuff> m_Vertices;
     std::vector<Uint32> m_Indices;
+    std::shared_ptr<SF_GLTF::Mesh> m_Mesh;
 
     bool m_GPUDataInitialized = false;
 };
+
+} // namespace SF_GLTF
 
 } // namespace Diligent

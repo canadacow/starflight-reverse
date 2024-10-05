@@ -400,7 +400,8 @@ struct GraphicsContext
         const SF_GLTF::Node* camera;
         std::vector<const SF_GLTF::Node*> lights;
 
-        std::unique_ptr<DynamicMesh> dynamicMesh;
+        std::unique_ptr<SF_GLTF::DynamicMesh> dynamicMesh;
+        std::array<SF_GLTF::ModelTransforms, 2> dynamicMeshTransforms; // [0] - current frame, [1] - previous frame
     };
 
     SFModel station{};
@@ -4332,7 +4333,7 @@ void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
     float4x4 RotationMatrixModel = float4x4::RotationY(axisOne);
 
     s_gc.planet.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
-    s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
+    s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0], nullptr);
 
     // Center and scale model
     float  MaxDim = 0;
@@ -4358,7 +4359,7 @@ void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.planet.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0], s_gc.planet.modelTransform);
         
-    s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
+    s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0], nullptr);
     s_gc.planet.transforms[1] = s_gc.planet.transforms[0];
 
     float YFov = PI_F / 4.0f;
@@ -4571,8 +4572,8 @@ void InitTerrain()
 {
     InitModel("61x61plane.glb", s_gc.terrain, 0);
 
-    s_gc.terrain.dynamicMesh = std::make_unique<DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlane(1.0f, 1.0f, 1.0f);
+    s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
+    s_gc.terrain.dynamicMesh->GeneratePlane(2.0f, 2.0f, 1.0f);
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
@@ -4587,7 +4588,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 RotationMatrixModel = float4x4::Identity();
 
     s_gc.terrain.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
-    s_gc.terrain.aabb = s_gc.terrain.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
+    s_gc.terrain.dynamicMesh->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.dynamicMeshTransforms[0]);
+    s_gc.terrain.aabb = s_gc.terrain.dynamicMesh->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0], &s_gc.terrain.dynamicMeshTransforms[0]);
 
     // Center and scale model
     float  MaxDim = 0;
@@ -4612,9 +4614,11 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     s_gc.terrain.scaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.terrain.scale);
 
     s_gc.terrain.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0], s_gc.terrain.modelTransform);
+    s_gc.terrain.dynamicMesh->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.dynamicMeshTransforms[0], s_gc.terrain.modelTransform);
 
-    s_gc.terrain.aabb = s_gc.terrain.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
+    s_gc.terrain.aabb = s_gc.terrain.dynamicMesh->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0], &s_gc.terrain.dynamicMeshTransforms[0]);
     s_gc.terrain.transforms[1] = s_gc.terrain.transforms[0];
+    s_gc.terrain.dynamicMeshTransforms[1] = s_gc.terrain.dynamicMeshTransforms[0];
 
     float YFov = PI_F / 4.0f;
     float ZNear = 0.1f;
@@ -5483,7 +5487,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     float4x4 RotationMatrixModel = float4x4::RotationY(axisTwo) * float4x4::RotationZ(axisOne);
 
     s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
-    s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
+    s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], nullptr);
 
     // Center and scale model
     float  MaxDim = 0;
@@ -5554,7 +5558,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], s_gc.station.modelTransform, animIndex, timeElapsed);
         
-    s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
+    s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], nullptr);
     s_gc.station.transforms[1] = s_gc.station.transforms[0];
 
     float YFov = PI_F / 4.0f;
@@ -5791,6 +5795,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     const auto& CurrTransforms = model.transforms[inFlightIndex & 0x01];
     const auto& PrevTransforms = model.transforms[(inFlightIndex + 1) & 0x01];
 
+    const auto& DynamicCurrTransforms = model.dynamicMeshTransforms[inFlightIndex & 0x01];
+    const auto& DynamicPrevTransforms = model.dynamicMeshTransforms[(inFlightIndex + 1) & 0x01];
+
+
     MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
 
     if (model.dynamicMesh)
@@ -5930,7 +5938,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
             if(model.dynamicMesh)
             {
-                s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, CurrTransforms, &PrevTransforms, s_gc.renderParams, &model.bindings);
+                s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, s_gc.renderParams, &model.bindings);
             }
         }
 
