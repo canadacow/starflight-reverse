@@ -295,6 +295,8 @@ public:
 
     static constexpr Uint32 InvalidTextureAttribIdx = ~0u;
 
+    std::string Name;
+
     Uint32 GetMaxActiveTextureAttribIdx() const
     {
         return ActiveTextureAttribs == 0 ? InvalidTextureAttribIdx : PlatformMisc::GetMSB(ActiveTextureAttribs);

@@ -1342,6 +1342,8 @@ void Model::LoadMaterials(const tinygltf::Model& gltf_model, const ModelCreateIn
         Material        Mat;
         MaterialBuilder MatBuilder{Mat};
 
+        Mat.Name = gltf_mat.name;
+
         auto FindTexture = [&MatBuilder](const TextureAttributeDesc& Attrib, const tinygltf::ParameterMap& Mapping) {
             auto tex_it = Mapping.find(Attrib.Name);
             if (tex_it == Mapping.end())

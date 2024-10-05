@@ -144,6 +144,15 @@ void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
             vert.posY = y;
             vert.posZ = z;
 
+            // Compute normals
+            vert.normalX = 0.0f;
+            vert.normalY = 1.0f;
+            vert.normalZ = 0.0f;
+
+            // Compute UV coordinates
+            vert.texU = col / static_cast<float>(numTiles);
+            vert.texV = row / static_cast<float>(numTiles);
+
             if (row < numTiles && col < numTiles)
             {
                 int topLeft = row * numVerticesPerRow + col;
@@ -163,9 +172,19 @@ void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
             }
         }
     }
+    
+    Uint32 materialId = 0;
+    for (size_t i = 0; i < m_Model->Materials.size(); ++i)
+    {
+        if (m_Model->Materials[i].Name == "TestPlane")
+        {
+            materialId = static_cast<Uint32>(i);
+            break;
+        }
+    }
 
     m_Mesh = std::make_shared<SF_GLTF::Mesh>();
-    m_Mesh->Primitives.emplace_back(0, m_Indices.size(), m_Vertices.size() / 4, 0, float3{}, float3{});
+    m_Mesh->Primitives.emplace_back(0, m_Indices.size(), m_Vertices.size() / 4, materialId, float3{}, float3{});
 
     Nodes[0].pMesh = m_Mesh.get();
 
@@ -215,17 +234,23 @@ void DynamicMesh::PrepareResources()
 void DynamicMesh::InitializeVertexAndIndexData()
 {
     // Initialize VertexData
-    VertexData.Strides = { 32 }; // Assuming 3 floats per vertex (x, y, z)
+    VertexData.Strides = { 0x20 }; // Assuming 3 floats per vertex (x, y, z)
     VertexData.Buffers = { m_VertexBuffer };
     VertexData.pAllocation = nullptr; // Assuming no suballocation
     VertexData.PoolId = 0;
-    VertexData.EnabledAttributeFlags = 0; // Set appropriate flags if needed
+    VertexData.EnabledAttributeFlags = 0x7; // Position, Normal, Tangent, Color
 
     // Initialize IndexData
     IndexData.pBuffer = m_IndexBuffer;
     IndexData.pAllocation = nullptr; // Assuming no suballocation
     IndexData.AllocatorId = 0;
     IndexData.IndexSize = sizeof(Uint32);
+
+    NumVertexAttributes = m_Model->GetNumVertexAttributes();
+    VertexAttributes = m_Model->VertexAttributes;
+
+    NumTextureAttributes = m_Model->GetNumTextureAttributes();
+    TextureAttributes = m_Model->TextureAttributes;
 }
 
 } // namespace SF_GLTF
