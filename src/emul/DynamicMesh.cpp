@@ -10,24 +10,24 @@ namespace SF_GLTF
 DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model) :
     m_Model(model), m_pDevice(pDevice), m_pContext(pContext)
 {
-    // Buffers will be created after generating the plane
-    // Create a basic GLTF model with a node containing the dynamic mesh
+    for(int i = 0; i < numBigTiles * numBigTiles; ++i)
+    {
+        SF_GLTF::Node dynamicMeshNode{i};
+        dynamicMeshNode.Name = "DynamicMeshNode" + std::to_string(i);
+        dynamicMeshNode.pMesh = nullptr; // No mesh data for now
+        dynamicMeshNode.Parent = nullptr; // Root node
 
-    // Create a new node and set its properties
-    SF_GLTF::Node dynamicMeshNode{0};
-    dynamicMeshNode.Name = "DynamicMeshNode";
-    dynamicMeshNode.pMesh = nullptr; // No mesh data for now
-    dynamicMeshNode.Parent = nullptr; // Root node
-
-    // Add the node to the model
-    Nodes.push_back(dynamicMeshNode);
+        Nodes.emplace_back(dynamicMeshNode);
+    }
 
     // Create a scene and add the node to the scene's root nodes
     SF_GLTF::Scene scene;
     scene.Name = "DynamicMeshScene";
-    scene.RootNodes.push_back(&Nodes.back());
-
-    scene.LinearNodes.push_back(&Nodes.back());
+    for (auto& node : Nodes)
+    {
+        scene.RootNodes.push_back(&node);
+        scene.LinearNodes.push_back(&node);
+    }
 
     // Add the scene to the model
     Scenes.push_back(scene);
@@ -119,7 +119,7 @@ BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::Model
 
 }
 
-void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
+void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
 {
     const int numTiles = 8;
     const int numVerticesPerRow = numTiles + 1;
@@ -186,7 +186,17 @@ void DynamicMesh::GeneratePlane(float width, float height, float tileHeight)
     m_Mesh = std::make_shared<SF_GLTF::Mesh>();
     m_Mesh->Primitives.emplace_back(0, m_Indices.size(), m_Vertices.size() / 4, materialId, float3{}, float3{});
 
-    Nodes[0].pMesh = m_Mesh.get();
+    float offsetX = (numBigTiles * width) / 2.0f;
+    float offsetY = (numBigTiles * height) / 2.0f;
+    for (int i = 0; i < numBigTiles; ++i)
+    {
+        for (int j = 0; j < numBigTiles; ++j)
+        {
+            uint64_t node = i * numBigTiles + j;
+            Nodes[node].pMesh = m_Mesh.get();
+            Nodes[node].Matrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
+        }
+    }
 
     CreateBuffers();
     m_GPUDataInitialized = false;

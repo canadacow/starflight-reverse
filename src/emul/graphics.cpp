@@ -4573,7 +4573,7 @@ void InitTerrain()
     InitModel("61x61plane.glb", s_gc.terrain, 0);
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlane(2.0f, 2.0f, 1.0f);
+    s_gc.terrain.dynamicMesh->GeneratePlanes(2.0f, 2.0f, 1.0f);
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)

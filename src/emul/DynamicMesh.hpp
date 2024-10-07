@@ -19,7 +19,7 @@ public:
 
     void CreateBuffers();
 
-    void GeneratePlane(float width, float height, float tileHeight);
+    void GeneratePlanes(float width, float height, float tileHeight);
 
     const std::vector<SF_GLTF::Material>& GetMaterials() const override
     {
@@ -43,6 +43,8 @@ public:
     virtual BoundBox ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::ModelTransforms& Transforms, const SF_GLTF::ModelTransforms* DynamicTransforms) const override;
 
 private:
+
+    const int numBigTiles = 61;
 
     void InitializeVertexAndIndexData();
 
