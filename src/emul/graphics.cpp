@@ -573,6 +573,8 @@ struct ShadowMap
         return m_ShadowMapMgr.GetSRV();
     }
 
+    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh);
+
 private:
 
     HLSL::LightAttribs m_LightAttribs;
@@ -589,8 +591,6 @@ private:
     RefCntAutoPtr<ISampler> m_pFilterableShadowMapSampler;
 
     //DXSDKMesh m_Mesh;
-
-    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh);
 };
 
 void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex = 0);
@@ -979,8 +979,6 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
     SMMgrInitInfo.pFilterableShadowMapSampler = m_pFilterableShadowMapSampler;
 
     m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
-
-    InitializeResourceBindings(mesh);
 }
 
 void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
@@ -1062,7 +1060,14 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-        DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+        if (model.dynamicMesh)
+        {
+            DrawMesh(s_gc.m_pImmediateContext, *model.dynamicMesh, model.dynamicMeshTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+        }
+        else
+        {
+            DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+        }
     }
 
     const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(0).Proj;
@@ -3304,6 +3309,8 @@ static int GraphicsInitThread()
 
     s_gc.shadowMap = std::make_unique<ShadowMap>();
     s_gc.shadowMap->Initialize(s_gc.station.model);
+    s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model);
+    s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
 
     InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
 
@@ -5934,11 +5941,13 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.renderParams.AlphaModes &= AlphaModes;
         if (s_gc.renderParams.AlphaModes != SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_NONE)
         {
-            s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.model, CurrTransforms, &PrevTransforms, s_gc.renderParams, &model.bindings);
-
-            if(model.dynamicMesh)
+            if (model.dynamicMesh)
             {
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, s_gc.renderParams, &model.bindings);
+            }
+            else
+            {
+                s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.model, CurrTransforms, &PrevTransforms, s_gc.renderParams, &model.bindings);
             }
         }
 

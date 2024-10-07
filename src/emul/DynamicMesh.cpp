@@ -215,6 +215,15 @@ void DynamicMesh::CreateBuffers()
     VertBuffDesc.Size = sizeof(VertexBuff) * m_Vertices.size();
     m_pDevice->CreateBuffer(VertBuffDesc, nullptr, &m_VertexBuffer);
 
+    // Initialize second vertex buffer
+    BufferDesc VertBuffDesc2;
+    VertBuffDesc2.Name = "Dynamic vertex buffer 2";
+    VertBuffDesc2.Usage = USAGE_DYNAMIC;
+    VertBuffDesc2.BindFlags = BIND_VERTEX_BUFFER;
+    VertBuffDesc2.CPUAccessFlags = CPU_ACCESS_WRITE;
+    VertBuffDesc2.Size = sizeof(VertexBuff2) * m_Vertices.size();
+    m_pDevice->CreateBuffer(VertBuffDesc2, nullptr, &m_VertexBuffer2);
+
     // Initialize index buffer
     BufferDesc IndBuffDesc;
     IndBuffDesc.Name = "Dynamic index buffer";
@@ -234,6 +243,10 @@ void DynamicMesh::PrepareResources()
     MapHelper<float> Vertices(m_pContext, m_VertexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
     memcpy(Vertices, m_Vertices.data(), sizeof(VertexBuff) * m_Vertices.size());
 
+    // Update second vertex buffer
+    MapHelper<float> Vertices2(m_pContext, m_VertexBuffer2, MAP_WRITE, MAP_FLAG_DISCARD);
+    memset(Vertices2, 0, sizeof(VertexBuff2) * m_Vertices.size());
+
     // Update index buffer
     MapHelper<Uint32> Indices(m_pContext, m_IndexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
     memcpy(Indices, m_Indices.data(), sizeof(Uint32) * m_Indices.size());
@@ -244,8 +257,8 @@ void DynamicMesh::PrepareResources()
 void DynamicMesh::InitializeVertexAndIndexData()
 {
     // Initialize VertexData
-    VertexData.Strides = { 0x20 }; // Assuming 3 floats per vertex (x, y, z)
-    VertexData.Buffers = { m_VertexBuffer };
+    VertexData.Strides = { 0x20, 0x20 }; // Assuming 3 floats per vertex (x, y, z)
+    VertexData.Buffers = { m_VertexBuffer, m_VertexBuffer2 };
     VertexData.pAllocation = nullptr; // Assuming no suballocation
     VertexData.PoolId = 0;
     VertexData.EnabledAttributeFlags = 0x7; // Position, Normal, Tangent, Color

@@ -44,7 +44,7 @@ public:
 
 private:
 
-    const int numBigTiles = 61;
+    const int numBigTiles = 9;
 
     void InitializeVertexAndIndexData();
 
@@ -60,7 +60,20 @@ private:
         float texV;
     };
 
+    struct VertexBuff2
+    {
+        float jointX;
+        float jointY;
+        float jointZ;
+        float jointW;
+        float weightX;
+        float weightY;
+        float weightZ;
+        float weightW;
+    };
+
     RefCntAutoPtr<IBuffer> m_VertexBuffer;
+    RefCntAutoPtr<IBuffer> m_VertexBuffer2;
     RefCntAutoPtr<IBuffer> m_IndexBuffer;
     std::shared_ptr<SF_GLTF::Model> m_Model;
     IRenderDevice* m_pDevice;
