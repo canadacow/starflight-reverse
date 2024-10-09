@@ -103,7 +103,7 @@ namespace HLSL
 
 //#define SF_PBR_Renderer GLTF_PBR_Renderer
 //#include "GLTF_PBR_Renderer.hpp"
-#include "../pbr/SF_PBR_Renderer.hpp"
+#include "../pbr/SF_GLTF_PBR_Renderer.hpp"
 
 #include "BasicMath.hpp"
 #include "GBuffer.hpp"
@@ -390,7 +390,7 @@ struct GraphicsContext
     struct SFModel
     {
         std::shared_ptr<SF_GLTF::Model> model;
-        SF_PBR_Renderer::ModelResourceBindings bindings;
+        SF_GLTF_PBR_Renderer::ModelResourceBindings bindings;
         BoundBox aabb;
         std::array<SF_GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
         float4x4                             modelTransform;
@@ -425,9 +425,9 @@ struct GraphicsContext
 
     std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
 
-    std::unique_ptr<SF_PBR_Renderer> pbrRenderer;
+    std::unique_ptr<SF_GLTF_PBR_Renderer> pbrRenderer;
     std::unique_ptr<GBuffer> gBuffer;
-    SF_PBR_Renderer::RenderInfo renderParams;
+    SF_GLTF_PBR_Renderer::RenderInfo renderParams;
     ApplyPosteffects applyPostFX;
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
@@ -566,9 +566,9 @@ struct ShadowMap
                 const SF_GLTF::Model& GLTFModel,
                 const SF_GLTF::ModelTransforms& Transforms,
                 const HLSL::CameraAttribs& cameraAttribs,
-                const SF_PBR_Renderer::RenderInfo & RenderParams);
+                const SF_GLTF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model);
+    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model);
 
     ITextureView* GetShadowMap()
     {
@@ -718,7 +718,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const SF_GLTF::Model& GLTFModel,
                          const SF_GLTF::ModelTransforms& Transforms,
                          const HLSL::CameraAttribs& cameraAttribs,
-                         const SF_PBR_Renderer::RenderInfo& RenderParams)
+                         const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams)
 {
     // Set the appropriate shadow pipeline state object and shader resource binding
     auto& pPSO = m_RenderMeshShadowPSO[0];
@@ -983,7 +983,7 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
     m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
+void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
     auto camWorld = CurrCamAttribs.f4Position;
@@ -2997,7 +2997,7 @@ static void InitPBRRenderer(ITextureView* shadowMap)
 
     s_gc.gBuffer = std::make_unique<GBuffer>(GBufferElems, _countof(GBufferElems));
 
-    SF_PBR_Renderer::CreateInfo RendererCI{};
+    SF_GLTF_PBR_Renderer::CreateInfo RendererCI{};
 
     RendererCI.EnableClearCoat = true;
     RendererCI.EnableSheen = true;
@@ -3015,27 +3015,27 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     s_gc.renderParams = {};
 
     s_gc.renderParams.Flags =
-        SF_PBR_Renderer::PSO_FLAG_DEFAULT |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_CLEAR_COAT |
-        SF_PBR_Renderer::PSO_FLAG_ALL_TEXTURES |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_SHEEN |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_ANISOTROPY |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_IRIDESCENCE |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_TRANSMISSION |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_VOLUME |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM |
-        SF_PBR_Renderer::PSO_FLAG_ENABLE_SHADOWS;
+        SF_GLTF_PBR_Renderer::PSO_FLAG_DEFAULT |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_CLEAR_COAT |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ALL_TEXTURES |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_SHEEN |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_ANISOTROPY |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_IRIDESCENCE |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TRANSMISSION |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_VOLUME |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM |
+        SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_SHADOWS;
 
-    s_gc.renderParams.Flags &= ~SF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING;
-    s_gc.renderParams.Flags |= SF_PBR_Renderer::PSO_FLAG_COMPUTE_MOTION_VECTORS;
-    s_gc.renderParams.Flags |= SF_PBR_Renderer::PSO_FLAG_USE_AO_MAP;
+    s_gc.renderParams.Flags &= ~SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING;
+    s_gc.renderParams.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_COMPUTE_MOTION_VECTORS;
+    s_gc.renderParams.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_AO_MAP;
 
     RendererCI.NumRenderTargets = GBUFFER_RT_NUM_COLOR_TARGETS;
     for (Uint32 i = 0; i < RendererCI.NumRenderTargets; ++i)
         RendererCI.RTVFormats[i] = s_gc.gBuffer->GetElementDesc(i).Format;
     RendererCI.DSVFormat = s_gc.gBuffer->GetElementDesc(GBUFFER_RT_DEPTH0).Format;
 
-    s_gc.pbrRenderer = std::make_unique<SF_PBR_Renderer>(s_gc.m_pDevice, nullptr, s_gc.m_pImmediateContext, RendererCI);
+    s_gc.pbrRenderer = std::make_unique<SF_GLTF_PBR_Renderer>(s_gc.m_pDevice, nullptr, s_gc.m_pImmediateContext, RendererCI);
 
     CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetPRBFrameAttribsSize(), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
 
@@ -5906,7 +5906,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
             
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
-            SF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, model.scale };
+            SF_GLTF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, model.scale };
 
             if (LightNode.Name == "Sun")
             {
@@ -5918,12 +5918,12 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 AttribsData.ShadowMapIndex = -1;
             }
             
-            SF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + i);
+            SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + i);
         }
     }
     else
     {
-        SF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, model.scale }, Lights);
+        SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, model.scale }, Lights);
         LightCount = 1;
     }
 
@@ -5953,11 +5953,11 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     Renderer.MipBias = 0;
     Renderer.LightCount = LightCount;
 
-    auto RenderModel = [&](SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
+    auto RenderModel = [&](SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
         const auto OrigAlphaModes = s_gc.renderParams.AlphaModes;
 
         s_gc.renderParams.AlphaModes &= AlphaModes;
-        if (s_gc.renderParams.AlphaModes != SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_NONE)
+        if (s_gc.renderParams.AlphaModes != SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_NONE)
         {
             if (model.dynamicMesh)
             {
@@ -5972,17 +5972,17 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.renderParams.AlphaModes = OrigAlphaModes;
     };
 
-    s_gc.renderParams.AlphaModes = SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_ALL;
+    s_gc.renderParams.AlphaModes = SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_ALL;
 
     s_gc.pbrRenderer->Begin(s_gc.m_pImmediateContext);
 
-    RenderModel(SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_OPAQUE | SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_MASK);
+    RenderModel(SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_OPAQUE | SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_MASK);
 
     {
         ITextureView* pEnvMapSRV = model.env;
 
         HLSL::ToneMappingAttribs TMAttribs;
-        TMAttribs.iToneMappingMode     = (s_gc.renderParams.Flags & SF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING) ? TONE_MAPPING_MODE_UNCHARTED2 : TONE_MAPPING_MODE_NONE;
+        TMAttribs.iToneMappingMode     = (s_gc.renderParams.Flags & SF_GLTF_PBR_Renderer::PSO_FLAG_ENABLE_TONE_MAPPING) ? TONE_MAPPING_MODE_UNCHARTED2 : TONE_MAPPING_MODE_NONE;
         TMAttribs.bAutoExposure        = 0;
         TMAttribs.fMiddleGray          = m_ShaderAttribs.MiddleGray;
         TMAttribs.bLightAdaptation     = 0;
@@ -5996,14 +5996,14 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         // It is essential to write zero alpha because we use alpha channel
         // to attenuate SSR for transparent surfaces.
         EnvMapAttribs.Alpha                = 0.0;
-        EnvMapAttribs.ConvertOutputToSRGB  = (s_gc.renderParams.Flags & SF_PBR_Renderer::PSO_FLAG_CONVERT_OUTPUT_TO_SRGB) != 0;
+        EnvMapAttribs.ConvertOutputToSRGB  = (s_gc.renderParams.Flags & SF_GLTF_PBR_Renderer::PSO_FLAG_CONVERT_OUTPUT_TO_SRGB) != 0;
         EnvMapAttribs.ComputeMotionVectors = true;
 
         s_gc.envMapRenderer->Prepare(s_gc.m_pImmediateContext, EnvMapAttribs, TMAttribs);
         s_gc.envMapRenderer->Render(s_gc.m_pImmediateContext);
     }    
 
-    RenderModel(SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
+    RenderModel(SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
 
     {
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);

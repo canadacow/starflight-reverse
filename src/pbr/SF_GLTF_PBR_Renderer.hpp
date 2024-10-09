@@ -45,7 +45,7 @@ struct PBRLightAttribs;
 } // namespace HLSL
 
 /// Implementation of a GLTF PBR renderer
-class SF_PBR_Renderer : public PBR_Renderer
+class SF_GLTF_PBR_Renderer : public PBR_Renderer
 {
 public:
     struct CreateInfo : public PBR_Renderer::CreateInfo
@@ -63,7 +63,7 @@ public:
     };
 
     /// Initializes the renderer
-    SF_PBR_Renderer(IRenderDevice*     pDevice,
+    SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
                       IRenderStateCache* pStateCache,
                       IDeviceContext*    pCtx,
                       const CreateInfo&  CI);
@@ -306,6 +306,6 @@ private:
     PsoCacheAccessor m_WireframePSOCache;
 };
 
-DEFINE_FLAG_ENUM_OPERATORS(SF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS)
+DEFINE_FLAG_ENUM_OPERATORS(SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS)
 
 } // namespace Diligent

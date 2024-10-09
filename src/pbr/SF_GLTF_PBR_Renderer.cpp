@@ -25,7 +25,7 @@
  *  of the possibility of such damages.
  */
 
-#include "SF_PBR_Renderer.hpp"
+#include "SF_GLTF_PBR_Renderer.hpp"
 
 #include <array>
 #include <functional>
@@ -40,7 +40,7 @@
 namespace Diligent
 {
 
-PBR_Renderer::ALPHA_MODE SF_PBR_Renderer::GltfAlphaModeToAlphaMode(SF_GLTF::Material::ALPHA_MODE GltfAlphaMode)
+    PBR_Renderer::ALPHA_MODE SF_GLTF_PBR_Renderer::GltfAlphaModeToAlphaMode(SF_GLTF::Material::ALPHA_MODE GltfAlphaMode)
 {
     static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_OPAQUE) == ALPHA_MODE_OPAQUE, "SF_GLTF::Material::ALPHA_MODE_OPAQUE != ALPHA_MODE_OPAQUE");
     static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_MASK) == ALPHA_MODE_MASK, "SF_GLTF::Material::ALPHA_MODE_MASK != ALPHA_MODE_MASK");
@@ -104,7 +104,7 @@ struct PBRRendererCreateInfoWrapper
 };
 
 } // namespace
-SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
+SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
                                      IRenderStateCache* pStateCache,
                                      IDeviceContext*    pCtx,
                                      const CreateInfo&  CI) :
@@ -128,7 +128,7 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
     }
 }
 
-void SF_PBR_Renderer::InitMaterialSRB(SF_GLTF::Model&            Model,
+void SF_GLTF_PBR_Renderer::InitMaterialSRB(SF_GLTF::Model&            Model,
                                         SF_GLTF::Material&         Material,
                                         IBuffer*                pFrameAttribs,
                                         IShaderResourceBinding* pMaterialSRB,
@@ -225,7 +225,7 @@ void SF_PBR_Renderer::InitMaterialSRB(SF_GLTF::Model&            Model,
     }
 }
 
-void SF_PBR_Renderer::CreateResourceCacheSRB(IRenderDevice*           pDevice,
+void SF_GLTF_PBR_Renderer::CreateResourceCacheSRB(IRenderDevice*           pDevice,
                                                IDeviceContext*          pCtx,
                                                ResourceCacheUseInfo&    CacheUseInfo,
                                                IBuffer*                 pFrameAttribs,
@@ -299,7 +299,7 @@ void SF_PBR_Renderer::CreateResourceCacheSRB(IRenderDevice*           pDevice,
     }
 }
 
-SF_PBR_Renderer::ModelResourceBindings SF_PBR_Renderer::CreateResourceBindings(
+SF_GLTF_PBR_Renderer::ModelResourceBindings SF_GLTF_PBR_Renderer::CreateResourceBindings(
     SF_GLTF::Model& GLTFModel,
     IBuffer*     pFrameAttribs,
     ITextureView* pShadowMap)
@@ -315,7 +315,7 @@ SF_PBR_Renderer::ModelResourceBindings SF_PBR_Renderer::CreateResourceBindings(
     return ResourceBindings;
 }
 
-void SF_PBR_Renderer::Begin(IDeviceContext* pCtx)
+void SF_GLTF_PBR_Renderer::Begin(IDeviceContext* pCtx)
 {
     if (m_JointsBuffer)
     {
@@ -324,7 +324,7 @@ void SF_PBR_Renderer::Begin(IDeviceContext* pCtx)
     }
 }
 
-void SF_PBR_Renderer::Begin(IRenderDevice*         pDevice,
+void SF_GLTF_PBR_Renderer::Begin(IRenderDevice*         pDevice,
                               IDeviceContext*        pCtx,
                               ResourceCacheUseInfo&  CacheUseInfo,
                               ResourceCacheBindings& Bindings,
@@ -369,7 +369,7 @@ void SF_PBR_Renderer::Begin(IRenderDevice*         pDevice,
     pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 }
 
-SF_PBR_Renderer::PSO_FLAGS SF_PBR_Renderer::GetMaterialPSOFlags(const SF_GLTF::Material& Mat) const
+SF_GLTF_PBR_Renderer::PSO_FLAGS SF_GLTF_PBR_Renderer::GetMaterialPSOFlags(const SF_GLTF::Material& Mat) const
 {
     // Color, normal and physical descriptor maps are always enabled
     PSO_FLAGS PSOFlags =
@@ -437,7 +437,7 @@ SF_PBR_Renderer::PSO_FLAGS SF_PBR_Renderer::GetMaterialPSOFlags(const SF_GLTF::M
 }
 
 
-void SF_PBR_Renderer::Render(IDeviceContext*              pCtx,
+void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                                const SF_GLTF::Model&           GLTFModel,
                                const SF_GLTF::ModelTransforms& Transforms,
                                const SF_GLTF::ModelTransforms* PrevTransforms,
@@ -711,7 +711,7 @@ Uint8* WriteShaderAttribs(Uint8* pDstPtr, HostStructType* pSrc, const char* Debu
 }
 
 
-void* SF_PBR_Renderer::WritePBRPrimitiveShaderAttribs(void*                                           pDstShaderAttribs,
+void* SF_GLTF_PBR_Renderer::WritePBRPrimitiveShaderAttribs(void*                                           pDstShaderAttribs,
                                                         const PBRPrimitiveShaderAttribsData&            AttribsData,
                                                         const std::array<int, TEXTURE_ATTRIB_ID_COUNT>& TextureAttribIndices,
                                                         const SF_GLTF::Material&                           Material,
@@ -831,7 +831,7 @@ void* SF_PBR_Renderer::WritePBRPrimitiveShaderAttribs(void*                     
     return pDstPtr;
 }
 
-void SF_PBR_Renderer::WritePBRLightShaderAttribs(const PBRLightShaderAttribsData& AttribsData,
+void SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(const PBRLightShaderAttribsData& AttribsData,
                                                    HLSL::PBRLightAttribs*           pShaderAttribs)
 {
     VERIFY_EXPR(pShaderAttribs != nullptr);
