@@ -408,6 +408,8 @@ struct GraphicsContext
     SFModel planet{};
     SFModel terrain{};
 
+    Uint32 terrainMaterialIndex = 0;
+
     struct MouseState
     {
         float2 pos = float2(-1.0f, -1.0f);
@@ -4516,6 +4518,22 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                         currentCameraIndex = (currentCameraIndex + 1) % cameras.size();
                         s_gc.terrain.camera = cameras[currentCameraIndex];
                     }
+                    break;
+                case SDLK_m:
+                    {
+                        s_gc.terrainMaterialIndex = (s_gc.terrainMaterialIndex + 1) % s_gc.terrain.model->GetMaterials().size();
+                        for (const auto& node : s_gc.terrain.dynamicMesh->GetNodes())
+                        {
+                            if (node.pMesh)
+                            {
+                                for (auto& primitive : node.pMesh->Primitives)
+                                {
+                                    primitive.MaterialId = s_gc.terrainMaterialIndex;
+                                }
+                            }
+                        }
+                    }
+                    break;
                 default:
                     break;
             }

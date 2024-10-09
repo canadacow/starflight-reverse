@@ -174,6 +174,7 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
     }
     
     Uint32 materialId = 0;
+    #if 0
     for (size_t i = 0; i < m_Model->Materials.size(); ++i)
     {
         if (m_Model->Materials[i].Name == "TestPlane")
@@ -182,6 +183,7 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
             break;
         }
     }
+    #endif
 
     m_Mesh = std::make_shared<SF_GLTF::Mesh>();
     m_Mesh->Primitives.emplace_back(0, m_Indices.size(), m_Vertices.size() / 4, materialId, float3{}, float3{});

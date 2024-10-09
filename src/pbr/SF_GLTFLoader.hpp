@@ -353,7 +353,7 @@ struct Primitive
     const Uint32 FirstIndex;
     const Uint32 IndexCount;
     const Uint32 VertexCount;
-    const Uint32 MaterialId;
+    Uint32 MaterialId;
 
     const BoundBox BB;
 
@@ -493,7 +493,7 @@ struct Node
 
     std::vector<const Node*> Children;
 
-    const Mesh*   pMesh   = nullptr;
+    Mesh*   pMesh   = nullptr;
     const Camera* pCamera = nullptr;
     const Skin*   pSkin   = nullptr;
     const Light*  pLight  = nullptr;
@@ -848,7 +848,7 @@ class DynamicMesh;
 struct Model
 {
     friend class Diligent::SF_GLTF::DynamicMesh;
-protected:
+
     std::vector<Scene>       Scenes;
     std::vector<Node>        Nodes;
     std::vector<Mesh>        Meshes;
@@ -859,7 +859,6 @@ protected:
     std::vector<Animation>   Animations;
     std::vector<std::string> Extensions;
 
-public:
     std::vector<RefCntAutoPtr<ISampler>> TextureSamplers;
 
     // The number of nodes that have skin.
