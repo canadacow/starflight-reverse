@@ -146,6 +146,7 @@ set(HEADER_FILES
     src/pbr/SF_GLTFLoader.hpp
     src/pbr/SF_GLTFResourceManager.hpp
     src/pbr/SF_GLTFBuilder.hpp
+    src/pbr/SF_PBR_Renderer.hpp
     src/emul/DiligentShadowMapManager.hpp
     ${CURL_INCLUDE_DIRS}
     ${nlohmann_json_INCLUDE_DIRS}/nlohmann
@@ -167,6 +168,7 @@ add_executable(emulatesdl WIN32
     src/emul/vulkan_helper.cpp
     src/emul/DiligentShadowMapManager.cpp
     src/tts/speech.cpp
+    src/pbr/SF_PBR_Renderer.cpp
     src/pbr/SF_GLTF_PBR_Renderer.cpp
     src/pbr/SF_GLTFLoader.cpp
     src/pbr/SF_GLTFResourceManager.cpp

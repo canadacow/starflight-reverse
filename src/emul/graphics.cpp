@@ -2908,9 +2908,9 @@ static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model
     s_gc.m_pImmediateContext->Flush();
 }
 
-static PBR_Renderer::CreateInfo::PSMainSourceInfo GetPbrPSMainSource(PBR_Renderer::PSO_FLAGS PSOFlags)
+static SF_PBR_Renderer::CreateInfo::PSMainSourceInfo GetPbrPSMainSource(SF_PBR_Renderer::PSO_FLAGS PSOFlags)
 {
-    PBR_Renderer::CreateInfo::PSMainSourceInfo PSMainInfo;
+    SF_PBR_Renderer::CreateInfo::PSMainSourceInfo PSMainInfo;
 
     PSMainInfo.OutputStruct = R"(
 struct PSOutput

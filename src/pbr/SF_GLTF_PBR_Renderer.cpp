@@ -40,7 +40,7 @@
 namespace Diligent
 {
 
-    PBR_Renderer::ALPHA_MODE SF_GLTF_PBR_Renderer::GltfAlphaModeToAlphaMode(SF_GLTF::Material::ALPHA_MODE GltfAlphaMode)
+    SF_PBR_Renderer::ALPHA_MODE SF_GLTF_PBR_Renderer::GltfAlphaModeToAlphaMode(SF_GLTF::Material::ALPHA_MODE GltfAlphaMode)
 {
     static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_OPAQUE) == ALPHA_MODE_OPAQUE, "SF_GLTF::Material::ALPHA_MODE_OPAQUE != ALPHA_MODE_OPAQUE");
     static_assert(static_cast<ALPHA_MODE>(SF_GLTF::Material::ALPHA_MODE_MASK) == ALPHA_MODE_MASK, "SF_GLTF::Material::ALPHA_MODE_MASK != ALPHA_MODE_MASK");
@@ -61,7 +61,7 @@ namespace
 
 struct PBRRendererCreateInfoWrapper
 {
-    PBRRendererCreateInfoWrapper(const PBR_Renderer::CreateInfo& _CI) :
+    PBRRendererCreateInfoWrapper(const SF_PBR_Renderer::CreateInfo& _CI) :
         CI{_CI}
     {
         if (CI.InputLayout.NumElements == 0)
@@ -70,36 +70,36 @@ struct PBRRendererCreateInfoWrapper
             CI.InputLayout = InputLayout;
         }
 
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_BASE_COLOR]            = SF_GLTF::DefaultBaseColorTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_PHYS_DESC]             = SF_GLTF::DefaultMetallicRoughnessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_NORMAL]                = SF_GLTF::DefaultNormalTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_OCCLUSION]             = SF_GLTF::DefaultOcclusionTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_EMISSIVE]              = SF_GLTF::DefaultEmissiveTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT]            = SF_GLTF::DefaultClearcoatTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_ROUGHNESS]  = SF_GLTF::DefaultClearcoatRoughnessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_NORMAL]     = SF_GLTF::DefaultClearcoatNormalTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_COLOR]           = SF_GLTF::DefaultSheenColorTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_ROUGHNESS]       = SF_GLTF::DefaultSheenRoughnessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_ANISOTROPY]            = SF_GLTF::DefaultAnisotropyTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE]           = SF_GLTF::DefaultIridescenceTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE_THICKNESS] = SF_GLTF::DefaultIridescenceThicknessTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_TRANSMISSION]          = SF_GLTF::DefaultTransmissionTextureAttribId;
-        CI.TextureAttribIndices[PBR_Renderer::TEXTURE_ATTRIB_ID_THICKNESS]             = SF_GLTF::DefaultThicknessTextureAttribId;
-        static_assert(PBR_Renderer::TEXTURE_ATTRIB_ID_COUNT == 17, "Please update the initializer list above");
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_BASE_COLOR]            = SF_GLTF::DefaultBaseColorTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_PHYS_DESC]             = SF_GLTF::DefaultMetallicRoughnessTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_NORMAL]                = SF_GLTF::DefaultNormalTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_OCCLUSION]             = SF_GLTF::DefaultOcclusionTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_EMISSIVE]              = SF_GLTF::DefaultEmissiveTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT]            = SF_GLTF::DefaultClearcoatTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_ROUGHNESS]  = SF_GLTF::DefaultClearcoatRoughnessTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_CLEAR_COAT_NORMAL]     = SF_GLTF::DefaultClearcoatNormalTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_COLOR]           = SF_GLTF::DefaultSheenColorTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_SHEEN_ROUGHNESS]       = SF_GLTF::DefaultSheenRoughnessTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_ANISOTROPY]            = SF_GLTF::DefaultAnisotropyTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE]           = SF_GLTF::DefaultIridescenceTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_IRIDESCENCE_THICKNESS] = SF_GLTF::DefaultIridescenceThicknessTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_TRANSMISSION]          = SF_GLTF::DefaultTransmissionTextureAttribId;
+        CI.TextureAttribIndices[SF_PBR_Renderer::TEXTURE_ATTRIB_ID_THICKNESS]             = SF_GLTF::DefaultThicknessTextureAttribId;
+        static_assert(SF_PBR_Renderer::TEXTURE_ATTRIB_ID_COUNT == 17, "Please update the initializer list above");
 
-        if (_CI.ShaderTexturesArrayMode == PBR_Renderer::SHADER_TEXTURE_ARRAY_MODE_DYNAMIC)
+        if (_CI.ShaderTexturesArrayMode == SF_PBR_Renderer::SHADER_TEXTURE_ARRAY_MODE_DYNAMIC)
         {
             UNEXPECTED("Dynamic shader texture arrays are not supported in GLTF renderer");
-            CI.ShaderTexturesArrayMode = PBR_Renderer::SHADER_TEXTURE_ARRAY_MODE_NONE;
+            CI.ShaderTexturesArrayMode = SF_PBR_Renderer::SHADER_TEXTURE_ARRAY_MODE_NONE;
         }
     }
 
-    operator const PBR_Renderer::CreateInfo &() const
+    operator const SF_PBR_Renderer::CreateInfo &() const
     {
         return CI;
     }
 
-    PBR_Renderer::CreateInfo CI;
+    SF_PBR_Renderer::CreateInfo CI;
     InputLayoutDescX         InputLayout;
 };
 
@@ -108,7 +108,7 @@ SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
                                      IRenderStateCache* pStateCache,
                                      IDeviceContext*    pCtx,
                                      const CreateInfo&  CI) :
-    PBR_Renderer{pDevice, pStateCache, pCtx, PBRRendererCreateInfoWrapper{CI}}
+    SF_PBR_Renderer{pDevice, pStateCache, pCtx, PBRRendererCreateInfoWrapper{CI}}
 {
     {
         GraphicsPipelineDesc GraphicsDesc;
@@ -801,7 +801,7 @@ void* SF_GLTF_PBR_Renderer::WritePBRPrimitiveShaderAttribs(void*                
         static_assert(sizeof(HLSL::PBRMaterialTextureAttribs) % 16 == 0, "Size of HLSL::PBRMaterialTextureAttribs must be a multiple of 16");
 
         Uint32 NumTextureAttribs = 0;
-        ProcessTexturAttribs(AttribsData.PSOFlags, [&](int CurrIndex, PBR_Renderer::TEXTURE_ATTRIB_ID AttribId) //
+        ProcessTexturAttribs(AttribsData.PSOFlags, [&](int CurrIndex, SF_PBR_Renderer::TEXTURE_ATTRIB_ID AttribId) //
                              {
                                  const int SrcAttribIndex = TextureAttribIndices[AttribId];
                                  if (SrcAttribIndex < 0)

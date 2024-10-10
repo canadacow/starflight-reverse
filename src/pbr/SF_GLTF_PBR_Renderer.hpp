@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "PBR_Renderer.hpp"
+#include "SF_PBR_Renderer.hpp"
 
 #include <vector>
 #include <array>
@@ -45,10 +45,10 @@ struct PBRLightAttribs;
 } // namespace HLSL
 
 /// Implementation of a GLTF PBR renderer
-class SF_GLTF_PBR_Renderer : public PBR_Renderer
+class SF_GLTF_PBR_Renderer : public SF_PBR_Renderer
 {
 public:
-    struct CreateInfo : public PBR_Renderer::CreateInfo
+    struct CreateInfo : public SF_PBR_Renderer::CreateInfo
     {
         /// The number of render targets.
         Uint8 NumRenderTargets = 0;
