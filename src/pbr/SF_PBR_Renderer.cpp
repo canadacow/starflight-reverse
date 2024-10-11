@@ -63,6 +63,38 @@ namespace HLSL
 
 } // namespace HLSL
 
+class SF_PBR_RendererShaderSourceStreamFactory final
+{
+public:
+    static IShaderSourceInputStreamFactory& GetInstance();
+
+private:
+    SF_PBR_RendererShaderSourceStreamFactory();
+
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pFactory;
+};
+
+SF_PBR_RendererShaderSourceStreamFactory::SF_PBR_RendererShaderSourceStreamFactory()
+{
+    static const MemoryShaderSourceFileInfo g_Shaders[] =
+    {
+        {
+            "SF_RenderPBR.vsh",
+            #include "SF_RenderPBR.vsh.h"
+        }
+    };
+
+    MemoryShaderSourceFactoryCreateInfo CI{g_Shaders, _countof(g_Shaders), false};
+
+    CreateMemoryShaderSourceFactory(CI, &m_pFactory);
+}
+
+IShaderSourceInputStreamFactory& SF_PBR_RendererShaderSourceStreamFactory::GetInstance()
+{
+    static SF_PBR_RendererShaderSourceStreamFactory TheFactory;
+    return *TheFactory.m_pFactory;
+}
+
 SF_PBR_Renderer::PSOKey::PSOKey(PSO_FLAGS            _Flags,
                              ALPHA_MODE           _AlphaMode,
                              CULL_MODE            _CullMode,
@@ -1600,7 +1632,7 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
                                         },
                                         CopyGeneratedStrings);
     RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory =
-        CreateCompoundShaderSourceFactory({&DiligentFXShaderSourceStreamFactory::GetInstance(), pMemorySourceFactory});
+        CreateCompoundShaderSourceFactory({&SF_PBR_RendererShaderSourceStreamFactory::GetInstance(), &DiligentFXShaderSourceStreamFactory::GetInstance(), pMemorySourceFactory});
 
     ShaderMacroHelper Macros = DefineMacros(Key);
 
@@ -1632,7 +1664,7 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
     if (!pVS)
     {
         ShaderCreateInfo ShaderCI{
-            "RenderPBR.vsh",
+            "SF_RenderPBR.vsh",
             pShaderSourceFactory,
             "main",
             Macros,

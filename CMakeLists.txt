@@ -150,6 +150,7 @@ set(HEADER_FILES
     src/emul/DiligentShadowMapManager.hpp
     ${CURL_INCLUDE_DIRS}
     ${nlohmann_json_INCLUDE_DIRS}/nlohmann
+    src/shaders
 )
 
 add_executable(emulatesdl WIN32
