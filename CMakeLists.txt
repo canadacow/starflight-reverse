@@ -177,6 +177,36 @@ add_executable(emulatesdl WIN32
     src/emul/DynamicMesh.cpp
 )
 
+include(DiligentUtils.cmake)
+
+if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/pbr/shaders)
+    message(FATAL_ERROR "Directory does not exist: ${CMAKE_CURRENT_SOURCE_DIR}/src/pbr/shaders")
+else()
+    message(STATUS "Directory exists: ${CMAKE_CURRENT_SOURCE_DIR}/src/pbr/shaders")
+endif()
+
+file(GLOB_RECURSE SHADERS LIST_DIRECTORIES false ${CMAKE_CURRENT_SOURCE_DIR}/src/pbr/shaders/*.*)
+
+# Call the function directly within the CMake script
+convert_sf_shaders_to_headers(
+    "${SHADERS}" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/pbr/shaders_inc" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/pbr/shaders_inc/Shaders.h" 
+    SHADERS_INC_LIST
+)
+
+target_sources(emulatesdl PRIVATE
+    # A target created in the same directory (CMakeLists.txt file) that specifies any output of the 
+    # custom command as a source file is given a rule to generate the file using the command at build time. 
+    ${SHADERS_INC_LIST}
+    ${SHADERS_LIST_FILE}
+)
+
+source_group("generated" FILES
+    ${SHADERS_LIST_FILE}
+    ${SHADERS_INC_LIST}
+)
+
 target_include_directories(emulatesdl
 PRIVATE
     ${diligentcore_SOURCE_DIR}
