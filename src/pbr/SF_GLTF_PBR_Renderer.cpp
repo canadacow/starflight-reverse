@@ -132,7 +132,9 @@ void SF_GLTF_PBR_Renderer::InitMaterialSRB(SF_GLTF::Model&            Model,
                                         SF_GLTF::Material&         Material,
                                         IBuffer*                pFrameAttribs,
                                         IShaderResourceBinding* pMaterialSRB,
-                                        ITextureView*           pShadowMap)
+                                        ITextureView*           pShadowMap,
+                                        IBuffer* pHeightmapAttribs,
+                                        ITextureView* pHeightmap)
 {
     if (pMaterialSRB == nullptr)
     {
@@ -140,7 +142,7 @@ void SF_GLTF_PBR_Renderer::InitMaterialSRB(SF_GLTF::Model&            Model,
         return;
     }
 
-    InitCommonSRBVars(pMaterialSRB, pFrameAttribs, true, pShadowMap);
+    InitCommonSRBVars(pMaterialSRB, pFrameAttribs, true, pShadowMap, pHeightmapAttribs, pHeightmap);
 
     auto SetTexture = [&](TEXTURE_ATTRIB_ID ID, ITextureView* pDefaultTexSRV) //
     {
@@ -302,7 +304,9 @@ void SF_GLTF_PBR_Renderer::CreateResourceCacheSRB(IRenderDevice*           pDevi
 SF_GLTF_PBR_Renderer::ModelResourceBindings SF_GLTF_PBR_Renderer::CreateResourceBindings(
     SF_GLTF::Model& GLTFModel,
     IBuffer*     pFrameAttribs,
-    ITextureView* pShadowMap)
+    ITextureView* pShadowMap,
+    IBuffer* pHeightmapAttribs,
+    ITextureView* pHeightmap)
 {
     ModelResourceBindings ResourceBindings;
     ResourceBindings.MaterialSRB.resize(GLTFModel.GetMaterials().size());
@@ -310,7 +314,7 @@ SF_GLTF_PBR_Renderer::ModelResourceBindings SF_GLTF_PBR_Renderer::CreateResource
     {
         auto& pMatSRB = ResourceBindings.MaterialSRB[mat];
         CreateResourceBinding(&pMatSRB);
-        InitMaterialSRB(GLTFModel, GLTFModel.GetMaterials()[mat], pFrameAttribs, pMatSRB, pShadowMap);
+        InitMaterialSRB(GLTFModel, GLTFModel.GetMaterials()[mat], pFrameAttribs, pMatSRB, pShadowMap, pHeightmapAttribs, pHeightmap);
     }
     return ResourceBindings;
 }
@@ -573,6 +577,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             PSOFlags &= RenderParams.Flags;
 
             PSOFlags |= PSO_FLAG_ENABLE_SHADOWS;
+
+            if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
+            {
+                PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
+            }
 
             if (RenderParams.Wireframe)
                 PSOFlags |= PSO_FLAG_UNSHADED;

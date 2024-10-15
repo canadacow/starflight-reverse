@@ -493,8 +493,9 @@ public:
         PSO_FLAG_UNSHADED                  = PSO_FLAG_BIT(36),
         PSO_FLAG_COMPUTE_MOTION_VECTORS    = PSO_FLAG_BIT(37),
         PSO_FLAG_ENABLE_SHADOWS            = PSO_FLAG_BIT(38),
+        PSO_FLAG_USE_HEIGHTMAP             = PSO_FLAG_BIT(39),
 
-        PSO_FLAG_LAST = PSO_FLAG_ENABLE_SHADOWS,
+        PSO_FLAG_LAST = PSO_FLAG_USE_HEIGHTMAP,
 
         PSO_FLAG_FIRST_USER_DEFINED = PSO_FLAG_LAST << 1ull,
 
@@ -659,7 +660,9 @@ public:
     void InitCommonSRBVars(IShaderResourceBinding* pSRB,
                            IBuffer*                pFrameAttribs,
                            bool                    BindPrimitiveAttribsBuffer = true,
-                           ITextureView*           pShadowMap                 = nullptr) const;
+                           ITextureView*           pShadowMap                 = nullptr,
+                           IBuffer*                pHeightmapAttribs          = nullptr,
+                           ITextureView*           pHeightmap                 = nullptr) const;
 
     void SetMaterialTexture(IShaderResourceBinding* pSRB, ITextureView* pTexSRV, TEXTURE_ATTRIB_ID TextureId) const;
 
@@ -674,6 +677,9 @@ public:
 
     /// Returns the PBR Frame attributes shader data size for the given light count.
     static Uint32 GetPRBFrameAttribsSize(Uint32 LightCount, Uint32 ShadowCastingLightCount);
+
+    /// Returns the PBR Heightmap attributes shader data size.
+    Uint32 GetHeightmapAttribsSize() const;
 
     /// Returns the PBR Frame attributes shader data size.
     Uint32 GetPRBFrameAttribsSize() const;

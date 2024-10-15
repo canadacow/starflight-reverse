@@ -1,7 +1,7 @@
 #include "BasicStructures.fxh"
 #include "VertexProcessing.fxh"
 #include "PBR_Structures.fxh"
-#include "RenderPBR_Structures.fxh"
+#include "SF_RenderPBR_Structures.fxh"
 
 #include "VSInputStruct.generated"
 //struct VSInput
@@ -28,6 +28,15 @@
 //     float3 Tangent     : TANGENT;
 //     float4 PrevClipPos : PREV_CLIP_POS;
 // };
+
+#ifdef USE_HEIGHTMAP
+cbuffer cbHeightmapAttribs
+{
+    PBRHeightmapAttribs g_HeightmapAttribs;
+}
+Texture2D g_Heightmap;
+SamplerState g_Heightmap_sampler;
+#endif
 
 #ifndef MAX_JOINT_COUNT
 #   define MAX_JOINT_COUNT 64
@@ -118,7 +127,15 @@ void main(in  VSInput  VSIn,
     float3 Normal = float3(0.0, 0.0, 1.0);
 #endif
 
-    GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(VSIn.Pos, Normal, Transform);    
+#if USE_HEIGHTMAP
+    float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
+    float height = g_Heightmap.Sample(g_Heightmap_sampler, adjustedUV).r;
+    float3 adjustedPos = VSIn.Pos + float3(0.0, height * 1.0 /*g_HeightmapAttribs.HeightScale*/, 0.0);
+#else
+    float3 adjustedPos = VSIn.Pos;
+#endif
+
+    GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    
     VSOut.ClipPos = mul(float4(TransformedVert.WorldPos, 1.0), g_Frame.Camera.mViewProj);
 
 #if COMPUTE_MOTION_VECTORS

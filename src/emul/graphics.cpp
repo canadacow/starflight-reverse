@@ -86,7 +86,7 @@ namespace HLSL
 
 #include "Shaders/Common/public/BasicStructures.fxh"
 #include "Shaders/PBR/public/PBR_Structures.fxh"
-#include "Shaders/PBR/private/RenderPBR_Structures.fxh"
+#include "../pbr/shaders/SF_RenderPBR_Structures.fxh"
 #include "Shaders/PostProcess/Bloom/public/BloomStructures.fxh"
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
@@ -434,6 +434,9 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> jointsBuffer;
     RefCntAutoPtr<IBuffer> dummyVertexBuffer;
+    RefCntAutoPtr<IBuffer> heightmapAttribsCB;
+    RefCntAutoPtr<ITexture> heightmap;
+    RefCntAutoPtr<ITextureView> heightmapView;
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<Bloom> bloom;
     std::unique_ptr<ScreenSpaceAmbientOcclusion> ssao;
@@ -2982,6 +2985,39 @@ struct PSOutput
     return PSMainInfo;
 }
 
+static void InitHeightmap()
+{
+    std::vector<float> dummyHeightmap(9 * 9);
+    for (int y = 0; y < 9; ++y)
+    {
+        for (int x = 0; x < 9; ++x)
+        {
+            dummyHeightmap[y * 9 + x] = static_cast<float>(x + y) / 16.0f; // Gradient from upper-left to bottom-right
+        }
+    }
+
+    TextureDesc HeightmapTexDesc;
+    HeightmapTexDesc.Name = "Dummy Heightmap Texture";
+    HeightmapTexDesc.Type = RESOURCE_DIM_TEX_2D;
+    HeightmapTexDesc.Width = 9;
+    HeightmapTexDesc.Height = 9;
+    HeightmapTexDesc.Format = TEX_FORMAT_R32_FLOAT;
+    HeightmapTexDesc.BindFlags = BIND_SHADER_RESOURCE;
+
+    TextureData HeightmapTexData;
+    HeightmapTexData.pSubResources = new TextureSubResData[1];
+    HeightmapTexData.pSubResources[0].pData = dummyHeightmap.data();
+    HeightmapTexData.pSubResources[0].Stride = HeightmapTexDesc.Width * sizeof(float);
+
+    s_gc.m_pDevice->CreateTexture(HeightmapTexDesc, &HeightmapTexData, &s_gc.heightmap);
+    delete[] HeightmapTexData.pSubResources;
+
+    s_gc.heightmapView = s_gc.heightmap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+    StateTransitionDesc HeightmapTransitionDesc = {s_gc.heightmap, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE};
+    s_gc.m_pImmediateContext->TransitionResourceStates(1, &HeightmapTransitionDesc);
+}   
+
 static void InitPBRRenderer(ITextureView* shadowMap)
 {
     GBuffer::ElementDesc GBufferElems[GBUFFER_RT_COUNT];
@@ -3039,6 +3075,10 @@ static void InitPBRRenderer(ITextureView* shadowMap)
 
     CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetPRBFrameAttribsSize(), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
 
+    CreateUniformBuffer(s_gc.m_pDevice, s_gc.pbrRenderer->GetHeightmapAttribsSize(), "Heightmap attribs buffer", &s_gc.heightmapAttribsCB);
+
+    InitHeightmap();
+
     PostFXContext::CreateInfo pfxcci{};
     s_gc.postFXContext = std::make_unique<PostFXContext>(s_gc.m_pDevice, pfxcci);
     
@@ -3054,14 +3094,14 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     s_gc.ssr = std::make_unique<ScreenSpaceReflection>(s_gc.m_pDevice, ssrci);
     #endif
 
-    s_gc.station.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station.model, s_gc.frameAttribsCB, shadowMap);
+    s_gc.station.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.station.model, s_gc.frameAttribsCB, shadowMap, nullptr, nullptr);
     if (frameSync.demoMode == 1)
     {
-        s_gc.planet.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.planet.model, s_gc.frameAttribsCB, shadowMap);
+        s_gc.planet.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.planet.model, s_gc.frameAttribsCB, shadowMap, nullptr, nullptr);
     }
     else if (frameSync.demoMode == 2)
     {
-        s_gc.terrain.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.terrain.model, s_gc.frameAttribsCB, shadowMap);
+        s_gc.terrain.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.terrain.model, s_gc.frameAttribsCB, shadowMap, s_gc.heightmapAttribsCB, s_gc.heightmapView);
     }
     
 
@@ -3755,6 +3795,13 @@ std::binary_semaphore& GraphicsInit()
 
     graphicsThread = std::jthread([] {
         GraphicsInitThread();
+
+#if defined(_WIN32) && (defined(_DEBUG) || defined(DEBUG))
+            // Disable memory leak detection and allocation debug flags
+            int dbgFlags = _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG);
+            dbgFlags &= ~(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF); // Clear the flags
+            _CrtSetDbgFlag(dbgFlags);
+#endif
 
         // Uncomment to start the game immediately
         //StartEmulationThread("");
@@ -5961,7 +6008,16 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         {
             if (model.dynamicMesh)
             {
-                s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, s_gc.renderParams, &model.bindings);
+
+                MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ s_gc.m_pImmediateContext, s_gc.heightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+                HeightmapAttribs->ScaleX = 1.0;
+                HeightmapAttribs->ScaleY = 1.0;
+                HeightmapAttribs->OffsetX = 0.0;
+                HeightmapAttribs->OffsetY = 0.0;
+
+                SF_GLTF_PBR_Renderer::RenderInfo ri = s_gc.renderParams;
+                ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_HEIGHTMAP;
+                s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
             }
             else
             {

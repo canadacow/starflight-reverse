@@ -41,5 +41,17 @@ struct PBRPrimitiveAttribs
 	CHECK_STRUCT_ALIGNMENT(PBRPrimitiveAttribs);
 #endif
 
+struct PBRHeightmapAttribs
+{
+    float ScaleX;
+    float ScaleY;
+    float OffsetX;
+    float OffsetY;
+};
+#ifdef CHECK_STRUCT_ALIGNMENT
+	CHECK_STRUCT_ALIGNMENT(PBRHeightmapAttribs);
+#endif
+
+
 
 #endif // _RENDER_PBR_STRUCTURES_FXH_

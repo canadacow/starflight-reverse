@@ -60,8 +60,11 @@ namespace HLSL
 
 #include "Shaders/Common/public/BasicStructures.fxh"
 #include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "shaders/SF_RenderPBR_Structures.fxh"
 
 } // namespace HLSL
+
+#include "shaders_inc/Shaders.h"
 
 class SF_PBR_RendererShaderSourceStreamFactory final
 {
@@ -76,14 +79,6 @@ private:
 
 SF_PBR_RendererShaderSourceStreamFactory::SF_PBR_RendererShaderSourceStreamFactory()
 {
-    static const MemoryShaderSourceFileInfo g_Shaders[] =
-    {
-        {
-            "SF_RenderPBR.vsh",
-            #include "SF_RenderPBR.vsh.h"
-        }
-    };
-
     MemoryShaderSourceFactoryCreateInfo CI{g_Shaders, _countof(g_Shaders), false};
 
     CreateMemoryShaderSourceFactory(CI, &m_pFactory);
@@ -216,13 +211,14 @@ std::string SF_PBR_Renderer::GetPSOFlagsString(PSO_FLAGS Flags)
             case PSO_FLAG_UNSHADED:                  FlagsStr += "UNSHADED"; break;
             case PSO_FLAG_COMPUTE_MOTION_VECTORS:    FlagsStr += "MOTION_VECTORS"; break;
             case PSO_FLAG_ENABLE_SHADOWS:            FlagsStr += "SHADOWS"; break;
+            case PSO_FLAG_USE_HEIGHTMAP:             FlagsStr += "HEIGHTMAP"; break;
                 // clang-format on
 
             default:
                 FlagsStr += std::to_string(PlatformMisc::GetLSB(Flag));
         }
     }
-    static_assert(PSO_FLAG_LAST == 1ull << 38ull, "Please update the switch above to handle the new flag");
+    static_assert(PSO_FLAG_LAST == 1ull << 39ull, "Please update the switch above to handle the new flag");
 
     return FlagsStr;
 }
@@ -838,7 +834,9 @@ void SF_PBR_Renderer::PrecomputeCubemaps(IDeviceContext* pCtx,
 void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
                                      IBuffer*                pFrameAttribs,
                                      bool                    BindPrimitiveAttribsBuffer,
-                                     ITextureView*           pShadowMap) const
+                                     ITextureView*           pShadowMap,
+                                     IBuffer*                pHeightmapAttribs,
+                                     ITextureView*           pHeightmap) const
 {
     if (pSRB == nullptr)
     {
@@ -883,6 +881,15 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
     {
         if (auto* pShadowMapVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
             pShadowMapVar->Set(pShadowMap);
+    }
+
+    if(pHeightmapAttribs != nullptr && pHeightmap != nullptr)
+    {
+        if (auto* pHeightmapAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs"))
+            pHeightmapAttribsVar->Set(pHeightmapAttribs);
+
+        if (auto* pHeightmapVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap"))
+            pHeightmapVar->Set(pHeightmap);
     }
 }
 
@@ -937,7 +944,9 @@ void SF_PBR_Renderer::CreateSignature()
     SignatureDesc
         .SetUseCombinedTextureSamplers(m_Device.GetDeviceInfo().IsGLDevice())
         .AddResource(SHADER_TYPE_VS_PS, "cbFrameAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddResource(SHADER_TYPE_VS_PS, "cbPrimitiveAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        .AddResource(SHADER_TYPE_VS_PS, "cbPrimitiveAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddResource(SHADER_TYPE_VS_PS, "cbHeightmapAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddResource(SHADER_TYPE_VS_PS, "g_Heightmap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
 
     if (m_Settings.MaxJointCount > 0)
         SignatureDesc.AddResource(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
@@ -947,6 +956,9 @@ void SF_PBR_Renderer::CreateSignature()
     {
         SignatureDesc.AddImmutableSampler(SHADER_TYPE_PIXEL, "g_LinearClampSampler", Sam_LinearClamp);
         Samplers.emplace("g_LinearClampSampler");
+
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap_sampler", Sam_LinearClamp);
+        Samplers.emplace("g_Heightmap_sampler");
     }
 
     auto& MaterialTexturesArraySize = m_Settings.MaterialTexturesArraySize;
@@ -1246,7 +1258,7 @@ ShaderMacroHelper SF_PBR_Renderer::DefineMacros(const PSOKey& Key) const
     Macros.Add("LOADING_ANIMATION_TRANSITIONING", static_cast<int>(LoadingAnimationMode::Transitioning));
     // clang-format on
 
-    static_assert(PSO_FLAG_LAST == PSO_FLAG_BIT(38), "Did you add new PSO Flag? You may need to handle it here.");
+    static_assert(PSO_FLAG_LAST == PSO_FLAG_BIT(39), "Did you add new PSO Flag? You may need to handle it here.");
 #define ADD_PSO_FLAG_MACRO(Flag) Macros.Add(#Flag, (PSOFlags & PSO_FLAG_##Flag) != PSO_FLAG_NONE)
     ADD_PSO_FLAG_MACRO(USE_COLOR_MAP);
     ADD_PSO_FLAG_MACRO(USE_NORMAL_MAP);
@@ -1290,6 +1302,7 @@ ShaderMacroHelper SF_PBR_Renderer::DefineMacros(const PSOKey& Key) const
     ADD_PSO_FLAG_MACRO(UNSHADED);
     ADD_PSO_FLAG_MACRO(COMPUTE_MOTION_VECTORS);
     ADD_PSO_FLAG_MACRO(ENABLE_SHADOWS);
+    ADD_PSO_FLAG_MACRO(USE_HEIGHTMAP);
 #undef ADD_PSO_FLAG_MACRO
 
     Macros.Add("TEX_COLOR_CONVERSION_MODE_NONE", CreateInfo::TEX_COLOR_CONVERSION_MODE_NONE);
@@ -1970,6 +1983,11 @@ Uint32 SF_PBR_Renderer::GetPRBFrameAttribsSize(Uint32 LightCount, Uint32 ShadowC
 Uint32 SF_PBR_Renderer::GetPRBFrameAttribsSize() const
 {
     return GetPRBFrameAttribsSize(m_Settings.MaxLightCount, m_Settings.MaxShadowCastingLightCount);
+}
+
+Uint32 SF_PBR_Renderer::GetHeightmapAttribsSize() const
+{
+    return sizeof(HLSL::PBRHeightmapAttribs);
 }
 
 } // namespace Diligent
