@@ -280,7 +280,8 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         }(CI)},
     m_Device{pDevice, pStateCache},
     m_PBRPrimitiveAttribsCB{CI.pPrimitiveAttribsCB},
-    m_JointsBuffer{CI.pJointsBuffer}
+    m_JointsBuffer{CI.pJointsBuffer},
+    m_HeightmapAttribsCB{CI.pHeightmapAttribsCB}
 {
     if (m_Settings.EnableIBL)
     {
@@ -433,6 +434,10 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         {
             CreateUniformBuffer(pDevice, GetPBRPrimitiveAttribsSize(PSO_FLAG_ALL), "PBR primitive attribs CB", &m_PBRPrimitiveAttribsCB);
         }
+        if (!m_HeightmapAttribsCB)
+        {
+            CreateUniformBuffer(pDevice, sizeof(HLSL::PBRHeightmapAttribs), "PBR heightmap attribs CB", &m_HeightmapAttribsCB);
+        }
         if (m_Settings.MaxJointCount > 0)
         {
             const size_t JointsBufferSize = sizeof(float4x4) * m_Settings.MaxJointCount * 2; // Current and previous transforms
@@ -447,6 +452,7 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         }
         std::vector<StateTransitionDesc> Barriers;
         Barriers.emplace_back(m_PBRPrimitiveAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
+        Barriers.emplace_back(m_HeightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         if (m_JointsBuffer)
             Barriers.emplace_back(m_JointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         pCtx->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());

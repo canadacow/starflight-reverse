@@ -150,8 +150,8 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
             vert.normalZ = 0.0f;
 
             // Compute UV coordinates
-            vert.texU = col / static_cast<float>(numTiles);
-            vert.texV = row / static_cast<float>(numTiles);
+            vert.texU0 = col / static_cast<float>(numTiles);
+            vert.texV0 = row / static_cast<float>(numTiles);
 
             if (row < numTiles && col < numTiles)
             {

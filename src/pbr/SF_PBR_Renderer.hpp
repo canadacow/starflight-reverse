@@ -331,6 +331,10 @@ public:
         /// If null, the renderer will allocate the buffer.
         IBuffer* pJointsBuffer = nullptr;
 
+        /// A pointer to the user-provided heightmap attribs buffer.
+        /// If null, the renderer will allocate the buffer.
+        IBuffer* pHeightmapAttribsCB = nullptr;
+
         /// Texture attribute index info
         std::array<int, TEXTURE_ATTRIB_ID_COUNT> TextureAttribIndices{};
 
@@ -430,6 +434,7 @@ public:
     ITextureView* GetDefaultNormalMapSRV() const   { return m_pDefaultNormalMapSRV; }
     IBuffer*      GetPBRPrimitiveAttribsCB() const {return m_PBRPrimitiveAttribsCB;}
     IBuffer*      GetJointsBuffer() const          {return m_JointsBuffer;}
+    IBuffer*      GetHeightmapAttribsCB() const    {return m_HeightmapAttribsCB;}
     // clang-format on
 
     /// Precompute cubemaps used by IBL.
@@ -811,6 +816,7 @@ protected:
     IBL_PipelineStateObjectCache m_IBL_PSOCache;
 
     RefCntAutoPtr<IBuffer> m_PBRPrimitiveAttribsCB;
+    RefCntAutoPtr<IBuffer> m_HeightmapAttribsCB;
     RefCntAutoPtr<IBuffer> m_PrecomputeEnvMapAttribsCB;
     RefCntAutoPtr<IBuffer> m_JointsBuffer;
 

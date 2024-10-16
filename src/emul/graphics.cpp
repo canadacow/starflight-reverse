@@ -3004,17 +3004,25 @@ static void InitHeightmap()
     HeightmapTexDesc.Format = TEX_FORMAT_R32_FLOAT;
     HeightmapTexDesc.BindFlags = BIND_SHADER_RESOURCE;
 
-    TextureData HeightmapTexData;
-    HeightmapTexData.pSubResources = new TextureSubResData[1];
-    HeightmapTexData.pSubResources[0].pData = dummyHeightmap.data();
-    HeightmapTexData.pSubResources[0].Stride = HeightmapTexDesc.Width * sizeof(float);
-
-    s_gc.m_pDevice->CreateTexture(HeightmapTexDesc, &HeightmapTexData, &s_gc.heightmap);
-    delete[] HeightmapTexData.pSubResources;
+    s_gc.m_pDevice->CreateTexture(HeightmapTexDesc, nullptr, &s_gc.heightmap);
 
     s_gc.heightmapView = s_gc.heightmap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 
-    StateTransitionDesc HeightmapTransitionDesc = {s_gc.heightmap, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE};
+    Box UpdateBox;
+    UpdateBox.MinX = 0;
+    UpdateBox.MinY = 0;
+    UpdateBox.MinZ = 0;
+    UpdateBox.MaxX = HeightmapTexDesc.Width;
+    UpdateBox.MaxY = HeightmapTexDesc.Height;
+    UpdateBox.MaxZ = 1;
+
+    TextureSubResData SubresData;
+    SubresData.pData = dummyHeightmap.data();
+    SubresData.Stride = HeightmapTexDesc.Width * sizeof(float);
+
+    s_gc.m_pImmediateContext->UpdateTexture(s_gc.heightmap, 0, 0, UpdateBox, SubresData, RESOURCE_STATE_TRANSITION_MODE_NONE, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+    StateTransitionDesc HeightmapTransitionDesc = {s_gc.heightmap, RESOURCE_STATE_COPY_DEST, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE};
     s_gc.m_pImmediateContext->TransitionResourceStates(1, &HeightmapTransitionDesc);
 }   
 

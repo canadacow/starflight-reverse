@@ -56,8 +56,10 @@ private:
         float normalX;
         float normalY;
         float normalZ;
-        float texU;
-        float texV;
+        float texU0;
+        float texV0;
+        float texU1;
+        float texV1;
     };
 
     struct VertexBuff2
