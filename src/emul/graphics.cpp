@@ -2987,12 +2987,28 @@ struct PSOutput
 
 static void InitHeightmap()
 {
+    const int8_t image[9][9] = {
+        {-16, -16, 16, 16, 32, 48, 48, 32, 32},
+        {-16, -16, 16, 16, 32, 48, 32, 32, 48},
+        {-16, -16, 16, 16, 32, 32, 32, 48, 48},
+        {-16, -16, -16, 16, 32, 32, 32, 32, 48},
+        {-16, -16, 16, 16, 32, 32, 32, 48, 32},
+        {-16, -16, 16, 16, 32, 32, 32, 32, 48},
+        {-16, -16, 16, 16, 32, 32, 32, 32, 32},
+        {-16, -16, 16, 16, 32, 32, 32, 32, 32},
+        {-16, 16, 16, 16, 16, 32, 32, 32, 32},
+    };
+
     std::vector<float> dummyHeightmap(9 * 9);
     for (int y = 0; y < 9; ++y)
     {
         for (int x = 0; x < 9; ++x)
         {
+            #if 0
             dummyHeightmap[y * 9 + x] = static_cast<float>(x + y) / 16.0f; // Gradient from upper-left to bottom-right
+            #else
+            dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 48.0f;
+            #endif
         }
     }
 
