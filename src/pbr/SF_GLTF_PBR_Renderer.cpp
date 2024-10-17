@@ -53,6 +53,8 @@ namespace HLSL
 {
 
 #include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "Shaders/Common/public/BasicStructures.fxh"
+#include "shaders/SF_RenderPBR_Structures.fxh"
 
 } // namespace HLSL
 
@@ -682,6 +684,15 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 else
                 {
                     UNEXPECTED("Unable to map the buffer");
+                }
+
+                if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
+                {
+                    MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ pCtx, m_HeightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    HeightmapAttribs->ScaleX = 1.0;
+                    HeightmapAttribs->ScaleY = 1.0;
+                    HeightmapAttribs->OffsetX = 0.0;
+                    HeightmapAttribs->OffsetY = 0.0;
                 }
             }
 

@@ -889,10 +889,10 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
             pShadowMapVar->Set(pShadowMap);
     }
 
-    if(pHeightmapAttribs != nullptr && pHeightmap != nullptr)
+    if(m_HeightmapAttribsCB != nullptr && pHeightmap != nullptr)
     {
         if (auto* pHeightmapAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs"))
-            pHeightmapAttribsVar->Set(pHeightmapAttribs);
+            pHeightmapAttribsVar->Set(m_HeightmapAttribsCB);
 
         if (auto* pHeightmapVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap"))
             pHeightmapVar->Set(pHeightmap);

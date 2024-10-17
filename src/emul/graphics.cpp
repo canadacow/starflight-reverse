@@ -6016,13 +6016,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         {
             if (model.dynamicMesh)
             {
-
-                MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ s_gc.m_pImmediateContext, s_gc.heightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-                HeightmapAttribs->ScaleX = 1.0;
-                HeightmapAttribs->ScaleY = 1.0;
-                HeightmapAttribs->OffsetX = 0.0;
-                HeightmapAttribs->OffsetY = 0.0;
-
                 SF_GLTF_PBR_Renderer::RenderInfo ri = s_gc.renderParams;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_HEIGHTMAP;
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
