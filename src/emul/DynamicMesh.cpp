@@ -194,9 +194,12 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
     {
         for (int j = 0; j < numBigTiles; ++j)
         {
-            uint64_t node = i * numBigTiles + j;
-            Nodes[node].pMesh = m_Mesh.get();
-            Nodes[node].Matrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
+            uint64_t nodeIndex = i * numBigTiles + j;
+            auto& node = Nodes[nodeIndex];
+            node.pMesh = m_Mesh.get();
+            node.Matrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
+            node.HeightmapOffset = float2{(float)i , (float)j };
+            node.HeightmapDimensions = int2{numBigTiles, numBigTiles};
         }
     }
 

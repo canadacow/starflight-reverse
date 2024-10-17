@@ -689,10 +689,10 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
                 {
                     MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ pCtx, m_HeightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-                    HeightmapAttribs->ScaleX = 1.0;
-                    HeightmapAttribs->ScaleY = 1.0;
-                    HeightmapAttribs->OffsetX = 0.0;
-                    HeightmapAttribs->OffsetY = 0.0;
+                    HeightmapAttribs->ScaleX = 1.0f / (float)Node.HeightmapDimensions.x;
+                    HeightmapAttribs->ScaleY = 1.0f / (float)Node.HeightmapDimensions.y;
+                    HeightmapAttribs->OffsetX = Node.HeightmapOffset.x / (float)Node.HeightmapDimensions.x;
+                    HeightmapAttribs->OffsetY = Node.HeightmapOffset.y / (float)Node.HeightmapDimensions.y;
                 }
             }
 

@@ -503,6 +503,9 @@ struct Node
     float3      Scale  = float3{1, 1, 1};
     float4x4    Matrix = float4x4::Identity();
 
+    float2 HeightmapOffset;
+    int2   HeightmapDimensions;
+
     explicit Node(int _Index) :
         Index{_Index}
     {}
