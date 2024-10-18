@@ -3004,11 +3004,8 @@ static void InitHeightmap()
     {
         for (int x = 0; x < 9; ++x)
         {
-            #if 0
-            dummyHeightmap[y * 9 + x] = static_cast<float>(x + y) / 16.0f; // Gradient from upper-left to bottom-right
-            #else
-            dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 48.0f;
-            #endif
+            //dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 48.0f;
+            dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 16.0f;
         }
     }
 

@@ -1540,6 +1540,10 @@ std::string SF_PBR_Renderer::GetVSOutputStruct(PSO_FLAGS PSOFlags, bool UseVkPoi
     {
         ss << "    int PrimitiveID : PRIM_ID;" << std::endl;
     }
+    if (PSOFlags & PSO_FLAG_USE_HEIGHTMAP)
+    {
+        ss << "    float Height : HEIGHT;" << std::endl;
+    }
     ss << "};" << std::endl;
     return ss.str();
 }
@@ -1747,7 +1751,7 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
     if (!pPS)
     {
         ShaderCreateInfo ShaderCI{
-            !IsUnshaded ? "RenderPBR.psh" : "RenderUnshaded.psh",
+            !IsUnshaded ? "SF_RenderPBR.psh" : "RenderUnshaded.psh",
             pShaderSourceFactory,
             "main",
             Macros,
