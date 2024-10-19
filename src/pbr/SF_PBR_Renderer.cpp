@@ -438,6 +438,18 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         {
             CreateUniformBuffer(pDevice, sizeof(HLSL::PBRHeightmapAttribs), "PBR heightmap attribs CB", &m_HeightmapAttribsCB);
         }
+        if (!m_InstanceAttribsSB)
+        {
+            BufferDesc SBDesc;
+            SBDesc.Name           = "PBR instance attribs SB";
+            SBDesc.Size           = sizeof(HLSL::PBRInstanceAttribs);
+            SBDesc.Usage          = USAGE_DEFAULT;
+            SBDesc.BindFlags      = BIND_SHADER_RESOURCE;
+            SBDesc.Mode           = BUFFER_MODE_STRUCTURED;
+            SBDesc.ElementByteStride = sizeof(HLSL::PBRInstanceAttribs);
+
+            pDevice->CreateBuffer(SBDesc, nullptr, &m_InstanceAttribsSB);
+        }
         if (m_Settings.MaxJointCount > 0)
         {
             const size_t JointsBufferSize = sizeof(float4x4) * m_Settings.MaxJointCount * 2; // Current and previous transforms
@@ -453,6 +465,7 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         std::vector<StateTransitionDesc> Barriers;
         Barriers.emplace_back(m_PBRPrimitiveAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         Barriers.emplace_back(m_HeightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
+        Barriers.emplace_back(m_InstanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE);
         if (m_JointsBuffer)
             Barriers.emplace_back(m_JointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         pCtx->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());
@@ -896,6 +909,12 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
 
         if (auto* pHeightmapVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap"))
             pHeightmapVar->Set(pHeightmap);
+    }
+
+    if(m_InstanceAttribsSB != nullptr)
+    {
+        if (auto* pInstanceAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer"))
+            pInstanceAttribsVar->Set(m_InstanceAttribsSB);
     }
 }
 
@@ -1393,6 +1412,7 @@ void SF_PBR_Renderer::GetVSInputStructAndLayout(PSO_FLAGS         PSOFlags,
     //    float4 Weight0 : ATTRIB5;
     //    float4 Color   : ATTRIB6; // May be float3
     //    float3 Tangent : ATTRIB7;
+    //    uint InstanceID : SV_InstanceID;
     //};
     struct VSAttribInfo
     {
@@ -1431,7 +1451,7 @@ void SF_PBR_Renderer::GetVSInputStructAndLayout(PSO_FLAGS         PSOFlags,
             VSAttribInfo{VERTEX_ATTRIB_ID_JOINTS,    "Joint0",  VT_FLOAT32, 4,            PSO_FLAG_USE_JOINTS},
             VSAttribInfo{VERTEX_ATTRIB_ID_WEIGHTS,   "Weight0", VT_FLOAT32, 4,            PSO_FLAG_USE_JOINTS},
             VSAttribInfo{VERTEX_ATTRIB_ID_COLOR,     "Color",   VT_FLOAT32, NumColorComp, PSO_FLAG_USE_VERTEX_COLORS},
-            VSAttribInfo{VERTEX_ATTRIB_ID_TANGENT,   "Tangent", VT_FLOAT32, 3,            PSO_FLAG_USE_VERTEX_TANGENTS}
+            VSAttribInfo{VERTEX_ATTRIB_ID_TANGENT,   "Tangent", VT_FLOAT32, 3,            PSO_FLAG_USE_VERTEX_TANGENTS},
             // clang-format on
         };
 
@@ -1481,6 +1501,10 @@ void SF_PBR_Renderer::GetVSInputStructAndLayout(PSO_FLAGS         PSOFlags,
     if (m_Settings.PrimitiveArraySize > 0 && !m_Device.GetDeviceInfo().Features.NativeMultiDraw)
     {
         // Draw id is emulated using instance id
+        ss << "    uint InstanceID : SV_InstanceID;" << std::endl;
+    }
+    else if(PSOFlags & PSO_FLAG_USE_INSTANCING)
+    {
         ss << "    uint InstanceID : SV_InstanceID;" << std::endl;
     }
 

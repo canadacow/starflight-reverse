@@ -63,6 +63,7 @@ public:
         VERTEX_ATTRIB_ID_WEIGHTS,
         VERTEX_ATTRIB_ID_COLOR,
         VERTEX_ATTRIB_ID_TANGENT,
+        VERTEX_ATTRIB_ID_INSTANCE_ID,
         VERTEX_ATTRIB_ID_COUNT
     };
 
@@ -435,6 +436,7 @@ public:
     IBuffer*      GetPBRPrimitiveAttribsCB() const {return m_PBRPrimitiveAttribsCB;}
     IBuffer*      GetJointsBuffer() const          {return m_JointsBuffer;}
     IBuffer*      GetHeightmapAttribsCB() const    {return m_HeightmapAttribsCB;}
+    IBuffer*      GetInstanceAttribsSB() const     {return m_InstanceAttribsSB;}
     // clang-format on
 
     /// Precompute cubemaps used by IBL.
@@ -499,6 +501,7 @@ public:
         PSO_FLAG_COMPUTE_MOTION_VECTORS    = PSO_FLAG_BIT(37),
         PSO_FLAG_ENABLE_SHADOWS            = PSO_FLAG_BIT(38),
         PSO_FLAG_USE_HEIGHTMAP             = PSO_FLAG_BIT(39),
+        PSO_FLAG_USE_INSTANCING            = PSO_FLAG_BIT(40),
 
         PSO_FLAG_LAST = PSO_FLAG_USE_HEIGHTMAP,
 
@@ -817,6 +820,7 @@ protected:
 
     RefCntAutoPtr<IBuffer> m_PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> m_HeightmapAttribsCB;
+    RefCntAutoPtr<IBuffer> m_InstanceAttribsSB;
     RefCntAutoPtr<IBuffer> m_PrecomputeEnvMapAttribsCB;
     RefCntAutoPtr<IBuffer> m_JointsBuffer;
 

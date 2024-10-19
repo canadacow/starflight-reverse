@@ -14,6 +14,7 @@
 //    float4 Weight0 : ATTRIB5;
 //    float4 Color   : ATTRIB6; // May be float3
 //    float3 Tangent : ATTRIB7;
+//    uint InstanceID : SV_InstanceID;
 //};
 
 #include "VSOutputStruct.generated"
@@ -83,6 +84,10 @@ float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
                     sy);
 }
 
+#endif
+
+#if USE_INSTANCING
+StructuredBuffer<PBRInstanceAttribs> instanceBuffer : register(t1);
 #endif
 
 #ifndef MAX_JOINT_COUNT
@@ -175,13 +180,19 @@ void main(in  VSInput  VSIn,
 #endif
 
 #if USE_HEIGHTMAP
-    float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
+
+    #if USE_INSTANCING
+        PBRInstanceAttribs instance = instanceBuffer[VSIn.InstanceID];
+        Transform = mul(instance.NodeMatrix, Transform);
+        float2 adjustedUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
+    #else // USE_INSTANCING
+        float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
+    #endif // USE_INSTANCING
+
     float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
-    float3 adjustedPos = VSIn.Pos + float3(0.0, height * 1.0 /*g_HeightmapAttribs.HeightScale*/, 0.0);
+    float3 adjustedPos = VSIn.Pos + float3(0.0, height, 0.0);
     VSOut.Height = height;
-#else
-    float3 adjustedPos = VSIn.Pos;
-#endif
+#endif // USE_HEIGHTMAP
 
     GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    
     VSOut.ClipPos = mul(float4(TransformedVert.WorldPos, 1.0), g_Frame.Camera.mViewProj);

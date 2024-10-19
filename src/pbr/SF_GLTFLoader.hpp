@@ -479,6 +479,15 @@ struct Light
     float OuterConeAngle = 0;
 };
 
+struct NodeInstance
+{
+    float4x4 NodeMatrix;
+    float ScaleX;
+    float ScaleY;
+    float OffsetX;
+    float OffsetY;
+};
+
 struct Node
 {
     // Index in Model.LinearNodes array.
@@ -502,6 +511,8 @@ struct Node
     QuaternionF Rotation;
     float3      Scale  = float3{1, 1, 1};
     float4x4    Matrix = float4x4::Identity();
+
+    std::vector<NodeInstance> Instances;
 
     float2 HeightmapOffset;
     int2   HeightmapDimensions;

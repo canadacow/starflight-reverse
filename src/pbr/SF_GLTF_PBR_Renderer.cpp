@@ -584,6 +584,10 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
             }
+            if ((RenderParams.Flags & PSO_FLAG_USE_INSTANCING) && Node.Instances.size() > 0)
+            {
+                PSOFlags |= PSO_FLAG_USE_INSTANCING;
+            }
 
             if (RenderParams.Wireframe)
                 PSOFlags |= PSO_FLAG_UNSHADED;
@@ -686,6 +690,18 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     UNEXPECTED("Unable to map the buffer");
                 }
 
+                if((RenderParams.Flags & PSO_FLAG_USE_INSTANCING) && Node.Instances.size() > 0)
+                {
+                    MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, m_InstanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    for(int i = 0; i < Node.Instances.size(); ++i)
+                    {
+                        InstanceAttribs[i].NodeMatrix = Node.Instances[i].NodeMatrix;
+                        InstanceAttribs[i].HeightmapAttribs.ScaleX = Node.Instances[i].ScaleX;
+                        InstanceAttribs[i].HeightmapAttribs.ScaleY = Node.Instances[i].ScaleY;
+                        InstanceAttribs[i].HeightmapAttribs.OffsetX = Node.Instances[i].OffsetX;
+                        InstanceAttribs[i].HeightmapAttribs.OffsetY = Node.Instances[i].OffsetY;
+                    }
+                }
                 if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
                 {
                     MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ pCtx, m_HeightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
@@ -701,6 +717,10 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 DrawIndexedAttribs drawAttrs{primitive.IndexCount, VT_UINT32, DRAW_FLAG_VERIFY_ALL};
                 drawAttrs.FirstIndexLocation = FirstIndexLocation + primitive.FirstIndex;
                 drawAttrs.BaseVertex         = BaseVertex;
+                if(Node.Instances.size() > 0)
+                {
+                    drawAttrs.NumInstances = static_cast<Uint32>(Node.Instances.size());
+                }
                 pCtx->DrawIndexed(drawAttrs);
             }
             else

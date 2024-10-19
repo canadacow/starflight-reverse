@@ -52,6 +52,13 @@ struct PBRHeightmapAttribs
 	CHECK_STRUCT_ALIGNMENT(PBRHeightmapAttribs);
 #endif
 
-
+struct PBRInstanceAttribs
+{
+    float4x4            NodeMatrix;
+    PBRHeightmapAttribs HeightmapAttribs;
+};
+#ifdef CHECK_STRUCT_ALIGNMENT
+	CHECK_STRUCT_ALIGNMENT(PBRInstanceAttribs);
+#endif
 
 #endif // _RENDER_PBR_STRUCTURES_FXH_
