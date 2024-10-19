@@ -10,15 +10,12 @@ namespace SF_GLTF
 DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model) :
     m_Model(model), m_pDevice(pDevice), m_pContext(pContext)
 {
-    for(int i = 0; i < numBigTiles * numBigTiles; ++i)
-    {
-        SF_GLTF::Node dynamicMeshNode{i};
-        dynamicMeshNode.Name = "DynamicMeshNode" + std::to_string(i);
-        dynamicMeshNode.pMesh = nullptr; // No mesh data for now
-        dynamicMeshNode.Parent = nullptr; // Root node
+    SF_GLTF::Node dynamicMeshNode{0};
+    dynamicMeshNode.Name = "DynamicMeshNode";
+    dynamicMeshNode.pMesh = nullptr; // No mesh data for now
+    dynamicMeshNode.Parent = nullptr; // Root node
 
-        Nodes.emplace_back(dynamicMeshNode);
-    }
+    Nodes.emplace_back(dynamicMeshNode);
 
     // Create a scene and add the node to the scene's root nodes
     SF_GLTF::Scene scene;
@@ -190,16 +187,24 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
 
     float offsetX = (numBigTiles * width) / 2.0f;
     float offsetY = (numBigTiles * height) / 2.0f;
+
+    auto& node = Nodes[0];
+    node.pMesh = m_Mesh.get();
+
     for (int i = 0; i < numBigTiles; ++i)
     {
         for (int j = 0; j < numBigTiles; ++j)
         {
             uint64_t nodeIndex = i * numBigTiles + j;
-            auto& node = Nodes[nodeIndex];
-            node.pMesh = m_Mesh.get();
-            node.Matrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
-            node.HeightmapOffset = float2{(float)i , (float)j };
-            node.HeightmapDimensions = int2{numBigTiles, numBigTiles};
+
+            NodeInstance ni;
+            ni.NodeMatrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
+            ni.ScaleX = 1.0f / (float)numBigTiles;
+            ni.ScaleY = 1.0f / (float)numBigTiles;
+            ni.OffsetX = i / (float)numBigTiles;
+            ni.OffsetY = j / (float)numBigTiles;
+
+            node.Instances.push_back(ni);
         }
     }
 

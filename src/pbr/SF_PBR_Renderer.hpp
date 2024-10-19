@@ -821,6 +821,7 @@ protected:
     RefCntAutoPtr<IBuffer> m_PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> m_HeightmapAttribsCB;
     RefCntAutoPtr<IBuffer> m_InstanceAttribsSB;
+    RefCntAutoPtr<IBufferView> m_InstanceAttribsSBView;
     RefCntAutoPtr<IBuffer> m_PrecomputeEnvMapAttribsCB;
     RefCntAutoPtr<IBuffer> m_JointsBuffer;
 

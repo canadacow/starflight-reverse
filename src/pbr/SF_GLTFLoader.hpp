@@ -514,8 +514,10 @@ struct Node
 
     std::vector<NodeInstance> Instances;
 
-    float2 HeightmapOffset;
-    int2   HeightmapDimensions;
+    float2 HeightmapScaleX;
+    float2 HeightmapScaleY;
+    float2 HeightmapOffsetX;
+    float2 HeightmapOffsetY;
 
     explicit Node(int _Index) :
         Index{_Index}

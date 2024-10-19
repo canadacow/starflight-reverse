@@ -212,6 +212,7 @@ std::string SF_PBR_Renderer::GetPSOFlagsString(PSO_FLAGS Flags)
             case PSO_FLAG_COMPUTE_MOTION_VECTORS:    FlagsStr += "MOTION_VECTORS"; break;
             case PSO_FLAG_ENABLE_SHADOWS:            FlagsStr += "SHADOWS"; break;
             case PSO_FLAG_USE_HEIGHTMAP:             FlagsStr += "HEIGHTMAP"; break;
+            case PSO_FLAG_USE_INSTANCING:            FlagsStr += "INSTANCING"; break;
                 // clang-format on
 
             default:
@@ -443,12 +444,15 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
             BufferDesc SBDesc;
             SBDesc.Name           = "PBR instance attribs SB";
             SBDesc.Size           = sizeof(HLSL::PBRInstanceAttribs);
-            SBDesc.Usage          = USAGE_DEFAULT;
-            SBDesc.BindFlags      = BIND_SHADER_RESOURCE;
+            SBDesc.Usage          = USAGE_DYNAMIC;
+            SBDesc.BindFlags      = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
             SBDesc.Mode           = BUFFER_MODE_STRUCTURED;
+            SBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
             SBDesc.ElementByteStride = sizeof(HLSL::PBRInstanceAttribs);
 
             pDevice->CreateBuffer(SBDesc, nullptr, &m_InstanceAttribsSB);
+
+            m_InstanceAttribsSBView = m_InstanceAttribsSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
         }
         if (m_Settings.MaxJointCount > 0)
         {
@@ -914,7 +918,7 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
     if(m_InstanceAttribsSB != nullptr)
     {
         if (auto* pInstanceAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer"))
-            pInstanceAttribsVar->Set(m_InstanceAttribsSB);
+            pInstanceAttribsVar->Set(m_InstanceAttribsSBView);
     }
 }
 
@@ -971,7 +975,8 @@ void SF_PBR_Renderer::CreateSignature()
         .AddResource(SHADER_TYPE_VS_PS, "cbFrameAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "cbPrimitiveAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "cbHeightmapAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddResource(SHADER_TYPE_VS_PS, "g_Heightmap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        .AddResource(SHADER_TYPE_VS_PS, "g_Heightmap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddResource(SHADER_TYPE_VS_PS, "instanceBuffer", SHADER_RESOURCE_TYPE_BUFFER_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
 
     if (m_Settings.MaxJointCount > 0)
         SignatureDesc.AddResource(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
@@ -1328,6 +1333,7 @@ ShaderMacroHelper SF_PBR_Renderer::DefineMacros(const PSOKey& Key) const
     ADD_PSO_FLAG_MACRO(COMPUTE_MOTION_VECTORS);
     ADD_PSO_FLAG_MACRO(ENABLE_SHADOWS);
     ADD_PSO_FLAG_MACRO(USE_HEIGHTMAP);
+    ADD_PSO_FLAG_MACRO(USE_INSTANCING);
 #undef ADD_PSO_FLAG_MACRO
 
     Macros.Add("TEX_COLOR_CONVERSION_MODE_NONE", CreateInfo::TEX_COLOR_CONVERSION_MODE_NONE);
