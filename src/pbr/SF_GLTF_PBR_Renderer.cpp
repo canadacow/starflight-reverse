@@ -695,7 +695,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, m_InstanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
                     for(int i = 0; i < Node.Instances.size(); ++i)
                     {
-                        InstanceAttribs[i].NodeMatrix = Node.Instances[i].NodeMatrix;
+                        InstanceAttribs[i].NodeMatrix = Node.Instances[i].NodeMatrix.Transpose();
                         InstanceAttribs[i].HeightmapAttribs.ScaleX = Node.Instances[i].ScaleX;
                         InstanceAttribs[i].HeightmapAttribs.ScaleY = Node.Instances[i].ScaleY;
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = Node.Instances[i].OffsetX;

@@ -183,7 +183,7 @@ void main(in  VSInput  VSIn,
 
     #if USE_INSTANCING
         PBRInstanceAttribs instance = instanceBuffer[VSIn.InstanceID];
-        Transform = mul(Transform, instance.NodeMatrix);
+        Transform = mul(instance.NodeMatrix, Transform);
         float2 adjustedUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
     #else // USE_INSTANCING
         float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
