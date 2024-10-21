@@ -195,14 +195,21 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
     {
         for (int j = 0; j < numBigTiles; ++j)
         {
-            uint64_t nodeIndex = i * numBigTiles + j;
-
             NodeInstance ni;
+#if 1
+            
             ni.NodeMatrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
             ni.ScaleX = 1.0f / (float)numBigTiles;
             ni.ScaleY = 1.0f / (float)numBigTiles;
             ni.OffsetX = i / (float)numBigTiles;
             ni.OffsetY = j / (float)numBigTiles;
+#else
+            ni.NodeMatrix = float4x4::Identity();
+            ni.ScaleX = 1.0f;
+            ni.ScaleY = 1.0f;
+            ni.OffsetX = 0.0f;
+            ni.OffsetY = 0.0f;
+#endif
 
             node.Instances.push_back(ni);
         }

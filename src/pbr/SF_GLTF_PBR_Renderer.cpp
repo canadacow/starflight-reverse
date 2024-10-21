@@ -701,6 +701,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = Node.Instances[i].OffsetX;
                         InstanceAttribs[i].HeightmapAttribs.OffsetY = Node.Instances[i].OffsetY;
                     }
+
+                    StateTransitionDesc Barriers[] = {
+                        {m_InstanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE},
+                    };
+                    pCtx->TransitionResourceStates(_countof(Barriers), Barriers);
                 }
                 else if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
                 {
@@ -719,6 +724,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 drawAttrs.BaseVertex         = BaseVertex;
                 if(Node.Instances.size() > 0)
                 {
+                    drawAttrs.FirstInstanceLocation = 0;
                     drawAttrs.NumInstances = static_cast<Uint32>(Node.Instances.size());
                 }
                 pCtx->DrawIndexed(drawAttrs);

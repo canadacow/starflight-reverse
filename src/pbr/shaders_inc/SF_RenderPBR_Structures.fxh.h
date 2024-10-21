@@ -56,6 +56,7 @@
 "{\n"
 "    float4x4            NodeMatrix;\n"
 "    PBRHeightmapAttribs HeightmapAttribs;\n"
+"    float4 Padding[3]; // 64 bytes padding\n"
 "};\n"
 "#ifdef CHECK_STRUCT_ALIGNMENT\n"
 "	CHECK_STRUCT_ALIGNMENT(PBRInstanceAttribs);\n"

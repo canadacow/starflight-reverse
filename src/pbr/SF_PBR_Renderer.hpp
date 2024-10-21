@@ -91,6 +91,8 @@ public:
 
     static constexpr Uint16 InvalidMaterialTextureId = 0xFFFFu;
 
+    static constexpr Uint32 MaxInstanceCount = 4096;
+
     /// Static indices assigned to each material texture at shader compile time
     /// (e.g. BaseColorTextureId, NormalTextureId, etc.).
     using StaticShaderTextureIdsArrayType = std::array<Uint16, TEXTURE_ATTRIB_ID_COUNT>;

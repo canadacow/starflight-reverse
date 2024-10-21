@@ -443,7 +443,7 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         {
             BufferDesc SBDesc;
             SBDesc.Name           = "PBR instance attribs SB";
-            SBDesc.Size           = sizeof(HLSL::PBRInstanceAttribs);
+            SBDesc.Size           = sizeof(HLSL::PBRInstanceAttribs) * MaxInstanceCount;
             SBDesc.Usage          = USAGE_DYNAMIC;
             SBDesc.BindFlags      = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
             SBDesc.Mode           = BUFFER_MODE_STRUCTURED;

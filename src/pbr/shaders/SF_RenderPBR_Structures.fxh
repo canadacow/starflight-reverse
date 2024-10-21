@@ -56,6 +56,7 @@ struct PBRInstanceAttribs
 {
     float4x4            NodeMatrix;
     PBRHeightmapAttribs HeightmapAttribs;
+    float4 Padding[3]; // 64 bytes padding
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRInstanceAttribs);

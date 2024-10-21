@@ -3124,10 +3124,11 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     {
         s_gc.terrain.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.terrain.model, s_gc.frameAttribsCB, shadowMap, s_gc.heightmapAttribsCB, s_gc.heightmapView);
     }
-    
 
     StateTransitionDesc Barriers[] = {
         {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+        {s_gc.heightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+        {s_gc.pbrRenderer->GetInstanceAttribsSB(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE},
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
