@@ -44,7 +44,7 @@ public:
 
 private:
 
-    const int numBigTiles = 9;
+    const int numBigTiles = 61;
 
     void InitializeVertexAndIndexData();
 

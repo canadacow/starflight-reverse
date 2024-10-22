@@ -2987,6 +2987,7 @@ struct PSOutput
 
 static void InitHeightmap()
 {
+    /*
     const int8_t image[9][9] = {
         {-16, -16, 16, 16, 32, 48, 48, 32, 32},
         {-16, -16, 16, 16, 32, 48, 32, 32, 48},
@@ -2998,22 +2999,29 @@ static void InitHeightmap()
         {-16, -16, 16, 16, 32, 32, 32, 32, 32},
         {-16, 16, 16, 16, 16, 32, 32, 32, 32},
     };
+    static constexpr MapWidth = 9;
+    static constexpr MapHeight = 9;
+    */
 
-    std::vector<float> dummyHeightmap(9 * 9);
-    for (int y = 0; y < 9; ++y)
+    #include "map.h"
+    static constexpr int MapWidth = 61;
+    static constexpr int MapHeight = 61;
+
+    std::vector<float> dummyHeightmap(MapWidth * MapHeight);
+    for (int y = 0; y < MapHeight; ++y)
     {
-        for (int x = 0; x < 9; ++x)
+        for (int x = 0; x < MapWidth; ++x)
         {
             //dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 48.0f;
-            dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 16.0f;
+            dummyHeightmap[y * MapWidth + x] = static_cast<float>(image[y][x]) / 8.0f;
         }
     }
 
     TextureDesc HeightmapTexDesc;
     HeightmapTexDesc.Name = "Dummy Heightmap Texture";
     HeightmapTexDesc.Type = RESOURCE_DIM_TEX_2D;
-    HeightmapTexDesc.Width = 9;
-    HeightmapTexDesc.Height = 9;
+    HeightmapTexDesc.Width = MapWidth;
+    HeightmapTexDesc.Height = MapHeight;
     HeightmapTexDesc.Format = TEX_FORMAT_R32_FLOAT;
     HeightmapTexDesc.BindFlags = BIND_SHADER_RESOURCE;
 
@@ -4547,10 +4555,14 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 
     const float3 referenceRightAxis = float3{ 1, 0, 0 };
     const float3 referenceUpAxis = float3{ 0, 1, 0 };
+    static bool shiftDown = false;
 
     switch (event.type) {
         case SDL_KEYDOWN:
             switch (event.key.keysym.sym) {
+                case SDLK_LSHIFT:
+                    shiftDown = true;
+                    break;
                 case SDLK_w:
                     if (currentCameraIndex == 0)
                     {
@@ -4567,6 +4579,18 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                         MoveDirection.y += 1.0f;
                     }
                     else
+                    {
+                        MoveDirection.z += 1.0f;
+                    }
+                    break;
+                case SDLK_q:
+                    if (currentCameraIndex == 0)
+                    {
+                        MoveDirection.z -= 1.0f;
+                    }
+                    break;
+                case SDLK_e:
+                    if (currentCameraIndex == 0)
                     {
                         MoveDirection.z += 1.0f;
                     }
@@ -4590,7 +4614,18 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_m:
                     {
-                        s_gc.terrainMaterialIndex = (s_gc.terrainMaterialIndex + 1) % s_gc.terrain.model->GetMaterials().size();
+                        int64_t materialCount = s_gc.terrain.model->GetMaterials().size();
+                        int64_t materialIndex = s_gc.terrainMaterialIndex;
+                        materialIndex += shiftDown ? -1 : 1;
+                        if (materialIndex < 0)
+                        {
+                            materialIndex += materialCount;
+                        }
+                        else if (materialIndex >= materialCount)
+                        {
+                            materialIndex -= materialCount;
+                        }
+                        s_gc.terrainMaterialIndex = static_cast<Uint32>(materialIndex);
                         for (const auto& node : s_gc.terrain.dynamicMesh->GetNodes())
                         {
                             if (node.pMesh)
@@ -4608,7 +4643,13 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
             }
             break;
         case SDL_KEYUP:
-            s_gc.terrainDelta = {};
+            {
+                if (event.key.keysym.sym == SDLK_LSHIFT)
+                {
+                    shiftDown = false;
+                }
+                s_gc.terrainDelta = {};
+            }
             break;
         case SDL_MOUSEMOTION:
             {
@@ -4667,7 +4708,7 @@ void InitTerrain()
     InitModel("61x61plane.glb", s_gc.terrain, 0);
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlanes(2.0f, 2.0f, 1.0f);
+    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 1.0f);
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
@@ -4739,6 +4780,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     YFov = pCamera->Perspective.YFov;
     ZNear = pCamera->Perspective.ZNear;
     ZFar = pCamera->Perspective.ZFar;
+    //ZFar = 10000.0f;
 
     // Apply pretransform matrix that rotates the scene according the surface orientation
     CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
