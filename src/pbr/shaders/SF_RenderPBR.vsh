@@ -214,7 +214,16 @@ void main(in  VSInput  VSIn,
 
 #if USE_TEXCOORD0
     VSOut.UV0      = VSIn.UV0;
+#if USE_TERRAINING
+#if !defined(USE_HEIGHTMAP) || !defined(USE_INSTANCING)
+    #error "Height map and instancing must be enabled"
 #endif
+    int instanceX = VSIn.InstanceID % 61;
+    int instanceY = VSIn.InstanceID / 61;
+    float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
+    VSOut.UV0 = frac(megaUV * 3.0);
+#endif // USE_TERRAINING
+#endif // USE_TEXCOORD0
 
 #if USE_TEXCOORD1
     VSOut.UV1      = VSIn.UV1;

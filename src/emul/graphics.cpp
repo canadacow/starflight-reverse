@@ -6075,6 +6075,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 SF_GLTF_PBR_Renderer::RenderInfo ri = s_gc.renderParams;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_HEIGHTMAP;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_INSTANCING;
+                ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
             }
             else

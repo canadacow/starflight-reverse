@@ -588,6 +588,10 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 PSOFlags |= PSO_FLAG_USE_INSTANCING;
             }
+            if (RenderParams.Flags & PSO_FLAG_USE_TERRAINING)
+            {
+                PSOFlags |= PSO_FLAG_USE_TERRAINING;
+            }
 
             if (RenderParams.Wireframe)
                 PSOFlags |= PSO_FLAG_UNSHADED;

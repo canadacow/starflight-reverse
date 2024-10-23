@@ -231,6 +231,15 @@ void DynamicMesh::CreateBuffers()
     VertBuffDesc2.Size = sizeof(VertexBuff2) * m_Vertices.size();
     m_pDevice->CreateBuffer(VertBuffDesc2, nullptr, &m_VertexBuffer2);
 
+    // Initialize third vertex buffer
+    BufferDesc VertBuffDesc3;
+    VertBuffDesc3.Name = "Dynamic vertex buffer 3";
+    VertBuffDesc3.Usage = USAGE_DYNAMIC;
+    VertBuffDesc3.BindFlags = BIND_VERTEX_BUFFER;
+    VertBuffDesc3.CPUAccessFlags = CPU_ACCESS_WRITE;
+    VertBuffDesc3.Size = sizeof(VertexBuff3) * m_Vertices.size();
+    m_pDevice->CreateBuffer(VertBuffDesc3, nullptr, &m_VertexBuffer3);
+
     // Initialize index buffer
     BufferDesc IndBuffDesc;
     IndBuffDesc.Name = "Dynamic index buffer";
@@ -254,6 +263,10 @@ void DynamicMesh::PrepareResources()
     MapHelper<float> Vertices2(m_pContext, m_VertexBuffer2, MAP_WRITE, MAP_FLAG_DISCARD);
     memset(Vertices2, 0, sizeof(VertexBuff2) * m_Vertices.size());
 
+    // Update third vertex buffer
+    MapHelper<float> Vertices3(m_pContext, m_VertexBuffer3, MAP_WRITE, MAP_FLAG_DISCARD);
+    memset(Vertices3, 0, sizeof(VertexBuff3) * m_Vertices.size());
+
     // Update index buffer
     MapHelper<Uint32> Indices(m_pContext, m_IndexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
     memcpy(Indices, m_Indices.data(), sizeof(Uint32) * m_Indices.size());
@@ -264,11 +277,11 @@ void DynamicMesh::PrepareResources()
 void DynamicMesh::InitializeVertexAndIndexData()
 {
     // Initialize VertexData
-    VertexData.Strides = { 0x20, 0x20 }; // Assuming 3 floats per vertex (x, y, z)
-    VertexData.Buffers = { m_VertexBuffer, m_VertexBuffer2 };
+    VertexData.Strides = { 0x20, 0x20, 0x20 }; // Assuming 3 floats per vertex (x, y, z)
+    VertexData.Buffers = { m_VertexBuffer, m_VertexBuffer2, m_VertexBuffer3 };
     VertexData.pAllocation = nullptr; // Assuming no suballocation
     VertexData.PoolId = 0;
-    VertexData.EnabledAttributeFlags = 0x7; // Position, Normal, Tangent, Color
+    VertexData.EnabledAttributeFlags = 0xf; // Position, Normal, Texcoord0, Texcoord1
 
     // Initialize IndexData
     IndexData.pBuffer = m_IndexBuffer;

@@ -72,8 +72,21 @@ private:
         float weightW;
     };
 
+    struct VertexBuff3
+    {
+        float texU1;
+        float texV1;
+        float padding0;
+        float padding1;
+        float padding2;
+        float padding3;
+        float padding4;
+        float padding5;
+    };
+
     RefCntAutoPtr<IBuffer> m_VertexBuffer;
     RefCntAutoPtr<IBuffer> m_VertexBuffer2;
+    RefCntAutoPtr<IBuffer> m_VertexBuffer3;
     RefCntAutoPtr<IBuffer> m_IndexBuffer;
     std::shared_ptr<SF_GLTF::Model> m_Model;
     IRenderDevice* m_pDevice;
