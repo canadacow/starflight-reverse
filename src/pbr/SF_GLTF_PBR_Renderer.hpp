@@ -31,6 +31,7 @@
 
 #include <vector>
 #include <array>
+#include <unordered_map>
 
 //#include "../../../DiligentTools/AssetLoader/interface/GLTFLoader.hpp"
 #include "SF_GLTFLoader.hpp"
@@ -104,9 +105,14 @@ public:
 
         bool Wireframe = false;
 
-        bool Terrain = false;
-        float StartBiomHeight = 0.0f;
-        float EndBiomHeight = 0.0f;
+        struct TerrainInfo
+        {
+            Uint32 MaterialIndex = 0;
+            float StartBiomHeight = 0.0f;
+            float EndBiomHeight = 0.0f;
+        };
+
+        std::unordered_map<Uint32, TerrainInfo> TerrainInfos;
     };
 
     /// GLTF Model shader resource binding information
@@ -148,6 +154,12 @@ public:
                 const RenderInfo&            RenderParams,
                 ModelResourceBindings*       pModelBindings,
                 ResourceCacheBindings*       pCacheBindings = nullptr);
+
+    void RenderTerrain(IDeviceContext*              pCtx,
+                const SF_GLTF::Model&           GLTFModel,
+                const SF_GLTF::ModelTransforms& Transforms,
+                const RenderInfo&            RenderParams,
+                ModelResourceBindings*       pModelBindings);    
 
     /// Creates resource bindings for a given GLTF model
     ModelResourceBindings CreateResourceBindings(SF_GLTF::Model& GLTFModel,
@@ -301,11 +313,14 @@ private:
     {
         const SF_GLTF::Primitive& Primitive;
         const SF_GLTF::Node&      Node;
+        const Uint32              MaterialIndex;
 
         PrimitiveRenderInfo(const SF_GLTF::Primitive& _Primitive,
-                            const SF_GLTF::Node&      _Node) noexcept :
+                            const SF_GLTF::Node&      _Node,
+                            Uint32                     _MaterialIndex) noexcept :
             Primitive{_Primitive},
-            Node{_Node}
+            Node{_Node},
+            MaterialIndex{_MaterialIndex}
         {}
     };
     std::array<std::vector<PrimitiveRenderInfo>, SF_GLTF::Material::ALPHA_MODE_NUM_MODES> m_RenderLists;

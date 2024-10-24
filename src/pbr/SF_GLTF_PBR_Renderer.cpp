@@ -443,6 +443,15 @@ SF_GLTF_PBR_Renderer::PSO_FLAGS SF_GLTF_PBR_Renderer::GetMaterialPSOFlags(const 
 }
 
 
+void SF_GLTF_PBR_Renderer::RenderTerrain(IDeviceContext*              pCtx,
+                                        const SF_GLTF::Model&           GLTFModel,
+                                        const SF_GLTF::ModelTransforms& Transforms,
+                                        const RenderInfo&            RenderParams,
+                                        ModelResourceBindings*       pModelBindings)
+{
+
+}
+
 void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                                const SF_GLTF::Model&           GLTFModel,
                                const SF_GLTF::ModelTransforms& Transforms,
@@ -525,12 +534,27 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                 continue;
 
-            const auto& Material  = GLTFModel.GetMaterials()[primitive.MaterialId];
-            const auto  AlphaMode = Material.Attribs.AlphaMode;
-            if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
-                continue;
+            if(RenderParams.TerrainInfos.size() > 0 )
+            {
+                for(const auto& terrainInfo : RenderParams.TerrainInfos)
+                {
+                    const auto& Material  = GLTFModel.GetMaterials()[terrainInfo.second.MaterialIndex];
+                    const auto  AlphaMode = Material.Attribs.AlphaMode;
+                    if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
+                        continue;
 
-            m_RenderLists[AlphaMode].emplace_back(primitive, *pNode);
+                    m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, terrainInfo.second.MaterialIndex);
+                }
+            }
+            else
+            {
+                const auto& Material  = GLTFModel.GetMaterials()[primitive.MaterialId];
+                const auto  AlphaMode = Material.Attribs.AlphaMode;
+                if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
+                    continue;
+
+                m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, primitive.MaterialId);
+            }
         }
     }
 
@@ -558,7 +582,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
         {
             const auto& Node                 = PrimRI.Node;
             const auto& primitive            = PrimRI.Primitive;
-            const auto& material             = GLTFModel.GetMaterials()[primitive.MaterialId];
+            const auto& material             = GLTFModel.GetMaterials()[PrimRI.MaterialIndex];
             const auto& NodeGlobalMatrix     = Transforms.NodeGlobalMatrices[Node.Index];
             const auto& PrevNodeGlobalMatrix = PrevTransforms->NodeGlobalMatrices[Node.Index];
 
@@ -589,7 +613,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 PSOFlags |= PSO_FLAG_USE_INSTANCING;
             }
 
-            if (RenderParams.Terrain)
+            if (RenderParams.TerrainInfos.size() > 0)
             {
                 PSOFlags |= PSO_FLAG_USE_TERRAINING;
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
@@ -696,11 +720,15 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     UNEXPECTED("Unable to map the buffer");
                 }
 
-                if(RenderParams.Terrain)
+                if(RenderParams.TerrainInfos.size() > 0)
                 {
                     MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, m_TerrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-                    TerrainAttribs->startBiomHeight = RenderParams.StartBiomHeight;
-                    TerrainAttribs->endBiomHeight = RenderParams.EndBiomHeight; 
+                    auto it = RenderParams.TerrainInfos.find(static_cast<Uint32>(PrimRI.MaterialIndex));
+                    if(it != RenderParams.TerrainInfos.end())
+                    {
+                        TerrainAttribs->startBiomHeight = it->second.StartBiomHeight;
+                        TerrainAttribs->endBiomHeight = it->second.EndBiomHeight; 
+                    }
                 }
 
                 if((RenderParams.Flags & PSO_FLAG_USE_INSTANCING) && Node.Instances.size() > 0)
