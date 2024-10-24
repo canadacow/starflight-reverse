@@ -283,7 +283,8 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
     m_Device{pDevice, pStateCache},
     m_PBRPrimitiveAttribsCB{CI.pPrimitiveAttribsCB},
     m_JointsBuffer{CI.pJointsBuffer},
-    m_HeightmapAttribsCB{CI.pHeightmapAttribsCB}
+    m_HeightmapAttribsCB{CI.pHeightmapAttribsCB},
+    m_TerrainAttribsCB{CI.pTerrainAttribsCB}
 {
     if (m_Settings.EnableIBL)
     {
@@ -440,6 +441,10 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         {
             CreateUniformBuffer(pDevice, sizeof(HLSL::PBRHeightmapAttribs), "PBR heightmap attribs CB", &m_HeightmapAttribsCB);
         }
+        if (!m_TerrainAttribsCB)
+        {
+            CreateUniformBuffer(pDevice, sizeof(HLSL::PBRTerrainAttribs), "PBR terrain attribs CB", &m_TerrainAttribsCB);
+        }
         if (!m_InstanceAttribsSB)
         {
             BufferDesc SBDesc;
@@ -471,6 +476,7 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         Barriers.emplace_back(m_PBRPrimitiveAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         Barriers.emplace_back(m_HeightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         Barriers.emplace_back(m_InstanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE);
+        Barriers.emplace_back(m_TerrainAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         if (m_JointsBuffer)
             Barriers.emplace_back(m_JointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         pCtx->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());
@@ -921,6 +927,12 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
         if (auto* pInstanceAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer"))
             pInstanceAttribsVar->Set(m_InstanceAttribsSBView);
     }
+
+    if(m_TerrainAttribsCB != nullptr)
+    {
+        if (auto* pTerrainAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs"))
+            pTerrainAttribsVar->Set(m_TerrainAttribsCB);
+    }
 }
 
 void SF_PBR_Renderer::SetMaterialTexture(IShaderResourceBinding* pSRB, ITextureView* pTexSRV, TEXTURE_ATTRIB_ID TextureId) const
@@ -977,7 +989,8 @@ void SF_PBR_Renderer::CreateSignature()
         .AddResource(SHADER_TYPE_VS_PS, "cbPrimitiveAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "cbHeightmapAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "g_Heightmap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddResource(SHADER_TYPE_VS_PS, "instanceBuffer", SHADER_RESOURCE_TYPE_BUFFER_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        .AddResource(SHADER_TYPE_VS_PS, "instanceBuffer", SHADER_RESOURCE_TYPE_BUFFER_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddResource(SHADER_TYPE_VS_PS, "cbTerrainAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
 
     if (m_Settings.MaxJointCount > 0)
         SignatureDesc.AddResource(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);

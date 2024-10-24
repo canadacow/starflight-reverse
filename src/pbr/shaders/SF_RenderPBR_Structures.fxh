@@ -62,4 +62,15 @@ struct PBRInstanceAttribs
 	CHECK_STRUCT_ALIGNMENT(PBRInstanceAttribs);
 #endif
 
+struct PBRTerrainAttribs
+{
+    float startBiomHeight;
+    float endBiomHeight;
+    float padding0;
+    float padding1;
+};
+#ifdef CHECK_STRUCT_ALIGNMENT
+	CHECK_STRUCT_ALIGNMENT(PBRTerrainAttribs);
+#endif
+
 #endif // _RENDER_PBR_STRUCTURES_FXH_

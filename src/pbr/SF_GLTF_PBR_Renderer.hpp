@@ -103,6 +103,10 @@ public:
         PSO_FLAGS Flags = PSO_FLAG_DEFAULT;
 
         bool Wireframe = false;
+
+        bool Terrain = false;
+        float StartBiomHeight = 0.0f;
+        float EndBiomHeight = 0.0f;
     };
 
     /// GLTF Model shader resource binding information

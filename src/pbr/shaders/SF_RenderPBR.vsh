@@ -90,6 +90,13 @@ float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 StructuredBuffer<PBRInstanceAttribs> instanceBuffer : register(t1);
 #endif
 
+#if USE_TERRAINING
+cbuffer cbTerrainAttribs
+{
+    PBRTerrainAttribs g_Terrain;
+}
+#endif
+
 #ifndef MAX_JOINT_COUNT
 #   define MAX_JOINT_COUNT 64
 #endif

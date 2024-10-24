@@ -588,9 +588,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 PSOFlags |= PSO_FLAG_USE_INSTANCING;
             }
-            if (RenderParams.Flags & PSO_FLAG_USE_TERRAINING)
+
+            if (RenderParams.Terrain)
             {
                 PSOFlags |= PSO_FLAG_USE_TERRAINING;
+                PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
             }
 
             if (RenderParams.Wireframe)
@@ -692,6 +694,13 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 else
                 {
                     UNEXPECTED("Unable to map the buffer");
+                }
+
+                if(RenderParams.Terrain)
+                {
+                    MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, m_TerrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    TerrainAttribs->startBiomHeight = RenderParams.StartBiomHeight;
+                    TerrainAttribs->endBiomHeight = RenderParams.EndBiomHeight; 
                 }
 
                 if((RenderParams.Flags & PSO_FLAG_USE_INSTANCING) && Node.Instances.size() > 0)

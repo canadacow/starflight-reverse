@@ -338,6 +338,10 @@ public:
         /// If null, the renderer will allocate the buffer.
         IBuffer* pHeightmapAttribsCB = nullptr;
 
+        /// A pointer to the user-provided terrain attribs buffer.
+        /// If null, the renderer will allocate the buffer.
+        IBuffer* pTerrainAttribsCB = nullptr;
+
         /// Texture attribute index info
         std::array<int, TEXTURE_ATTRIB_ID_COUNT> TextureAttribIndices{};
 
@@ -823,6 +827,7 @@ protected:
 
     RefCntAutoPtr<IBuffer> m_PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> m_HeightmapAttribsCB;
+    RefCntAutoPtr<IBuffer> m_TerrainAttribsCB;
     RefCntAutoPtr<IBuffer> m_InstanceAttribsSB;
     RefCntAutoPtr<IBufferView> m_InstanceAttribsSBView;
     RefCntAutoPtr<IBuffer> m_PrecomputeEnvMapAttribsCB;
