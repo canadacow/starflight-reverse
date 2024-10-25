@@ -642,10 +642,10 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
             if (pModelBindings != nullptr)
             {
-                VERIFY(primitive.MaterialId < pModelBindings->MaterialSRB.size(),
+                VERIFY(PrimRI.MaterialIndex < pModelBindings->MaterialSRB.size(),
                        "Material index is out of bounds. This most likely indicates that shader resources were initialized for a different model.");
 
-                IShaderResourceBinding* const pSRB = pModelBindings->MaterialSRB[primitive.MaterialId];
+                IShaderResourceBinding* const pSRB = pModelBindings->MaterialSRB[PrimRI.MaterialIndex];
                 DEV_CHECK_ERR(pSRB != nullptr, "Unable to find SRB for GLTF material.");
                 if (pCurrSRB != pSRB)
                 {
