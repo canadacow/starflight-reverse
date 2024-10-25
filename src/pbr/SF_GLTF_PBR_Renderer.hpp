@@ -112,7 +112,7 @@ public:
             float EndBiomHeight = 0.0f;
         };
 
-        std::unordered_map<Uint32, TerrainInfo> TerrainInfos;
+        std::vector<TerrainInfo> TerrainInfos;
     };
 
     /// GLTF Model shader resource binding information

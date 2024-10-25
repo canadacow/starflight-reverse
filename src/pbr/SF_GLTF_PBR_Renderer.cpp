@@ -538,12 +538,12 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 for(const auto& terrainInfo : RenderParams.TerrainInfos)
                 {
-                    const auto& Material  = GLTFModel.GetMaterials()[terrainInfo.second.MaterialIndex];
+                    const auto& Material  = GLTFModel.GetMaterials()[terrainInfo.MaterialIndex];
                     const auto  AlphaMode = Material.Attribs.AlphaMode;
                     if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
                         continue;
 
-                    m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, terrainInfo.second.MaterialIndex);
+                    m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, terrainInfo.MaterialIndex);
                 }
             }
             else
@@ -723,11 +723,13 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 if(RenderParams.TerrainInfos.size() > 0)
                 {
                     MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, m_TerrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-                    auto it = RenderParams.TerrainInfos.find(static_cast<Uint32>(PrimRI.MaterialIndex));
+                    auto it = std::find_if(RenderParams.TerrainInfos.begin(), RenderParams.TerrainInfos.end(), [PrimRI](const auto& terrainInfo) {
+                        return terrainInfo.MaterialIndex == PrimRI.MaterialIndex;
+                    });
                     if(it != RenderParams.TerrainInfos.end())
                     {
-                        TerrainAttribs->startBiomHeight = it->second.StartBiomHeight;
-                        TerrainAttribs->endBiomHeight = it->second.EndBiomHeight; 
+                        TerrainAttribs->startBiomHeight = it->StartBiomHeight;
+                        TerrainAttribs->endBiomHeight = it->EndBiomHeight; 
                     }
                 }
 

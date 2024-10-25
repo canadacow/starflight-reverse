@@ -402,6 +402,22 @@ struct GraphicsContext
 
         std::unique_ptr<SF_GLTF::DynamicMesh> dynamicMesh;
         std::array<SF_GLTF::ModelTransforms, 2> dynamicMeshTransforms; // [0] - current frame, [1] - previous frame
+
+        std::unordered_map<std::string, Uint32> biomMaterialIndex;
+
+        struct BiomBoundary
+        {
+            std::string name;
+            float endHeight;
+        };
+
+        struct PlanetType
+        {
+            std::string name;
+            std::vector<BiomBoundary> boundaries;
+        };
+
+        std::vector<PlanetType> planetTypes;
     };
 
     SFModel station{};
@@ -4709,6 +4725,23 @@ void InitTerrain()
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
     s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 1.0f);
+
+    std::vector<std::string> biomNames = { "Grass", "Beach", "Sand", "Ice", "Rock", "Moon", "Sulfur", "Lava", "Water" };
+
+    for(const auto& biomName : biomNames)
+    {
+        auto& materials = s_gc.terrain.model->GetMaterials();
+        for (size_t i = 0; i < materials.size(); ++i) {
+            if (materials[i].Name == biomName) {
+                s_gc.terrain.biomMaterialIndex[biomName] = static_cast<Uint32>(i);
+                break;
+            }
+        }
+    }
+
+    s_gc.terrain.planetTypes = {
+        { "Earth-like", { { "Water", 1.0f }, { "Beach", 2.0f }, { "Grass", 3.0f }, { "Rock", 7.0f }, { "Ice", 15.0f } } },     
+    };
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
@@ -6077,6 +6110,22 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_INSTANCING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
 
+                // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
+                auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [](const auto& planetType) {
+                    return planetType.name == "Earth-like";
+                });
+                if (it != model.planetTypes.end())
+                {
+                    float startBiomHeight = -2.0f;
+                    for (const auto& biom : it->boundaries)
+                    {
+                        auto materialIndex = model.biomMaterialIndex[biom.name];
+                      
+                        ri.TerrainInfos.push_back({ materialIndex, startBiomHeight, biom.endHeight });
+                        startBiomHeight = biom.endHeight;
+                    }
+                }
+                
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
             }
             else
