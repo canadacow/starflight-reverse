@@ -230,9 +230,9 @@ void main(in  VSInput  VSIn,
     float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
     VSOut.UV0 = frac(megaUV * 1.5);
     
-    float2 gridPos = float2(gridX, gridY);
+    float2 gridPos = float2(instanceX, instanceY);
     gridPos += VSIn.UV0;
-    VSOut.UV1 = gridPos;
+    VSOut.UV1 = gridPos / float2(61.0, 61.0);
 #endif // USE_TERRAINING
 #endif // USE_TEXCOORD0
 

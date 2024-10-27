@@ -435,18 +435,11 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
     {
 
         {
-            TextureDesc TexDesc;
-            TexDesc.Name      = "Noise Texture";
-            TexDesc.Type      = RESOURCE_DIM_TEX_2D;
-            TexDesc.Width     = NoiseTextureDim;
-            TexDesc.Height    = NoiseTextureDim;
-            TexDesc.Format    = TEX_FORMAT_R8_UNORM;
-            TexDesc.Usage     = USAGE_IMMUTABLE;
-            TexDesc.BindFlags = BIND_SHADER_RESOURCE;
-
             RefCntAutoPtr<ITexture> pNoiseTexture;
             TextureLoadInfo LoadInfo{"Perlin Noise Texture"};
-            LoadInfo.Format = TEX_FORMAT_R8_UNORM;
+            LoadInfo.Format = TEX_FORMAT_RG8_UNORM;
+            LoadInfo.BindFlags = BIND_SHADER_RESOURCE;
+            LoadInfo.Usage = USAGE_IMMUTABLE;
             CreateTextureFromFile("perlin_noise.png", LoadInfo, pDevice, &pNoiseTexture);
             if (pNoiseTexture)
             {
@@ -961,9 +954,9 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
             pTerrainAttribsVar->Set(m_TerrainAttribsCB);
     }
 
-    if(m_pNoiseTextureSRV != nullptr    )
+    if(m_pNoiseTextureSRV != nullptr)
     {
-        if (auto* pNoiseTextureVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_Noise"))
+        if (auto* pNoiseTextureVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Noise"))
             pNoiseTextureVar->Set(m_pNoiseTextureSRV);
     }
 }
