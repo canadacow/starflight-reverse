@@ -433,6 +433,33 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
     }
 
     {
+
+        {
+            TextureDesc TexDesc;
+            TexDesc.Name      = "Noise Texture";
+            TexDesc.Type      = RESOURCE_DIM_TEX_2D;
+            TexDesc.Width     = NoiseTextureDim;
+            TexDesc.Height    = NoiseTextureDim;
+            TexDesc.Format    = TEX_FORMAT_R8_UNORM;
+            TexDesc.Usage     = USAGE_IMMUTABLE;
+            TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+
+            RefCntAutoPtr<ITexture> pNoiseTexture;
+            TextureLoadInfo LoadInfo{"Perlin Noise Texture"};
+            LoadInfo.Format = TEX_FORMAT_R8_UNORM;
+            CreateTextureFromFile("perlin_noise.png", LoadInfo, pDevice, &pNoiseTexture);
+            if (pNoiseTexture)
+            {
+                m_pNoiseTextureSRV = pNoiseTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+                StateTransitionDesc Barriers{pNoiseTexture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE};
+                pCtx->TransitionResourceStates(1, &Barriers);
+            }
+            else
+            {
+                LOG_ERROR_MESSAGE("Failed to load Perlin noise texture from file perlin_noise.png");
+            }
+        }
+
         if (!m_PBRPrimitiveAttribsCB)
         {
             CreateUniformBuffer(pDevice, GetPBRPrimitiveAttribsSize(PSO_FLAG_ALL), "PBR primitive attribs CB", &m_PBRPrimitiveAttribsCB);
@@ -933,6 +960,12 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
         if (auto* pTerrainAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs"))
             pTerrainAttribsVar->Set(m_TerrainAttribsCB);
     }
+
+    if(m_pNoiseTextureSRV != nullptr    )
+    {
+        if (auto* pNoiseTextureVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_Noise"))
+            pNoiseTextureVar->Set(m_pNoiseTextureSRV);
+    }
 }
 
 void SF_PBR_Renderer::SetMaterialTexture(IShaderResourceBinding* pSRB, ITextureView* pTexSRV, TEXTURE_ATTRIB_ID TextureId) const
@@ -1154,6 +1187,11 @@ void SF_PBR_Renderer::CreateSignature()
     {
         constexpr WebGPUResourceAttribs WGPUShadowMap{WEB_GPU_BINDING_TYPE_DEPTH_TEXTURE, RESOURCE_DIM_TEX_2D_ARRAY};
         AddTextureAndSampler("g_ShadowMap", Sam_ComparisonLinearClamp, "g_ShadowMap_sampler", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE, WGPUShadowMap);
+    }
+
+    if(m_pNoiseTextureSRV != nullptr)
+    {
+        AddTextureAndSampler("g_Noise", Sam_LinearWrap, "g_Noise_sampler", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
     }
 
     CreateCustomSignature(std::move(SignatureDesc));

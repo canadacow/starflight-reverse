@@ -222,17 +222,21 @@ void main(in  VSInput  VSIn,
 #if USE_TEXCOORD0
     VSOut.UV0      = VSIn.UV0;
 #if USE_TERRAINING
-#if !defined(USE_HEIGHTMAP) || !defined(USE_INSTANCING)
-    #error "Height map and instancing must be enabled"
+#if !defined(USE_HEIGHTMAP) || !defined(USE_INSTANCING) && !defined(USE_TEXCOORD1)
+    #error "Height map, instancing and texcoord1 must be enabled"
 #endif
     int instanceX = VSIn.InstanceID % 61;
     int instanceY = VSIn.InstanceID / 61;
     float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
-    VSOut.UV0 = frac(megaUV * 3.0);
+    VSOut.UV0 = frac(megaUV * 1.5);
+    
+    float2 gridPos = float2(gridX, gridY);
+    gridPos += VSIn.UV0;
+    VSOut.UV1 = gridPos;
 #endif // USE_TERRAINING
 #endif // USE_TEXCOORD0
 
-#if USE_TEXCOORD1
+#if USE_TEXCOORD1 && !USE_TERRAINING
     VSOut.UV1      = VSIn.UV1;
 #endif
     

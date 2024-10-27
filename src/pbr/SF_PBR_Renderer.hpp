@@ -843,6 +843,14 @@ protected:
     std::unordered_map<GraphicsPipelineDesc, PsoHashMapType> m_PSOs;
 
     std::unique_ptr<StaticShaderTextureIdsArrayType> m_StaticShaderTextureIds;
+
+    static constexpr Uint32 NoiseTextureDim = 2048;
+    RefCntAutoPtr<ITextureView> m_pNoiseTextureSRV;
+
+    ITextureView* GetNoiseTextureSRV() const
+    {
+        return m_pNoiseTextureSRV;
+    }
 };
 
 DEFINE_FLAG_ENUM_OPERATORS(SF_PBR_Renderer::PSO_FLAGS)

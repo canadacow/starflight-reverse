@@ -23,6 +23,7 @@
 #include <unordered_map>
 #include <array>
 #include <utility>
+#include <deque>
 
 #include <zstd.h>
 #include <xxhash.h>
@@ -408,7 +409,7 @@ struct GraphicsContext
         struct BiomBoundary
         {
             std::string name;
-            float endHeight;
+            float startHeight;
         };
 
         struct PlanetType
@@ -4726,7 +4727,7 @@ void InitTerrain()
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
     s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 1.0f);
 
-    std::vector<std::string> biomNames = { "Grass", "Beach", "Sand", "Ice", "Rock", "Moon", "Sulfur", "Lava", "Water" };
+    std::vector<std::string> biomNames = { "Grass2", "Beach", "Sand", "Ice", "Rock", "Moon", "Sulfur", "Lava", "Water" };
 
     for(const auto& biomName : biomNames)
     {
@@ -4740,7 +4741,7 @@ void InitTerrain()
     }
 
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", 1.0f }, { "Beach", 2.0f }, { "Grass", 3.0f }, { "Rock", 7.0f }, { "Ice", 15.0f } } },     
+        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "Rock", 6.01f }, { "Ice", 8.01f } } },     
     };
 }
 
@@ -6109,21 +6110,27 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_HEIGHTMAP;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_INSTANCING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
+                ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
                 auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [](const auto& planetType) {
                     return planetType.name == "Earth-like";
                 });
+
                 if (it != model.planetTypes.end())
                 {
-                    float startBiomHeight = -2.0f;
-                    for (const auto& biom : it->boundaries)
+                    using TerrainInfo = SF_GLTF_PBR_Renderer::RenderInfo::TerrainInfo;
+
+                    std::deque<TerrainInfo> terrainInfos;
+                    float endBiomHeight = 16.0f;
+                    for (auto it_biom = it->boundaries.rbegin(); it_biom != it->boundaries.rend(); ++it_biom)
                     {
-                        auto materialIndex = model.biomMaterialIndex[biom.name];
-                      
-                        ri.TerrainInfos.push_back({ materialIndex, startBiomHeight, biom.endHeight });
-                        startBiomHeight = biom.endHeight;
+                        auto materialIndex = model.biomMaterialIndex[it_biom->name];
+                        terrainInfos.push_front({ materialIndex, it_biom->startHeight, endBiomHeight });
+                        endBiomHeight = it_biom->startHeight;
                     }
+
+                    ri.TerrainInfos = std::vector<TerrainInfo>(terrainInfos.begin(), terrainInfos.end());
                 }
                 
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
