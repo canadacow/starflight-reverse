@@ -326,6 +326,7 @@ private:
     std::array<std::vector<PrimitiveRenderInfo>, SF_GLTF::Material::ALPHA_MODE_NUM_MODES> m_RenderLists;
 
     PsoCacheAccessor m_PbrPSOCache;
+    PsoCacheAccessor m_TerrainPSOCache;
     PsoCacheAccessor m_WireframePSOCache;
 };
 

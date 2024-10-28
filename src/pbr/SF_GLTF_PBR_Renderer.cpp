@@ -124,6 +124,10 @@ SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
 
         m_PbrPSOCache = GetPsoCacheAccessor(GraphicsDesc);
 
+        GraphicsDesc.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+        m_TerrainPSOCache = GetPsoCacheAccessor(GraphicsDesc);
+
         GraphicsDesc.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 
         m_WireframePSOCache = GetPsoCacheAccessor(GraphicsDesc);
@@ -629,15 +633,17 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 pCurrPSO   = nullptr;
             }
 
+            auto psoCache = (RenderParams.TerrainInfos.size() > 0) ? m_TerrainPSOCache : (RenderParams.Wireframe ? m_WireframePSOCache : m_PbrPSOCache);
+
             if (pCurrPSO == nullptr)
             {
-                pCurrPSO = (RenderParams.Wireframe ? m_WireframePSOCache : m_PbrPSOCache).Get(NewKey, PsoCacheAccessor::GET_FLAG_CREATE_IF_NULL);
+                pCurrPSO = psoCache.Get(NewKey, PsoCacheAccessor::GET_FLAG_CREATE_IF_NULL);
                 VERIFY_EXPR(pCurrPSO != nullptr);
                 pCtx->SetPipelineState(pCurrPSO);
             }
             else
             {
-                VERIFY_EXPR(pCurrPSO == (RenderParams.Wireframe ? m_WireframePSOCache : m_PbrPSOCache).Get(NewKey, PsoCacheAccessor::GET_FLAG_CREATE_IF_NULL));
+                VERIFY_EXPR(pCurrPSO == psoCache.Get(NewKey, PsoCacheAccessor::GET_FLAG_CREATE_IF_NULL));
             }
 
             if (pModelBindings != nullptr)
