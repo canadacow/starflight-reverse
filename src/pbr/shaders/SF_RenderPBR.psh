@@ -1,0 +1,627 @@
+// PBR shader based on the Khronos WebGL PBR implementation
+// See https://github.com/KhronosGroup/glTF-WebGL-PBR
+// Supports both metallic roughness and specular glossiness inputs
+
+#include "BasicStructures.fxh"
+#include "PBR_Shading.fxh"
+#include "SF_RenderPBR_Structures.fxh"
+
+#if ENABLE_TONE_MAPPING
+#   include "ToneMapping.fxh"
+#endif
+
+#if ENABLE_IRIDESCENCE
+#   include "Iridescence.fxh"
+#endif
+
+#include "VSOutputStruct.generated"
+// struct VSOutput
+// {
+//     float4 ClipPos  : SV_Position;
+//     float3 WorldPos : WORLD_POS;
+//     float4 Color    : COLOR;
+//     float3 Normal   : NORMAL;
+//     float2 UV0      : UV0;
+//     float2 UV1      : UV1;
+//     float Height : HEIGHT;
+// };
+
+#include "PSOutputStruct.generated"
+// struct PSOutput
+// {
+//     float4 Color      : SV_Target0;
+//     float4 CustomData : SV_Target1;
+// };
+
+#ifndef USE_TEXTURE_ATLAS
+#   define USE_TEXTURE_ATLAS 0
+#endif
+
+#ifndef ALLOW_DEBUG_VIEW
+#   define ALLOW_DEBUG_VIEW 0
+#endif
+
+#include "PBR_Textures.fxh"
+
+cbuffer cbFrameAttribs
+{
+    PBRFrameAttribs g_Frame;
+}
+
+cbuffer cbPrimitiveAttribs
+{
+#if PRIMITIVE_ARRAY_SIZE > 0
+    PBRPrimitiveAttribs g_Primitive[PRIMITIVE_ARRAY_SIZE];
+#else
+    PBRPrimitiveAttribs g_Primitive;
+#endif
+}
+
+#if USE_TERRAINING
+cbuffer cbTerrainAttribs
+{
+    PBRTerrainAttribs g_Terrain;
+}
+Texture2D<float4> g_Noise;
+SamplerState g_Noise_sampler;
+#endif
+
+#if PRIMITIVE_ARRAY_SIZE > 0
+#   define PRIMITIVE g_Primitive[VSOut.PrimitiveID]
+#else
+#   define PRIMITIVE g_Primitive
+#endif
+
+#if ENABLE_SHADOWS
+Texture2DArray<float>  g_ShadowMap;
+SamplerComparisonState g_ShadowMap_sampler;
+#endif
+
+
+PBRMaterialTextureAttribs GetDefaultTextureAttribs()
+{
+    PBRMaterialTextureAttribs Attribs;
+    Attribs.UVSelector   = -1.0;
+    Attribs.TextureSlice = 0.0;
+    Attribs.UBias        = 0.0;
+    Attribs.VBias        = 0.0;
+
+    Attribs.UVScaleAndRotation  = float4(1.0, 0.0, 0.0, 1.0);
+    Attribs.AtlasUVScaleAndBias = float4(1.0, 1.0, 0.0, 0.0);
+
+    Attribs.NormalScale = 1.0;
+    
+    return Attribs;
+}
+
+struct NormalMapUVInfo
+{
+    float  Selector;
+    float2 UV;
+    float2 SmoothUV;
+    float2 dUV_dx;
+    float2 dUV_dy;
+};
+
+NormalMapUVInfo GetNormalMapUVInfo(in VSOutput VSOut, in PBRMaterialTextureAttribs TexAttribs)
+{
+    NormalMapUVInfo UVInfo;
+    
+    UVInfo.Selector = TexAttribs.UVSelector;
+    UVInfo.UV       = SelectUV(VSOut, TexAttribs.UVSelector);
+
+#if ENABLE_TEXCOORD_TRANSFORM
+    UVInfo.UV = TransformUV(UVInfo.UV, TexAttribs);
+#endif
+    
+    UVInfo.SmoothUV = UVInfo.UV;
+    UVInfo.dUV_dx   = ddx(UVInfo.UV);
+    UVInfo.dUV_dy   = ddy(UVInfo.UV);
+#if USE_TEXTURE_ATLAS
+    {
+        UVInfo.UV = frac(UVInfo.UV) * TexAttribs.AtlasUVScaleAndBias.xy + TexAttribs.AtlasUVScaleAndBias.zw;
+        UVInfo.SmoothUV *= TexAttribs.AtlasUVScaleAndBias.xy;
+        UVInfo.dUV_dx   *= TexAttribs.AtlasUVScaleAndBias.xy;
+        UVInfo.dUV_dy   *= TexAttribs.AtlasUVScaleAndBias.xy;
+    }
+#endif
+    
+    return UVInfo;
+}
+
+BaseLayerShadingInfo ReadBaseLayerProperties(in VSOutput              VSOut,
+                                             in PBRMaterialShaderInfo Material,
+                                             in float4                BaseColor,
+                                             in PerturbNormalInfo     NormalInfo,
+                                             in NormalMapUVInfo       NMUVInfo,
+                                             in float3                View)
+{
+    BaseLayerShadingInfo Base;
+    
+    float3 TSNormal     = GetMicroNormal(Material, NMUVInfo.UV, NMUVInfo.SmoothUV, NMUVInfo.dUV_dx, NMUVInfo.dUV_dy, g_Frame.Renderer.MipBias);
+    float4 PhysicalDesc = GetPhysicalDesc(VSOut, Material, g_Frame.Renderer.MipBias);
+    
+    PBRMaterialBasicAttribs BasicAttribs = Material.Basic;
+    if (BasicAttribs.Workflow == PBR_WORKFLOW_SPECULAR_GLOSINESS)
+    {
+        PhysicalDesc.rgb = TO_LINEAR(PhysicalDesc.rgb) * BasicAttribs.SpecularFactor.rgb;
+        const float u_GlossinessFactor = 1.0;
+        PhysicalDesc.a *= u_GlossinessFactor;
+    }
+    else if (BasicAttribs.Workflow == PBR_WORKFLOW_METALLIC_ROUGHNESS)
+    {
+        // PhysicalDesc should already be in linear space
+        PhysicalDesc.g = saturate(PhysicalDesc.g * BasicAttribs.RoughnessFactor);
+        PhysicalDesc.b = saturate(PhysicalDesc.b * BasicAttribs.MetallicFactor);
+    }
+    Base.Metallic = 0.0;
+    Base.Srf = GetSurfaceReflectance(BasicAttribs.Workflow, BaseColor, PhysicalDesc, Base.Metallic);
+    
+    Base.Normal = PerturbNormal(NormalInfo,
+                                NMUVInfo.dUV_dx,
+                                NMUVInfo.dUV_dy,
+                                TSNormal,
+                                NMUVInfo.Selector >= 0.0);
+    
+    Base.NdotV = dot_sat(Base.Normal, View);
+    
+    return Base;
+}
+
+#if ENABLE_CLEAR_COAT
+ClearcoatShadingInfo ReadClearcoatLayerProperties(in VSOutput              VSOut,
+                                                  in PBRMaterialShaderInfo Material,
+                                                  in PerturbNormalInfo     NormalInfo,
+                                                  in NormalMapUVInfo       NMUVInfo)
+{
+    ClearcoatShadingInfo Clearcoat;
+
+    Clearcoat.Factor  = GetClearcoatFactor(VSOut, Material, g_Frame.Renderer.MipBias);
+
+    float  ClearCoatRoughness = GetClearcoatRoughness(VSOut, Material, g_Frame.Renderer.MipBias);
+    float3 ClearCoatNormal    = GetClearcoatNormal(Material, NMUVInfo.UV, NMUVInfo.SmoothUV, NMUVInfo.dUV_dx, NMUVInfo.dUV_dy, g_Frame.Renderer.MipBias);
+    
+    float IOR = 1.5;
+    Clearcoat.Srf = GetSurfaceReflectanceClearCoat(ClearCoatRoughness, IOR);
+
+    Clearcoat.Normal = NormalInfo.Normal;
+#   if USE_CLEAR_COAT_NORMAL_MAP
+    {
+        // If clearcoatNormalTexture is not given, no normal mapping is applied to the clear coat layer,
+        // even if normal mapping is applied to the base material.
+        if (NMUVInfo.Selector >= 0.0)
+        {
+            Clearcoat.Normal = PerturbNormal(NormalInfo,
+                                             NMUVInfo.dUV_dx,
+                                             NMUVInfo.dUV_dy,
+                                             ClearCoatNormal,
+                                             true);
+        }
+    }
+#   endif
+
+    return Clearcoat;
+}
+#endif
+
+#if ENABLE_SHEEN
+SheenShadingInfo ReadSheenLayerProperties(in VSOutput              VSOut, 
+                                          in PBRMaterialShaderInfo Material)
+{
+    SheenShadingInfo Sheen;
+    
+    Sheen.Color     = GetSheenColor(VSOut, Material, g_Frame.Renderer.MipBias);
+    Sheen.Roughness = GetSheenRoughness(VSOut, Material, g_Frame.Renderer.MipBias);
+
+    return Sheen;
+}
+#endif
+
+#if ENABLE_IRIDESCENCE
+IridescenceShadingInfo ReadIridescenceProperties(in VSOutput              VSOut, 
+                                                 in PBRMaterialShaderInfo Material,
+                                                 in BaseLayerShadingInfo  BaseLayer)
+{
+    IridescenceShadingInfo Iridescence;
+    
+    Iridescence.Factor    = GetIridescence(VSOut, Material, g_Frame.Renderer.MipBias);
+    Iridescence.Thickness = GetIridescenceThickness(VSOut, Material, g_Frame.Renderer.MipBias);
+
+    Iridescence.Fresnel = EvalIridescence(1.0, Material.Iridescence.IOR, BaseLayer.NdotV, Iridescence.Thickness, BaseLayer.Srf.Reflectance0);
+    Iridescence.F0      = SchlickToF0(BaseLayer.NdotV, Iridescence.Fresnel, float3(1.0, 1.0, 1.0));
+
+    if (Iridescence.Thickness == 0.0)
+        Iridescence.Factor = 0.0;
+
+    return Iridescence;
+}
+#endif
+
+#if ENABLE_ANISOTROPY
+AnisotropyShadingInfo ReadAnisotropyProperties(in VSOutput              VSOut,
+                                               in PBRMaterialShaderInfo Material,
+                                               in BaseLayerShadingInfo  BaseLayer)
+{
+    float3 PackedAnisotropy = GetAnisotropy(VSOut, Material, g_Frame.Renderer.MipBias);
+
+    float2 RotationCS = float2(cos(Material.Anisotropy.Rotation), sin(Material.Anisotropy.Rotation));
+
+    float2 Direction = float2(
+        PackedAnisotropy.x * RotationCS.x - PackedAnisotropy.y * RotationCS.y,
+        PackedAnisotropy.x * RotationCS.y + PackedAnisotropy.y * RotationCS.x);
+
+    AnisotropyShadingInfo Anisotropy;
+
+    Anisotropy.Direction = Direction;
+    Anisotropy.Strength  = PackedAnisotropy.z;
+    
+    float3 Tangent = float3(1.0, 0.0, 0.0);
+#   if USE_VERTEX_TANGENTS
+    {
+        Tangent = VSOut.Tangent;
+    }
+#   else
+    {
+        // GLTF spec states that SamplerName all meshes with materials that use anisotropy SHOULD supply TANGENT vectors as a mesh attribute.
+        // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_anisotropy#anisotropy
+        // If tangent attribute is not supplied, tangents should be computed from screen-space derivatives.
+        // However, such tangents may be discontinuous (normals are always continuous), so we don't use them.
+    }
+#   endif
+    float3 Bitangent = cross(Tangent, BaseLayer.Normal);
+    
+    Anisotropy.Tangent   = normalize(mul(float3(Direction, 0.0), MatrixFromRows(Tangent, Bitangent, BaseLayer.Normal)));
+    Anisotropy.Bitangent = cross(BaseLayer.Normal, Anisotropy.Tangent);
+
+    // Roughness along the anisotropy bitangent is the material roughness, while the tangent roughness increases with anisotropy.
+    Anisotropy.AlphaRoughnessT = lerp(BaseLayer.Srf.PerceptualRoughness * BaseLayer.Srf.PerceptualRoughness, 1.0, Anisotropy.Strength * Anisotropy.Strength);
+    Anisotropy.AlphaRoughnessB = BaseLayer.Srf.PerceptualRoughness * BaseLayer.Srf.PerceptualRoughness;
+
+    return Anisotropy;
+}
+#endif
+
+SurfaceShadingInfo GetSurfaceShadingInfo(in VSOutput              VSOut,
+                                         in PBRMaterialShaderInfo Material,
+                                         in float4                BaseColor,
+                                         in PerturbNormalInfo     NormalInfo,
+                                         in NormalMapUVInfo       NMUVInfo,
+                                         in NormalMapUVInfo       ClearCoatNMUVInfo)
+{
+    SurfaceShadingInfo Shading;
+    
+    Shading.Pos       = VSOut.WorldPos.xyz;
+    Shading.View      = normalize(g_Frame.Camera.f4Position.xyz - VSOut.WorldPos.xyz); // Direction from surface point to camera
+    Shading.BaseLayer = ReadBaseLayerProperties(VSOut, Material, BaseColor, NormalInfo, NMUVInfo, Shading.View);
+    Shading.Occlusion = GetOcclusion(VSOut, Material, g_Frame.Renderer.MipBias);
+    Shading.Emissive  = GetEmissive(VSOut, Material, g_Frame.Renderer.MipBias);
+
+    Shading.IBLScale  = g_Frame.Renderer.IBLScale.rgb;
+    Shading.Occlusion = lerp(1.0, Shading.Occlusion, g_Frame.Renderer.OcclusionStrength);
+    Shading.Emissive *= g_Frame.Renderer.EmissionScale;
+
+#   if ENABLE_CLEAR_COAT
+    {
+        Shading.Clearcoat = ReadClearcoatLayerProperties(VSOut, Material, NormalInfo, ClearCoatNMUVInfo); 
+    }
+#   endif
+    
+#   if ENABLE_SHEEN
+    {    
+        Shading.Sheen = ReadSheenLayerProperties(VSOut, Material);
+    }
+#   endif
+    
+#   if ENABLE_ANISOTROPY
+    {
+        Shading.Anisotropy = ReadAnisotropyProperties(VSOut, Material, Shading.BaseLayer);
+    }
+#   endif
+    
+#   if ENABLE_IRIDESCENCE
+    {
+        Shading.Iridescence = ReadIridescenceProperties(VSOut, Material, Shading.BaseLayer);
+    
+        Shading.BaseLayer.Srf.Reflectance0 = lerp(Shading.BaseLayer.Srf.Reflectance0,
+                                                  Shading.Iridescence.F0,
+                                                  float3(Shading.Iridescence.Factor, Shading.Iridescence.Factor, Shading.Iridescence.Factor));
+    }
+#   endif
+    
+#   if ENABLE_TRANSMISSION
+    {
+        Shading.Transmission = GetTransmission(VSOut, Material, g_Frame.Renderer.MipBias);
+    }
+#   endif
+    
+#   if ENABLE_VOLUME
+    {
+        Shading.VolumeThickness = GetVolumeThickness(VSOut, Material, g_Frame.Renderer.MipBias);
+    }
+#   endif
+    
+    return Shading;
+}
+
+#if LOADING_ANIMATION != LOADING_ANIMATION_NONE
+float4 GetLoadingAnimationColor(float3 WorldPos, float Factor)
+{
+    float  Time   = g_Frame.Renderer.Time;
+    float3 Color0 = g_Frame.Renderer.LoadingAnimation.Color0.rgb;
+    float3 Color1 = g_Frame.Renderer.LoadingAnimation.Color1.rgb;
+    float  Scale  = g_Frame.Renderer.LoadingAnimation.WorldScale;
+    float  Speed  = g_Frame.Renderer.LoadingAnimation.Speed;
+
+    float3 Dist3 = frac(WorldPos * Scale);
+    Dist3 = min(Dist3, float3(1.0, 1.0, 1.0) - Dist3) * 2.0;
+    Dist3 = sin(Dist3 * PI/2.0);
+    float Dist = dot(Dist3, Dist3) / 3.0;
+
+    float Weight = 1.0 - abs(sin((Dist + Time * Speed) * 2.0 * PI));
+    float Alpha = saturate(Factor * 2.0 + Weight - 1.0);
+
+    float ShockWave = max(0.25 - abs(Alpha - 0.25), 0.0) * 4.0;
+    ShockWave *= ShockWave;
+    ShockWave *= ShockWave;
+    Weight = max(Weight, ShockWave);
+
+    float3 Color = lerp(Color0, Color1, Weight);
+    return float4(Color, Alpha);
+}
+#endif
+
+PSOutput main(in VSOutput VSOut,
+              in bool     IsFrontFace : SV_IsFrontFace)
+{
+
+#if USE_TERRAINING
+
+    float noiseSample = g_Noise.Sample(g_Noise_sampler, VSOut.UV1).r;
+
+    float wideNoise = abs((noiseSample - 0.5) * 4.0) + 0.1;
+
+    float bottomTransitionHeight = g_Terrain.startBiomHeight - wideNoise;
+    float topTransitionHeight = g_Terrain.endBiomHeight + wideNoise;
+
+    if (VSOut.Height < bottomTransitionHeight || VSOut.Height >= topTransitionHeight)
+    {
+        discard;
+    }
+#endif
+
+    float4 BaseColor = GetBaseColor(VSOut, PRIMITIVE.Material, g_Frame.Renderer.MipBias);
+
+#if USE_VERTEX_NORMALS
+    float3 MeshNormal = VSOut.Normal;
+#else
+    // PerturbNormal can handle zero-length mesh normals.
+    float3 MeshNormal = float3(0.0, 0.0, 0.0);
+#endif
+    // We have to compute gradients in uniform flow control to avoid issues with perturbed normal
+    PerturbNormalInfo NormalInfo = GetPerturbNormalInfo(VSOut.WorldPos, MeshNormal, IsFrontFace, g_Frame.Camera.fHandness);
+    
+    PBRMaterialTextureAttribs NormalTexAttribs;
+#   if USE_NORMAL_MAP
+    {
+        NormalTexAttribs = PRIMITIVE.Material.Textures[NormalTextureAttribId];
+    }
+#   else
+    {
+        NormalTexAttribs = GetDefaultTextureAttribs();
+    
+    }
+#   endif
+    NormalMapUVInfo NMUVInfo = GetNormalMapUVInfo(VSOut, NormalTexAttribs);
+    
+    NormalMapUVInfo ClearCoatNMUVInfo;
+#   if USE_CLEAR_COAT_NORMAL_MAP
+    {
+        ClearCoatNMUVInfo = GetNormalMapUVInfo(VSOut, PRIMITIVE.Material.Textures[ClearCoatNormalTextureAttribId]);
+    }
+#   else
+    {
+        ClearCoatNMUVInfo = NMUVInfo;
+    }
+#   endif
+
+    PBRMaterialBasicAttribs BasicAttribs = PRIMITIVE.Material.Basic;
+#   if PBR_ALPHA_MODE == PBR_ALPHA_MODE_MASK
+    if (BaseColor.a < BasicAttribs.AlphaMaskCutoff)
+    {
+        discard;
+    }
+#   endif
+
+#   if DEBUG_VIEW == DEBUG_VIEW_WHITE_BASE_COLOR
+    {
+        BaseColor.rgb = float3(1.0, 1.0, 1.0);
+    }
+#   endif
+
+    SurfaceShadingInfo Shading = GetSurfaceShadingInfo(VSOut, PRIMITIVE.Material, BaseColor, NormalInfo, NMUVInfo, ClearCoatNMUVInfo);
+    SurfaceLightingInfo SrfLighting = GetDefaultSurfaceLightingInfo();
+
+    float4 OutColor;
+    if (BasicAttribs.Workflow != PBR_WORKFLOW_UNLIT)
+    {
+#       if defined(PBR_MAX_LIGHTS) && PBR_MAX_LIGHTS > 0
+        {
+            int LightCount = min(g_Frame.Renderer.LightCount, PBR_MAX_LIGHTS);
+            for (int i = 0; i < LightCount; ++i)
+            {
+                ApplyPunctualLight(
+                    Shading,
+                    g_Frame.Lights[i],
+#                   if ENABLE_SHEEN
+                        g_SheenAlbedoScalingLUT,
+                        g_SheenAlbedoScalingLUT_sampler,
+#                   endif
+#                   if ENABLE_SHADOWS
+                        g_ShadowMap,
+                        g_ShadowMap_sampler,
+                        g_Frame.ShadowMaps[max(g_Frame.Lights[i].ShadowMapIndex, 0)],
+#                   endif
+                    SrfLighting);
+            }
+        }
+#       endif
+        
+#       if USE_IBL
+        {
+            ApplyIBL(Shading, float(g_Frame.Renderer.PrefilteredCubeLastMip),
+                     g_PreintegratedGGX,  g_PreintegratedGGX_sampler,
+                     g_IrradianceMap,     g_IrradianceMap_sampler,
+                     g_PrefilteredEnvMap, g_PrefilteredEnvMap_sampler,
+#                    if ENABLE_SHEEN
+                         g_PreintegratedCharlie, g_PreintegratedCharlie_sampler,
+#                    endif
+                     SrfLighting);
+        }
+#       endif
+        
+        OutColor.rgb = ResolveLighting(Shading, SrfLighting);
+#       if ENABLE_TRANSMISSION
+        {
+            OutColor.a = 1.0 - Shading.Transmission;
+        }
+#       else
+        {
+            OutColor.a = BaseColor.a;
+        }
+#       endif
+    }
+    else
+    {
+        OutColor = BaseColor;
+    }
+
+#if ENABLE_TONE_MAPPING
+    {
+        // Perform tone mapping
+        ToneMappingAttribs TMAttribs;
+        TMAttribs.iToneMappingMode     = TONE_MAPPING_MODE;
+        TMAttribs.bAutoExposure        = false;
+        TMAttribs.fMiddleGray          = g_Frame.Renderer.MiddleGray;
+        TMAttribs.bLightAdaptation     = false;
+        TMAttribs.fWhitePoint          = g_Frame.Renderer.WhitePoint;
+        TMAttribs.fLuminanceSaturation = 1.0;
+        OutColor.rgb = ToneMap(OutColor.rgb, TMAttribs, g_Frame.Renderer.AverageLogLum);
+    }
+#endif
+
+    if (BasicAttribs.AlphaMode == PBR_ALPHA_MODE_BLEND)
+    {
+        OutColor.rgb *= BaseColor.a;
+    }
+    
+    // Add highlight color
+    OutColor.rgb = lerp(OutColor.rgb, g_Frame.Renderer.HighlightColor.rgb, g_Frame.Renderer.HighlightColor.a);
+        
+    float2 MotionVector = float2(0.0, 0.0);
+#   if COMPUTE_MOTION_VECTORS
+    {
+        float2 ClipPos     = TexUVToNormalizedDeviceXY(VSOut.ClipPos.xy * g_Frame.Camera.f4ViewportSize.zw);
+        float2 PrevClipPos = VSOut.PrevClipPos.xy / VSOut.PrevClipPos.w;
+        MotionVector = GetMotionVector(ClipPos, PrevClipPos, g_Frame.Camera.f2Jitter, g_Frame.PrevCamera.f2Jitter);
+    }
+#   endif
+    
+    // Shader inputs debug visualization
+    #if (DEBUG_VIEW == DEBUG_VIEW_BASE_COLOR)
+    {
+        OutColor.rgba = BaseColor;
+    }
+#   elif (DEBUG_VIEW == DEBUG_VIEW_TEXCOORD0 && USE_TEXCOORD0)
+    {
+        OutColor.rgb = float3(VSOut.UV0, 0.0);
+    }
+#   elif (DEBUG_VIEW == DEBUG_VIEW_TEXCOORD1 && USE_TEXCOORD1)
+    {
+        OutColor.rgb = float3(VSOut.UV1, 0.0);
+    }
+#   elif (DEBUG_VIEW == DEBUG_VIEW_TRANSPARENCY)
+    {
+        OutColor.rgba = float4(BaseColor.a, BaseColor.a, BaseColor.a, 1.0);
+    }
+#   elif (DEBUG_VIEW == DEBUG_VIEW_MESH_NORMAL)
+    {
+        OutColor.rgb  = MeshNormal * float3(0.5, 0.5, 0.5) + float3(0.5, 0.5, 0.5);
+    }
+#   elif (DEBUG_VIEW == DEBUG_VIEW_MOTION_VECTORS)
+    {
+        OutColor.rgb  = float3(sqrt(abs(MotionVector)) * 5.0, 0.0);
+    }
+#   elif (DEBUG_VIEW == DEBUG_VIEW_WHITE_BASE_COLOR)
+    {
+        // Already handled
+    }
+#   elif (DEBUG_VIEW != DEBUG_VIEW_NONE)
+    {
+        OutColor.rgb = GetDebugColor(Shading, SrfLighting);
+    }
+#   endif
+    
+#   if LOADING_ANIMATION != LOADING_ANIMATION_NONE
+    {
+        float Factor = 1.0;
+#       if LOADING_ANIMATION == LOADING_ANIMATION_TRANSITIONING
+        {
+            Factor = g_Frame.Renderer.LoadingAnimation.Factor;
+        }
+#       endif
+    
+        if (Factor > 0.0)
+        {
+            float4 LoadingAnimationColor = GetLoadingAnimationColor(Shading.Pos, Factor);
+            OutColor = lerp(OutColor, float4(LoadingAnimationColor.rgb, 1.0), LoadingAnimationColor.a);
+        }
+    }
+#endif
+
+#if CONVERT_OUTPUT_TO_SRGB
+    {
+        OutColor.rgb = FastLinearToSRGB(OutColor.rgb);
+    }
+#endif
+
+#if 1
+
+    if(VSOut.Height < g_Terrain.startBiomHeight)
+    {
+        // variable bottom of bottom of biome -- fade in our biome starting from 0% to 50%
+        float relativeHeight = ((VSOut.Height - (g_Terrain.startBiomHeight - wideNoise)) / wideNoise) * 0.5;
+        OutColor.rgb = float3(relativeHeight, 0.0, 0.0);
+    }
+    else if(VSOut.Height >= g_Terrain.endBiomHeight)
+    {
+        // variable top of top of biome -- fade out our biome starting from 50% to 0%
+        float relativeHeight = ((VSOut.Height - g_Terrain.endBiomHeight) / wideNoise) * 0.5 + 0.5;
+        OutColor.rgb = float3(0.0, 0.0, relativeHeight);
+    }
+    else if(VSOut.Height >= g_Terrain.endBiomHeight - wideNoise)
+    {
+        // variable bottom of top of biome -- fade out our biome starting from 100% to 50%
+        float relativeHeight = ((VSOut.Height - (g_Terrain.endBiomHeight - wideNoise)) / wideNoise) * 0.5;
+        OutColor.rgb = float3(0.0, relativeHeight, 0.0);
+    }
+    else if(VSOut.Height <= g_Terrain.startBiomHeight + wideNoise)
+    {
+        // variable top of bottom of biome -- fade in our biome starting from 50% to 100%
+        float relativeHeight = 1.0 -(((g_Terrain.startBiomHeight + wideNoise) - VSOut.Height) / wideNoise) * 0.5 + 0.5;
+        OutColor.rgb = float3(relativeHeight, 0.0, relativeHeight);
+    }
+
+#endif
+
+#include "PSMainFooter.generated"
+//     PSOutput PSOut;
+//     PSOut.Color = OutColor;
+// 
+// #if ENABLE_CUSTOM_DATA_OUTPUT
+//     {
+//         PSOut.CustomData = PRIMITIVE.CustomData;
+//     }
+// #endif
+//
+//     return PSOut;
+}
