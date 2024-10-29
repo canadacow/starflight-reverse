@@ -124,9 +124,20 @@ SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
 
         m_PbrPSOCache = GetPsoCacheAccessor(GraphicsDesc);
 
-        GraphicsDesc.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+        GraphicsPipelineDesc TerrainGraphicsDesc = GraphicsDesc;
+        TerrainGraphicsDesc.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+        for(int i = 0; i < CI.NumRenderTargets; i++)
+        {
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].BlendEnable    = true;
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].SrcBlend       = BLEND_FACTOR_ONE;
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].DestBlend      = BLEND_FACTOR_INV_SRC_ALPHA;
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].BlendOp        = BLEND_OPERATION_ADD;
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].SrcBlendAlpha  = BLEND_FACTOR_ONE;
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].DestBlendAlpha = BLEND_FACTOR_INV_SRC_ALPHA;
+            TerrainGraphicsDesc.BlendDesc.RenderTargets[i].BlendOpAlpha   = BLEND_OPERATION_ADD;
+        }
 
-        m_TerrainPSOCache = GetPsoCacheAccessor(GraphicsDesc);
+        m_TerrainPSOCache = GetPsoCacheAccessor(TerrainGraphicsDesc);
 
         GraphicsDesc.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 
