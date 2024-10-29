@@ -4728,8 +4728,8 @@ void InitTerrain()
     s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 1.0f);
 
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "HighGrass", 4.01f}, { "Rock", 6.01f }, {"Ice", 8.01f}}},
-        { "Earth-dead", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Barren", 1.01f }, { "HighBarren", 4.01f}, { "Rock", 6.01f }, {"Ice", 8.01f}}},
+        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "HighGrass", 4.01f}, { "Rock", 6.51f }, {"Ice", 8.01f}}},
+        { "Earth-dead", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Barren", 1.01f }, { "HighBarren", 4.01f}, { "Rock", 6.51f }, {"Ice", 8.01f}}},
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },

@@ -378,7 +378,7 @@ PSOutput main(in VSOutput VSOut,
 
     float noiseSample = g_Noise.Sample(g_Noise_sampler, VSOut.UV1).r;
 
-    float wideNoise = abs((noiseSample - 0.5) * 4.0) + 0.1;
+    float wideNoise = abs((noiseSample - 0.5) * 8.0) + 0.25;
 
     float bottomTransitionHeight = g_Terrain.startBiomHeight - wideNoise;
     float topTransitionHeight = g_Terrain.endBiomHeight + wideNoise;
