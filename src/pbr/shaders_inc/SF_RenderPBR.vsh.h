@@ -228,7 +228,7 @@
 "    int instanceX = VSIn.InstanceID % 61;\n"
 "    int instanceY = VSIn.InstanceID / 61;\n"
 "    float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);\n"
-"    VSOut.UV0 = frac(megaUV * 1.5);\n"
+"    VSOut.UV0 = frac(megaUV * 9.0);\n"
 "    VSOut.UV1 = megaUV;\n"
 "#endif // USE_TERRAINING\n"
 "#endif // USE_TEXCOORD0\n"

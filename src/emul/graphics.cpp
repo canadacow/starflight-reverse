@@ -4741,7 +4741,10 @@ void InitTerrain()
     }
 
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "Rock", 6.01f }, { "Ice", 8.01f } } },     
+        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "Rock", 6.01f }, { "Ice", 8.01f } } },
+        { "Moon", { { "Moon", -15.0f } } },
+        { "Sulfur", { { "Sulfur", -15.0f } } },
+        { "Lava", { { "Lava", -15.0f } } },
     };
 }
 
@@ -6112,9 +6115,11 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
+                const std::string showPlanet = "Earth-Like";
+
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
-                auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [](const auto& planetType) {
-                    return planetType.name == "Earth-like";
+                auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [showPlanet](const auto& planetType) {
+                    return planetType.name == showPlanet;
                 });
 
                 if (it != model.planetTypes.end())
