@@ -438,6 +438,35 @@ PSOutput main(in VSOutput VSOut,
     }
 #   endif
 
+    if(VSOut.Height < g_Terrain.startBiomHeight)
+    {
+        // variable bottom of bottom of biome -- fade in our biome starting from 0% to 50%
+        float relativeHeight = ((VSOut.Height - (g_Terrain.startBiomHeight - wideNoise)) / wideNoise) * 0.5;
+        //OutColor.rgb = float3(relativeHeight, 0.0, 0.0);
+        BaseColor.a = relativeHeight;
+    }
+    else if(VSOut.Height >= g_Terrain.endBiomHeight)
+    {
+        // variable top of top of biome -- fade out our biome starting from 50% to 0%
+        float relativeHeight = ((VSOut.Height - g_Terrain.endBiomHeight) / wideNoise) * 0.5 + 0.5;
+        //OutColor.rgb = float3(0.0, 0.0, relativeHeight);
+        BaseColor.a = 1.0 - relativeHeight;
+    }
+    else if(VSOut.Height >= g_Terrain.endBiomHeight - wideNoise)
+    {
+        // variable bottom of top of biome -- fade out our biome starting from 100% to 50%
+        float relativeHeight = ((VSOut.Height - (g_Terrain.endBiomHeight - wideNoise)) / wideNoise) * 0.5;
+        //OutColor.rgb = float3(0.0, relativeHeight, 0.0);
+        BaseColor.a = 1.0 - relativeHeight;
+    }
+    else if(VSOut.Height <= g_Terrain.startBiomHeight + wideNoise)
+    {
+        // variable top of bottom of biome -- fade in our biome starting from 50% to 100%
+        float relativeHeight = ((VSOut.Height - g_Terrain.startBiomHeight) / wideNoise) * 0.5 + 0.5;
+        //OutColor.rgb = float3(relativeHeight, 0.0, relativeHeight);
+        BaseColor.a = relativeHeight;
+    }
+
     SurfaceShadingInfo Shading = GetSurfaceShadingInfo(VSOut, PRIMITIVE.Material, BaseColor, NormalInfo, NMUVInfo, ClearCoatNMUVInfo);
     SurfaceLightingInfo SrfLighting = GetDefaultSurfaceLightingInfo();
 
@@ -509,10 +538,15 @@ PSOutput main(in VSOutput VSOut,
     }
 #endif
 
+#if USE_TERRAINING
+    OutColor.rgb *= BaseColor.a;
+
+#else
     if (BasicAttribs.AlphaMode == PBR_ALPHA_MODE_BLEND)
     {
         OutColor.rgb *= BaseColor.a;
     }
+#endif
     
     // Add highlight color
     OutColor.rgb = lerp(OutColor.rgb, g_Frame.Renderer.HighlightColor.rgb, g_Frame.Renderer.HighlightColor.a);
@@ -584,38 +618,6 @@ PSOutput main(in VSOutput VSOut,
     }
 #endif
 
-#if 1
-
-    if(VSOut.Height < g_Terrain.startBiomHeight)
-    {
-        // variable bottom of bottom of biome -- fade in our biome starting from 0% to 50%
-        float relativeHeight = ((VSOut.Height - (g_Terrain.startBiomHeight - wideNoise)) / wideNoise) * 0.5;
-        //OutColor.rgb = float3(relativeHeight, 0.0, 0.0);
-        OutColor.a = relativeHeight;
-    }
-    else if(VSOut.Height >= g_Terrain.endBiomHeight)
-    {
-        // variable top of top of biome -- fade out our biome starting from 50% to 0%
-        float relativeHeight = ((VSOut.Height - g_Terrain.endBiomHeight) / wideNoise) * 0.5 + 0.5;
-        //OutColor.rgb = float3(0.0, 0.0, relativeHeight);
-        OutColor.a = 1.0 - relativeHeight;
-    }
-    else if(VSOut.Height >= g_Terrain.endBiomHeight - wideNoise)
-    {
-        // variable bottom of top of biome -- fade out our biome starting from 100% to 50%
-        float relativeHeight = ((VSOut.Height - (g_Terrain.endBiomHeight - wideNoise)) / wideNoise) * 0.5;
-        //OutColor.rgb = float3(0.0, relativeHeight, 0.0);
-        OutColor.a = 1.0 - relativeHeight;
-    }
-    else if(VSOut.Height <= g_Terrain.startBiomHeight + wideNoise)
-    {
-        // variable top of bottom of biome -- fade in our biome starting from 50% to 100%
-        float relativeHeight = ((VSOut.Height - g_Terrain.startBiomHeight) / wideNoise) * 0.5 + 0.5;
-        //OutColor.rgb = float3(relativeHeight, 0.0, relativeHeight);
-        OutColor.a = relativeHeight;
-    }
-
-#endif
 
 #include "PSMainFooter.generated"
 //     PSOutput PSOut;
