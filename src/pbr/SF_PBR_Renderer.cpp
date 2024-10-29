@@ -1853,27 +1853,32 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
     PSOCreateInfo.pPS = pPS;
 
     const ALPHA_MODE AlphaMode = Key.GetAlphaMode();
-    if (AlphaMode == ALPHA_MODE_OPAQUE ||
-        AlphaMode == ALPHA_MODE_MASK)
-    {
-        PSOCreateInfo.GraphicsPipeline.BlendDesc = BS_Default;
-    }
-    else if (AlphaMode == ALPHA_MODE_BLEND)
-    {
-        VERIFY(!IsUnshaded, "Unshaded mode should use OpaquePSO. The PSOKey's ctor sets the alpha mode to opaque.");
 
-        auto& RT0          = GraphicsPipeline.BlendDesc.RenderTargets[0];
-        RT0.BlendEnable    = true;
-        RT0.SrcBlend       = BLEND_FACTOR_ONE;
-        RT0.DestBlend      = BLEND_FACTOR_INV_SRC_ALPHA;
-        RT0.BlendOp        = BLEND_OPERATION_ADD;
-        RT0.SrcBlendAlpha  = BLEND_FACTOR_ONE;
-        RT0.DestBlendAlpha = BLEND_FACTOR_INV_SRC_ALPHA;
-        RT0.BlendOpAlpha   = BLEND_OPERATION_ADD;
-    }
-    else
+    if(!(Key.GetFlags() & PSO_FLAG_USE_TERRAINING))
     {
-        UNEXPECTED("Unknown alpha mode");
+        
+        if (AlphaMode == ALPHA_MODE_OPAQUE ||
+            AlphaMode == ALPHA_MODE_MASK)
+        {
+            PSOCreateInfo.GraphicsPipeline.BlendDesc = BS_Default;
+        }
+        else if (AlphaMode == ALPHA_MODE_BLEND)
+        {
+            VERIFY(!IsUnshaded, "Unshaded mode should use OpaquePSO. The PSOKey's ctor sets the alpha mode to opaque.");
+
+            auto& RT0          = GraphicsPipeline.BlendDesc.RenderTargets[0];
+            RT0.BlendEnable    = true;
+            RT0.SrcBlend       = BLEND_FACTOR_ONE;
+            RT0.DestBlend      = BLEND_FACTOR_INV_SRC_ALPHA;
+            RT0.BlendOp        = BLEND_OPERATION_ADD;
+            RT0.SrcBlendAlpha  = BLEND_FACTOR_ONE;
+            RT0.DestBlendAlpha = BLEND_FACTOR_INV_SRC_ALPHA;
+            RT0.BlendOpAlpha   = BLEND_OPERATION_ADD;
+        }
+        else
+        {
+            UNEXPECTED("Unknown alpha mode");
+        }
     }
 
     std::string PSOName{!IsUnshaded ? "PBR PSO " : "Unshaded PSO "};
