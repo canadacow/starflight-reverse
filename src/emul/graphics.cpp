@@ -4727,25 +4727,32 @@ void InitTerrain()
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
     s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 1.0f);
 
-    std::vector<std::string> biomNames = { "Grass2", "Beach", "Sand", "Ice", "Rock", "Moon", "Sulfur", "Lava", "Water" };
-
-    for(const auto& biomName : biomNames)
-    {
-        auto& materials = s_gc.terrain.model->GetMaterials();
-        for (size_t i = 0; i < materials.size(); ++i) {
-            if (materials[i].Name == biomName) {
-                s_gc.terrain.biomMaterialIndex[biomName] = static_cast<Uint32>(i);
-                break;
-            }
-        }
-    }
-
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "Rock", 6.01f }, { "Ice", 8.01f } } },
+        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "HighGrass", 4.01f}, { "Rock", 6.01f }, {"Ice", 8.01f}}},
+        { "Earth-dead", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Barren", 1.01f }, { "HighBarren", 4.01f}, { "Rock", 6.01f }, {"Ice", 8.01f}}},
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
     };
+
+    for (const auto& planetType : s_gc.terrain.planetTypes)
+    {
+        for (const auto& biomBoundary : planetType.boundaries)
+        {
+            if(s_gc.terrain.biomMaterialIndex.find(biomBoundary.name) != s_gc.terrain.biomMaterialIndex.end())
+                break;
+
+            auto& materials = s_gc.terrain.model->GetMaterials();
+            for (size_t i = 0; i < materials.size(); ++i) {
+                if (materials[i].Name == biomBoundary.name) {
+                    s_gc.terrain.biomMaterialIndex[biomBoundary.name] = static_cast<Uint32>(i);
+                    break;
+                }
+            }
+
+            assert(s_gc.terrain.biomMaterialIndex.find(biomBoundary.name) != s_gc.terrain.biomMaterialIndex.end());
+        }
+    }
 }
 
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
@@ -6115,7 +6122,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
-                const std::string showPlanet = "Earth-Like";
+                const std::string showPlanet = "Earth-like";
 
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
                 auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [showPlanet](const auto& planetType) {
