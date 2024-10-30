@@ -431,16 +431,33 @@ TEXTURE_FORMAT GetModelImageDataTextureFormat(const Model::ImageData& Image)
     if (Image.TexFormat != TEX_FORMAT_UNKNOWN)
         return Image.TexFormat;
 
-    VERIFY(Image.ComponentSize == 1, "Only 8-bit image components are currently supported");
-    switch (Image.NumComponents)
+    VERIFY(Image.ComponentSize == 1 || Image.ComponentSize == 2, "Only 8-bit and 16-bit image components are currently supported");
+
+    if(Image.ComponentSize == 1)
     {
-        case 1: return TEX_FORMAT_R8_UNORM;
-        case 2: return TEX_FORMAT_RG8_UNORM;
-        case 3:
-        case 4: return TEX_FORMAT_RGBA8_UNORM;
-        default:
-            UNEXPECTED("Unsupported number of color components in gltf image: ", Image.NumComponents);
-            return TEX_FORMAT_UNKNOWN;
+        switch (Image.NumComponents)
+        {
+            case 1: return TEX_FORMAT_R8_UNORM;
+            case 2: return TEX_FORMAT_RG8_UNORM;
+            case 3:
+            case 4: return TEX_FORMAT_RGBA8_UNORM;
+            default:
+                UNEXPECTED("Unsupported number of color components in gltf image: ", Image.NumComponents);
+                return TEX_FORMAT_UNKNOWN;
+        }
+    }
+    else if(Image.ComponentSize == 2)
+    {
+        switch (Image.NumComponents)
+        {
+            case 1: return TEX_FORMAT_R16_UNORM;
+            case 2: return TEX_FORMAT_RG16_UNORM;
+            case 3:
+            case 4: return TEX_FORMAT_RGBA16_UNORM;
+            default:
+                UNEXPECTED("Unsupported number of color components in gltf image: ", Image.NumComponents);
+                return TEX_FORMAT_UNKNOWN;
+        }
     }
 }
 

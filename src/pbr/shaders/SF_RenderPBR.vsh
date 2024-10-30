@@ -26,6 +26,7 @@
 //     float3 Normal      : NORMAL;
 //     float2 UV0         : UV0;
 //     float2 UV1         : UV1;
+//     
 //     float3 Tangent     : TANGENT;
 //     float4 PrevClipPos : PREV_CLIP_POS;
 //     float Height : HEIGHT;
@@ -228,8 +229,11 @@ void main(in  VSInput  VSIn,
     int instanceX = VSIn.InstanceID % 61;
     int instanceY = VSIn.InstanceID / 61;
     float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
+
+    VSOut.UV2 = VSIn.UV0;
     VSOut.UV0 = frac(megaUV * 9.0);
     VSOut.UV1 = megaUV;
+
 #endif // USE_TERRAINING
 #endif // USE_TEXCOORD0
 

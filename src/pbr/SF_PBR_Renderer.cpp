@@ -1600,6 +1600,10 @@ std::string SF_PBR_Renderer::GetVSOutputStruct(PSO_FLAGS PSOFlags, bool UseVkPoi
     {
         ss << "    float2 UV1      : UV1;" << std::endl;
     }
+    if (PSOFlags & PSO_FLAG_USE_TERRAINING)
+    {
+        ss << "    float2 UV2      : UV2;" << std::endl;
+    }
     if (PSOFlags & PSO_FLAG_USE_VERTEX_TANGENTS)
     {
         ss << "    float3 Tangent  : TANGENT;" << std::endl;
