@@ -450,6 +450,8 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
     RefCntAutoPtr<IBuffer> PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> jointsBuffer;
+    RefCntAutoPtr<IBuffer> instanceAttribsSB;
+    RefCntAutoPtr<IBufferView> instanceAttribsSBView;    
     RefCntAutoPtr<IBuffer> dummyVertexBuffer;
     RefCntAutoPtr<IBuffer> heightmapAttribsCB;
     RefCntAutoPtr<ITexture> heightmap;
@@ -813,6 +815,13 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                     DrawIndexedAttribs drawAttrs{primitive.IndexCount, VT_UINT32, DRAW_FLAG_VERIFY_ALL};
                     drawAttrs.FirstIndexLocation = GLTFModel.GetFirstIndexLocation() + primitive.FirstIndex;
                     drawAttrs.BaseVertex = GLTFModel.GetBaseVertex();
+
+                    if(pNode->Instances.size() > 0)
+                    {
+                        drawAttrs.FirstInstanceLocation = 0;
+                        drawAttrs.NumInstances = static_cast<Uint32>(pNode->Instances.size());
+                    }
+
                     pCtx->DrawIndexed(drawAttrs);
                 }
                 else
@@ -834,6 +843,7 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
     const size_t JointsBufferSize = sizeof(float4x4) * /* m_Settings.MaxJointCount */ 64 * 2;
     CreateUniformBuffer(s_gc.m_pDevice, JointsBufferSize, "cbJointTransforms", &s_gc.jointsBuffer);
+    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::PBRHeightmapAttribs), "g_HeightmapAttribs", &s_gc.heightmapAttribsCB);
 
     BufferDesc VertBuffDesc;
     VertBuffDesc.Name = "Dummy vertex buffer";
@@ -855,7 +865,9 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
         .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_VERTEX, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+        .AddVariable(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_VERTEX, "g_HeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_VERTEX, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
 
     PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
 
@@ -894,6 +906,8 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
     Macros.AddShaderMacro("FILTER_ACROSS_CASCADES", true);
     Macros.AddShaderMacro("BEST_CASCADE_SEARCH", true);
     Macros.AddShaderMacro("SHADOW_PASS", true);
+    Macros.AddShaderMacro("USE_INSTANCING", true);
+    Macros.AddShaderMacro("USE_HEIGHTMAP", true);
 
     // Create shadow vertex shader
     RefCntAutoPtr<IShader> pShadowVS;
@@ -946,6 +960,9 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
+    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_HeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
+    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.pbrRenderer->GetInstanceAttribsSB());
+    
 
     m_RenderMeshShadowPSO.emplace_back(std::move(pRenderMeshShadowPSO));
 
@@ -953,6 +970,8 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
             {s_gc.cameraAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
             {s_gc.PBRPrimitiveAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.jointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.heightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.pbrRenderer->GetInstanceAttribsSB(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
@@ -1015,6 +1034,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pLightDir = &Direction;
     DistrInfo.fPartitioningFactor = 0.95f;
 
+#if 0
     DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model](int CascadeIdx, float& MinZ, float& MaxZ) {
 
         // Adjust the whole range only
@@ -1056,6 +1076,9 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         }
 
     };
+#else
+
+#endif
 
     m_ShadowMapMgr.DistributeCascades(DistrInfo, m_LightAttribs.ShadowAttribs);
 

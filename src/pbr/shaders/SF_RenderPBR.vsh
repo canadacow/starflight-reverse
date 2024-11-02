@@ -200,6 +200,8 @@ void main(in  VSInput  VSIn,
     float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
     float3 adjustedPos = VSIn.Pos + float3(0.0, height, 0.0);
     VSOut.Height = height;
+#else
+    float3 adjustedPos = VSIn.Position;
 #endif // USE_HEIGHTMAP
 
     GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    

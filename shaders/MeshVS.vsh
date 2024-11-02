@@ -1,6 +1,6 @@
 #include "BasicStructures.fxh"
 #include "PBR_Structures.fxh"
-#include "RenderPBR_Structures.fxh"
+#include "SF_RenderPBR_Structures.fxh"
 
 cbuffer cbCameraAttribs
 {
@@ -20,6 +20,65 @@ cbuffer cbJointTransforms
 {
     float4x4 g_Joints[MAX_JOINT_COUNT];
 };
+
+#ifdef USE_HEIGHTMAP
+cbuffer cbHeightmapAttribs
+{
+    PBRHeightmapAttribs g_HeightmapAttribs;
+}
+Texture2D g_Heightmap;
+SamplerState g_Heightmap_sampler;
+
+float4 sampleBicubic(float v) {
+    float4 n = float4(1.0, 2.0, 3.0, 4.0) - v;
+    float4 s = n * n * n;
+    float4 o;
+    o.x = s.x;
+    o.y = s.y - 4.0 * s.x;
+    o.z = s.z - 4.0 * s.y + 6.0 * s.x;
+    o.w = 6.0 - o.x - o.y - o.z;
+    return o;
+}
+
+float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
+{
+    int2 texResolution;
+    tex.GetDimensions(texResolution.x, texResolution.y);
+    float2 pixel = 1.0 / float2(texResolution);
+
+    st = st * texResolution - 0.5;
+
+    float2 fxy = frac(st);
+    st -= fxy;
+
+    float4 xcubic = sampleBicubic(fxy.x);
+    float4 ycubic = sampleBicubic(fxy.y);
+
+    float4 c = st.xxyy + float2 (-0.5, 1.5).xyxy;
+
+    float4 s = float4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
+    float4 offset = c + float4(xcubic.yw, ycubic.yw) / s;
+
+    offset *= pixel.xxyy;
+    
+    float4 sample0 = tex.Sample(samplerState, offset.xz);
+    float4 sample1 = tex.Sample(samplerState, offset.yz);
+    float4 sample2 = tex.Sample(samplerState, offset.xw);
+    float4 sample3 = tex.Sample(samplerState, offset.yw);
+
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
+
+    return lerp(    lerp(sample3, sample2, sx), 
+                    lerp(sample1, sample0, sx), 
+                    sy);
+}
+
+#endif
+
+#if USE_INSTANCING
+StructuredBuffer<PBRInstanceAttribs> instanceBuffer : register(t1);
+#endif
 
 struct VSInput
 {
@@ -58,7 +117,22 @@ void MeshVS(in  VSInput  VSIn,
         Transform = mul(SkinMat, Transform);
     }
 
-    float4 locPos = mul(float4(VSIn.Position, 1.0), Transform);
+#if USE_HEIGHTMAP
+    #if USE_INSTANCING
+        PBRInstanceAttribs instance = instanceBuffer[VSIn.InstanceID];
+        Transform = mul(instance.NodeMatrix, Transform);
+        float2 adjustedUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
+    #else // USE_INSTANCING
+        float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
+    #endif // USE_INSTANCING
+
+    float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
+    float3 adjustedPos = VSIn.Position + float3(0.0, height, 0.0);
+#else
+    float3 adjustedPos = VSIn.Position;
+#endif // USE_HEIGHTMAP
+
+    float4 locPos = mul(float4(adjustedPos, 1.0), Transform);
     locPos = locPos.xyzw / locPos.w;
     VSOut.PositionPS = mul(locPos, g_CameraAttribs.mViewProj);
 };
