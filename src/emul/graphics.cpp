@@ -449,6 +449,7 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
     RefCntAutoPtr<IBuffer> PBRPrimitiveAttribsCB;
+    RefCntAutoPtr<IBuffer> terrainAttribsCB;
     RefCntAutoPtr<IBuffer> jointsBuffer;
     RefCntAutoPtr<IBuffer> instanceAttribsSB;
     RefCntAutoPtr<IBufferView> instanceAttribsSBView;    
@@ -945,7 +946,7 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_HeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.pbrRenderer->GetInstanceAttribsSB());
+    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
 
     m_RenderMeshShadowPSO.emplace_back(std::move(pRenderMeshShadowPSO));
@@ -3097,6 +3098,11 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     RendererCI.EnableShadows = true;
 
     RendererCI.GetPSMainSource = GetPbrPSMainSource;
+
+    RendererCI.pHeightmapAttribsCB = s_gc.heightmapAttribsCB;
+    RendererCI.pPrimitiveAttribsCB = s_gc.PBRPrimitiveAttribsCB;
+    RendererCI.pJointsBuffer = s_gc.jointsBuffer;
+    RendererCI.pTerrainAttribsCB = s_gc.terrainAttribsCB;
 
     RendererCI.SheenAlbedoScalingLUTPath    = "sheen_albedo_scaling.jpg";
     RendererCI.PreintegratedCharlieBRDFPath = "charlie_preintegrated.jpg";
@@ -5636,7 +5642,22 @@ void InitializeCommonResources()
 
     CreateUniformBuffer(s_gc.m_pDevice, SF_PBR_Renderer::GetHeightmapAttribsSizeStatic(), "Heightmap attribs buffer", &s_gc.heightmapAttribsCB);
 
+    CreateUniformBuffer(s_gc.m_pDevice, SF_PBR_Renderer::GetTerrainAttribsSizeStatic(), "Terrain attribs buffer", &s_gc.terrainAttribsCB);
+
     InitHeightmap();
+
+    BufferDesc SBDesc;
+    SBDesc.Name           = "PBR instance attribs SB";
+    SBDesc.Size           = sizeof(HLSL::PBRInstanceAttribs) * SF_PBR_Renderer::MaxInstanceCount;
+    SBDesc.Usage          = USAGE_DYNAMIC;
+    SBDesc.BindFlags      = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+    SBDesc.Mode           = BUFFER_MODE_STRUCTURED;
+    SBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
+    SBDesc.ElementByteStride = sizeof(HLSL::PBRInstanceAttribs);
+
+    s_gc.m_pDevice->CreateBuffer(SBDesc, nullptr, &s_gc.instanceAttribsSB);
+
+    s_gc.instanceAttribsSBView = s_gc.instanceAttribsSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);    
 }
 
 void InitStation()

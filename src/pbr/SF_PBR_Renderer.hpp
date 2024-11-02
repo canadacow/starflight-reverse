@@ -727,6 +727,18 @@ public:
         return GetPRBFrameAttribsSizeStatic(m_Settings.MaxLightCount, m_Settings.MaxShadowCastingLightCount);
     }
 
+    /// Returns the PBR Terrain attributes shader data size.
+    static constexpr Uint32 GetTerrainAttribsSizeStatic()
+    {
+        return sizeof(HLSL::PBRTerrainAttribs);
+    }
+
+    /// Returns the PBR Terrain attributes shader data size.
+    Uint32 GetTerrainAttribsSize() const
+    {
+        return GetTerrainAttribsSizeStatic();
+    }
+
     const CreateInfo& GetSettings() const { return m_Settings; }
 
     inline static constexpr PSO_FLAGS GetTextureAttribPSOFlag(TEXTURE_ATTRIB_ID AttribId);
