@@ -55,15 +55,6 @@ static constexpr char MultiDrawGLSLExtension[] = "#extension GL_ANGLE_multi_draw
 static constexpr char MultiDrawGLSLExtension[] = "#extension GL_ARB_shader_draw_parameters : enable";
 #endif
 
-namespace HLSL
-{
-
-#include "Shaders/Common/public/BasicStructures.fxh"
-#include "Shaders/PBR/public/PBR_Structures.fxh"
-#include "shaders/SF_RenderPBR_Structures.fxh"
-
-} // namespace HLSL
-
 #include "shaders_inc/Shaders.h"
 
 class SF_PBR_RendererShaderSourceStreamFactory final
@@ -2065,24 +2056,6 @@ Uint32 SF_PBR_Renderer::GetPBRPrimitiveAttribsSize(PSO_FLAGS Flags, Uint32 Custo
             ((Flags & PSO_FLAG_ENABLE_VOLUME) ? sizeof(HLSL::PBRMaterialVolumeAttribs) : 0) +
             sizeof(HLSL::PBRMaterialTextureAttribs) * NumTextureAttribs +
             CustomDataSize);
-}
-
-Uint32 SF_PBR_Renderer::GetPRBFrameAttribsSize(Uint32 LightCount, Uint32 ShadowCastingLightCount)
-{
-    return (sizeof(HLSL::CameraAttribs) * 2 +
-            sizeof(HLSL::PBRRendererShaderParameters) +
-            sizeof(HLSL::PBRLightAttribs) * LightCount +
-            sizeof(HLSL::PBRShadowMapInfo) * ShadowCastingLightCount);
-}
-
-Uint32 SF_PBR_Renderer::GetPRBFrameAttribsSize() const
-{
-    return GetPRBFrameAttribsSize(m_Settings.MaxLightCount, m_Settings.MaxShadowCastingLightCount);
-}
-
-Uint32 SF_PBR_Renderer::GetHeightmapAttribsSize() const
-{
-    return sizeof(HLSL::PBRHeightmapAttribs);
 }
 
 } // namespace Diligent

@@ -46,6 +46,11 @@ namespace Diligent
 namespace HLSL
 {
 struct PBRRendererShaderParameters;
+
+#include "Shaders/Common/public/BasicStructures.fxh"
+#include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "shaders/SF_RenderPBR_Structures.fxh"
+
 } // namespace HLSL
 
 class SF_PBR_Renderer
@@ -690,14 +695,37 @@ public:
     /// Returns the PBR primitive attributes shader data size for the given PSO flags.
     Uint32 GetPBRPrimitiveAttribsSize(PSO_FLAGS Flags, Uint32 CustomDataSize = sizeof(float4)) const;
 
+    static constexpr Uint32 GetPRBFrameAttribsSizeStatic(Uint32 LightCount, Uint32 ShadowCastingLightCount)
+    {
+        return (sizeof(HLSL::CameraAttribs) * 2 +
+                sizeof(HLSL::PBRRendererShaderParameters) +
+                sizeof(HLSL::PBRLightAttribs) * LightCount +
+                sizeof(HLSL::PBRShadowMapInfo) * ShadowCastingLightCount);
+    }
+
     /// Returns the PBR Frame attributes shader data size for the given light count.
-    static Uint32 GetPRBFrameAttribsSize(Uint32 LightCount, Uint32 ShadowCastingLightCount);
+    static Uint32 GetPRBFrameAttribsSize(Uint32 LightCount, Uint32 ShadowCastingLightCount)
+    {
+        return GetPRBFrameAttribsSizeStatic(LightCount, ShadowCastingLightCount);
+    }
 
     /// Returns the PBR Heightmap attributes shader data size.
-    Uint32 GetHeightmapAttribsSize() const;
+    static constexpr Uint32 GetHeightmapAttribsSizeStatic()
+    {
+        return sizeof(HLSL::PBRHeightmapAttribs);
+    }
+
+    /// Returns the PBR Heightmap attributes shader data size.
+    Uint32 GetHeightmapAttribsSize() const 
+    {
+        return GetHeightmapAttribsSizeStatic();
+    }
 
     /// Returns the PBR Frame attributes shader data size.
-    Uint32 GetPRBFrameAttribsSize() const;
+    Uint32 GetPRBFrameAttribsSize() const
+    {
+        return GetPRBFrameAttribsSizeStatic(m_Settings.MaxLightCount, m_Settings.MaxShadowCastingLightCount);
+    }
 
     const CreateInfo& GetSettings() const { return m_Settings; }
 

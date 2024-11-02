@@ -27,7 +27,7 @@ cbuffer cbHeightmapAttribs
     PBRHeightmapAttribs g_HeightmapAttribs;
 }
 Texture2D g_Heightmap;
-SamplerState g_Heightmap_sampler;
+SamplerState g_Heightmap_sampler : register(s0);
 
 float4 sampleBicubic(float v) {
     float4 n = float4(1.0, 2.0, 3.0, 4.0) - v;
@@ -84,9 +84,10 @@ struct VSInput
 {
     float3 Position  : ATTRIB0;
     float3 Normal    : ATTRIB1;
-    float2 TexCoord  : ATTRIB2;
+    float2 UV0       : ATTRIB2;
     float4 Joint0    : ATTRIB3;
     float4 Weight0   : ATTRIB4;
+    uint InstanceID  : SV_InstanceID;
 };
 
 struct VSOutput
@@ -102,7 +103,7 @@ void MeshVS(in  VSInput  VSIn,
 {
     VSOut.PosInLightViewSpace = float3(0.0, 0.0, 0.0);
     VSOut.NormalWS     = VSIn.Normal;
-    VSOut.TexCoord     = VSIn.TexCoord;
+    VSOut.TexCoord     = VSIn.UV0;
 
     float4x4 Transform = PRIMITIVE.NodeMatrix;
     
