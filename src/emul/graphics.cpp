@@ -811,6 +811,24 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 IShaderResourceBinding* pSRB = m_ShadowSRBs[primitive.MaterialId];
                 pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
+                if(pNode->Instances.size() > 0)
+                {
+                    MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, s_gc.instanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    for(int i = 0; i < pNode->Instances.size(); ++i)
+                    {
+                        InstanceAttribs[i].NodeMatrix = pNode->Instances[i].NodeMatrix.Transpose();
+                        InstanceAttribs[i].HeightmapAttribs.ScaleX = pNode->Instances[i].ScaleX;
+                        InstanceAttribs[i].HeightmapAttribs.ScaleY = pNode->Instances[i].ScaleY;
+                        InstanceAttribs[i].HeightmapAttribs.OffsetX = pNode->Instances[i].OffsetX;
+                        InstanceAttribs[i].HeightmapAttribs.OffsetY = pNode->Instances[i].OffsetY;
+                    }
+
+                    StateTransitionDesc Barriers[] = {
+                        {s_gc.instanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE},
+                    };
+                    pCtx->TransitionResourceStates(_countof(Barriers), Barriers);
+                }
+
                 // Draw the primitive
                 if (primitive.HasIndices())
                 {
@@ -913,9 +931,9 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
         // Attribute 0 - vertex position
         LayoutElement{0, 0, 3, VT_FLOAT32, False},
         // Attribute 1 - normal
-        LayoutElement{2, 0, 3, VT_FLOAT32, False},
+        LayoutElement{1, 0, 3, VT_FLOAT32, False},
         // Attribute 2 - texture coordinates
-        LayoutElement{1, 0, 2, VT_FLOAT32, False},
+        LayoutElement{2, 0, 2, VT_FLOAT32, False},
         // Attribute 3 - joint indices
         LayoutElement{3, 1, 4, VT_FLOAT32, False},
         // Attribute 4 - joint weights
@@ -1030,7 +1048,6 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pLightDir = &Direction;
     DistrInfo.fPartitioningFactor = 0.95f;
 
-#if 0
     DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model](int CascadeIdx, float& MinZ, float& MaxZ) {
 
         // Adjust the whole range only
@@ -1072,9 +1089,6 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         }
 
     };
-#else
-
-#endif
 
     m_ShadowMapMgr.DistributeCascades(DistrInfo, m_LightAttribs.ShadowAttribs);
 
@@ -4746,7 +4760,7 @@ void InitTerrain()
     InitModel("61x61plane.glb", s_gc.terrain, 0);
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 1.0f);
+    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f);
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "HighGrass", 4.01f}, { "Rock", 6.51f }, {"Ice", 8.01f}}},
