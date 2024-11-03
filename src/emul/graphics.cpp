@@ -304,6 +304,13 @@ void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVForm
 
 struct ShadowMap;
 
+enum Scene {
+    SCENE_NONE,
+    SCENE_STATION,
+    SCENE_PLANET,
+    SCENE_TERRAIN
+};
+
 struct GraphicsContext
 {
     RefCntAutoPtr<IRenderDevice>    m_pDevice;
@@ -424,6 +431,8 @@ struct GraphicsContext
     SFModel station{};
     SFModel planet{};
     SFModel terrain{};
+
+    Scene currentScene = SCENE_NONE;
 
     Uint32 terrainMaterialIndex = 0;
 
@@ -570,10 +579,10 @@ struct ShadowMap
 {
     struct ShadowSettings
     {
-        bool           SnapCascades = true;
-        bool           StabilizeExtents = true;
-        bool           EqualizeExtents = true;
-        bool           SearchBestCascade = true;
+        bool           SnapCascades = false;
+        bool           StabilizeExtents = false;
+        bool           EqualizeExtents = false;
+        bool           SearchBestCascade = false;
         bool           FilterAcrossCascades = true;
         int            Resolution = 2048;
         float          PartitioningFactor = 0.95f;
@@ -583,7 +592,7 @@ struct ShadowMap
         bool Is32BitFilterableFmt = true;
     } m_ShadowSettings;
 
-    void Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh);
+    void Initialize();
 
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const SF_GLTF::Model& GLTFModel,
@@ -624,7 +633,16 @@ void InitPlanet();
 void InitTerrain();
 void InitializeCommonResources();
 void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex);
-void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model);
+
+using SunBehaviorFn = std::function<float3(const float4x4& lightGlobalTransform, double currentTimeInSeconds)>;
+
+static SunBehaviorFn DefaultSunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
+    float3 lightDir = float3{ lightGlobalTransform._31, lightGlobalTransform._32, lightGlobalTransform._33 };
+    float3 Direction = -normalize(lightDir);
+    return Direction;
+};
+
+void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior = DefaultSunBehavior);
 
 /*
 
@@ -857,7 +875,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     s_gc.m_pImmediateContext->Flush();
 }
 
-void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
+void ShadowMap::Initialize()
 {
     GraphicsPipelineStateCreateInfo PSOCreateInfo{};
 
@@ -3432,8 +3450,7 @@ static int GraphicsInitThread()
     InitializeCommonResources();
 
     s_gc.shadowMap = std::make_unique<ShadowMap>();
-    s_gc.shadowMap->Initialize(s_gc.station.model);
-    s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model);
+    s_gc.shadowMap->Initialize();
     s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
 
     InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
@@ -4894,7 +4911,21 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
 void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
-    RenderSFModel(inFlightIndex, s_gc.terrain);
+    if(s_gc.currentScene != SCENE_TERRAIN)
+    {
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
+        s_gc.currentScene = SCENE_TERRAIN;
+    }
+
+    auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
+
+        float3 lightDir = float3{ 0.0f, -1.0f, 0.0f };
+        float3 Direction = -normalize(lightDir);
+
+        return Direction;
+    };
+
+    RenderSFModel(inFlightIndex, s_gc.terrain, sunBehavior);
 }
 
 
@@ -6017,10 +6048,27 @@ static FfxResource ffxGetResource(ITextureView* textureView)
 
 void RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
-    RenderSFModel(inFlightIndex, s_gc.station);
+    if(s_gc.currentScene != SCENE_STATION)
+    {
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model);
+        s_gc.currentScene = SCENE_STATION;
+    }
+
+    auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
+        float3 lightDir = float3{ 0.0f, -0.07f, -0.07f };
+        float3 Direction = -normalize(lightDir);
+
+        float rotationAngle = currentTimeInSeconds * 0.025f;
+        float4x4 rotationMatrix = float4x4::RotationY(rotationAngle);
+        float4 rotatedDirection = rotationMatrix * float4(Direction, 0.0f);
+        Direction = float3(rotatedDirection);
+        return Direction;
+    };
+
+    RenderSFModel(inFlightIndex, s_gc.station, sunBehavior);
 }
 
-void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model)
+void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
 {
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
     ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
@@ -6116,20 +6164,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
             if (LightNode.Name == "Sun")
             {
-                // Don't rotate the sun with the rest of the model.
-                //LightGlobalTransform *= baseModelTransform;
                 LightGlobalTransform *= s_gc.renderParams.ModelTransform;
-                // Convert from POINT to DIRECTION light
-                //lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
-                lightDir = float3{ 0.0f, -0.07f, -0.07f };
-                Direction = -normalize(lightDir);
-
                 double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
-                float rotationAngle = currentTimeInSeconds * 0.025f;
-                float4x4 rotationMatrix = float4x4::RotationY(rotationAngle);
-                float4 rotatedDirection = rotationMatrix * float4(Direction, 0.0f);
-                Direction = float3(rotatedDirection);
+                Direction = sunBehavior(LightGlobalTransform, currentTimeInSeconds);
             }
             else
             {
@@ -6139,7 +6177,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
                 Direction = -normalize(lightDir);
             }
-
             
             float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
             SF_GLTF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, model.scale };

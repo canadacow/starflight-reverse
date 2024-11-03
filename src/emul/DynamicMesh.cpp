@@ -62,32 +62,6 @@ BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::Model
 {
     BoundBox ModelAABB;
 
-    if (m_Model->CompatibleWithTransforms(Transforms))
-    {
-        VERIFY_EXPR(SceneIndex < m_Model->Scenes.size());
-        const auto& scene = m_Model->Scenes[SceneIndex];
-
-        ModelAABB.Min = float3{+FLT_MAX, +FLT_MAX, +FLT_MAX};
-        ModelAABB.Max = float3{-FLT_MAX, -FLT_MAX, -FLT_MAX};
-
-        for (const auto* pN : scene.LinearNodes)
-        {
-            VERIFY_EXPR(pN != nullptr);
-            if (pN->pMesh != nullptr && pN->pMesh->IsValidBB())
-            {
-                const auto& GlobalMatrix = Transforms.NodeGlobalMatrices[pN->Index];
-                const auto  NodeAABB     = pN->pMesh->BB.Transform(GlobalMatrix);
-
-                ModelAABB.Min = std::min(ModelAABB.Min, NodeAABB.Min);
-                ModelAABB.Max = std::max(ModelAABB.Max, NodeAABB.Max);
-            }
-        }
-    }
-    else
-    {
-        UNEXPECTED("Incompatible transforms. Please use the ComputeTransforms() method first.");
-    }
-
     // Measure the nodes on this object directly
     if (CompatibleWithTransforms(*DynamicTransforms))
     {
@@ -128,6 +102,10 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
     int vertexIndex = 0;
     int indexIndex = 0;
 
+    // Calculate the bounding box for the mesh
+    float3 minBB = float3{ std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
+    float3 maxBB = float3{ std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest() };
+
     for (int row = 0; row <= numTiles; ++row)
     {
         for (int col = 0; col <= numTiles; ++col)
@@ -140,6 +118,14 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
             vert.posX = x;
             vert.posY = y;
             vert.posZ = z;
+
+            minBB.x = std::min(minBB.x, vert.posX);
+            minBB.y = std::min(minBB.y, vert.posY);
+            minBB.z = std::min(minBB.z, vert.posZ);
+
+            maxBB.x = std::max(maxBB.x, vert.posX);
+            maxBB.y = std::max(maxBB.y, vert.posY);
+            maxBB.z = std::max(maxBB.z, vert.posZ);            
 
             // Compute normals
             vert.normalX = 0.0f;
@@ -191,6 +177,9 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
     auto& node = Nodes[0];
     node.pMesh = m_Mesh.get();
 
+    float3 baseMinBB = minBB;
+    float3 baseMaxBB = maxBB;
+
     for (int i = 0; i < numBigTiles; ++i)
     {
         for (int j = 0; j < numBigTiles; ++j)
@@ -202,8 +191,47 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
             ni.OffsetX = i / (float)numBigTiles;
             ni.OffsetY = j / (float)numBigTiles;
             node.Instances.push_back(ni);
+
+            float3 minTranslatedPos = baseMinBB * ni.NodeMatrix;
+            float3 maxTranslatedPos = baseMaxBB * ni.NodeMatrix;
+
+            minBB = float3{
+                std::min(minBB.x, minTranslatedPos.x),
+                std::min(minBB.y, minTranslatedPos.y),
+                std::min(minBB.z, minTranslatedPos.z)
+            };
+
+            maxBB = float3{
+                std::max(maxBB.x, maxTranslatedPos.x),
+                std::max(maxBB.y, maxTranslatedPos.y),
+                std::max(maxBB.z, maxTranslatedPos.z)
+            };
+
         }
     }
+
+    float yValues[] = {-16.0f, 16.0f};
+
+    for (float y : yValues)
+    {
+        float3 minTranslatedPos = baseMinBB * float4x4::Translation(0.0f, y, 0.0f);
+        float3 maxTranslatedPos = baseMaxBB * float4x4::Translation(0.0f, y, 0.0f);
+
+        minBB = float3{
+            std::min(minBB.x, minTranslatedPos.x),
+            std::min(minBB.y, minTranslatedPos.y),
+            std::min(minBB.z, minTranslatedPos.z)
+        };
+
+        maxBB = float3{
+            std::max(maxBB.x, maxTranslatedPos.x),
+            std::max(maxBB.y, maxTranslatedPos.y),
+            std::max(maxBB.z, maxTranslatedPos.z)
+        };
+    }
+
+    m_Mesh->BB.Min = minBB;
+    m_Mesh->BB.Max = maxBB;
 
     CreateBuffers();
     m_GPUDataInitialized = false;
