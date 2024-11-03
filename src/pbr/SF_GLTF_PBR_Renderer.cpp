@@ -106,6 +106,12 @@ struct PBRRendererCreateInfoWrapper
 };
 
 } // namespace
+
+void InitializeGLTFPBRCreateInfo(SF_PBR_Renderer::CreateInfo& CI)
+{
+    CI = PBRRendererCreateInfoWrapper{CI}.CI;
+}
+
 SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
                                      IRenderStateCache* pStateCache,
                                      IDeviceContext*    pCtx,

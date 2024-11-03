@@ -21,11 +21,11 @@ cbuffer cbJointTransforms
     float4x4 g_Joints[MAX_JOINT_COUNT];
 };
 
-#ifdef USE_HEIGHTMAP
+#if USE_HEIGHTMAP
 cbuffer cbHeightmapAttribs
 {
     PBRHeightmapAttribs g_HeightmapAttribs;
-}
+};
 Texture2D g_Heightmap;
 SamplerState g_Heightmap_sampler : register(s0);
 

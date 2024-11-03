@@ -45,6 +45,8 @@ struct PBRMaterialBasicAttribs;
 struct PBRLightAttribs;
 } // namespace HLSL
 
+void InitializeGLTFPBRCreateInfo(SF_PBR_Renderer::CreateInfo& CI);
+
 /// Implementation of a GLTF PBR renderer
 class SF_GLTF_PBR_Renderer : public SF_PBR_Renderer
 {

@@ -849,7 +849,7 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
         .AddVariable(SHADER_TYPE_VERTEX, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "g_HeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_VERTEX, "cbHeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
 
@@ -942,12 +942,23 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
 
     auto count = pRenderMeshShadowPSO->GetStaticVariableCount(SHADER_TYPE_VERTEX);
 
+    for (Uint32 i = 0; i < count; ++i)
+    {
+        auto pVar = pRenderMeshShadowPSO->GetStaticVariableByIndex(SHADER_TYPE_VERTEX, i);
+        ShaderResourceDesc varDesc;
+        pVar->GetResourceDesc(varDesc);
+        char debugMessage[256];
+        sprintf_s(debugMessage, "Variable %d: %s\n", i, varDesc.Name);
+        OutputDebugString(debugMessage);
+    }
+
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_HeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
     pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
+
+    //pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
 
     m_RenderMeshShadowPSO.emplace_back(std::move(pRenderMeshShadowPSO));
 
@@ -956,7 +967,7 @@ void ShadowMap::Initialize(const std::shared_ptr<SF_GLTF::Model>& mesh)
             {s_gc.PBRPrimitiveAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.jointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.heightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
-            {s_gc.pbrRenderer->GetInstanceAttribsSB(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.instanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
@@ -5618,8 +5629,12 @@ void InitializeAnimationIndices()
 
 void InitializeCommonResources()
 {
+    SF_GLTF_PBR_Renderer::CreateInfo RendererCI = {};
+    InitializeGLTFPBRCreateInfo(RendererCI);
+
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "cbCameraAttribs", &s_gc.cameraAttribsCB);
-    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
+    //CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::GLTFNodeShaderTransforms), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
+    CreateUniformBuffer(s_gc.m_pDevice, SF_GLTF_PBR_Renderer::GetPBRPrimitiveAttribsSizeStatic(RendererCI, SF_PBR_Renderer::PSO_FLAG_ALL, 0), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
     const size_t JointsBufferSize = sizeof(float4x4) * /* m_Settings.MaxJointCount */ 64 * 2;
     CreateUniformBuffer(s_gc.m_pDevice, JointsBufferSize, "cbJointTransforms", &s_gc.jointsBuffer);
 
@@ -5635,8 +5650,6 @@ void InitializeCommonResources()
     VBData.DataSize = sizeof(DummyVertex);
 
     s_gc.m_pDevice->CreateBuffer(VertBuffDesc, &VBData, &s_gc.dummyVertexBuffer);
-
-    SF_GLTF_PBR_Renderer::CreateInfo RendererCI{};
 
     CreateUniformBuffer(s_gc.m_pDevice, SF_GLTF_PBR_Renderer::GetPRBFrameAttribsSizeStatic(RendererCI.MaxLightCount, RendererCI.MaxShadowCastingLightCount), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
 

@@ -692,8 +692,35 @@ public:
     ///             - PrefilteredCubeLastMip
     void SetInternalShaderParameters(HLSL::PBRRendererShaderParameters& Renderer);
 
-    /// Returns the PBR primitive attributes shader data size for the given PSO flags.
-    Uint32 GetPBRPrimitiveAttribsSize(PSO_FLAGS Flags, Uint32 CustomDataSize = sizeof(float4)) const;
+
+    static Uint32 GetPBRPrimitiveAttribsSizeStatic(const CreateInfo& Settings, PSO_FLAGS Flags, Uint32 CustomDataSize)
+    {
+        Uint32 NumTextureAttribs = 0;
+        ProcessTexturAttribs(Flags, [&](int CurrIndex, SF_PBR_Renderer::TEXTURE_ATTRIB_ID AttribId) //
+                             {
+                                 const int SrcAttribIndex = Settings.TextureAttribIndices[AttribId];
+                                 if (SrcAttribIndex >= 0)
+                                 {
+                                     ++NumTextureAttribs;
+                                 }
+                             });
+
+        return (sizeof(HLSL::GLTFNodeShaderTransforms) +
+                ((Flags & PSO_FLAG_COMPUTE_MOTION_VECTORS) ? sizeof(float4x4) : 0) +
+                sizeof(HLSL::PBRMaterialBasicAttribs) +
+                ((Flags & PSO_FLAG_ENABLE_SHEEN) ? sizeof(HLSL::PBRMaterialSheenAttribs) : 0) +
+                ((Flags & PSO_FLAG_ENABLE_ANISOTROPY) ? sizeof(HLSL::PBRMaterialAnisotropyAttribs) : 0) +
+                ((Flags & PSO_FLAG_ENABLE_IRIDESCENCE) ? sizeof(HLSL::PBRMaterialIridescenceAttribs) : 0) +
+                ((Flags & PSO_FLAG_ENABLE_TRANSMISSION) ? sizeof(HLSL::PBRMaterialTransmissionAttribs) : 0) +
+                ((Flags & PSO_FLAG_ENABLE_VOLUME) ? sizeof(HLSL::PBRMaterialVolumeAttribs) : 0) +
+                sizeof(HLSL::PBRMaterialTextureAttribs) * NumTextureAttribs +
+                CustomDataSize);
+    }
+
+    Uint32 GetPBRPrimitiveAttribsSize(PSO_FLAGS Flags, Uint32 CustomDataSize = sizeof(float4)) const
+    {
+        return GetPBRPrimitiveAttribsSizeStatic(m_Settings, Flags, CustomDataSize);
+    }   
 
     static constexpr Uint32 GetPRBFrameAttribsSizeStatic(Uint32 LightCount, Uint32 ShadowCastingLightCount)
     {

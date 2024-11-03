@@ -2017,45 +2017,4 @@ void SF_PBR_Renderer::SetInternalShaderParameters(HLSL::PBRRendererShaderParamet
     Renderer.PrefilteredCubeLastMip = m_Settings.EnableIBL ? static_cast<float>(m_pPrefilteredEnvMapSRV->GetTexture()->GetDesc().MipLevels - 1) : 0.f;
 }
 
-Uint32 SF_PBR_Renderer::GetPBRPrimitiveAttribsSize(PSO_FLAGS Flags, Uint32 CustomDataSize) const
-{
-    //struct PBRPrimitiveAttribs
-    //{
-    //    GLTFNodeShaderTransforms Transforms;
-    //    float4x4                 PrevNodeMatrix; // #if ENABLE_MOTION_VECTORS
-    //    struct PBRMaterialShaderInfo
-    //    {
-    //        PBRMaterialBasicAttribs        Basic;
-    //        PBRMaterialSheenAttribs        Sheen;        // #if ENABLE_SHEEN
-    //        PBRMaterialAnisotropyAttribs   Anisotropy;   // #if ENABLE_ANISOTROPY
-    //        PBRMaterialIridescenceAttribs  Iridescence;  // #if ENABLE_IRIDESCENCE
-    //        PBRMaterialTransmissionAttribs Transmission; // #if ENABLE_TRANSMISSION
-    //        PBRMaterialVolumeAttribs       Volume;       // #if ENABLE_VOLUME
-    //        PBRMaterialTextureAttribs Textures[PBR_NUM_TEXTURE_ATTRIBUTES];
-    //    } Material;
-    //    UserDefined CustomData;
-    //};
-
-    Uint32 NumTextureAttribs = 0;
-    ProcessTexturAttribs(Flags, [&](int CurrIndex, SF_PBR_Renderer::TEXTURE_ATTRIB_ID AttribId) //
-                         {
-                             const int SrcAttribIndex = m_Settings.TextureAttribIndices[AttribId];
-                             if (SrcAttribIndex >= 0)
-                             {
-                                 ++NumTextureAttribs;
-                             }
-                         });
-
-    return (sizeof(HLSL::GLTFNodeShaderTransforms) +
-            ((Flags & PSO_FLAG_COMPUTE_MOTION_VECTORS) ? sizeof(float4x4) : 0) +
-            sizeof(HLSL::PBRMaterialBasicAttribs) +
-            ((Flags & PSO_FLAG_ENABLE_SHEEN) ? sizeof(HLSL::PBRMaterialSheenAttribs) : 0) +
-            ((Flags & PSO_FLAG_ENABLE_ANISOTROPY) ? sizeof(HLSL::PBRMaterialAnisotropyAttribs) : 0) +
-            ((Flags & PSO_FLAG_ENABLE_IRIDESCENCE) ? sizeof(HLSL::PBRMaterialIridescenceAttribs) : 0) +
-            ((Flags & PSO_FLAG_ENABLE_TRANSMISSION) ? sizeof(HLSL::PBRMaterialTransmissionAttribs) : 0) +
-            ((Flags & PSO_FLAG_ENABLE_VOLUME) ? sizeof(HLSL::PBRMaterialVolumeAttribs) : 0) +
-            sizeof(HLSL::PBRMaterialTextureAttribs) * NumTextureAttribs +
-            CustomDataSize);
-}
-
 } // namespace Diligent
