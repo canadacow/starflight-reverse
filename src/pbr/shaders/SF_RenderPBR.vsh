@@ -201,7 +201,7 @@ void main(in  VSInput  VSIn,
     float3 adjustedPos = VSIn.Pos + float3(0.0, height, 0.0);
     VSOut.Height = height;
 #else
-    float3 adjustedPos = VSIn.Position;
+    float3 adjustedPos = VSIn.Pos;
 #endif // USE_HEIGHTMAP
 
     GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    
