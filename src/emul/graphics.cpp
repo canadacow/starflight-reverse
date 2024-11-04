@@ -400,6 +400,7 @@ struct GraphicsContext
         std::shared_ptr<SF_GLTF::Model> model;
         SF_GLTF_PBR_Renderer::ModelResourceBindings bindings;
         BoundBox aabb;
+        BoundBox worldspaceAABB;
         std::array<SF_GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
         float4x4                             modelTransform;
         float                                scale = 1.f;
@@ -1064,9 +1065,10 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pCameraView = &view;
     DistrInfo.pCameraProj = &proj;
     DistrInfo.pLightDir = &Direction;
-    DistrInfo.fPartitioningFactor = 0.95f;
+    //DistrInfo.fPartitioningFactor = 0.95f;
+    DistrInfo.fPartitioningFactor = 0.0f;
 
-    DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model](int CascadeIdx, float& MinZ, float& MaxZ) {
+    DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model, inFlightIndex](int CascadeIdx, float& MinZ, float& MaxZ) {
 
         // Adjust the whole range only
         if(CascadeIdx == -1)
@@ -1088,6 +1090,10 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             float minZ = std::numeric_limits<float>::max();
             float maxZ = std::numeric_limits<float>::lowest();
 
+            OutputDebugString(("AABB Min: " + std::to_string(aabb.Min.z) + "\n").c_str());
+            OutputDebugString(("AABB Max: " + std::to_string(aabb.Max.z) + "\n").c_str());
+
+#if 0
             for (const auto& corner : corners)
             {
                 float4 transformed = float4(corner, 1.0f) * viewProj;
@@ -1104,6 +1110,42 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
 
             MinZ = minZ;
             MaxZ = maxZ;
+#else
+            for (const auto& corner : corners)
+            {
+                float4 test = { -122.0f, -2.0f, -122.0f, 1.0f };
+                float4 testTrans = test * model.modelTransform;
+                testTrans = testTrans * viewProj;
+
+                float4 transformed = float4(corner, 1.0f);
+                transformed = transformed * viewProj;
+                transformed /= transformed.w;
+                float z = transformed.z;
+
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
+            }
+
+            OutputDebugString(("View Space MinZ: " + std::to_string(minZ) + "\n").c_str());
+            OutputDebugString(("View Space MaxZ: " + std::to_string(maxZ) + "\n").c_str());
+
+            // Convert to positive distances
+            float nearPlane = std::max(0.1f, minZ);  // Closest point (least negative becomes smallest positive)
+            float farPlane = maxZ;   // Farthest point (most negative becomes largest positive)
+
+            // Debug: Print converted distances
+            OutputDebugString(("Near Plane: " + std::to_string(nearPlane) + "\n").c_str());
+            OutputDebugString(("Far Plane: " + std::to_string(farPlane) + "\n").c_str());
+
+            // Add padding
+            MinZ = nearPlane;
+            MaxZ = farPlane;
+
+            // Debug: Print final values
+            OutputDebugString(("Final MinZ: " + std::to_string(MinZ) + "\n").c_str());
+            OutputDebugString(("Final MaxZ: " + std::to_string(MaxZ) + "\n").c_str());
+#endif
+
         }
 
     };
@@ -4489,6 +4531,7 @@ void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.planet.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0]);
     s_gc.planet.aabb = s_gc.planet.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.planet.transforms[0], nullptr);
+    s_gc.planet.worldspaceAABB = s_gc.planet.aabb;
 
     // Center and scale model
     float  MaxDim = 0;
@@ -4821,6 +4864,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     s_gc.terrain.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0]);
     s_gc.terrain.dynamicMesh->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.terrain.dynamicMeshTransforms[0]);
     s_gc.terrain.aabb = s_gc.terrain.dynamicMesh->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.terrain.transforms[0], &s_gc.terrain.dynamicMeshTransforms[0]);
+    s_gc.terrain.worldspaceAABB = s_gc.terrain.aabb;
 
     // Center and scale model
     float  MaxDim = 0;
@@ -5780,6 +5824,7 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.station.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0]);
     s_gc.station.aabb = s_gc.station.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.station.transforms[0], nullptr);
+    s_gc.planet.worldspaceAABB = s_gc.station.aabb;
 
     // Center and scale model
     float  MaxDim = 0;

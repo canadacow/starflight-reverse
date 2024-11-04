@@ -210,7 +210,7 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
         }
     }
 
-    float yValues[] = {-16.0f, 16.0f};
+    float yValues[] = {-2.0f, 10.0f};
 
     for (float y : yValues)
     {
