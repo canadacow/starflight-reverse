@@ -608,7 +608,7 @@ struct ShadowMap
         return m_ShadowMapMgr.GetSRV();
     }
 
-    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh);
+    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh, uint32_t shaderIdx);
 
 private:
 
@@ -617,7 +617,7 @@ private:
 
     RefCntAutoPtr<IBuffer>                             m_LightAttribsCB;
     std::vector<Uint32>                                m_PSOIndex;
-    std::vector<RefCntAutoPtr<IPipelineState>>         m_RenderMeshShadowPSO;
+    std::array<RefCntAutoPtr<IPipelineState>, 2>       m_RenderMeshShadowPSO;
     std::vector<RefCntAutoPtr<IShaderResourceBinding>> m_ShadowSRBs;
 
     RefCntAutoPtr<IRenderStateNotationLoader> m_pRSNLoader;
@@ -745,14 +745,14 @@ void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
 
 */
 
-void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh)
+void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh, uint32_t shaderIdx)
 {
     m_ShadowSRBs.clear();
     m_ShadowSRBs.resize(mesh->GetMaterials().size());
     for (Uint32 mat = 0; mat < mesh->GetMaterials().size(); ++mat)
     {
         RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
-        m_RenderMeshShadowPSO[0]->CreateShaderResourceBinding(&pShadowSRB, true);
+        m_RenderMeshShadowPSO[shaderIdx]->CreateShaderResourceBinding(&pShadowSRB, true);
         m_ShadowSRBs[mat] = std::move(pShadowSRB);
     }
 }
@@ -763,8 +763,16 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const HLSL::CameraAttribs& cameraAttribs,
                          const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams)
 {
-    // Set the appropriate shadow pipeline state object and shader resource binding
-    auto& pPSO = m_RenderMeshShadowPSO[0];
+    RefCntAutoPtr<IPipelineState> pPSO;
+
+    if(RenderParams.Flags & SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING)
+    {
+        pPSO = m_RenderMeshShadowPSO[1];
+    }
+    else
+    {
+        pPSO = m_RenderMeshShadowPSO[0];
+    }
 
     pCtx->SetPipelineState(pPSO);
 
@@ -878,126 +886,132 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
 void ShadowMap::Initialize()
 {
-    GraphicsPipelineStateCreateInfo PSOCreateInfo{};
-
-    PipelineResourceLayoutDescX ResourceLayout;
-    ResourceLayout
-        .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "cbHeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
-
-    ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearClamp);
-
-    PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
-
-    // This is a graphics pipeline
-    PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-    // clang-format off
-    // Shadow pass doesn't use any render target outputs
-    PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 0;
-    PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
-    // The DSV format is the shadow map format
-    PSOCreateInfo.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT; // m_ShadowMapFormat;
-    PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    // Cull back faces
-    PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
-    PSOCreateInfo.GraphicsPipeline.RasterizerDesc.SlopeScaledDepthBias = 2.0f;
-    // Enable depth testing
-    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = True;
-    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-    // clang-format on
-
-    auto pCompoundSourceFactory = SFCreateCompoundShaderSourceFactory(s_gc.m_pDevice);
-
-    ShaderCreateInfo ShaderCI;
-    ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
-    // Tell the system that the shader source code is in HLSL.
-    // For OpenGL, the engine will convert this into GLSL under the hood.
-    ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-    // OpenGL backend requires emulated combined HLSL texture samplers (g_Texture + g_Texture_sampler combination)
-    ShaderCI.Desc.UseCombinedTextureSamplers = true;
-
-    ShaderMacroHelper Macros;
-    Macros.AddShaderMacro("SHADOW_MODE", SHADOW_MODE_PCF);
-    Macros.AddShaderMacro("PCF_FILTER_SIZE", 5);
-    Macros.AddShaderMacro("FILTER_ACROSS_CASCADES", true);
-    Macros.AddShaderMacro("BEST_CASCADE_SEARCH", true);
-    Macros.AddShaderMacro("SHADOW_PASS", true);
-    Macros.AddShaderMacro("USE_INSTANCING", true);
-    Macros.AddShaderMacro("USE_HEIGHTMAP", true);
-
-    // Create shadow vertex shader
-    RefCntAutoPtr<IShader> pShadowVS;
+    for (int shaderInit = 0; shaderInit < 2; ++shaderInit)
     {
-        ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-        ShaderCI.EntryPoint = "MeshVS";
-        ShaderCI.Desc.Name = "Mesh VS";
-        ShaderCI.FilePath = "MeshVS.vsh";
-        ShaderCI.Macros = Macros;
-        s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowVS);
+        GraphicsPipelineStateCreateInfo PSOCreateInfo{};
+
+        PipelineResourceLayoutDescX ResourceLayout;
+        ResourceLayout
+            .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+            .AddVariable(SHADER_TYPE_VERTEX, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+            .AddVariable(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+            .AddVariable(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            
+        if(shaderInit == 1)
+        {
+            ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbHeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearClamp);
+        }
+
+        PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
+
+        // This is a graphics pipeline
+        PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+        // clang-format off
+        // Shadow pass doesn't use any render target outputs
+        PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 0;
+        PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
+        // The DSV format is the shadow map format
+        PSOCreateInfo.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT; // m_ShadowMapFormat;
+        PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        // Cull back faces
+        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
+        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.SlopeScaledDepthBias = 2.0f;
+        // Enable depth testing
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = True;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+        // clang-format on
+
+        auto pCompoundSourceFactory = SFCreateCompoundShaderSourceFactory(s_gc.m_pDevice);
+
+        ShaderCreateInfo ShaderCI;
+        ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
+        // Tell the system that the shader source code is in HLSL.
+        // For OpenGL, the engine will convert this into GLSL under the hood.
+        ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        // OpenGL backend requires emulated combined HLSL texture samplers (g_Texture + g_Texture_sampler combination)
+        ShaderCI.Desc.UseCombinedTextureSamplers = true;
+
+        ShaderMacroHelper Macros;
+        Macros.AddShaderMacro("SHADOW_MODE", SHADOW_MODE_PCF);
+        Macros.AddShaderMacro("PCF_FILTER_SIZE", 5);
+        Macros.AddShaderMacro("FILTER_ACROSS_CASCADES", true);
+        Macros.AddShaderMacro("BEST_CASCADE_SEARCH", true);
+        Macros.AddShaderMacro("SHADOW_PASS", true);
+        Macros.AddShaderMacro("USE_INSTANCING", shaderInit == 1);
+        Macros.AddShaderMacro("USE_HEIGHTMAP", shaderInit == 1);
+
+        // Create shadow vertex shader
+        RefCntAutoPtr<IShader> pShadowVS;
+        {
+            ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+            ShaderCI.EntryPoint = "MeshVS";
+            ShaderCI.Desc.Name = "Mesh VS";
+            ShaderCI.FilePath = "MeshVS.vsh";
+            ShaderCI.Macros = Macros;
+            s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowVS);
+        }
+        PSOCreateInfo.pVS = pShadowVS;
+
+        // clang-format off
+        // Define vertex shader input layout
+        LayoutElement LayoutElems[] =
+        {
+            // Attribute 0 - vertex position
+            LayoutElement{0, 0, 3, VT_FLOAT32, False},
+            // Attribute 1 - normal
+            LayoutElement{1, 0, 3, VT_FLOAT32, False},
+            // Attribute 2 - texture coordinates
+            LayoutElement{2, 0, 2, VT_FLOAT32, False},
+            // Attribute 3 - joint indices
+            LayoutElement{3, 1, 4, VT_FLOAT32, False},
+            // Attribute 4 - joint weights
+            LayoutElement{4, 1, 4, VT_FLOAT32, False}
+        };
+        // clang-format on
+
+        PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
+        PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
+
+        PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
+
+        if (s_gc.m_pDevice->GetDeviceInfo().Features.DepthClamp)
+        {
+            // Disable depth clipping to render objects that are closer than near
+            // clipping plane. This is not required for this tutorial, but real applications
+            // will most likely want to do this.
+            PSOCreateInfo.GraphicsPipeline.RasterizerDesc.DepthClipEnable = False;
+        }
+
+        RefCntAutoPtr<IPipelineState> pRenderMeshShadowPSO;
+
+        s_gc.m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &pRenderMeshShadowPSO);
+
+        auto count = pRenderMeshShadowPSO->GetStaticVariableCount(SHADER_TYPE_VERTEX);
+
+        for (Uint32 i = 0; i < count; ++i)
+        {
+            auto pVar = pRenderMeshShadowPSO->GetStaticVariableByIndex(SHADER_TYPE_VERTEX, i);
+            ShaderResourceDesc varDesc;
+            pVar->GetResourceDesc(varDesc);
+        }
+
+        pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
+        pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
+        pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
+        if(shaderInit == 1)     
+        {
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
+        }
+
+        //pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
+
+        m_RenderMeshShadowPSO[shaderInit] = std::move(pRenderMeshShadowPSO);
     }
-    PSOCreateInfo.pVS = pShadowVS;
-
-    // clang-format off
-    // Define vertex shader input layout
-    LayoutElement LayoutElems[] =
-    {
-        // Attribute 0 - vertex position
-        LayoutElement{0, 0, 3, VT_FLOAT32, False},
-        // Attribute 1 - normal
-        LayoutElement{1, 0, 3, VT_FLOAT32, False},
-        // Attribute 2 - texture coordinates
-        LayoutElement{2, 0, 2, VT_FLOAT32, False},
-        // Attribute 3 - joint indices
-        LayoutElement{3, 1, 4, VT_FLOAT32, False},
-        // Attribute 4 - joint weights
-        LayoutElement{4, 1, 4, VT_FLOAT32, False}
-    };
-    // clang-format on
-
-    PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
-    PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
-
-    PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
-
-    if (s_gc.m_pDevice->GetDeviceInfo().Features.DepthClamp)
-    {
-        // Disable depth clipping to render objects that are closer than near
-        // clipping plane. This is not required for this tutorial, but real applications
-        // will most likely want to do this.
-        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.DepthClipEnable = False;
-    }
-
-    RefCntAutoPtr<IPipelineState> pRenderMeshShadowPSO;
-
-    s_gc.m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &pRenderMeshShadowPSO);
-
-    auto count = pRenderMeshShadowPSO->GetStaticVariableCount(SHADER_TYPE_VERTEX);
-
-    for (Uint32 i = 0; i < count; ++i)
-    {
-        auto pVar = pRenderMeshShadowPSO->GetStaticVariableByIndex(SHADER_TYPE_VERTEX, i);
-        ShaderResourceDesc varDesc;
-        pVar->GetResourceDesc(varDesc);
-        char debugMessage[256];
-        sprintf_s(debugMessage, "Variable %d: %s\n", i, varDesc.Name);
-        OutputDebugString(debugMessage);
-    }
-
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
-    pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
-
-    //pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
-
-    m_RenderMeshShadowPSO.emplace_back(std::move(pRenderMeshShadowPSO));
 
     StateTransitionDesc Barriers[] = {
             {s_gc.cameraAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
@@ -1090,8 +1104,8 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             float minZ = std::numeric_limits<float>::max();
             float maxZ = std::numeric_limits<float>::lowest();
 
-            OutputDebugString(("AABB Min: " + std::to_string(aabb.Min.z) + "\n").c_str());
-            OutputDebugString(("AABB Max: " + std::to_string(aabb.Max.z) + "\n").c_str());
+            //OutputDebugString(("AABB Min: " + std::to_string(aabb.Min.z) + "\n").c_str());
+            //OutputDebugString(("AABB Max: " + std::to_string(aabb.Max.z) + "\n").c_str());
 
 #if 0
             for (const auto& corner : corners)
@@ -1126,24 +1140,24 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
                 if (z > maxZ) maxZ = z;
             }
 
-            OutputDebugString(("View Space MinZ: " + std::to_string(minZ) + "\n").c_str());
-            OutputDebugString(("View Space MaxZ: " + std::to_string(maxZ) + "\n").c_str());
+            //OutputDebugString(("View Space MinZ: " + std::to_string(minZ) + "\n").c_str());
+            //OutputDebugString(("View Space MaxZ: " + std::to_string(maxZ) + "\n").c_str());
 
             // Convert to positive distances
             float nearPlane = std::max(0.1f, minZ);  // Closest point (least negative becomes smallest positive)
             float farPlane = maxZ;   // Farthest point (most negative becomes largest positive)
 
             // Debug: Print converted distances
-            OutputDebugString(("Near Plane: " + std::to_string(nearPlane) + "\n").c_str());
-            OutputDebugString(("Far Plane: " + std::to_string(farPlane) + "\n").c_str());
+            //OutputDebugString(("Near Plane: " + std::to_string(nearPlane) + "\n").c_str());
+            //OutputDebugString(("Far Plane: " + std::to_string(farPlane) + "\n").c_str());
 
             // Add padding
             MinZ = nearPlane;
             MaxZ = farPlane;
 
             // Debug: Print final values
-            OutputDebugString(("Final MinZ: " + std::to_string(MinZ) + "\n").c_str());
-            OutputDebugString(("Final MaxZ: " + std::to_string(MaxZ) + "\n").c_str());
+            //OutputDebugString(("Final MinZ: " + std::to_string(MinZ) + "\n").c_str());
+            //OutputDebugString(("Final MaxZ: " + std::to_string(MaxZ) + "\n").c_str());
 #endif
 
         }
@@ -1177,7 +1191,13 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
 
         if (model.dynamicMesh)
         {
-            DrawMesh(s_gc.m_pImmediateContext, *model.dynamicMesh, model.dynamicMeshTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+            SF_GLTF_PBR_Renderer::RenderInfo ri = RenderParams;
+            ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_HEIGHTMAP;
+            ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_INSTANCING;
+            ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
+            ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
+
+            DrawMesh(s_gc.m_pImmediateContext, *model.dynamicMesh, model.dynamicMeshTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, ri);
         }
         else
         {
@@ -3493,7 +3513,7 @@ static int GraphicsInitThread()
 
     s_gc.shadowMap = std::make_unique<ShadowMap>();
     s_gc.shadowMap->Initialize();
-    s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
+    s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model, 1);
 
     InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
 
@@ -4957,7 +4977,7 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_TERRAIN)
     {
-        s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model, 1);
         s_gc.currentScene = SCENE_TERRAIN;
     }
 
@@ -6095,7 +6115,7 @@ void RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_STATION)
     {
-        s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model);
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model, 0);
         s_gc.currentScene = SCENE_STATION;
     }
 
