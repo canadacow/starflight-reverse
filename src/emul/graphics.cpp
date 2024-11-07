@@ -580,10 +580,10 @@ struct ShadowMap
 {
     struct ShadowSettings
     {
-        bool           SnapCascades = false;
-        bool           StabilizeExtents = false;
-        bool           EqualizeExtents = false;
-        bool           SearchBestCascade = false;
+        bool           SnapCascades = true;
+        bool           StabilizeExtents = true;
+        bool           EqualizeExtents = true;
+        bool           SearchBestCascade = true;
         bool           FilterAcrossCascades = true;
         int            Resolution = 2048;
         float          PartitioningFactor = 0.95f;
@@ -1022,7 +1022,7 @@ void ShadowMap::Initialize()
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    m_LightAttribs.ShadowAttribs.iNumCascades = 1;
+    m_LightAttribs.ShadowAttribs.iNumCascades = 4;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
@@ -1069,6 +1069,144 @@ void ShadowMap::Initialize()
     m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
 }
 
+static float3 Vec3(const float4& v)
+{
+    return float3(v.x, v.y, v.z);
+}
+
+static float4x4 Orthographic(float left, float right, float bottom, float top, float nearPlane, float farPlane)
+{
+    float4x4 orthoMatrix;
+    orthoMatrix._11 = 2.0f / (right - left);
+    orthoMatrix._22 = 2.0f / (top - bottom);
+    orthoMatrix._33 = -2.0f / (farPlane - nearPlane);
+    orthoMatrix._41 = -(right + left) / (right - left);
+    orthoMatrix._42 = -(top + bottom) / (top - bottom);
+    orthoMatrix._43 = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    orthoMatrix._44 = 1.0f;
+    return orthoMatrix;
+}
+
+static float4x4 LookAt(const float3& eye, const float3& at, const float3& up)
+{
+    // Ensure we have a valid direction vector
+    float3 zAxis = at - eye;
+    float zLength = length(zAxis);
+    if (zLength < 1e-6f) {
+        // Return identity matrix if eye and at are too close
+        return float4x4::Identity();
+    }
+    zAxis /= zLength;
+
+    // Handle case where up and zAxis are parallel
+    float upDotZ = dot(up, zAxis);
+    float3 fixedUp = (abs(upDotZ) > 0.9999f) ? 
+        float3(zAxis.z, zAxis.x, zAxis.y) : // Choose different up vector if parallel
+        up;
+
+    // Compute coordinate frame
+    float3 xAxis = normalize(cross(fixedUp, zAxis));
+    float3 yAxis = cross(zAxis, xAxis); // Note: no need to normalize since xAxis and zAxis are perpendicular
+
+    // Build view matrix
+    float4x4 viewMatrix;
+    viewMatrix._11 = xAxis.x;
+    viewMatrix._12 = yAxis.x;
+    viewMatrix._13 = zAxis.x;
+    viewMatrix._14 = 0.0f;
+
+    viewMatrix._21 = xAxis.y;
+    viewMatrix._22 = yAxis.y;
+    viewMatrix._23 = zAxis.y;
+    viewMatrix._24 = 0.0f;
+
+    viewMatrix._31 = xAxis.z;
+    viewMatrix._32 = yAxis.z;
+    viewMatrix._33 = zAxis.z;
+    viewMatrix._34 = 0.0f;
+
+    viewMatrix._41 = -dot(xAxis, eye);
+    viewMatrix._42 = -dot(yAxis, eye);
+    viewMatrix._43 = -dot(zAxis, eye);
+    viewMatrix._44 = 1.0f;
+
+    return viewMatrix;
+}
+
+float4x4 ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const float3& lightDirection, GraphicsContext::SFModel& model, ShadowMap::ShadowSettings& shadowSettings)
+{
+    // Compute the view matrix for the light using a right-handed coordinate system
+    float3 lightPos = Vec3(cameraAttribs.f4Position) - lightDirection * 100.0f;
+    float4x4 lightView = LookAt(lightPos, Vec3(cameraAttribs.f4Position), float3(0.0f, 1.0f, 0.0f));
+
+    // Get the corners of the model's bounding box
+    const auto& aabb = model.aabb;
+    std::array<float3, 8> corners = {
+        float3(aabb.Min.x, aabb.Min.y, aabb.Min.z),
+        float3(aabb.Max.x, aabb.Min.y, aabb.Min.z),
+        float3(aabb.Min.x, aabb.Max.y, aabb.Min.z),
+        float3(aabb.Max.x, aabb.Max.y, aabb.Min.z),
+        float3(aabb.Min.x, aabb.Min.y, aabb.Max.z),
+        float3(aabb.Max.x, aabb.Min.y, aabb.Max.z),
+        float3(aabb.Min.x, aabb.Max.y, aabb.Max.z),
+        float3(aabb.Max.x, aabb.Max.y, aabb.Max.z)
+    };
+
+    // Transform the corners to light space
+    float3 minCorner = float3(std::numeric_limits<float>::max());
+    float3 maxCorner = float3(std::numeric_limits<float>::lowest());
+
+    for (const auto& corner : corners)
+    {
+        float4 transformed = float4(corner, 1.0f) * lightView;
+        minCorner = min(minCorner, float3(transformed));
+        maxCorner = max(maxCorner, float3(transformed));
+    }
+
+    // Add padding to avoid edge cases (using similar scale as DistributeCascades)
+    float width = maxCorner.x - minCorner.x;
+    float height = maxCorner.y - minCorner.y;
+    float depth = maxCorner.z - minCorner.z;
+    float largestDimension = std::max(width, height);
+    
+    // Center the projection
+    float centerX = (minCorner.x + maxCorner.x) * 0.5f;
+    float centerY = (minCorner.y + maxCorner.y) * 0.5f;
+    
+    // Compute extended bounds with fixed margin
+    float shadowMapSize = static_cast<float>(shadowSettings.Resolution);
+    float fixedMargin = 0.5f; // Matches DistributeCascades fixed margin
+    float marginScale = shadowMapSize / (shadowMapSize - 2.0f * fixedMargin);
+    
+    largestDimension *= marginScale;
+    
+    minCorner.x = centerX - largestDimension * 0.5f;
+    maxCorner.x = centerX + largestDimension * 0.5f;
+    minCorner.y = centerY - largestDimension * 0.5f;
+    maxCorner.y = centerY + largestDimension * 0.5f;
+
+    // Extend Z range proportionally and add bias
+    float zExtension = 0.1f; // Similar to DistributeCascades z extension
+    float zRange = maxCorner.z - minCorner.z;
+    zRange *= (1.0f / (1.0f - zExtension * 2.0f));
+    float zCenter = (maxCorner.z + minCorner.z) * 0.5f;
+    minCorner.z = zCenter - zRange;
+    maxCorner.z = zCenter + zRange;
+
+    // Snap cascade center to texels to reduce temporal aliasing
+    float texelXSize = largestDimension / shadowMapSize;
+    float texelYSize = largestDimension / shadowMapSize;
+    centerX = std::round(centerX / texelXSize) * texelXSize;
+    centerY = std::round(centerY / texelYSize) * texelYSize;
+
+    // Compute the projection matrix for the light
+    // Note: Using negative Z range to match DistributeCascades convention
+    float4x4 lightProj = Orthographic(minCorner.x, maxCorner.x, minCorner.y, maxCorner.y, -maxCorner.z, -minCorner.z);
+
+    // Return the combined view-projection matrix
+    return lightView * lightProj;
+}
+
 void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
@@ -1079,14 +1217,15 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pCameraView = &view;
     DistrInfo.pCameraProj = &proj;
     DistrInfo.pLightDir = &Direction;
-    //DistrInfo.fPartitioningFactor = 0.95f;
-    DistrInfo.fPartitioningFactor = 0.0f;
+    DistrInfo.fPartitioningFactor = 0.95f;
+    DistrInfo.UseRightHandedLightViewTransform = true;
 
     DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model, inFlightIndex](int CascadeIdx, float& MinZ, float& MaxZ) {
 
         // Adjust the whole range only
         if(CascadeIdx == -1)
         {
+#if 0
             // Get the corners of the model's bounding box
             const auto& aabb = model.aabb;
             std::array<float3, 8> corners = {
@@ -1155,9 +1294,13 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             MinZ = nearPlane;
             MaxZ = farPlane;
 
+            //MinZ = 1.0f;
+            //MaxZ = 12.0f;
+
             // Debug: Print final values
             //OutputDebugString(("Final MinZ: " + std::to_string(MinZ) + "\n").c_str());
             //OutputDebugString(("Final MaxZ: " + std::to_string(MaxZ) + "\n").c_str());
+#endif
 #endif
 
         }
@@ -1178,7 +1321,9 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
 
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
-        ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr.Transpose();
+        //ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr.Transpose();
+        ShadowCameraAttribs.mViewProj = ComputeCascadeViewProj(CurrCamAttribs, Direction, model, m_ShadowSettings).Transpose();
+        //ShadowCameraAttribs.mViewProj = viewProj.Transpose();
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
         ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
@@ -4940,6 +5085,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     YFov = pCamera->Perspective.YFov;
     ZNear = pCamera->Perspective.ZNear;
     ZFar = pCamera->Perspective.ZFar;
+    ZNear = 1.0f;
+    ZFar = 400.0f;
     //ZFar = 10000.0f;
 
     // Apply pretransform matrix that rotates the scene according the surface orientation

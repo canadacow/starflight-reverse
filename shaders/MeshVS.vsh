@@ -1,5 +1,6 @@
 #include "BasicStructures.fxh"
 #include "PBR_Structures.fxh"
+#include "VertexProcessing.fxh"
 #include "SF_RenderPBR_Structures.fxh"
 
 cbuffer cbCameraAttribs
@@ -105,6 +106,8 @@ void MeshVS(in  VSInput  VSIn,
     VSOut.NormalWS     = VSIn.Normal;
     VSOut.TexCoord     = VSIn.UV0;
 
+    float3 Normal = float3(0.0, 0.0, 1.0);
+
     float4x4 Transform = PRIMITIVE.NodeMatrix;
     
     if (PRIMITIVE.JointCount > 0)
@@ -133,7 +136,6 @@ void MeshVS(in  VSInput  VSIn,
     float3 adjustedPos = VSIn.Position;
 #endif // USE_HEIGHTMAP
 
-    float4 locPos = mul(float4(adjustedPos, 1.0), Transform);
-    locPos = locPos.xyzw / locPos.w;
-    VSOut.PositionPS = mul(locPos, g_CameraAttribs.mViewProj);
+    GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    
+    VSOut.PositionPS = mul(float4(TransformedVert.WorldPos, 1.0), g_CameraAttribs.mViewProj);
 };
