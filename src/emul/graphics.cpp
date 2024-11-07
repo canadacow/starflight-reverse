@@ -1022,7 +1022,7 @@ void ShadowMap::Initialize()
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    m_LightAttribs.ShadowAttribs.iNumCascades = 4;
+    m_LightAttribs.ShadowAttribs.iNumCascades = 1;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
@@ -1133,11 +1133,16 @@ static float4x4 LookAt(const float3& eye, const float3& at, const float3& up)
     return viewMatrix;
 }
 
-float4x4 ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const float3& lightDirection, GraphicsContext::SFModel& model, ShadowMap::ShadowSettings& shadowSettings)
+struct CascadeMatrices {
+    float4x4 WorldToLightView;
+    float4x4 ViewProj;
+};
+
+CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const float3& lightDirection, GraphicsContext::SFModel& model, ShadowMap::ShadowSettings& shadowSettings)
 {
-    // Compute the view matrix for the light using a right-handed coordinate system
-    float3 lightPos = Vec3(cameraAttribs.f4Position) - lightDirection * 100.0f;
-    float4x4 lightView = LookAt(lightPos, Vec3(cameraAttribs.f4Position), float3(0.0f, 1.0f, 0.0f));
+    float3 lightPos = float3(0, 0, 0); // Arbitrary position
+    float3 lookAt = lightPos + lightDirection; // Look in direction of light
+    float4x4 WorldToLightView = LookAt(lightPos, lookAt, float3(0.0f, 1.0f, 0.0f));
 
     // Get the corners of the model's bounding box
     const auto& aabb = model.aabb;
@@ -1158,7 +1163,7 @@ float4x4 ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const 
 
     for (const auto& corner : corners)
     {
-        float4 transformed = float4(corner, 1.0f) * lightView;
+        float4 transformed = float4(corner, 1.0f) * WorldToLightView;
         minCorner = min(minCorner, float3(transformed));
         maxCorner = max(maxCorner, float3(transformed));
     }
@@ -1204,7 +1209,7 @@ float4x4 ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const 
     float4x4 lightProj = Orthographic(minCorner.x, maxCorner.x, minCorner.y, maxCorner.y, maxCorner.z, minCorner.z);
 
     // Return the combined view-projection matrix
-    return lightView * lightProj;
+    return {WorldToLightView, WorldToLightView * lightProj};
 }
 
 void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
@@ -1219,6 +1224,8 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     DistrInfo.pLightDir = &Direction;
     DistrInfo.fPartitioningFactor = 0.95f;
     DistrInfo.UseRightHandedLightViewTransform = true;
+
+    CascadeMatrices cascadeViewProj{};
 
     DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model, inFlightIndex](int CascadeIdx, float& MinZ, float& MaxZ) {
 
@@ -1322,7 +1329,8 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
         //ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr.Transpose();
-        ShadowCameraAttribs.mViewProj = ComputeCascadeViewProj(CurrCamAttribs, Direction, model, m_ShadowSettings).Transpose();
+        cascadeViewProj = ComputeCascadeViewProj(CurrCamAttribs, Direction, model, m_ShadowSettings);
+        ShadowCameraAttribs.mViewProj = cascadeViewProj.ViewProj.Transpose();
         //ShadowCameraAttribs.mViewProj = viewProj.Transpose();
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
@@ -1350,6 +1358,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         }
     }
 
+#if 0
     const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(0).Proj;
 
     auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightView.Transpose();
@@ -1359,6 +1368,17 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     shadowInfo->UVScale = { 1.0f, 1.0f };
     shadowInfo->UVBias = { 0.0f, 0.0f };
     shadowInfo->ShadowMapSlice = 0.0f;
+#else
+    const auto CascadeProjMatr = cascadeViewProj.ViewProj;
+
+    auto WorldToLightViewSpaceMatr = cascadeViewProj.WorldToLightView;
+    auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;    
+
+    shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
+    shadowInfo->UVScale = { 1.0f, 1.0f };
+    shadowInfo->UVBias = { 0.0f, 0.0f };
+    shadowInfo->ShadowMapSlice = 0.0f;
+#endif
 }
 
 template<std::size_t PLANES>
