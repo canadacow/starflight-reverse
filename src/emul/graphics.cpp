@@ -1079,10 +1079,10 @@ static float4x4 Orthographic(float left, float right, float bottom, float top, f
     float4x4 orthoMatrix;
     orthoMatrix._11 = 2.0f / (right - left);
     orthoMatrix._22 = 2.0f / (top - bottom);
-    orthoMatrix._33 = -2.0f / (farPlane - nearPlane);
+    orthoMatrix._33 = 1.0f / (farPlane - nearPlane);    // Remove negative sign and change to 1.0f
     orthoMatrix._41 = -(right + left) / (right - left);
     orthoMatrix._42 = -(top + bottom) / (top - bottom);
-    orthoMatrix._43 = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    orthoMatrix._43 = -nearPlane / (farPlane - nearPlane);  // Change this term for 0-1 range
     orthoMatrix._44 = 1.0f;
     return orthoMatrix;
 }
@@ -1201,7 +1201,7 @@ float4x4 ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const 
 
     // Compute the projection matrix for the light
     // Note: Using negative Z range to match DistributeCascades convention
-    float4x4 lightProj = Orthographic(minCorner.x, maxCorner.x, minCorner.y, maxCorner.y, -maxCorner.z, -minCorner.z);
+    float4x4 lightProj = Orthographic(minCorner.x, maxCorner.x, minCorner.y, maxCorner.y, maxCorner.z, minCorner.z);
 
     // Return the combined view-projection matrix
     return lightView * lightProj;
