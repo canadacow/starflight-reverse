@@ -1077,7 +1077,7 @@ static float3 Vec3(const float4& v)
 static float4x4 Orthographic(float left, float right, float bottom, float top, float nearPlane, float farPlane)
 {
     float4x4 orthoMatrix;
-    orthoMatrix._11 = 2.0f / (right - left);
+    orthoMatrix._11 = 2.0f / (left - right);
     orthoMatrix._22 = 2.0f / (top - bottom);
     orthoMatrix._33 = 1.0f / (farPlane - nearPlane);
     orthoMatrix._41 = -(right + left) / (right - left);
@@ -1369,12 +1369,12 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
     shadowInfo->UVBias = { 0.0f, 0.0f };
     shadowInfo->ShadowMapSlice = 0.0f;
 #else
-    const auto CascadeProjMatr = cascadeViewProj.ViewProj;
+    //const auto CascadeProjMatr = cascadeViewProj.ViewProj;
 
-    auto WorldToLightViewSpaceMatr = cascadeViewProj.WorldToLightView;
-    auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;    
+    //auto WorldToLightViewSpaceMatr = cascadeViewProj.WorldToLightView;
+    //auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;    
 
-    shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
+    shadowInfo->WorldToLightProjSpace = cascadeViewProj.ViewProj.Transpose();
     shadowInfo->UVScale = { 1.0f, 1.0f };
     shadowInfo->UVBias = { 0.0f, 0.0f };
     shadowInfo->ShadowMapSlice = 0.0f;
