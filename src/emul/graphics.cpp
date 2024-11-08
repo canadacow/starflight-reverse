@@ -639,7 +639,7 @@ using SunBehaviorFn = std::function<float3(const float4x4& lightGlobalTransform,
 
 static SunBehaviorFn DefaultSunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
     float3 lightDir = float3{ lightGlobalTransform._31, lightGlobalTransform._32, lightGlobalTransform._33 };
-    float3 Direction = -normalize(lightDir);
+    float3 Direction = normalize(lightDir);
     return Direction;
 };
 
@@ -1079,10 +1079,10 @@ static float4x4 Orthographic(float left, float right, float bottom, float top, f
     float4x4 orthoMatrix;
     orthoMatrix._11 = 2.0f / (right - left);
     orthoMatrix._22 = 2.0f / (top - bottom);
-    orthoMatrix._33 = 1.0f / (farPlane - nearPlane);    // Remove negative sign and change to 1.0f
+    orthoMatrix._33 = 1.0f / (farPlane - nearPlane);
     orthoMatrix._41 = -(right + left) / (right - left);
     orthoMatrix._42 = -(top + bottom) / (top - bottom);
-    orthoMatrix._43 = -nearPlane / (farPlane - nearPlane);  // Change this term for 0-1 range
+    orthoMatrix._43 = -nearPlane / (farPlane - nearPlane);
     orthoMatrix._44 = 1.0f;
     return orthoMatrix;
 }
@@ -1141,8 +1141,8 @@ struct CascadeMatrices {
 CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const float3& lightDirection, GraphicsContext::SFModel& model, ShadowMap::ShadowSettings& shadowSettings)
 {
     float3 lightPos = float3(0, 0, 0); // Arbitrary position
-    float3 lookAt = lightPos + lightDirection; // Look in direction of light
-    float4x4 WorldToLightView = LookAt(lightPos, lookAt, float3(0.0f, 1.0f, 0.0f));
+    float3 lookAt = lightPos - lightDirection; // Look in direction of light
+    float4x4 WorldToLightView = LookAt(lightPos, lookAt, float3(0.0f, -1.0f, 0.0f));
 
     // Get the corners of the model's bounding box
     const auto& aabb = model.aabb;
