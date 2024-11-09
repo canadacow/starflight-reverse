@@ -5150,24 +5150,29 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
 
-#if 0
-
-        float3 lightDir = float3{ 0.0f, -1.0f, 0.0f };
-        float3 Direction = -normalize(lightDir);
-#else
         // 1,0,0, points towards the horizon
         float3 lightDir = float3{ 1.0f, 0.0f, 0.0f };
 
         // Calculate the angle of the sun based on the current time
-        //float angle = static_cast<float>(fmod(currentTimeInSeconds, 24.0) / 24.0 * 2.0 * M_PI); // Full rotation in 24 hours
         float angle = static_cast<float>(fmod(currentTimeInSeconds, 60.0) / 60.0 * 2.0 * M_PI); // Full rotation in a minute
+
+        if(angle > M_PI)
+        {
+            angle = 1.5f * M_PI;
+        }
+
+        //char buffer[50];
+        //sprintf(buffer, "angle: %f\n", angle);
+        //OutputDebugString(buffer);
+       
+        // Set this to high noon given that lightDir starts straight east
+        //float angle = static_cast<float>(M_PI / 2.0); // High noon, 90 degrees
 
         // Rotate the light direction around the y-axis to simulate rising from east to west
         float4x4 rotationMatrix = float4x4::RotationZ(angle);
         lightDir = rotationMatrix * float4(lightDir, 0.0f);
 
         float3 Direction = -normalize(lightDir);
-#endif
 
         return Direction;
     };
