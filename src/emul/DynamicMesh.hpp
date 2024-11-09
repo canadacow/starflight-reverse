@@ -9,6 +9,15 @@ namespace Diligent
 namespace SF_GLTF
 {
 
+struct TerrainItem
+{
+    std::string name;
+    float3 position;
+    Quaternion<float> rotation;
+};
+
+typedef std::vector<TerrainItem> TerrainItems;
+
 class DynamicMesh : public Model
 {
 public:
@@ -31,6 +40,8 @@ public:
         return m_Model->GetMaterials();
     }
 
+    void SetTerrainItems(const TerrainItems& terrainItems);
+    void ClearTerrainItems();
 
     virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
 

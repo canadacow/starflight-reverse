@@ -550,12 +550,14 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
         if (pNode->pMesh == nullptr)
             continue;
 
+        bool isTerrain = RenderParams.TerrainInfos.size() > 0 && pNode->isTerrain;
+
         for (const auto& primitive : pNode->pMesh->Primitives)
         {
             if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                 continue;
 
-            if(RenderParams.TerrainInfos.size() > 0 )
+            if(isTerrain)
             {
                 for(const auto& terrainInfo : RenderParams.TerrainInfos)
                 {
@@ -609,6 +611,8 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
             auto PSOFlags = VertexAttribFlags | GetMaterialPSOFlags(material);
 
+            bool isTerrain = RenderParams.TerrainInfos.size() > 0 && Node.isTerrain;
+
             // These flags will be filtered out by RenderParams.Flags
             PSOFlags |= PSO_FLAG_USE_TEXTURE_ATLAS |
                 PSO_FLAG_ENABLE_TEXCOORD_TRANSFORM |
@@ -625,16 +629,16 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
             PSOFlags |= PSO_FLAG_ENABLE_SHADOWS;
 
-            if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
+            if(Node.isHeightmap)
             {
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
             }
-            if ((RenderParams.Flags & PSO_FLAG_USE_INSTANCING) && Node.Instances.size() > 0)
+            if (Node.Instances.size() > 0)
             {
                 PSOFlags |= PSO_FLAG_USE_INSTANCING;
             }
 
-            if (RenderParams.TerrainInfos.size() > 0)
+            if (isTerrain)
             {
                 PSOFlags |= PSO_FLAG_USE_TERRAINING;
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
@@ -650,7 +654,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 pCurrPSO   = nullptr;
             }
 
-            auto psoCache = (RenderParams.TerrainInfos.size() > 0) ? m_TerrainPSOCache : (RenderParams.Wireframe ? m_WireframePSOCache : m_PbrPSOCache);
+            auto psoCache = (isTerrain) ? m_TerrainPSOCache : (RenderParams.Wireframe ? m_WireframePSOCache : m_PbrPSOCache);
 
             if (pCurrPSO == nullptr)
             {
@@ -743,7 +747,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     UNEXPECTED("Unable to map the buffer");
                 }
 
-                if(RenderParams.TerrainInfos.size() > 0)
+                if(isTerrain)
                 {
                     MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, m_TerrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
                     auto it = std::find_if(RenderParams.TerrainInfos.begin(), RenderParams.TerrainInfos.end(), [PrimRI](const auto& terrainInfo) {
@@ -756,7 +760,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     }
                 }
 
-                if((RenderParams.Flags & PSO_FLAG_USE_INSTANCING) && Node.Instances.size() > 0)
+                if(Node.Instances.size() > 0)
                 {
                     MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, m_InstanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
                     for(int i = 0; i < Node.Instances.size(); ++i)
@@ -773,7 +777,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     };
                     pCtx->TransitionResourceStates(_countof(Barriers), Barriers);
                 }
-                else if(RenderParams.Flags & PSO_FLAG_USE_HEIGHTMAP)
+                else if(Node.isHeightmap)
                 {
                     MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ pCtx, m_HeightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
                     HeightmapAttribs->ScaleX = Node.HeightmapScaleX.x;

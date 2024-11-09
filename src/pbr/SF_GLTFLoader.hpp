@@ -37,6 +37,7 @@
 #include <string>
 #include <limits>
 #include <algorithm>
+#include <deque>
 
 #include "../../../DiligentCore/Platforms/interface/PlatformMisc.hpp"
 #include "../../../DiligentCore/Graphics/GraphicsEngine/interface/RenderDevice.h"
@@ -491,7 +492,7 @@ struct NodeInstance
 struct Node
 {
     // Index in Model.LinearNodes array.
-    const int Index;
+    int Index;
 
     // Index in ModelTransforms.Skins array.
     int SkinTransformsIndex = -1;
@@ -518,6 +519,9 @@ struct Node
     float2 HeightmapScaleY;
     float2 HeightmapOffsetX;
     float2 HeightmapOffsetY;
+
+    bool isTerrain = false;
+    bool isHeightmap = false;
 
     explicit Node(int _Index) :
         Index{_Index}
@@ -866,7 +870,7 @@ struct Model
     friend class Diligent::SF_GLTF::DynamicMesh;
 
     std::vector<Scene>       Scenes;
-    std::vector<Node>        Nodes;
+    std::deque<Node>         Nodes;
     std::vector<Mesh>        Meshes;
     std::vector<Camera>      Cameras;
     std::vector<Light>       Lights;
@@ -1088,8 +1092,8 @@ struct Model
     virtual const std::vector<Scene>& GetScenes() const { return Scenes; }
     virtual std::vector<Scene>& GetScenes() { return Scenes; }
 
-    virtual const std::vector<Node>& GetNodes() const { return Nodes; }
-    virtual std::vector<Node>& GetNodes() { return Nodes; }
+    virtual const std::deque<Node>& GetNodes() const { return Nodes; }
+    virtual std::deque<Node>& GetNodes() { return Nodes; }
 
     virtual const std::vector<Mesh>& GetMeshes() const { return Meshes; }
     virtual std::vector<Mesh>& GetMeshes() { return Meshes; }

@@ -5039,6 +5039,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
+    SF_GLTF::TerrainItem terrainItem{ "Rover", float3{ 0.0f, 0.0f, 0.0f }, Quaternion<float>{} };
+
+    s_gc.terrain.dynamicMesh->SetTerrainItems({ terrainItem });
+
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
     s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;

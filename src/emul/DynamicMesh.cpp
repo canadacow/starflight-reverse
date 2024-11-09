@@ -14,6 +14,8 @@ DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const
     dynamicMeshNode.Name = "DynamicMeshNode";
     dynamicMeshNode.pMesh = nullptr; // No mesh data for now
     dynamicMeshNode.Parent = nullptr; // Root node
+    dynamicMeshNode.isHeightmap = true;
+    dynamicMeshNode.isTerrain = true;
 
     Nodes.emplace_back(dynamicMeshNode);
 
@@ -322,6 +324,40 @@ void DynamicMesh::InitializeVertexAndIndexData()
 
     NumTextureAttributes = m_Model->GetNumTextureAttributes();
     TextureAttributes = m_Model->TextureAttributes;
+}
+
+void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems)
+{
+    ClearTerrainItems();
+
+    for (const auto& item : terrainItems)
+    {
+        auto it = std::find_if(m_Model->Nodes.begin(), m_Model->Nodes.end(), [&item](const auto& node) {
+            return std::equal(node.Name.begin(), node.Name.end(), item.name.begin(), item.name.end(),
+                            [](char a, char b) { return tolower(a) == tolower(b); });
+        });
+
+        if (it != m_Model->Nodes.end())
+        {
+            Node ourNode{static_cast<int>(Nodes.size())};
+
+            ourNode.Name = it->Name;
+            ourNode.pMesh = it->pMesh;
+            ourNode.Translation = item.position;
+            ourNode.Rotation = item.rotation;
+
+            Nodes.emplace_back(ourNode);
+            Scenes[0].LinearNodes.push_back(&Nodes.back());
+            Scenes[0].RootNodes.push_back(&Nodes.back());
+        }
+    }
+}
+
+void DynamicMesh::ClearTerrainItems()
+{
+    Scenes[0].LinearNodes.erase(Scenes[0].LinearNodes.begin() + 1, Scenes[0].LinearNodes.end());
+    Scenes[0].RootNodes.erase(Scenes[0].RootNodes.begin() + 1, Scenes[0].RootNodes.end());
+    Nodes.erase(Nodes.begin() + 1, Nodes.end());
 }
 
 } // namespace SF_GLTF
