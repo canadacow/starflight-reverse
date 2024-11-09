@@ -1596,6 +1596,33 @@ void Model::LoadMaterials(const tinygltf::Model& gltf_model, const ModelCreateIn
     }
 }
 
+void Model::ClearSetVertexBuffers() const
+{
+    targetNode = nullptr;
+}
+
+void Model::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node& node) const
+{
+    if (targetNode != &node)
+    {
+        ClearSetVertexBuffers();
+        targetNode = &node;
+
+        std::array<IBuffer*, 8> pVBs;
+
+        const auto NumVBs = static_cast<Uint32>(GetVertexBufferCount());
+        VERIFY_EXPR(NumVBs <= pVBs.size());
+        for (Uint32 i = 0; i < NumVBs; ++i)
+            pVBs[i] = GetVertexBuffer(i);
+        pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
+
+        if (auto* pIndexBuffer = GetIndexBuffer())
+        {
+            pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }
+    }
+}
+
 namespace Callbacks
 {
 

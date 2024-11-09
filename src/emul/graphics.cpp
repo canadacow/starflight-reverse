@@ -860,8 +860,8 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 if (primitive.HasIndices())
                 {
                     DrawIndexedAttribs drawAttrs{primitive.IndexCount, VT_UINT32, DRAW_FLAG_VERIFY_ALL};
-                    drawAttrs.FirstIndexLocation = GLTFModel.GetFirstIndexLocation() + primitive.FirstIndex;
-                    drawAttrs.BaseVertex = GLTFModel.GetBaseVertex();
+                    drawAttrs.FirstIndexLocation = GLTFModel.GetFirstIndexLocationForNode(pNode) + primitive.FirstIndex;
+                    drawAttrs.BaseVertex = GLTFModel.GetBaseVertexForNode(pNode);
 
                     if(pNode->Instances.size() > 0)
                     {
@@ -874,7 +874,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 else
                 {
                     DrawAttribs drawAttrs{primitive.VertexCount, DRAW_FLAG_VERIFY_ALL};
-                    drawAttrs.StartVertexLocation = GLTFModel.GetBaseVertex();
+                    drawAttrs.StartVertexLocation = GLTFModel.GetBaseVertexForNode(pNode);
                     pCtx->Draw(drawAttrs);
                 }
             }

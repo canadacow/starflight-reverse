@@ -503,43 +503,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
     m_RenderParams = RenderParams;
 
-    if (pModelBindings != nullptr)
-    {
-        std::array<IBuffer*, 8> pVBs;
-
-        const auto NumVBs = static_cast<Uint32>(GLTFModel.GetVertexBufferCount());
-        VERIFY_EXPR(NumVBs <= pVBs.size());
-        for (Uint32 i = 0; i < NumVBs; ++i)
-            pVBs[i] = GLTFModel.GetVertexBuffer(i);
-        pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
-
-        if (auto* pIndexBuffer = GLTFModel.GetIndexBuffer())
-        {
-            pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        }
-    }
-
-    auto VertexAttribFlags = PSO_FLAG_NONE;
-    for (Uint32 i = 0; i < GLTFModel.GetNumVertexAttributes(); ++i)
-    {
-        if (!GLTFModel.IsVertexAttributeEnabled(i))
-            continue;
-        const auto& Attrib = GLTFModel.GetVertexAttribute(i);
-        if (strcmp(Attrib.Name, SF_GLTF::PositionAttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_NONE; // Position is always enabled
-        else if (strcmp(Attrib.Name, SF_GLTF::NormalAttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_USE_VERTEX_NORMALS;
-        else if (strcmp(Attrib.Name, SF_GLTF::Texcoord0AttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_USE_TEXCOORD0;
-        else if (strcmp(Attrib.Name, SF_GLTF::Texcoord1AttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_USE_TEXCOORD1;
-        else if (strcmp(Attrib.Name, SF_GLTF::JointsAttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_USE_JOINTS;
-        else if (strcmp(Attrib.Name, SF_GLTF::VertexColorAttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_USE_VERTEX_COLORS;
-        else if (strcmp(Attrib.Name, SF_GLTF::TangentAttributeName) == 0)
-            VertexAttribFlags |= PSO_FLAG_USE_VERTEX_TANGENTS;
-    }
+    GLTFModel.ClearSetVertexBuffers();
 
     for (auto& List : m_RenderLists)
         List.clear();
@@ -581,9 +545,6 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
         }
     }
 
-    const auto FirstIndexLocation = GLTFModel.GetFirstIndexLocation();
-    const auto BaseVertex         = GLTFModel.GetBaseVertex();
-
     const std::array<SF_GLTF::Material::ALPHA_MODE, 3> AlphaModes //
         {
             SF_GLTF::Material::ALPHA_MODE_OPAQUE, // Opaque primitives - first
@@ -608,6 +569,36 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             const auto& material             = GLTFModel.GetMaterials()[PrimRI.MaterialIndex];
             const auto& NodeGlobalMatrix     = Transforms.NodeGlobalMatrices[Node.Index];
             const auto& PrevNodeGlobalMatrix = PrevTransforms->NodeGlobalMatrices[Node.Index];
+
+            if (pModelBindings != nullptr)
+            {
+                GLTFModel.SetVertexBuffersForNode(pCtx, Node);
+            }
+
+            auto VertexAttribFlags = PSO_FLAG_NONE;
+            for (Uint32 i = 0; i < GLTFModel.GetNumVertexAttributesForNode(Node); ++i)
+            {
+                if (!GLTFModel.IsVertexAttributeEnabledForNode(Node, i))
+                    continue;
+                const auto& Attrib = GLTFModel.GetVertexAttributeForNode(Node, i);
+                if (strcmp(Attrib.Name, SF_GLTF::PositionAttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_NONE; // Position is always enabled
+                else if (strcmp(Attrib.Name, SF_GLTF::NormalAttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_USE_VERTEX_NORMALS;
+                else if (strcmp(Attrib.Name, SF_GLTF::Texcoord0AttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_USE_TEXCOORD0;
+                else if (strcmp(Attrib.Name, SF_GLTF::Texcoord1AttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_USE_TEXCOORD1;
+                else if (strcmp(Attrib.Name, SF_GLTF::JointsAttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_USE_JOINTS;
+                else if (strcmp(Attrib.Name, SF_GLTF::VertexColorAttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_USE_VERTEX_COLORS;
+                else if (strcmp(Attrib.Name, SF_GLTF::TangentAttributeName) == 0)
+                    VertexAttribFlags |= PSO_FLAG_USE_VERTEX_TANGENTS;
+            }
+
+            const auto FirstIndexLocation = GLTFModel.GetFirstIndexLocationForNode(&Node);
+            const auto BaseVertex = GLTFModel.GetBaseVertexForNode(&Node);
 
             auto PSOFlags = VertexAttribFlags | GetMaterialPSOFlags(material);
 

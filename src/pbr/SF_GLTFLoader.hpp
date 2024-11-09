@@ -881,6 +881,8 @@ struct Model
 
     std::vector<RefCntAutoPtr<ISampler>> TextureSamplers;
 
+    mutable const Node* targetNode = nullptr;
+
     // The number of nodes that have skin.
     int SkinTransformsCount = 0;
     int DefaultSceneId      = 0;
@@ -978,6 +980,17 @@ struct Model
         return NullDesc;
     }
 
+    virtual Uint32 GetFirstIndexLocationForNode(const Node* node) const
+    {
+        return GetFirstIndexLocation();
+    }
+
+    virtual Uint32 GetBaseVertexForNode(const Node* node) const
+    {
+        return GetBaseVertex();
+    }
+
+protected:
     Uint32 GetFirstIndexLocation() const
     {
         VERIFY(IndexData.IndexSize != 0, "Index size is not initialized");
@@ -997,6 +1010,8 @@ struct Model
             VertexData.pAllocation->GetStartVertex() :
             0;
     }
+
+public:
 
     /// Returns an index of the vertex pool in the resource manager.
     ///
@@ -1035,15 +1050,30 @@ struct Model
                       int                GltfSamplerId,
                       const std::string& CacheId);
 
+    virtual Uint32 GetNumVertexAttributesForNode(const Node& node) const 
+    {
+        return GetNumVertexAttributes();
+    }
+
+protected:
     Uint32 GetNumVertexAttributes() const { return NumVertexAttributes; }
+public:
+
     Uint32 GetNumTextureAttributes() const { return NumTextureAttributes; }
 
-    const auto& GetVertexAttribute(size_t Idx) const
+    virtual const VertexAttributeDesc GetVertexAttributeForNode(const Node& node, size_t Idx) const
+    {
+        return GetVertexAttribute(Idx);
+    }
+
+protected:
+    const VertexAttributeDesc GetVertexAttribute(size_t Idx) const
     {
         VERIFY_EXPR(Idx < GetNumVertexAttributes());
         return VertexAttributes[Idx];
     }
 
+public:
     const auto& GetTextureAttribute(size_t Idx) const
     {
         VERIFY_EXPR(Idx < GetNumTextureAttributes());
@@ -1081,10 +1111,17 @@ struct Model
         return VertexData.Strides.size();
     }
 
+    virtual bool IsVertexAttributeEnabledForNode(const Node& node, Uint32 AttribId) const
+    {
+        return IsVertexAttributeEnabled(AttribId);
+    }
+
+protected:
     bool IsVertexAttributeEnabled(Uint32 AttribId) const
     {
         return (VertexData.EnabledAttributeFlags & (1u << AttribId)) != 0;
     }
+public:
 
     void InitMaterialTextureAddressingAttribs(Material& Mat, Uint32 TextureIndex);
 
@@ -1115,6 +1152,9 @@ struct Model
 
     virtual const std::vector<std::string>& GetExtensions() const { return Extensions; }
     virtual std::vector<std::string>& GetExtensions() { return Extensions; }
+
+    virtual void ClearSetVertexBuffers() const;
+    virtual void SetVertexBuffersForNode(IDeviceContext* pCtx, const Node& node) const;
 
 private:
     friend ModelBuilder;
