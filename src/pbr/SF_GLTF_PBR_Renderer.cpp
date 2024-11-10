@@ -572,15 +572,15 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
             if (pModelBindings != nullptr)
             {
-                GLTFModel.SetVertexBuffersForNode(pCtx, Node);
+                GLTFModel.SetVertexBuffersForNode(pCtx, &Node);
             }
 
             auto VertexAttribFlags = PSO_FLAG_NONE;
-            for (Uint32 i = 0; i < GLTFModel.GetNumVertexAttributesForNode(Node); ++i)
+            for (Uint32 i = 0; i < GLTFModel.GetNumVertexAttributesForNode(&Node); ++i)
             {
-                if (!GLTFModel.IsVertexAttributeEnabledForNode(Node, i))
+                if (!GLTFModel.IsVertexAttributeEnabledForNode(&Node, i))
                     continue;
-                const auto& Attrib = GLTFModel.GetVertexAttributeForNode(Node, i);
+                const auto& Attrib = GLTFModel.GetVertexAttributeForNode(&Node, i);
                 if (strcmp(Attrib.Name, SF_GLTF::PositionAttributeName) == 0)
                     VertexAttribFlags |= PSO_FLAG_NONE; // Position is always enabled
                 else if (strcmp(Attrib.Name, SF_GLTF::NormalAttributeName) == 0)

@@ -53,6 +53,13 @@ public:
 
     virtual BoundBox ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::ModelTransforms& Transforms, const SF_GLTF::ModelTransforms* DynamicTransforms) const override;
 
+    virtual void SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node) const override;
+    virtual Uint32 GetFirstIndexLocationForNode(const Node* node) const override;
+    virtual Uint32 GetBaseVertexForNode(const Node* node) const override;
+    virtual Uint32 GetNumVertexAttributesForNode(const Node* node) const override;
+    virtual const VertexAttributeDesc GetVertexAttributeForNode(const Node* node, size_t Idx) const override;
+    virtual bool IsVertexAttributeEnabledForNode(const Node* node, Uint32 AttribId) const override;
+
 private:
 
     const int numBigTiles = 61;

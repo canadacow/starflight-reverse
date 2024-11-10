@@ -1050,7 +1050,7 @@ public:
                       int                GltfSamplerId,
                       const std::string& CacheId);
 
-    virtual Uint32 GetNumVertexAttributesForNode(const Node& node) const 
+    virtual Uint32 GetNumVertexAttributesForNode(const Node* node) const 
     {
         return GetNumVertexAttributes();
     }
@@ -1061,7 +1061,7 @@ public:
 
     Uint32 GetNumTextureAttributes() const { return NumTextureAttributes; }
 
-    virtual const VertexAttributeDesc GetVertexAttributeForNode(const Node& node, size_t Idx) const
+    virtual const VertexAttributeDesc GetVertexAttributeForNode(const Node* node, size_t Idx) const
     {
         return GetVertexAttribute(Idx);
     }
@@ -1111,7 +1111,7 @@ public:
         return VertexData.Strides.size();
     }
 
-    virtual bool IsVertexAttributeEnabledForNode(const Node& node, Uint32 AttribId) const
+    virtual bool IsVertexAttributeEnabledForNode(const Node* node, Uint32 AttribId) const
     {
         return IsVertexAttributeEnabled(AttribId);
     }
@@ -1154,7 +1154,7 @@ public:
     virtual std::vector<std::string>& GetExtensions() { return Extensions; }
 
     virtual void ClearSetVertexBuffers() const;
-    virtual void SetVertexBuffersForNode(IDeviceContext* pCtx, const Node& node) const;
+    virtual void SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node) const;
 
 private:
     friend ModelBuilder;

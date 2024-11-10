@@ -1601,12 +1601,11 @@ void Model::ClearSetVertexBuffers() const
     targetNode = nullptr;
 }
 
-void Model::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node& node) const
+void Model::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node) const
 {
-    if (targetNode != &node)
+    if (targetNode == nullptr)
     {
-        ClearSetVertexBuffers();
-        targetNode = &node;
+        targetNode = node;
 
         std::array<IBuffer*, 8> pVBs;
 

@@ -360,6 +360,102 @@ void DynamicMesh::ClearTerrainItems()
     Nodes.erase(Nodes.begin() + 1, Nodes.end());
 }
 
+void DynamicMesh::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node) const
+{
+    std::array<IBuffer*, 8> pVBs;
+
+    if (node == &Nodes[0] && targetNode != node)
+    {
+        // Terrain mesh
+        const auto NumVBs = static_cast<Uint32>(GetVertexBufferCount());
+        VERIFY_EXPR(NumVBs <= pVBs.size());
+        for (Uint32 i = 0; i < NumVBs; ++i)
+            pVBs[i] = GetVertexBuffer(i);
+        pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
+
+        if (auto* pIndexBuffer = GetIndexBuffer())
+        {
+            pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }
+    }
+    else if(targetNode != node)
+    {
+        // Other meshes
+        const auto NumVBs = static_cast<Uint32>(m_Model->GetVertexBufferCount());
+        VERIFY_EXPR(NumVBs <= pVBs.size());
+        for (Uint32 i = 0; i < NumVBs; ++i)
+            pVBs[i] = m_Model->GetVertexBuffer(i);
+        pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
+
+        if (auto* pIndexBuffer = GetIndexBuffer())
+        {
+            pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }        
+    }
+
+    targetNode = node;
+}
+
+Uint32 DynamicMesh::GetFirstIndexLocationForNode(const Node* node) const
+{
+    if(node == &Nodes[0])
+    {
+        return GetFirstIndexLocation();
+    }
+    else
+    {
+        return m_Model->GetFirstIndexLocation();
+    }
+}
+
+Uint32 DynamicMesh::GetBaseVertexForNode(const Node* node) const
+{
+    if(node == &Nodes[0])
+    {
+        return GetBaseVertex();
+    }
+    else
+    {
+        return m_Model->GetBaseVertex();
+    }
+}
+
+Uint32 DynamicMesh::GetNumVertexAttributesForNode(const Node* node) const
+{
+    if(node == &Nodes[0])
+    {
+        return GetNumVertexAttributes();
+    }
+    else
+    {
+        return m_Model->GetNumVertexAttributes();
+    }
+}
+
+const VertexAttributeDesc DynamicMesh::GetVertexAttributeForNode(const Node* node, size_t Idx) const
+{
+    if(node == &Nodes[0])
+    {
+        return GetVertexAttribute(Idx);
+    }
+    else
+    {
+        return m_Model->GetVertexAttribute(Idx);
+    }
+}
+
+ bool DynamicMesh::IsVertexAttributeEnabledForNode(const Node* node, Uint32 AttribId) const
+ {
+    if(node == &Nodes[0])
+    {
+        return IsVertexAttributeEnabled(AttribId);
+    }
+    else
+    {
+        return m_Model->IsVertexAttributeEnabled(AttribId);
+    }
+ }
+
 } // namespace SF_GLTF
 
 } // namespace Diligent
