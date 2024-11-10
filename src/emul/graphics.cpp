@@ -608,17 +608,17 @@ struct ShadowMap
         return m_ShadowMapMgr.GetSRV();
     }
 
-    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh, uint32_t shaderIdx);
+    void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh);
 
 private:
 
     HLSL::LightAttribs m_LightAttribs;
     DiligentShadowMapManager m_ShadowMapMgr;
 
-    RefCntAutoPtr<IBuffer>                             m_LightAttribsCB;
-    std::vector<Uint32>                                m_PSOIndex;
-    std::array<RefCntAutoPtr<IPipelineState>, 2>       m_RenderMeshShadowPSO;
-    std::vector<RefCntAutoPtr<IShaderResourceBinding>> m_ShadowSRBs;
+    RefCntAutoPtr<IBuffer>                                          m_LightAttribsCB;
+    std::vector<Uint32>                                             m_PSOIndex;
+    std::array<RefCntAutoPtr<IPipelineState>, 2>                    m_RenderMeshShadowPSO;
+    std::vector<std::vector<RefCntAutoPtr<IShaderResourceBinding>>> m_ShadowSRBs;
 
     RefCntAutoPtr<IRenderStateNotationLoader> m_pRSNLoader;
 
@@ -745,15 +745,20 @@ void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
 
 */
 
-void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh, uint32_t shaderIdx)
+void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh)
 {
     m_ShadowSRBs.clear();
-    m_ShadowSRBs.resize(mesh->GetMaterials().size());
-    for (Uint32 mat = 0; mat < mesh->GetMaterials().size(); ++mat)
+    m_ShadowSRBs.resize(2);
+
+    for (size_t shaderIdx = 0; shaderIdx < 2; ++shaderIdx)
     {
-        RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
-        m_RenderMeshShadowPSO[shaderIdx]->CreateShaderResourceBinding(&pShadowSRB, true);
-        m_ShadowSRBs[mat] = std::move(pShadowSRB);
+        m_ShadowSRBs[shaderIdx].resize(mesh->GetMaterials().size());
+        for (Uint32 mat = 0; mat < mesh->GetMaterials().size(); ++mat)
+        {
+            RefCntAutoPtr<IShaderResourceBinding> pShadowSRB;
+            m_RenderMeshShadowPSO[shaderIdx]->CreateShaderResourceBinding(&pShadowSRB, true);
+            m_ShadowSRBs[shaderIdx][mat] = std::move(pShadowSRB);
+        }
     }
 }
 
@@ -763,6 +768,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const HLSL::CameraAttribs& cameraAttribs,
                          const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams)
 {
+#if 0
     RefCntAutoPtr<IPipelineState> pPSO;
 
     if(RenderParams.Flags & SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING)
@@ -775,6 +781,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     }
 
     pCtx->SetPipelineState(pPSO);
+#endif
 
     // Iterate through each scene node
     for (const auto& Scene : GLTFModel.GetScenes())
@@ -784,7 +791,15 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             if (pNode->pMesh == nullptr)
                 continue;
 
+            RefCntAutoPtr<IPipelineState> pPSO;
+
+            int shaderIdx = (pNode->isTerrain) ? 1 : 0;
+
+            pPSO = m_RenderMeshShadowPSO[shaderIdx];
+
             GLTFModel.SetVertexBuffersForNode(pCtx, pNode);
+
+            pCtx->SetPipelineState(pPSO);
 
             // Need to make sure we're updating the CameraAttribs properly
             MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
@@ -819,7 +834,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                     continue;
                 
-                IShaderResourceBinding* pSRB = m_ShadowSRBs[primitive.MaterialId];
+                IShaderResourceBinding* pSRB = m_ShadowSRBs[shaderIdx][primitive.MaterialId];
                 pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
                 if(pNode->Instances.size() > 0)
@@ -3662,7 +3677,7 @@ static int GraphicsInitThread()
 
     s_gc.shadowMap = std::make_unique<ShadowMap>();
     s_gc.shadowMap->Initialize();
-    s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model, 1);
+    s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
 
     InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
 
@@ -5023,7 +5038,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
-    SF_GLTF::TerrainItem terrainItem{ "Rover", float3{ 0.0f, 8.0f, 0.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem terrainItem{ "Rover", float3{ 0.0f, 8.0f, -1.5f }, Quaternion<float>{} };
 
     s_gc.terrain.dynamicMesh->SetTerrainItems({ terrainItem });
 
@@ -5132,7 +5147,7 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_TERRAIN)
     {
-        s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model, 1);
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
         s_gc.currentScene = SCENE_TERRAIN;
     }
 
@@ -6291,7 +6306,7 @@ void RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_STATION)
     {
-        s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model, 0);
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.station.model);
         s_gc.currentScene = SCENE_STATION;
     }
 
@@ -6483,7 +6498,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
-                const std::string showPlanet = "Earth-like";
+                const std::string showPlanet = "Lava";
 
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
                 auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [showPlanet](const auto& planetType) {
