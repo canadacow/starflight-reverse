@@ -387,7 +387,7 @@ void DynamicMesh::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node
             pVBs[i] = m_Model->GetVertexBuffer(i);
         pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
 
-        if (auto* pIndexBuffer = GetIndexBuffer())
+        if (auto* pIndexBuffer = m_Model->GetIndexBuffer())
         {
             pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         }        

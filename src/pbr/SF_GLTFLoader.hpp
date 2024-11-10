@@ -1106,10 +1106,12 @@ public:
         return Textures.size();
     }
 
+protected:
     size_t GetVertexBufferCount() const
     {
         return VertexData.Strides.size();
     }
+public:
 
     virtual bool IsVertexAttributeEnabledForNode(const Node* node, Uint32 AttribId) const
     {

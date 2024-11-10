@@ -784,6 +784,8 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             if (pNode->pMesh == nullptr)
                 continue;
 
+            GLTFModel.SetVertexBuffersForNode(pCtx, pNode);
+
             // Need to make sure we're updating the CameraAttribs properly
             MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
             *CameraAttribs = cameraAttribs;
@@ -817,24 +819,6 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                     continue;
                 
-                // Set vertex and index buffers
-                std::array<IBuffer*, 8> pVBs;
-                const auto NumVBs = static_cast<Uint32>(GLTFModel.GetVertexBufferCount());
-                for (Uint32 i = 0; i < NumVBs; ++i)
-                    pVBs[i] = GLTFModel.GetVertexBuffer(i);
-
-                if (pVBs[1] == nullptr)
-                {
-                    pVBs[1] = s_gc.dummyVertexBuffer;
-                }
-
-                pCtx->SetVertexBuffers(0, NumVBs, pVBs.data(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
-
-                if (auto* pIndexBuffer = GLTFModel.GetIndexBuffer())
-                {
-                    pCtx->SetIndexBuffer(pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-                }
-
                 IShaderResourceBinding* pSRB = m_ShadowSRBs[primitive.MaterialId];
                 pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
@@ -5039,7 +5023,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
-    SF_GLTF::TerrainItem terrainItem{ "Rover", float3{ 0.0f, 0.0f, 0.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem terrainItem{ "Rover", float3{ 0.0f, 8.0f, 0.0f }, Quaternion<float>{} };
 
     s_gc.terrain.dynamicMesh->SetTerrainItems({ terrainItem });
 
