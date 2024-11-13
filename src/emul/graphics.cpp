@@ -86,7 +86,7 @@ namespace HLSL
 {
 
 #include "Shaders/Common/public/BasicStructures.fxh"
-#include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "../pbr/shaders/SF_PBR_Structures.fxh"
 #include "../pbr/shaders/SF_RenderPBR_Structures.fxh"
 #include "Shaders/PostProcess/Bloom/public/BloomStructures.fxh"
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
@@ -1021,7 +1021,7 @@ void ShadowMap::Initialize()
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
-    m_LightAttribs.ShadowAttribs.iNumCascades = 1;
+    m_LightAttribs.ShadowAttribs.iNumCascades = 2;
     m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
     m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
 
@@ -1135,16 +1135,54 @@ static float4x4 LookAt(const float3& eye, const float3& at, const float3& up)
 struct CascadeMatrices {
     float4x4 WorldToLightView;
     float4x4 ViewProj;
+    float4x4 Orthographic;
 };
 
-CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs, const float3& lightDirection, GraphicsContext::SFModel& model, ShadowMap::ShadowSettings& shadowSettings)
+ BoundBox GetBoxInsideFrustum(const ViewFrustum& Frustum, const BoundBox& Box)
+ {
+     // First check if there's any intersection at all
+     auto Visibility = GetBoxVisibility(Frustum, Box);
+     if (Visibility == BoxVisibility::Invisible)
+         return BoundBox::Invalid();
+     if (Visibility == BoxVisibility::FullyVisible)
+         return Box;
+ 
+     // Start with the original box
+     BoundBox Result = Box;
+ 
+     // Iterate over each plane of the frustum
+     for (Uint32 plane_idx = 0; plane_idx < ViewFrustum::NUM_PLANES; ++plane_idx)
+     {
+         const Plane3D& CurrPlane = Frustum.GetPlane(static_cast<ViewFrustum::PLANE_IDX>(plane_idx));
+ 
+         // Check each corner of the box
+         for (int i = 0; i < 8; ++i)
+         {
+             float3 Corner = Result.GetCorner(i);
+             float Distance = dot(Corner, CurrPlane.Normal) + CurrPlane.Distance;
+ 
+             // If the corner is outside the plane, adjust it
+             if (Distance < 0)
+             {
+                 float3 Adjustment = CurrPlane.Normal * -Distance;
+                 Corner += Adjustment;
+ 
+                 // Update the box with the adjusted corner
+                 Result = Result.Enclose(Corner);
+             }
+         }
+     }
+ 
+     return Result;
+ }
+
+CascadeMatrices ComputeCascadeViewProj(const float3& lightDirection, const BoundBox& aabb, const ShadowMap::ShadowSettings& shadowSettings)
 {
     float3 lightPos = float3(0, 0, 0); // Arbitrary position
     float3 lookAt = lightPos - lightDirection; // Look in direction of light
     float4x4 WorldToLightView = LookAt(lightPos, lookAt, float3(0.0f, -1.0f, 0.0f));
 
     // Get the corners of the model's bounding box
-    const auto& aabb = model.aabb;
     std::array<float3, 8> corners = {
         float3(aabb.Min.x, aabb.Min.y, aabb.Min.z),
         float3(aabb.Max.x, aabb.Min.y, aabb.Min.z),
@@ -1197,18 +1235,34 @@ CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs,
     minCorner.z = zCenter - zRange;
     maxCorner.z = zCenter + zRange;
 
-    // Snap cascade center to texels to reduce temporal aliasing
-    float texelXSize = largestDimension / shadowMapSize;
-    float texelYSize = largestDimension / shadowMapSize;
-    centerX = std::round(centerX / texelXSize) * texelXSize;
-    centerY = std::round(centerY / texelYSize) * texelYSize;
-
     // Compute the projection matrix for the light
     // Note: Using negative Z range to match DistributeCascades convention
     float4x4 lightProj = Orthographic(minCorner.x, maxCorner.x, minCorner.y, maxCorner.y, maxCorner.z, minCorner.z);
 
     // Return the combined view-projection matrix
-    return {WorldToLightView, WorldToLightView * lightProj};
+    return {WorldToLightView, WorldToLightView * lightProj, lightProj};
+}
+
+CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAttribs, const float4x4& modelTransform, const BoundBox& aabb, const float3& lightDirection, 
+    const ShadowMap::ShadowSettings& shadowSettings)
+{
+    //ViewFrustum Frustum;
+
+    //ExtractViewFrustumPlanesFromMatrix(cameraAttribs.mViewProj.Transpose(), Frustum, false);
+    //auto box = GetBoxInsideFrustum(Frustum, aabb);
+
+
+    BoundBox box = aabb;
+    box.Min.x = -12.0f;
+    box.Max.x = 12.0f;
+    box.Min.z = -12.0f;
+    box.Max.z = 12.0f;
+
+    box = box.Transform(modelTransform);
+
+    CascadeMatrices res = ComputeCascadeViewProj(lightDirection, box, shadowSettings);
+
+    return res;
 }
 
 void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
@@ -1327,10 +1381,17 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
 
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
-        //ShadowCameraAttribs.mViewProj = WorldToLightProjSpaceMatr.Transpose();
-        cascadeViewProj = ComputeCascadeViewProj(CurrCamAttribs, Direction, model, m_ShadowSettings);
+        
+        if(iCascade == 20)
+        {
+            cascadeViewProj = ComputeCascadeViewProj(Direction, model.aabb, m_ShadowSettings);
+        }
+        else
+        {
+            cascadeViewProj = ComputeCameraFrustumCascade(CurrCamAttribs, model.modelTransform, model.worldspaceAABB, Direction, m_ShadowSettings);
+        }
+
         ShadowCameraAttribs.mViewProj = cascadeViewProj.ViewProj.Transpose();
-        //ShadowCameraAttribs.mViewProj = viewProj.Transpose();
 
         ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
         ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
@@ -1355,29 +1416,12 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         {
             DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
         }
+
+        shadowInfo[iCascade].WorldToLightProjSpace = cascadeViewProj.ViewProj.Transpose();
+        shadowInfo[iCascade].UVScale = { 1.0f, 1.0f };
+        shadowInfo[iCascade].UVBias = { 0.0f, 0.0f };
+        shadowInfo[iCascade].ShadowMapSlice = static_cast<float>(iCascade);
     }
-
-#if 0
-    const auto CascadeProjMatr = m_ShadowMapMgr.GetCascadeTranform(0).Proj;
-
-    auto WorldToLightViewSpaceMatr = m_LightAttribs.ShadowAttribs.mWorldToLightView.Transpose();
-    auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;    
-
-    shadowInfo->WorldToLightProjSpace = WorldToLightProjSpaceMatr.Transpose();
-    shadowInfo->UVScale = { 1.0f, 1.0f };
-    shadowInfo->UVBias = { 0.0f, 0.0f };
-    shadowInfo->ShadowMapSlice = 0.0f;
-#else
-    //const auto CascadeProjMatr = cascadeViewProj.ViewProj;
-
-    //auto WorldToLightViewSpaceMatr = cascadeViewProj.WorldToLightView;
-    //auto WorldToLightProjSpaceMatr = WorldToLightViewSpaceMatr * CascadeProjMatr;    
-
-    shadowInfo->WorldToLightProjSpace = cascadeViewProj.ViewProj.Transpose();
-    shadowInfo->UVScale = { 1.0f, 1.0f };
-    shadowInfo->UVBias = { 0.0f, 0.0f };
-    shadowInfo->ShadowMapSlice = 0.0f;
-#endif
 }
 
 template<std::size_t PLANES>
@@ -4809,6 +4853,8 @@ void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
     CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
     CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
+    CurrCamAttribs.fNearPlaneZ = ZNear;
+    CurrCamAttribs.fFarPlaneZ = ZFar;
 
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;    
 }
@@ -5038,9 +5084,12 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
-    SF_GLTF::TerrainItem terrainItem{ "Rover", float3{ 0.0f, 8.0f, -1.5f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem rover { "Rover", float3{ 0.0f, 8.0f, -1.5f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem ruin  { "AncientRuin", float3{ -4.0f, 7.8f, 0.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem endurium { "Endurium", float3{ 0.0f, 7.8f, 3.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem recentRuin { "RecentRuin", float3{ 4.0f, 7.8f, 15.0f }, Quaternion<float>{} };
 
-    s_gc.terrain.dynamicMesh->SetTerrainItems({ terrainItem });
+    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin });
 
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
@@ -5139,6 +5188,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
     CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
+    CurrCamAttribs.fNearPlaneZ = ZNear;
+    CurrCamAttribs.fFarPlaneZ = ZFar;
 
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 }
@@ -5157,12 +5208,12 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
         float3 lightDir = float3{ 1.0f, 0.0f, 0.0f };
 
         // Calculate the angle of the sun based on the current time
-        float angle = static_cast<float>(fmod(currentTimeInSeconds, 60.0) / 60.0 * 2.0 * M_PI); // Full rotation in a minute
+        float angle = static_cast<float>(fmod(currentTimeInSeconds, 60.0) / 60.0 * M_PI); // Full rotation in a minute
 
-        if(angle > M_PI)
-        {
-            angle = 1.5f * M_PI;
-        }
+        //if(angle > M_PI)
+        //{
+        //    angle = 1.5f * M_PI;
+        //}
 
         //char buffer[50];
         //sprintf(buffer, "angle: %f\n", angle);
@@ -6174,6 +6225,8 @@ void UpdateStation(VulkanContext::frame_id_t inFlightIndex)
     CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
     CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
+    CurrCamAttribs.fNearPlaneZ = ZNear;
+    CurrCamAttribs.fFarPlaneZ = ZFar;
 
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 }
@@ -6498,7 +6551,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
-                const std::string showPlanet = "Lava";
+                const std::string showPlanet = "Earth-like";
 
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
                 auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [showPlanet](const auto& planetType) {

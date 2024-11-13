@@ -52,7 +52,7 @@ namespace Diligent
 namespace HLSL
 {
 
-#include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "shaders/SF_PBR_Structures.fxh"
 #include "Shaders/Common/public/BasicStructures.fxh"
 #include "shaders/SF_RenderPBR_Structures.fxh"
 

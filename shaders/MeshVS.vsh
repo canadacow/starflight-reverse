@@ -1,5 +1,5 @@
 #include "BasicStructures.fxh"
-#include "PBR_Structures.fxh"
+#include "SF_PBR_Structures.fxh"
 #include "VertexProcessing.fxh"
 #include "SF_RenderPBR_Structures.fxh"
 

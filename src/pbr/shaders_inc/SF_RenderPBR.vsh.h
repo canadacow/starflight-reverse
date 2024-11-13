@@ -1,6 +1,6 @@
 "#include \"BasicStructures.fxh\"\n"
 "#include \"VertexProcessing.fxh\"\n"
-"#include \"PBR_Structures.fxh\"\n"
+"#include \"SF_PBR_Structures.fxh\"\n"
 "#include \"SF_RenderPBR_Structures.fxh\"\n"
 "\n"
 "#include \"VSInputStruct.generated\"\n"

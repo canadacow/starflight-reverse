@@ -48,7 +48,7 @@ namespace HLSL
 struct PBRRendererShaderParameters;
 
 #include "Shaders/Common/public/BasicStructures.fxh"
-#include "Shaders/PBR/public/PBR_Structures.fxh"
+#include "shaders/SF_PBR_Structures.fxh"
 #include "shaders/SF_RenderPBR_Structures.fxh"
 
 } // namespace HLSL

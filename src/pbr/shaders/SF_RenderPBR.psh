@@ -3,7 +3,7 @@
 // Supports both metallic roughness and specular glossiness inputs
 
 #include "BasicStructures.fxh"
-#include "PBR_Shading.fxh"
+#include "SF_PBR_Shading.fxh"
 #include "SF_RenderPBR_Structures.fxh"
 
 #if ENABLE_TONE_MAPPING
@@ -368,6 +368,27 @@ float4 GetLoadingAnimationColor(float3 WorldPos, float Factor)
 
     float3 Color = lerp(Color0, Color1, Weight);
     return float4(Color, Alpha);
+}
+#endif
+
+#if 0
+int FindCascadeIndex(float3 WorldPos, PBRShadowMapInfo shadowMapInfo, int NumCascades)
+{
+    // Start from the smallest (most detailed) cascade
+    for (int i = 0; i < NumCascades; i++)
+    {
+        float4 ShadowPos = mul(float4(WorldPos, 1.0), CascadeMatrices[i]);
+        ShadowPos.xy /= ShadowPos.w;
+        
+        // If point is within NDC bounds of this cascade, use it
+        if (abs(ShadowPos.x) <= 1.0 && abs(ShadowPos.y) <= 1.0)
+        {
+            return i;
+        }
+    }
+    
+    // If no cascade contains the point, return the largest cascade
+    return NumCascades - 1;
 }
 #endif
 
