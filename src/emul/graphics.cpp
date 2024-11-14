@@ -1251,7 +1251,6 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     //ExtractViewFrustumPlanesFromMatrix(cameraAttribs.mViewProj.Transpose(), Frustum, false);
     //auto box = GetBoxInsideFrustum(Frustum, aabb);
 
-
     BoundBox box = aabb;
     box.Min.x = -12.0f;
     box.Max.x = 12.0f;
@@ -1382,13 +1381,13 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
         
-        if(iCascade == 20)
+        if(iCascade == 0)
         {
-            cascadeViewProj = ComputeCascadeViewProj(Direction, model.aabb, m_ShadowSettings);
+            cascadeViewProj = ComputeCameraFrustumCascade(CurrCamAttribs, model.modelTransform, model.worldspaceAABB, Direction, m_ShadowSettings);
         }
         else
         {
-            cascadeViewProj = ComputeCameraFrustumCascade(CurrCamAttribs, model.modelTransform, model.worldspaceAABB, Direction, m_ShadowSettings);
+            cascadeViewProj = ComputeCascadeViewProj(Direction, model.aabb, m_ShadowSettings);
         }
 
         ShadowCameraAttribs.mViewProj = cascadeViewProj.ViewProj.Transpose();
@@ -6496,10 +6495,12 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             {
                 s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model);
                 AttribsData.ShadowMapIndex = 0;
+                AttribsData.NumCascades = 2;
             }
             else
             {
                 AttribsData.ShadowMapIndex = -1;
+                AttribsData.NumCascades = 0;
             }
             
             SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + i);

@@ -962,6 +962,7 @@ void SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(const PBRLightShaderAttrib
     }
 
     pShaderAttribs->ShadowMapIndex = AttribsData.ShadowMapIndex;
+    pShaderAttribs->NumCascades = AttribsData.NumCascades;
 
     auto Intensity = Light.Intensity;
     if (pShaderAttribs->Type != LIGHT_TYPE_DIRECTIONAL)

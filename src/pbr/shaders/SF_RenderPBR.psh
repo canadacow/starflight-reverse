@@ -371,24 +371,29 @@ float4 GetLoadingAnimationColor(float3 WorldPos, float Factor)
 }
 #endif
 
-#if 0
-int FindCascadeIndex(float3 WorldPos, PBRShadowMapInfo shadowMapInfo, int NumCascades)
-{
-    // Start from the smallest (most detailed) cascade
-    for (int i = 0; i < NumCascades; i++)
+#if defined(ENABLE_SHADOWS) && ENABLE_SHADOWS && defined(PBR_MAX_SHADOW_MAPS) && PBR_MAX_SHADOW_MAPS > 0
+int FindCascadeIndex(float3 WorldPos, int LightIndex)
+{   
+    int mapIndex = g_Frame.Lights[LightIndex].ShadowMapIndex;
+
+    if(mapIndex >= 0)
     {
-        float4 ShadowPos = mul(float4(WorldPos, 1.0), CascadeMatrices[i]);
-        ShadowPos.xy /= ShadowPos.w;
-        
-        // If point is within NDC bounds of this cascade, use it
-        if (abs(ShadowPos.x) <= 1.0 && abs(ShadowPos.y) <= 1.0)
+        // Start from the smallest (most detailed) cascade
+        for (int i = 0; i < g_Frame.Lights[LightIndex].NumCascades; i++)
         {
-            return i;
+            float4 ShadowPos = mul(float4(WorldPos, 1.0), g_Frame.ShadowMaps[mapIndex + i].WorldToLightProjSpace);
+            ShadowPos.xy /= ShadowPos.w;
+            
+            // If point is within NDC bounds of this cascade, use it
+            if (abs(ShadowPos.x) <= 1.0 && abs(ShadowPos.y) <= 1.0)
+            {
+                return i;
+            }
         }
     }
     
     // If no cascade contains the point, return the largest cascade
-    return NumCascades - 1;
+    return (g_Frame.Lights[LightIndex].NumCascades - 1) + mapIndex;
 }
 #endif
 
@@ -503,6 +508,8 @@ PSOutput main(in VSOutput VSOut,
             int LightCount = min(g_Frame.Renderer.LightCount, PBR_MAX_LIGHTS);
             for (int i = 0; i < LightCount; ++i)
             {
+
+
                 ApplyPunctualLight(
                     Shading,
                     g_Frame.Lights[i],
@@ -513,7 +520,7 @@ PSOutput main(in VSOutput VSOut,
 #                   if ENABLE_SHADOWS
                         g_ShadowMap,
                         g_ShadowMap_sampler,
-                        g_Frame.ShadowMaps[max(g_Frame.Lights[i].ShadowMapIndex, 0)],
+                        g_Frame.ShadowMaps[max(FindCascadeIndex(VSOut.WorldPos, i), 0)],
 #                   endif
                     SrfLighting);
             }

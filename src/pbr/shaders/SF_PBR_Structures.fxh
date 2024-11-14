@@ -257,7 +257,7 @@ struct PBRLightAttribs
     float DirectionX; // Directional and spot lights.
     float DirectionY;
     float DirectionZ;    
-    int   ShadowMapIndex; // -1 if light does not cast shadows
+    float Padding0;
 
     float IntensityR;    
     float IntensityG;
@@ -266,8 +266,8 @@ struct PBRLightAttribs
     
     float SpotAngleScale; // 1.0 / (cos(InnerConeAngle) - cos(OuterConeAngle))
     float SpotAngleOffset;// -cos(OuterConeAngle) * SpotAngleScale;
-    float Padding0;
-    float Padding1;
+    int   ShadowMapIndex; // -1 if light does not cast shadows
+    int   NumCascades;
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRLightAttribs);
