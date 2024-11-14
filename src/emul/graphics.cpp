@@ -78,6 +78,7 @@
 #include "TextureLoader.h"
 #include "EnvMapRenderer.hpp"
 #include "DiligentShadowMapManager.hpp"
+#include "DiligentEpipolarLightScattering.hpp"
 
 namespace Diligent
 {
@@ -1252,10 +1253,10 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     //auto box = GetBoxInsideFrustum(Frustum, aabb);
 
     BoundBox box = aabb;
-    box.Min.x = -12.0f;
-    box.Max.x = 12.0f;
-    box.Min.z = -12.0f;
-    box.Max.z = 12.0f;
+    box.Min.x = -18.0f;
+    box.Max.x = 18.0f;
+    box.Min.z = -18.0f;
+    box.Max.z = 18.0f;
 
     box = box.Transform(modelTransform);
 
@@ -3721,6 +3722,16 @@ static int GraphicsInitThread()
     s_gc.shadowMap = std::make_unique<ShadowMap>();
     s_gc.shadowMap->Initialize();
     s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
+
+    std::unique_ptr<EpipolarLightScattering> m_pLightSctrPP = std::make_unique<EpipolarLightScattering>(EpipolarLightScattering::CreateInfo{
+    s_gc.m_pDevice,
+    nullptr,
+    s_gc.m_pImmediateContext,
+    TEX_FORMAT_RGBA8_UNORM_SRGB, /* SCDesc.ColorBufferFormat, */
+    TEX_FORMAT_D32_FLOAT, /* SCDesc.DepthBufferFormat, */
+    TEX_FORMAT_R11G11B10_FLOAT,
+    true, /* m_PackMatrixRowMajor, */
+        });
 
     InitPBRRenderer(s_gc.shadowMap->GetShadowMap());
 
