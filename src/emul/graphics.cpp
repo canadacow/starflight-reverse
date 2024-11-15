@@ -93,6 +93,7 @@ namespace HLSL
 #include "Shaders/PostProcess/ToneMapping/public/ToneMappingStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceReflection/public/ScreenSpaceReflectionStructures.fxh"
 #include "Shaders/PostProcess/ScreenSpaceAmbientOcclusion/public/ScreenSpaceAmbientOcclusionStructures.fxh"
+#include "Shaders/PostProcess/EpipolarLightScattering/public/EpipolarLightScatteringStructures.fxh"
 
 } // namespace HLSL
 
@@ -349,6 +350,9 @@ struct GraphicsContext
 
         avk::image    avkdShadowDepthBuffer;
         ITextureView* diligentShadowDepthBuffer;
+
+        ITexture* offscreenColorBuffer;
+        ITexture* offscreenDepthBuffer;
     };
     
     std::vector<BufferData> buffers;
@@ -474,6 +478,9 @@ struct GraphicsContext
 
     HLSL::BloomAttribs bloomSettings{};
 
+    RefCntAutoPtr<IBuffer> pcbCameraAttribs;
+    RefCntAutoPtr<IBuffer> pcbLightAttribs;
+
 #if defined(DE_SSR)
     std::unique_ptr<ScreenSpaceReflection> ssr;
 #endif
@@ -483,6 +490,8 @@ struct GraphicsContext
     FfxSssrContext sssrContext;
 #endif
     std::unique_ptr<EnvMapRenderer> envMapRenderer;
+
+    std::unique_ptr<EpipolarLightScattering> epipolarLightScattering;
 
     std::mutex spaceManMutex;
     Interpolator spaceMan;
@@ -3723,7 +3732,7 @@ static int GraphicsInitThread()
     s_gc.shadowMap->Initialize();
     s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
 
-    std::unique_ptr<EpipolarLightScattering> m_pLightSctrPP = std::make_unique<EpipolarLightScattering>(EpipolarLightScattering::CreateInfo{
+    s_gc.epipolarLightScattering = std::make_unique<EpipolarLightScattering>(EpipolarLightScattering::CreateInfo{
     s_gc.m_pDevice,
     nullptr,
     s_gc.m_pImmediateContext,
@@ -3881,6 +3890,28 @@ static int GraphicsInitThread()
         pDeviceVk->CreateTextureFromVulkanImage(bd.avkdShadowDepthBuffer.get().handle(), cbDesc, RESOURCE_STATE_UNDEFINED, &dd);
         bd.diligentShadowDepthBuffer = dd->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
 
+        cbDesc = {};
+        cbDesc.Type = RESOURCE_DIM_TEX_2D;
+        cbDesc.Width = WINDOW_WIDTH;
+        cbDesc.Height = WINDOW_HEIGHT;
+        cbDesc.Format = TEX_FORMAT_RGBA8_UNORM_SRGB;
+        cbDesc.MipLevels = 1;
+        cbDesc.SampleCount = 1;
+        cbDesc.Usage = USAGE_DEFAULT;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
+        pDeviceVk->CreateTexture(cbDesc, nullptr, &bd.offscreenColorBuffer);
+
+        cbDesc = {};
+        cbDesc.Type = RESOURCE_DIM_TEX_2D;
+        cbDesc.Width = WINDOW_WIDTH;
+        cbDesc.Height = WINDOW_HEIGHT;
+        cbDesc.Format = TEX_FORMAT_D32_FLOAT;
+        cbDesc.MipLevels = 1;
+        cbDesc.SampleCount = 1;
+        cbDesc.Usage = USAGE_DEFAULT;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
+        pDeviceVk->CreateTexture(cbDesc, nullptr, &bd.offscreenDepthBuffer);
+     
         s_gc.vc.record_and_submit_with_fence({
             avk::sync::image_memory_barrier(bd.gameOutput->get_image(),
             avk::stage::auto_stage >> avk::stage::auto_stage).with_layout_transition({avk::layout::undefined, avk::layout::shader_read_only_optimal})
@@ -6018,6 +6049,9 @@ void InitializeCommonResources()
 
     CreateUniformBuffer(s_gc.m_pDevice, SF_PBR_Renderer::GetTerrainAttribsSizeStatic(), "Terrain attribs buffer", &s_gc.terrainAttribsCB);
 
+    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "Camera Attribs CB", &s_gc.pcbCameraAttribs);
+    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::LightAttribs), "Light Attribs CB", &s_gc.pcbLightAttribs);
+
     InitHeightmap();
 
     BufferDesc SBDesc;
@@ -6416,6 +6450,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     s_gc.ssr->PrepareResources(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.postFXContext.get(), ScreenSpaceReflection::FEATURE_FLAG_NONE);
     #endif
 
+    HLSL::LightAttribs  LightAttrs = {};
+    HLSL::CameraAttribs CamAttribs = {};
+
     s_gc.gBuffer->Resize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     const auto& CurrCamAttribs = s_gc.cameraAttribs[inFlightIndex & 0x01];
@@ -6507,6 +6544,14 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model);
                 AttribsData.ShadowMapIndex = 0;
                 AttribsData.NumCascades = 2;
+
+                if(s_gc.currentScene == SCENE_TERRAIN)
+                {
+                    CamAttribs = CurrCamAttribs;
+
+                    LightAttrs.f4Direction = float4{ Direction, 0.0f };
+                    LightAttrs.ShadowAttribs.mWorldToLightView = ShadowMaps[0].WorldToLightProjSpace.Inverse();
+                }                
             }
             else
             {
@@ -6775,6 +6820,54 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     s_gc.applyPostFX.ptex2DSSAOVar->Set(s_gc.ssao->GetAmbientOcclusionSRV());
     s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
+
+    if(s_gc.currentScene == Scene::SCENE_TERRAIN)
+    {
+        HLSL::EpipolarLightScatteringAttribs m_PPAttribs{};
+
+        EpipolarLightScattering::FrameAttribs FrameAttribs;
+
+        FrameAttribs.pDevice        = s_gc.m_pDevice;
+        FrameAttribs.pDeviceContext = s_gc.m_pImmediateContext;
+        FrameAttribs.dElapsedTime   = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();;
+        FrameAttribs.pLightAttribs  = &LightAttrs;
+        FrameAttribs.pCameraAttribs = &CamAttribs;
+
+        m_PPAttribs.iNumCascades = 2;
+        m_PPAttribs.fNumCascades = (float)2.0f;
+
+        FrameAttribs.pcbLightAttribs  = s_gc.pcbLightAttribs;
+        FrameAttribs.pcbCameraAttribs = s_gc.pcbCameraAttribs;
+
+        m_PPAttribs.fMaxShadowMapStep = static_cast<float>(s_gc.shadowMap->m_ShadowSettings.Resolution / 4);
+
+        m_PPAttribs.f2ShadowMapTexelSize = float2(1.f / static_cast<float>(s_gc.shadowMap->m_ShadowSettings.Resolution), 1.f / static_cast<float>(s_gc.shadowMap->m_ShadowSettings.Resolution));
+        m_PPAttribs.uiMaxSamplesOnTheRay = s_gc.shadowMap->m_ShadowSettings.Resolution;
+
+        m_PPAttribs.uiNumSamplesOnTheRayAtDepthBreak = 32u;
+
+        // During the ray marching, on each step we move by the texel size in either horz
+        // or vert direction. So resolution of min/max mipmap should be the same as the
+        // resolution of the original shadow map
+        m_PPAttribs.uiMinMaxShadowMapResolution    = s_gc.shadowMap->m_ShadowSettings.Resolution;
+        m_PPAttribs.uiInitialSampleStepInSlice     = std::min(m_PPAttribs.uiInitialSampleStepInSlice, m_PPAttribs.uiMaxSamplesInSlice);
+        m_PPAttribs.uiEpipoleSamplingDensityFactor = std::min(m_PPAttribs.uiEpipoleSamplingDensityFactor, m_PPAttribs.uiInitialSampleStepInSlice);
+
+        FrameAttribs.ptex2DSrcColorBufferSRV = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        FrameAttribs.ptex2DSrcDepthBufferSRV = s_gc.buffers[inFlightIndex].offscreenDepthBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        FrameAttribs.ptex2DDstColorBufferRTV = pRTV;
+        FrameAttribs.ptex2DDstDepthBufferDSV = pDSV;
+        FrameAttribs.ptex2DShadowMapSRV      = s_gc.shadowMap->GetShadowMap();
+
+        // Begin new frame
+        //s_gc.epipolarLightScattering->PrepareForNewFrame(FrameAttribs, m_PPAttribs);
+
+        // Render the sun
+        s_gc.epipolarLightScattering->RenderSun(pRTV->GetDesc().Format, pDSV->GetDesc().Format, 1);
+
+        // Perform the post processing
+        s_gc.epipolarLightScattering->PerformPostProcessing();
+    }
 
     s_gc.m_pImmediateContext->Flush();
 }
