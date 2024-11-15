@@ -175,6 +175,7 @@ add_executable(emulatesdl WIN32
     src/pbr/SF_GLTFResourceManager.cpp
     src/pbr/SF_GLTFBuilder.cpp
     src/emul/DynamicMesh.cpp
+    src/emul/importfix.cpp
 )
 
 include(DiligentUtils.cmake)

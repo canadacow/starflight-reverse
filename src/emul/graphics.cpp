@@ -97,6 +97,8 @@ namespace HLSL
 
 } // namespace HLSL
 
+void PrepareForNewFrame(void* pEpipolarLightScattering, EpipolarLightScattering::FrameAttribs& FrameAttribs, void* m_PPAttribs);
+
 } // namespace Diligent
 
 #include "Common/interface/RefCntAutoPtr.hpp"
@@ -6861,6 +6863,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
         // Begin new frame
         //s_gc.epipolarLightScattering->PrepareForNewFrame(FrameAttribs, m_PPAttribs);
+        PrepareForNewFrame(s_gc.epipolarLightScattering.get(), FrameAttribs, &m_PPAttribs);
 
         // Render the sun
         s_gc.epipolarLightScattering->RenderSun(pRTV->GetDesc().Format, pDSV->GetDesc().Format, 1);
