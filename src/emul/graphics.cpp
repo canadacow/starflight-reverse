@@ -622,6 +622,11 @@ struct ShadowMap
 
     void InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh);
 
+    HLSL::LightAttribs GetLightAttribs()
+    {
+        return m_LightAttribs;
+    }
+
 private:
 
     HLSL::LightAttribs m_LightAttribs;
@@ -3361,8 +3366,7 @@ static void InitHeightmap()
     {
         for (int x = 0; x < MapWidth; ++x)
         {
-            //dummyHeightmap[y * 9 + x] = static_cast<float>(image[y][x]) / 48.0f;
-            dummyHeightmap[y * MapWidth + x] = static_cast<float>(image[y][x]) / 8.0f;
+            dummyHeightmap[y * MapWidth + x] = static_cast<float>(image[y][x] + 16) / 8.0f;
         }
     }
 
@@ -5096,8 +5100,8 @@ void InitTerrain()
     s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f);
 
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Grass2", 1.01f }, { "HighGrass", 4.01f}, { "Rock", 6.51f }, {"Ice", 8.01f}}},
-        { "Earth-dead", { { "Water", -15.0f }, { "Beach", 0.01f }, { "Barren", 1.01f }, { "HighBarren", 4.01f}, { "Rock", 6.51f }, {"Ice", 8.01f}}},
+        { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
+        { "Earth-dead", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Barren", 3.01f }, { "HighBarren", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
@@ -5127,10 +5131,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
-    SF_GLTF::TerrainItem rover { "Rover", float3{ 0.0f, 8.0f, -1.5f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem ruin  { "AncientRuin", float3{ -4.0f, 7.8f, 0.0f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem endurium { "Endurium", float3{ 0.0f, 7.8f, 3.0f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem recentRuin { "RecentRuin", float3{ 4.0f, 7.8f, 15.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem rover { "Rover", float3{ 0.0f, 10.0f, -1.5f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem ruin  { "AncientRuin", float3{ -4.0f, 9.8f, 0.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem endurium { "Endurium", float3{ 0.0f, 9.8f, 3.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem recentRuin { "RecentRuin", float3{ 4.0f, 9.8f, 15.0f }, Quaternion<float>{} };
 
     s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin });
 
@@ -5154,9 +5158,9 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     MaxDim = std::max(MaxDim, ModelDim.z);
 
     float4x4 InvYAxis = float4x4::Identity();
-    InvYAxis._22 = -1;
+    //InvYAxis._22 = -1;
 
-#if 1
+#if 0
     s_gc.terrain.scale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
     auto     Translate = -s_gc.terrain.aabb.Min - 0.5f * ModelDim;
     InvYAxis._22 = -1;
@@ -5233,6 +5237,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
     CurrCamAttribs.fNearPlaneZ = ZNear;
     CurrCamAttribs.fFarPlaneZ = ZFar;
+    CurrCamAttribs.f4ExtraData[0].x = pCamera->Perspective.YFov;
 
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 }
@@ -5248,7 +5253,7 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
     auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
 
         // 1,0,0, points towards the horizon
-        float3 lightDir = float3{ 1.0f, 0.0f, 0.0f };
+        float3 lightDir = float3{ 1.0f, 0.1f, 0.0f };
 
         // Calculate the angle of the sun based on the current time
         float angle = static_cast<float>(fmod(currentTimeInSeconds, 60.0) / 60.0 * M_PI); // Full rotation in a minute
@@ -5269,7 +5274,7 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
         float4x4 rotationMatrix = float4x4::RotationZ(angle);
         lightDir = rotationMatrix * float4(lightDir, 0.0f);
 
-        float3 Direction = -normalize(lightDir);
+        float3 Direction = normalize(lightDir);
 
         return Direction;
     };
@@ -6551,8 +6556,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 {
                     CamAttribs = CurrCamAttribs;
 
-                    LightAttrs.f4Direction = float4{ Direction, 0.0f };
-                    LightAttrs.ShadowAttribs.mWorldToLightView = ShadowMaps[0].WorldToLightProjSpace.Inverse();
+                    LightAttrs = s_gc.shadowMap->GetLightAttribs();
+                    LightAttrs.f4Direction = Direction;
                 }                
             }
             else
@@ -6825,21 +6830,113 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     if(s_gc.currentScene == Scene::SCENE_TERRAIN)
     {
+        //s_gc.m_pImmediateContext->BeginDebugGroup("EpipolarLightScattering");
+
         HLSL::EpipolarLightScatteringAttribs m_PPAttribs{};
 
         EpipolarLightScattering::FrameAttribs FrameAttribs;
 
+        //float scale = (69933.0f - 47984.07031f) / (400.0f - 1.0f);
+        //float offset = 47984.07031f;
+        
+        //float scale = (70000.0f - 48000.0f) / (0.96f - 0.982f);
+        //float offset = 48000.0f - (0.982 * scale);
+
+        /*
+        mProj {1.93137, 0.00, 0.00, 0.00}
+                {0.00, 2.41421, 0.00, 0.00}
+                {0.00, 0.00, 1.00252, -1515.24634}
+                {0.00, 0.00, 1.00, 0.00} 144 float4x4 (column_major)
+        */
+
+       /*
+           CameraAttribs CamAttribs;
+            WriteShaderMatrix(&CamAttribs.mView, m_mCameraView, !m_PackMatrixRowMajor);
+            WriteShaderMatrix(&CamAttribs.mProj, m_mCameraProj, !m_PackMatrixRowMajor);
+            WriteShaderMatrix(&CamAttribs.mViewProj, mViewProj, !m_PackMatrixRowMajor);
+            WriteShaderMatrix(&CamAttribs.mViewProjInv, mViewProj.Inverse(), !m_PackMatrixRowMajor);
+            float fNearPlane = 0.f, fFarPlane = 0.f;
+            m_mCameraProj.GetNearFarClipPlanes(fNearPlane, fFarPlane, m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+            CamAttribs.fNearPlaneZ      = fNearPlane;
+            CamAttribs.fFarPlaneZ       = fFarPlane * 0.999999f;
+            CamAttribs.f4Position       = m_f3CameraPos;
+            CamAttribs.f4ViewportSize.x = static_cast<float>(m_pSwapChain->GetDesc().Width);
+            CamAttribs.f4ViewportSize.y = static_cast<float>(m_pSwapChain->GetDesc().Height);
+            CamAttribs.f4ViewportSize.z = 1.f / CamAttribs.f4ViewportSize.x;
+            CamAttribs.f4ViewportSize.w = 1.f / CamAttribs.f4ViewportSize.y;
+       
+       */
+
+        const float WORLD_TO_EARTH_SCALE = 1511.4625f;
+
+        auto adjustedCamAttribs = CamAttribs;
+        auto adjustedLightAttribs = LightAttrs;
+
+        adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 1.0f);
+
+        //adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
+        adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
+
+        float originalNear = 0.f, originalFar = 0.f;
+        adjustedCamAttribs.mProj.GetNearFarClipPlanes(originalNear, originalFar, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+
+        adjustedCamAttribs.mProj = float4x4::Projection(
+            CamAttribs.f4ExtraData[0].x, // FOV
+            CamAttribs.f4ViewportSize.x / CamAttribs.f4ViewportSize.y,
+            originalNear * -WORLD_TO_EARTH_SCALE,
+            originalFar * -WORLD_TO_EARTH_SCALE,
+            s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1
+        );
+
+        adjustedCamAttribs.mProj._11 *= WORLD_TO_EARTH_SCALE; // Scale x axis
+        adjustedCamAttribs.mProj._22 *= WORLD_TO_EARTH_SCALE; // Scale y axis
+        //adjustedCamAttribs.mProj._33 *= WORLD_TO_EARTH_SCALE; // Scale z axis
+
+        adjustedCamAttribs.mView = float4x4{
+            0.973666370f, 0.0408147201f, 0.224294260f, 0.00000000f,
+            0.00000000f, 0.983843684f, -0.179029569f, 0.00000000f,
+            -0.227977529f, 0.174315080f, 0.957935572f, 0.00000000f,
+            0.00000000f, -7870.74951f, 1432.23657f, 1.00000000f
+        };
+
+        adjustedCamAttribs.mProj = float4x4{
+            1.93137074f, 0.00000000f, 0.00000000f, 0.00000000f,
+            0.00000000f, 2.41421342f, 0.00000000f, 0.00000000f,
+            0.00000000f, 0.00000000f, 1.00252461f, 1.00000000f,
+            0.00000000f, 0.00000000f, -1515.24634f, 0.00000000f
+        };
+
+        ////adjustedCamAttribs.mProj.m[2][2] = scale;
+        //adjustedCamAttribs.mProj.m[3][2] = -1515.24634f;
+        //adjustedCamAttribs.mProj.m[2][3] = 1.0f;
+        
+        // FIXME FIXME FIXME
+        //adjustedCamAttribs.f4Position.y = 8000.0f;
+
+        float fNearPlane = 0.f, fFarPlane = 0.f;
+        adjustedCamAttribs.mProj.GetNearFarClipPlanes(fNearPlane, fFarPlane, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+        adjustedCamAttribs.fNearPlaneZ      = fNearPlane;
+        adjustedCamAttribs.fFarPlaneZ       = fFarPlane * 0.999999f;
+
+        adjustedCamAttribs.mViewProj = (adjustedCamAttribs.mView * adjustedCamAttribs.mProj);
+        adjustedCamAttribs.mViewProjInv = (adjustedCamAttribs.mView * adjustedCamAttribs.mProj).Inverse();
+
+        adjustedCamAttribs.mViewInv = adjustedCamAttribs.mView.Inverse();
+
+        adjustedCamAttribs.mProjInv = adjustedCamAttribs.mProj.Inverse();
+
         FrameAttribs.pDevice        = s_gc.m_pDevice;
         FrameAttribs.pDeviceContext = s_gc.m_pImmediateContext;
         FrameAttribs.dElapsedTime   = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();;
-        FrameAttribs.pLightAttribs  = &LightAttrs;
-        FrameAttribs.pCameraAttribs = &CamAttribs;
+        FrameAttribs.pLightAttribs  = &adjustedLightAttribs;
+        FrameAttribs.pCameraAttribs = &adjustedCamAttribs;
 
-        m_PPAttribs.iNumCascades = 2;
-        m_PPAttribs.fNumCascades = (float)2.0f;
+        m_PPAttribs.iNumCascades = 1;
+        m_PPAttribs.fNumCascades = (float)1.0f;
+        m_PPAttribs.iFirstCascadeToRayMarch = 0;
 
-        FrameAttribs.pcbLightAttribs  = s_gc.pcbLightAttribs;
-        FrameAttribs.pcbCameraAttribs = s_gc.pcbCameraAttribs;
+        FrameAttribs.pcbLightAttribs  = nullptr; //s_gc.pcbLightAttribs;
+        FrameAttribs.pcbCameraAttribs = nullptr; //s_gc.pcbCameraAttribs;
 
         m_PPAttribs.fMaxShadowMapStep = static_cast<float>(s_gc.shadowMap->m_ShadowSettings.Resolution / 4);
 
@@ -6855,8 +6952,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         m_PPAttribs.uiInitialSampleStepInSlice     = std::min(m_PPAttribs.uiInitialSampleStepInSlice, m_PPAttribs.uiMaxSamplesInSlice);
         m_PPAttribs.uiEpipoleSamplingDensityFactor = std::min(m_PPAttribs.uiEpipoleSamplingDensityFactor, m_PPAttribs.uiInitialSampleStepInSlice);
 
-        FrameAttribs.ptex2DSrcColorBufferSRV = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-        FrameAttribs.ptex2DSrcDepthBufferSRV = s_gc.buffers[inFlightIndex].offscreenDepthBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        FrameAttribs.ptex2DSrcColorBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        FrameAttribs.ptex2DSrcDepthBufferSRV = pCurrDepthSRV;
         FrameAttribs.ptex2DDstColorBufferRTV = pRTV;
         FrameAttribs.ptex2DDstDepthBufferDSV = pDSV;
         FrameAttribs.ptex2DShadowMapSRV      = s_gc.shadowMap->GetShadowMap();
@@ -6870,6 +6967,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
         // Perform the post processing
         s_gc.epipolarLightScattering->PerformPostProcessing();
+
+        //s_gc.m_pImmediateContext->EndDebugGroup();
     }
 
     s_gc.m_pImmediateContext->Flush();
@@ -7070,6 +7169,8 @@ void GraphicsUpdate()
         uniform.graphics_mode_height = GRAPHICS_MODE_HEIGHT;
         uniform.window_width = WINDOW_WIDTH;
         uniform.window_height = WINDOW_HEIGHT;
+
+        s_gc.epipolarLightScattering->OnWindowResize(s_gc.m_pDevice, WINDOW_WIDTH, WINDOW_HEIGHT);
     }
 
     uniform.useEGA = s_useEGA ? 1 : 0;
