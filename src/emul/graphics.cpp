@@ -6557,7 +6557,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                     CamAttribs = CurrCamAttribs;
 
                     LightAttrs = s_gc.shadowMap->GetLightAttribs();
-                    LightAttrs.f4Direction = Direction;
+                    LightAttrs.f4Direction = float4(Direction, 1.0f);
                 }                
             }
             else
@@ -6872,10 +6872,12 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         auto adjustedCamAttribs = CamAttribs;
         auto adjustedLightAttribs = LightAttrs;
 
-        adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 1.0f);
+        //adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 1.0f);
 
-        //adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
-        adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
+        adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
+        adjustedCamAttribs.f4Position.z = 1.0f;
+        
+        //adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
 
         float originalNear = 0.f, originalFar = 0.f;
         adjustedCamAttribs.mProj.GetNearFarClipPlanes(originalNear, originalFar, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
@@ -6888,10 +6890,11 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1
         );
 
-        adjustedCamAttribs.mProj._11 *= WORLD_TO_EARTH_SCALE; // Scale x axis
-        adjustedCamAttribs.mProj._22 *= WORLD_TO_EARTH_SCALE; // Scale y axis
+        //adjustedCamAttribs.mProj._11 *= WORLD_TO_EARTH_SCALE; // Scale x axis
+        //adjustedCamAttribs.mProj._22 *= WORLD_TO_EARTH_SCALE; // Scale y axis
         //adjustedCamAttribs.mProj._33 *= WORLD_TO_EARTH_SCALE; // Scale z axis
 
+#if 0
         adjustedCamAttribs.mView = float4x4{
             0.973666370f, 0.0408147201f, 0.224294260f, 0.00000000f,
             0.00000000f, 0.983843684f, -0.179029569f, 0.00000000f,
@@ -6905,6 +6908,27 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             0.00000000f, 0.00000000f, 1.00252461f, 1.00000000f,
             0.00000000f, 0.00000000f, -1515.24634f, 0.00000000f
         };
+#endif
+
+        float3 negCamPos = float3(-adjustedCamAttribs.f4Position.x, 
+                                -adjustedCamAttribs.f4Position.y,
+                                -adjustedCamAttribs.f4Position.z);
+
+        adjustedCamAttribs.mView._41 = negCamPos.x * adjustedCamAttribs.mView._11 + 
+                                    negCamPos.y * adjustedCamAttribs.mView._21 + 
+                                    negCamPos.z * adjustedCamAttribs.mView._31;
+                                    
+        adjustedCamAttribs.mView._42 = negCamPos.x * adjustedCamAttribs.mView._12 + 
+                                    negCamPos.y * adjustedCamAttribs.mView._22 + 
+                                    negCamPos.z * adjustedCamAttribs.mView._32;
+                                    
+        adjustedCamAttribs.mView._43 = negCamPos.x * adjustedCamAttribs.mView._13 + 
+                                    negCamPos.y * adjustedCamAttribs.mView._23 + 
+                                    negCamPos.z * adjustedCamAttribs.mView._33;
+
+        //adjustedCamAttribs.mView._41 = 0.0f;
+        //adjustedCamAttribs.mView._42 = 7870.74951f;
+        //adjustedCamAttribs.mView._43 = 1432.23657f;
 
         ////adjustedCamAttribs.mProj.m[2][2] = scale;
         //adjustedCamAttribs.mProj.m[3][2] = -1515.24634f;
