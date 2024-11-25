@@ -451,10 +451,10 @@ struct GraphicsContext
     };
 
     float3 terrainDelta{};
-    float3 terrainMovement{};
+    float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     MouseState mouseState;
-    float FPVyawAngle{};
-    float FPVpitchAngle{};
+    float FPVpitchAngle = 0.18f;
+    float FPVyawAngle = 0.23f;
     float4x4 terrainFPVRotation = float4x4::Identity();
 
     std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
@@ -5059,7 +5059,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     }
                     s_gc.mouseState = mouseState;
 
-                    float fYawDelta = -MouseDeltaX * rotationSpeed;
+                    float fYawDelta = MouseDeltaX * rotationSpeed;
                     float fPitchDelta = MouseDeltaY * rotationSpeed;
                     if (mouseState.leftDown)
                     {
@@ -5069,8 +5069,17 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                         s_gc.FPVpitchAngle = std::min(s_gc.FPVpitchAngle, +PI_F / 2.f);
                     }
 
-                    s_gc.terrainFPVRotation = float4x4::RotationArbitrary(referenceUpAxis, s_gc.FPVyawAngle) *
-                        float4x4::RotationArbitrary(referenceRightAxis, s_gc.FPVpitchAngle);
+                    auto yaw = float4x4::RotationArbitrary(referenceUpAxis, s_gc.FPVyawAngle);
+                    auto pitch = float4x4::RotationArbitrary(referenceRightAxis, s_gc.FPVpitchAngle);
+                    
+                    auto camRotation =
+                        QuaternionF::RotationFromAxisAngle(float3{1, 0, 0}, s_gc.FPVpitchAngle) *
+                        QuaternionF::RotationFromAxisAngle(float3{0, 1, 0}, -s_gc.FPVyawAngle);
+                     
+                    auto CameraRotationMatrix = camRotation.ToMatrix();                    
+
+                    s_gc.terrainFPVRotation = yaw * pitch;
+                    s_gc.terrainFPVRotation = CameraRotationMatrix;
                 }
             }
             break;
@@ -5198,7 +5207,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     InvZAxis._33 = -1;
 
     auto trans = float4x4::Translation(s_gc.terrainMovement);
-    CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
+    //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
+    CameraView = trans * s_gc.terrainFPVRotation * InvZAxis;
     s_gc.renderParams.ModelTransform = RotationMatrixModel;
 
     YFov = pCamera->Perspective.YFov;
@@ -5274,7 +5284,10 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
         float4x4 rotationMatrix = float4x4::RotationZ(angle);
         lightDir = rotationMatrix * float4(lightDir, 0.0f);
 
-        float3 Direction = normalize(lightDir);
+        //float3 Direction = normalize(lightDir);
+
+        //float3 Direction = float3(-0.554699242f, -0.0599640049f, -0.829887390f);
+        float3 Direction = float3(0.0f, -1.0f, 0.0f);
 
         return Direction;
     };
@@ -6810,6 +6823,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     // Clear the back buffer
     const float ClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
     s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    s_gc.m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
     s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.bloom->GetBloomTextureSRV());
@@ -6872,12 +6886,16 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         auto adjustedCamAttribs = CamAttribs;
         auto adjustedLightAttribs = LightAttrs;
 
-        //adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 1.0f);
+        adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 0.0f);
+        //adjustedLightAttribs.f4Direction = float4(0.05742f, 0.99037f, -0.12608f, 0.00f);
 
-        adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
-        adjustedCamAttribs.f4Position.z = 1.0f;
+        adjustedLightAttribs.f4Direction.w = 0.0f;
+
+        //adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
+        adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * 133.0f);
+        adjustedCamAttribs.f4Position.w = 1.0f;
         
-        //adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
+        adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
 
         float originalNear = 0.f, originalFar = 0.f;
         adjustedCamAttribs.mProj.GetNearFarClipPlanes(originalNear, originalFar, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
@@ -6901,7 +6919,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             -0.227977529f, 0.174315080f, 0.957935572f, 0.00000000f,
             0.00000000f, -7870.74951f, 1432.23657f, 1.00000000f
         };
+#endif
 
+#if 0
         adjustedCamAttribs.mProj = float4x4{
             1.93137074f, 0.00000000f, 0.00000000f, 0.00000000f,
             0.00000000f, 2.41421342f, 0.00000000f, 0.00000000f,
@@ -6982,6 +7002,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         FrameAttribs.ptex2DDstDepthBufferDSV = pDSV;
         FrameAttribs.ptex2DShadowMapSRV      = s_gc.shadowMap->GetShadowMap();
 
+        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
         // Begin new frame
         //s_gc.epipolarLightScattering->PrepareForNewFrame(FrameAttribs, m_PPAttribs);
         PrepareForNewFrame(s_gc.epipolarLightScattering.get(), FrameAttribs, &m_PPAttribs);
@@ -6990,7 +7012,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.epipolarLightScattering->RenderSun(pRTV->GetDesc().Format, pDSV->GetDesc().Format, 1);
 
         // Perform the post processing
-        s_gc.epipolarLightScattering->PerformPostProcessing();
+        //s_gc.epipolarLightScattering->PerformPostProcessing();
 
         //s_gc.m_pImmediateContext->EndDebugGroup();
     }
