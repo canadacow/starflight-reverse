@@ -5072,6 +5072,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     auto yaw = float4x4::RotationArbitrary(referenceUpAxis, s_gc.FPVyawAngle);
                     auto pitch = float4x4::RotationArbitrary(referenceRightAxis, s_gc.FPVpitchAngle);
                     
+#if 0
                     auto camRotation =
                         QuaternionF::RotationFromAxisAngle(float3{1, 0, 0}, s_gc.FPVpitchAngle) *
                         QuaternionF::RotationFromAxisAngle(float3{0, 1, 0}, -s_gc.FPVyawAngle);
@@ -5080,6 +5081,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 
                     s_gc.terrainFPVRotation = yaw * pitch;
                     s_gc.terrainFPVRotation = CameraRotationMatrix;
+#endif
                 }
             }
             break;
@@ -5198,6 +5200,12 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     const auto* pCamera = pCameraNode->pCamera;
     const auto& CameraGlobalTransform = s_gc.terrain.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
 
+    auto camRotation =
+        QuaternionF::RotationFromAxisAngle(float3{ 1, 0, 0 }, -s_gc.FPVpitchAngle) *
+        QuaternionF::RotationFromAxisAngle(float3{ 0, 1, 0 }, -s_gc.FPVyawAngle);
+
+    auto CameraRotationMatrix = camRotation.ToMatrix();
+
     // GLTF camera is defined such that the local +X axis is to the right,
     // the lens looks towards the local -Z axis, and the top of the camera
     // is aligned with the local +Y axis.
@@ -5208,7 +5216,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     auto trans = float4x4::Translation(s_gc.terrainMovement);
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
-    CameraView = trans * s_gc.terrainFPVRotation * InvZAxis;
+    CameraView = trans * CameraRotationMatrix * InvZAxis;
+    //CameraView = trans * CameraRotationMatrix;
     s_gc.renderParams.ModelTransform = RotationMatrixModel;
 
     YFov = pCamera->Perspective.YFov;
@@ -5284,10 +5293,10 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
         float4x4 rotationMatrix = float4x4::RotationZ(angle);
         lightDir = rotationMatrix * float4(lightDir, 0.0f);
 
-        //float3 Direction = normalize(lightDir);
+        float3 Direction = normalize(lightDir);
 
         //float3 Direction = float3(-0.554699242f, -0.0599640049f, -0.829887390f);
-        float3 Direction = float3(0.0f, -1.0f, 0.0f);
+        //float3 Direction = float3(-0.5f, -0.5f, 0.0f);
 
         return Direction;
     };
@@ -6886,7 +6895,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         auto adjustedCamAttribs = CamAttribs;
         auto adjustedLightAttribs = LightAttrs;
 
-        adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 0.0f);
+        //adjustedLightAttribs.f4Direction = float4(-0.554699242f, -0.0599640049f, -0.829887390f, 0.0f);
         //adjustedLightAttribs.f4Direction = float4(0.05742f, 0.99037f, -0.12608f, 0.00f);
 
         adjustedLightAttribs.f4Direction.w = 0.0f;
@@ -6895,7 +6904,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * 133.0f);
         adjustedCamAttribs.f4Position.w = 1.0f;
         
-        adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
+        //adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
 
         float originalNear = 0.f, originalFar = 0.f;
         adjustedCamAttribs.mProj.GetNearFarClipPlanes(originalNear, originalFar, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
@@ -6911,6 +6920,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         //adjustedCamAttribs.mProj._11 *= WORLD_TO_EARTH_SCALE; // Scale x axis
         //adjustedCamAttribs.mProj._22 *= WORLD_TO_EARTH_SCALE; // Scale y axis
         //adjustedCamAttribs.mProj._33 *= WORLD_TO_EARTH_SCALE; // Scale z axis
+
+        adjustedCamAttribs.mView = adjustedCamAttribs.mView.Transpose();
 
 #if 0
         adjustedCamAttribs.mView = float4x4{
@@ -7012,7 +7023,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.epipolarLightScattering->RenderSun(pRTV->GetDesc().Format, pDSV->GetDesc().Format, 1);
 
         // Perform the post processing
-        //s_gc.epipolarLightScattering->PerformPostProcessing();
+        s_gc.epipolarLightScattering->PerformPostProcessing();
 
         //s_gc.m_pImmediateContext->EndDebugGroup();
     }
