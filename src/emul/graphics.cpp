@@ -448,6 +448,7 @@ struct GraphicsContext
     {
         float2 pos = float2(-1.0f, -1.0f);
         bool leftDown;
+        bool rightDown;
     };
 
     float3 terrainDelta{};
@@ -455,6 +456,7 @@ struct GraphicsContext
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
     float FPVyawAngle = 0.23f;
+    float NormalizedXCoordForSunRotation = 0.0f;
     float4x4 terrainFPVRotation = float4x4::Identity();
 
     std::unique_ptr<HLSL::CameraAttribs[]> cameraAttribs;
@@ -959,6 +961,7 @@ void ShadowMap::Initialize()
         Macros.AddShaderMacro("SHADOW_PASS", true);
         Macros.AddShaderMacro("USE_INSTANCING", shaderInit == 1);
         Macros.AddShaderMacro("USE_HEIGHTMAP", shaderInit == 1);
+        Macros.AddShaderMacro("USE_TERRAINING", shaderInit == 1);
 
         // Create shadow vertex shader
         RefCntAutoPtr<IShader> pShadowVS;
@@ -1022,6 +1025,7 @@ void ShadowMap::Initialize()
         {
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Terrain")->Set(s_gc.terrainAttribsCB);
         }
 
         //pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
@@ -5048,6 +5052,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     mouseState.pos.x = event.motion.x;
                     mouseState.pos.y = event.motion.y;
                     mouseState.leftDown = (event.motion.state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+                    mouseState.rightDown = (event.motion.state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
 
                     float MouseDeltaX = 0;
                     float MouseDeltaY = 0;
@@ -5059,14 +5064,18 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     }
                     s_gc.mouseState = mouseState;
 
-                    float fYawDelta = MouseDeltaX * rotationSpeed;
-                    float fPitchDelta = MouseDeltaY * rotationSpeed;
+                    float fYawDelta = -MouseDeltaX * rotationSpeed;
+                    float fPitchDelta = -MouseDeltaY * rotationSpeed;
                     if (mouseState.leftDown)
                     {
                         s_gc.FPVyawAngle += fYawDelta * -handness;
                         s_gc.FPVpitchAngle += fPitchDelta * -handness;
                         s_gc.FPVpitchAngle = std::max(s_gc.FPVpitchAngle, -PI_F / 2.f);
                         s_gc.FPVpitchAngle = std::min(s_gc.FPVpitchAngle, +PI_F / 2.f);
+                    }
+                    else if (mouseState.rightDown)
+                    {
+                        s_gc.NormalizedXCoordForSunRotation = ((s_gc.mouseState.pos.x / WINDOW_WIDTH) - 0.5f) * 2.0f;
                     }
 
                     auto yaw = float4x4::RotationArbitrary(referenceUpAxis, s_gc.FPVyawAngle);
@@ -5275,7 +5284,10 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
         float3 lightDir = float3{ 1.0f, 0.1f, 0.0f };
 
         // Calculate the angle of the sun based on the current time
-        float angle = static_cast<float>(fmod(currentTimeInSeconds, 60.0) / 60.0 * M_PI); // Full rotation in a minute
+        //float angle = static_cast<float>(fmod(currentTimeInSeconds, 60.0) / 60.0 * M_PI); // Full rotation in a minute
+
+        // Calculate the angle of the sun based on the NormalizedXCoordForSunRotation
+        float angle = (s_gc.NormalizedXCoordForSunRotation + 1.0f) * (M_PI / 2.0f);
 
         //if(angle > M_PI)
         //{
@@ -6452,6 +6464,8 @@ void RenderStation(VulkanContext::frame_id_t inFlightIndex)
 
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
 {
+    ITextureView*        pRTVOffscreen   = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
     ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
     ITextureView*        pPrevDSV = s_gc.buffers[(inFlightIndex + 1) & 0x01].diligentDepthBuffer;
@@ -6828,11 +6842,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.ssao->Execute(SSAORenderAttribs);
     }
 
-    s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Clear the back buffer
     const float ClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
-    s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-    s_gc.m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
     s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.bloom->GetBloomTextureSRV());
@@ -6899,6 +6912,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         //adjustedLightAttribs.f4Direction = float4(0.05742f, 0.99037f, -0.12608f, 0.00f);
 
         adjustedLightAttribs.f4Direction.w = 0.0f;
+        //adjustedLightAttribs.f4Intensity = float4(10.0f, 10.0f, 10.0f, 10.0f);
 
         //adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
         adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * 133.0f);
@@ -6986,9 +7000,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         FrameAttribs.pLightAttribs  = &adjustedLightAttribs;
         FrameAttribs.pCameraAttribs = &adjustedCamAttribs;
 
-        m_PPAttribs.iNumCascades = 1;
-        m_PPAttribs.fNumCascades = (float)1.0f;
-        m_PPAttribs.iFirstCascadeToRayMarch = 0;
+        m_PPAttribs.iNumCascades = 2;
+        m_PPAttribs.fNumCascades = (float)2.0f;
+        m_PPAttribs.iFirstCascadeToRayMarch = 1;
 
         FrameAttribs.pcbLightAttribs  = nullptr; //s_gc.pcbLightAttribs;
         FrameAttribs.pcbCameraAttribs = nullptr; //s_gc.pcbCameraAttribs;
@@ -7007,13 +7021,15 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         m_PPAttribs.uiInitialSampleStepInSlice     = std::min(m_PPAttribs.uiInitialSampleStepInSlice, m_PPAttribs.uiMaxSamplesInSlice);
         m_PPAttribs.uiEpipoleSamplingDensityFactor = std::min(m_PPAttribs.uiEpipoleSamplingDensityFactor, m_PPAttribs.uiInitialSampleStepInSlice);
 
-        FrameAttribs.ptex2DSrcColorBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        FrameAttribs.ptex2DSrcColorBufferSRV = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
         FrameAttribs.ptex2DSrcDepthBufferSRV = pCurrDepthSRV;
         FrameAttribs.ptex2DDstColorBufferRTV = pRTV;
         FrameAttribs.ptex2DDstDepthBufferDSV = pDSV;
         FrameAttribs.ptex2DShadowMapSRV      = s_gc.shadowMap->GetShadowMap();
 
         s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
         // Begin new frame
         //s_gc.epipolarLightScattering->PrepareForNewFrame(FrameAttribs, m_PPAttribs);

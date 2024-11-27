@@ -22,6 +22,13 @@ cbuffer cbJointTransforms
     float4x4 g_Joints[MAX_JOINT_COUNT];
 };
 
+#if USE_TERRAINING
+cbuffer cbTerrainAttribs
+{
+    PBRTerrainAttribs g_Terrain;
+}
+#endif
+
 #if USE_HEIGHTMAP
 cbuffer cbHeightmapAttribs
 {
@@ -129,6 +136,10 @@ void MeshVS(in  VSInput  VSIn,
     #else // USE_INSTANCING
         float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
     #endif // USE_INSTANCING
+
+    #if USE_TERRAINING
+        adjustedUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
+    #endif
 
     float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
     float3 adjustedPos = VSIn.Position + float3(0.0, height, 0.0);

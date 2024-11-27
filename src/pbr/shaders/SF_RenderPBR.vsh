@@ -197,6 +197,10 @@ void main(in  VSInput  VSIn,
         float2 adjustedUV = VSIn.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
     #endif // USE_INSTANCING
 
+    #if USE_TERRAINING
+        adjustedUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
+    #endif
+
     float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
     float3 adjustedPos = VSIn.Pos + float3(0.0, height, 0.0);
     VSOut.Height = height;
@@ -231,6 +235,10 @@ void main(in  VSInput  VSIn,
     int instanceX = VSIn.InstanceID % 61;
     int instanceY = VSIn.InstanceID / 61;
     float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
+
+    #if USE_TERRAINING
+        megaUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
+    #endif
 
     VSOut.UV2 = VSIn.UV0;
     VSOut.UV0 = frac(megaUV * 9.0);

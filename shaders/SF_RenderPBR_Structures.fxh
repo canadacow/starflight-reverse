@@ -66,8 +66,8 @@ struct PBRTerrainAttribs
 {
     float startBiomHeight;
     float endBiomHeight;
-    float padding0;
-    float padding1;
+    float textureOffsetX;
+    float textureOffsetY;
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRTerrainAttribs);
