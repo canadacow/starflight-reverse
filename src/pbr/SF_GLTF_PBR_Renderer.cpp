@@ -748,6 +748,8 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     {
                         TerrainAttribs->startBiomHeight = it->StartBiomHeight;
                         TerrainAttribs->endBiomHeight = it->EndBiomHeight; 
+                        TerrainAttribs->textureOffsetX = 0.0f;
+                        TerrainAttribs->textureOffsetY = 0.0f;
                     }
                 }
 

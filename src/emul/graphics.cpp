@@ -846,6 +846,15 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             const float4x4  NodeTransform     = NodeGlobalMatrix * RenderParams.ModelTransform;
 
             WriteShaderMatrix(&GLTFNodeShaderTransforms->NodeMatrix, NodeTransform, true);            
+
+            if(pNode->isTerrain )
+            {
+                MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, s_gc.terrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+                TerrainAttribs->startBiomHeight = 0.0f;
+                TerrainAttribs->endBiomHeight = 0.0f;
+                TerrainAttribs->textureOffsetX = 0.0f;
+                TerrainAttribs->textureOffsetY = 0.0f;
+            }
             
             // Iterate through each primitive in the mesh
             for (const auto& primitive : pNode->pMesh->Primitives)
@@ -921,6 +930,7 @@ void ShadowMap::Initialize()
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbHeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearClamp);
+            ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
         }
 
         PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
@@ -1010,12 +1020,14 @@ void ShadowMap::Initialize()
         s_gc.m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &pRenderMeshShadowPSO);
 
         auto count = pRenderMeshShadowPSO->GetStaticVariableCount(SHADER_TYPE_VERTEX);
+        std::vector<ShaderResourceDesc> debugDescs;
 
         for (Uint32 i = 0; i < count; ++i)
         {
             auto pVar = pRenderMeshShadowPSO->GetStaticVariableByIndex(SHADER_TYPE_VERTEX, i);
             ShaderResourceDesc varDesc;
             pVar->GetResourceDesc(varDesc);
+            debugDescs.push_back(varDesc);
         }
 
         pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
@@ -1025,7 +1037,7 @@ void ShadowMap::Initialize()
         {
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Terrain")->Set(s_gc.terrainAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
         }
 
         //pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
@@ -1039,6 +1051,7 @@ void ShadowMap::Initialize()
             {s_gc.jointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.heightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.instanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.terrainAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
