@@ -92,7 +92,7 @@ BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::Model
 
 }
 
-void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
+void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, float2 textureSize)
 {
     const int numTiles = 8;
     const int numVerticesPerRow = numTiles + 1;
@@ -188,10 +188,10 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight)
         {
             NodeInstance ni;
             ni.NodeMatrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
-            ni.ScaleX = 1.0f / (float)numBigTiles;
-            ni.ScaleY = 1.0f / (float)numBigTiles;
-            ni.OffsetX = i / (float)numBigTiles;
-            ni.OffsetY = j / (float)numBigTiles;
+            ni.ScaleX = 1.0f / (float)textureSize.x;
+            ni.ScaleY = 1.0f / (float)textureSize.y;
+            ni.OffsetX = i / (float)textureSize.x;
+            ni.OffsetY = j / (float)textureSize.y;
             node.Instances.push_back(ni);
 
             float3 minTranslatedPos = baseMinBB * ni.NodeMatrix;

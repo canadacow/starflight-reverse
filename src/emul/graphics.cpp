@@ -453,6 +453,8 @@ struct GraphicsContext
 
     float3 terrainDelta{};
     float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
+    float2 terrainTextureOffset = { 0.0f, 0.0f };
+
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
     float FPVyawAngle = 0.23f;
@@ -852,8 +854,8 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, s_gc.terrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
                 TerrainAttribs->startBiomHeight = 0.0f;
                 TerrainAttribs->endBiomHeight = 0.0f;
-                TerrainAttribs->textureOffsetX = 0.0f;
-                TerrainAttribs->textureOffsetY = 0.0f;
+                TerrainAttribs->textureOffsetX = s_gc.terrainTextureOffset.x;
+                TerrainAttribs->textureOffsetY = s_gc.terrainTextureOffset.y;
             }
             
             // Iterate through each primitive in the mesh
@@ -929,7 +931,7 @@ void ShadowMap::Initialize()
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbHeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
-            ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearClamp);
+            ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearMirror);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
         }
 
@@ -4972,7 +4974,9 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_w:
                     if (currentCameraIndex == 0)
                     {
-                        MoveDirection.y -= 1.0f;
+                        //MoveDirection.y -= 1.0f;
+                        //const float delta = 1.0f / 61.0f;
+                        //s_gc.terrainTextureOffset.y -= delta;
                     }
                     else
                     {
@@ -4982,7 +4986,9 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_s:
                     if (currentCameraIndex == 0)
                     {
-                        MoveDirection.y += 1.0f;
+                        // MoveDirection.y += 1.0f;
+                        //const float delta = 1.0f / 61.0f;
+                        //s_gc.terrainTextureOffset.y += delta;
                     }
                     else
                     {
@@ -5003,9 +5009,17 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_a:
                     MoveDirection.x += 1.0f;
+                    {
+                        //const float delta = 1.0f / 61.0f;
+                        //s_gc.terrainTextureOffset.x -= delta;
+                    }
                     break;
                 case SDLK_d:
                     MoveDirection.x -= 1.0f;
+                    {
+                        //const float delta = 1.0f / 61.0f;
+                        //s_gc.terrainTextureOffset.x += delta;
+                    }
                     break;
                 case SDLK_c:
                     {
@@ -5041,6 +5055,30 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                                     primitive.MaterialId = s_gc.terrainMaterialIndex;
                                 }
                             }
+                        }
+                    }
+                    break;
+                case SDLK_o:
+                    {
+                        if(shiftDown)
+                        {
+                            s_gc.terrainTextureOffset.x += 0.01f;
+                        }
+                        else
+                        {
+                            s_gc.terrainTextureOffset.x -= 0.01f;
+                        }
+                    }
+                    break;
+                case SDLK_p:
+                    {
+                        if(shiftDown)
+                        {
+                            s_gc.terrainTextureOffset.y += 0.01f;
+                        }
+                        else
+                        {
+                            s_gc.terrainTextureOffset.y -= 0.01f;
                         }
                     }
                     break;
@@ -5130,7 +5168,7 @@ void InitTerrain()
     InitModel("61x61plane.glb", s_gc.terrain, 0);
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f);
+    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f, float2{ 61, 61 });
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
@@ -5236,7 +5274,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    auto trans = float4x4::Translation(s_gc.terrainMovement);
+    s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / 61.0f;
+    s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / 61.0f;
+
+    auto trans = float4x4::Translation( 0.0f, -90.0f, 0.0 ); // float4x4::Translation(s_gc.terrainMovement);
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
     //CameraView = trans * CameraRotationMatrix;
@@ -6663,6 +6704,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_INSTANCING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
+
+                ri.TerrainTextureOffset = s_gc.terrainTextureOffset;
 
                 const std::string showPlanet = "Earth-like";
 

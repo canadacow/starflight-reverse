@@ -28,7 +28,7 @@ public:
 
     void CreateBuffers();
 
-    void GeneratePlanes(float width, float height, float tileHeight);
+    void GeneratePlanes(float width, float height, float tileHeight, float2 textureSize);
 
     const std::vector<SF_GLTF::Material>& GetMaterials() const override
     {

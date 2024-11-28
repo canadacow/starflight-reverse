@@ -1018,7 +1018,7 @@ void SF_PBR_Renderer::CreateSignature()
         SignatureDesc.AddImmutableSampler(SHADER_TYPE_PIXEL, "g_LinearClampSampler", Sam_LinearClamp);
         Samplers.emplace("g_LinearClampSampler");
 
-        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap_sampler", Sam_LinearClamp);
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap_sampler", Sam_LinearMirror);
         Samplers.emplace("g_Heightmap_sampler");
     }
 
