@@ -452,8 +452,10 @@ struct GraphicsContext
     };
 
     float3 terrainDelta{};
-    float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
+    //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
+    float3 terrainMovement = { 354.0f, -15.0f, 208.0f };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
+    float2 terrainSize = {};
 
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
@@ -3358,7 +3360,7 @@ struct PSOutput
     return PSMainInfo;
 }
 
-static void InitHeightmap()
+static float2 InitHeightmap()
 {
     /*
     const int8_t image[9][9] = {
@@ -3376,16 +3378,43 @@ static void InitHeightmap()
     static constexpr MapHeight = 9;
     */
 
-    #include "map.h"
-    static constexpr int MapWidth = 61;
-    static constexpr int MapHeight = 61;
+    std::vector<unsigned char> image;
+    unsigned MapWidth, MapHeight;
+    unsigned error = lodepng::decode(image, MapWidth, MapHeight, "lofi_earth.png", LCT_GREY, 8);
+    if (error)
+    {
+        printf("decoder error %d, %s loading lofi_earth.png\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    auto convertToHeightValue = [](unsigned char val) {
+        if (val == 0) {
+            return (unsigned char)0xf0; // Water
+        }
+        
+        float normalized_val = static_cast<float>(val) / 255.0f;
+        int height_val = static_cast<int>(normalized_val * 8.0f);
+        
+        if (height_val > 6) {
+            height_val = 6;
+        }
+        
+        height_val += 1;
+        height_val <<= 4;
+        
+        return (unsigned char)height_val;
+    };
+
+    std::transform(image.begin(), image.end(), image.begin(), convertToHeightValue);
+
+    int8_t* ptr = (int8_t*)image.data();
 
     std::vector<float> dummyHeightmap(MapWidth * MapHeight);
     for (int y = 0; y < MapHeight; ++y)
     {
         for (int x = 0; x < MapWidth; ++x)
         {
-            dummyHeightmap[y * MapWidth + x] = static_cast<float>(image[y][x] + 16) / 8.0f;
+            dummyHeightmap[y * MapWidth + x] = static_cast<float>(ptr[y * MapWidth + x] + 16) / 8.0f;
         }
     }
 
@@ -3417,6 +3446,8 @@ static void InitHeightmap()
 
     StateTransitionDesc HeightmapTransitionDesc = {s_gc.heightmap, RESOURCE_STATE_COPY_DEST, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE};
     s_gc.m_pImmediateContext->TransitionResourceStates(1, &HeightmapTransitionDesc);
+
+    return float2((float)MapWidth, (float)MapHeight);
 }   
 
 static void InitPBRRenderer(ITextureView* shadowMap)
@@ -4974,7 +5005,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_w:
                     if (currentCameraIndex == 0)
                     {
-                        //MoveDirection.y -= 1.0f;
+                        MoveDirection.y += 1.0f;
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.y -= delta;
                     }
@@ -4986,7 +5017,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_s:
                     if (currentCameraIndex == 0)
                     {
-                        // MoveDirection.y += 1.0f;
+                         MoveDirection.y -= 1.0f;
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.y += delta;
                     }
@@ -5008,14 +5039,14 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     }
                     break;
                 case SDLK_a:
-                    MoveDirection.x += 1.0f;
+                    MoveDirection.x -= 1.0f;
                     {
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.x -= delta;
                     }
                     break;
                 case SDLK_d:
-                    MoveDirection.x -= 1.0f;
+                    MoveDirection.x += 1.0f;
                     {
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.x += delta;
@@ -5167,8 +5198,10 @@ void InitTerrain()
 {
     InitModel("61x61plane.glb", s_gc.terrain, 0);
 
+    s_gc.terrainSize = InitHeightmap();
+
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f, float2{ 61, 61 });
+    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f, s_gc.terrainSize );
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
@@ -5274,10 +5307,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / 61.0f;
-    s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / 61.0f;
+    s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
+    s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    auto trans = float4x4::Translation( 0.0f, -90.0f, 0.0 ); // float4x4::Translation(s_gc.terrainMovement);
+    auto trans = float4x4::Translation( 0.0f, -40.0f, 0.0 ); // float4x4::Translation(s_gc.terrainMovement);
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
     //CameraView = trans * CameraRotationMatrix;
@@ -6146,8 +6179,6 @@ void InitializeCommonResources()
 
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::CameraAttribs), "Camera Attribs CB", &s_gc.pcbCameraAttribs);
     CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::LightAttribs), "Light Attribs CB", &s_gc.pcbLightAttribs);
-
-    InitHeightmap();
 
     BufferDesc SBDesc;
     SBDesc.Name           = "PBR instance attribs SB";

@@ -241,7 +241,7 @@ void main(in  VSInput  VSIn,
     #endif
 
     VSOut.UV2 = VSIn.UV0;
-    VSOut.UV0 = frac(megaUV * 9.0);
+    VSOut.UV0 = float2(frac(megaUV.x * 9.0 * 38.0), frac(megaUV.y * 9.0 * 14.9));
     VSOut.UV1 = megaUV;
 
 #endif // USE_TERRAINING
