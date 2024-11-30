@@ -480,6 +480,10 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> heightmapAttribsCB;
     RefCntAutoPtr<ITexture> heightmap;
     RefCntAutoPtr<ITextureView> heightmapView;
+
+    int2 heightmapSize;
+    std::vector<float> heightmapData;
+
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<Bloom> bloom;
     std::unique_ptr<ScreenSpaceAmbientOcclusion> ssao;
@@ -640,7 +644,7 @@ private:
 
     RefCntAutoPtr<IBuffer>                                          m_LightAttribsCB;
     std::vector<Uint32>                                             m_PSOIndex;
-    std::array<RefCntAutoPtr<IPipelineState>, 2>                    m_RenderMeshShadowPSO;
+    std::array<RefCntAutoPtr<IPipelineState>, 3>                    m_RenderMeshShadowPSO;
     std::vector<std::vector<RefCntAutoPtr<IShaderResourceBinding>>> m_ShadowSRBs;
 
     RefCntAutoPtr<IRenderStateNotationLoader> m_pRSNLoader;
@@ -791,21 +795,6 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const HLSL::CameraAttribs& cameraAttribs,
                          const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams)
 {
-#if 0
-    RefCntAutoPtr<IPipelineState> pPSO;
-
-    if(RenderParams.Flags & SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING)
-    {
-        pPSO = m_RenderMeshShadowPSO[1];
-    }
-    else
-    {
-        pPSO = m_RenderMeshShadowPSO[0];
-    }
-
-    pCtx->SetPipelineState(pPSO);
-#endif
-
     // Iterate through each scene node
     for (const auto& Scene : GLTFModel.GetScenes())
     {
@@ -917,7 +906,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
 void ShadowMap::Initialize()
 {
-    for (int shaderInit = 0; shaderInit < 2; ++shaderInit)
+    for (int shaderInit = 0; shaderInit < 3; ++shaderInit)
     {
         GraphicsPipelineStateCreateInfo PSOCreateInfo{};
 
@@ -935,6 +924,10 @@ void ShadowMap::Initialize()
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearMirror);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+        }
+        else if (shaderInit == 2)
+        {
+            ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
         }
 
         PSOCreateInfo.PSODesc.Name = "Mesh Shadow PSO";
@@ -973,7 +966,7 @@ void ShadowMap::Initialize()
         Macros.AddShaderMacro("FILTER_ACROSS_CASCADES", true);
         Macros.AddShaderMacro("BEST_CASCADE_SEARCH", true);
         Macros.AddShaderMacro("SHADOW_PASS", true);
-        Macros.AddShaderMacro("USE_INSTANCING", shaderInit == 1);
+        Macros.AddShaderMacro("USE_INSTANCING", shaderInit >= 1);
         Macros.AddShaderMacro("USE_HEIGHTMAP", shaderInit == 1);
         Macros.AddShaderMacro("USE_TERRAINING", shaderInit == 1);
 
@@ -1042,6 +1035,10 @@ void ShadowMap::Initialize()
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
+        }
+        else if (shaderInit == 2)
+        {
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
         }
 
         //pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbHeightmapAttribs")->Set(s_gc.heightmapAttribsCB);
@@ -3409,12 +3406,14 @@ static float2 InitHeightmap()
 
     int8_t* ptr = (int8_t*)image.data();
 
-    std::vector<float> dummyHeightmap(MapWidth * MapHeight);
+    s_gc.heightmapSize = int2(MapWidth, MapHeight);
+    s_gc.heightmapData.resize(MapWidth * MapHeight);
+
     for (int y = 0; y < MapHeight; ++y)
     {
         for (int x = 0; x < MapWidth; ++x)
         {
-            dummyHeightmap[y * MapWidth + x] = static_cast<float>(ptr[y * MapWidth + x] + 16) / 8.0f;
+            s_gc.heightmapData[y * MapWidth + x] = static_cast<float>(ptr[y * MapWidth + x] + 16) / 8.0f;
         }
     }
 
@@ -3439,7 +3438,7 @@ static float2 InitHeightmap()
     UpdateBox.MaxZ = 1;
 
     TextureSubResData SubresData;
-    SubresData.pData = dummyHeightmap.data();
+    SubresData.pData = s_gc.heightmapData.data();
     SubresData.Stride = HeightmapTexDesc.Width * sizeof(float);
 
     s_gc.m_pImmediateContext->UpdateTexture(s_gc.heightmap, 0, 0, UpdateBox, SubresData, RESOURCE_STATE_TRANSITION_MODE_NONE, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -5235,16 +5234,18 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
 
+    double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
+
+    s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
+    s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
+    s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
+
     SF_GLTF::TerrainItem rover { "Rover", float3{ 0.0f, 10.0f, -1.5f }, Quaternion<float>{} };
     SF_GLTF::TerrainItem ruin  { "AncientRuin", float3{ -4.0f, 9.8f, 0.0f }, Quaternion<float>{} };
     SF_GLTF::TerrainItem endurium { "Endurium", float3{ 0.0f, 9.8f, 3.0f }, Quaternion<float>{} };
     SF_GLTF::TerrainItem recentRuin { "RecentRuin", float3{ 4.0f, 9.8f, 15.0f }, Quaternion<float>{} };
 
     s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin });
-
-    double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
-
-    s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
@@ -5306,9 +5307,6 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     // We need to inverse the Z axis as our camera looks towards +Z.
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
-
-    s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
-    s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
     auto trans = float4x4::Translation( 0.0f, -40.0f, 0.0 ); // float4x4::Translation(s_gc.terrainMovement);
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;

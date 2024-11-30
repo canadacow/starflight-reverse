@@ -343,8 +343,20 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems)
 
             ourNode.Name = it->Name;
             ourNode.pMesh = it->pMesh;
-            ourNode.Translation = item.position;
-            ourNode.Rotation = item.rotation;
+            ourNode.Translation = float3{0.0f, 0.0f, 0.0f};
+            ourNode.Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
+
+            NodeInstance ni;
+
+            float4x4 translationMatrix = float4x4::Translation(item.position.x, item.position.y, item.position.z);
+            float4x4 rotationMatrix = item.rotation.ToMatrix();
+            ni.NodeMatrix = translationMatrix * rotationMatrix;
+
+            ni.ScaleX = 1.0f;
+            ni.ScaleY = 1.0f;
+            ni.OffsetX = 0.0f;
+            ni.OffsetY = 0.0f;
+            ourNode.Instances.push_back(ni);
 
             Nodes.emplace_back(ourNode);
             Scenes[0].LinearNodes.push_back(&Nodes.back());

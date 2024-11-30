@@ -571,6 +571,34 @@ PSOutput main(in VSOutput VSOut,
 #endif
 
 #if USE_TERRAINING
+
+/*
+    float noiseSample = g_Noise.Sample(g_Noise_sampler, VSOut.UV1).r;
+
+    // Use noise to create a natural-looking tree distribution pattern
+    float treeThreshold = 0.7; // Adjust this to control tree density
+    float heightThreshold = 0.4; // Don't place trees below this height (water level)
+    float slopeThreshold = 0.8; // Don't place trees on steep slopes
+    
+    // Get the terrain height and slope from the normal
+    float terrainHeight = VSOut.Height;
+    float slope = abs(dot(normalize(VSOut.Normal), float3(0, 1, 0)));
+    
+    // Create variation in tree placement
+    float treeNoise = noiseSample * (1.0 - slope); // Less trees on slopes
+    
+    // Only place trees above height threshold and below slope threshold
+    if (terrainHeight > heightThreshold && slope > slopeThreshold && treeNoise > treeThreshold) {
+        // Add a green tint for trees
+        float3 treeColor = float3(0.2, 0.5, 0.1);
+        OutColor.rgb = lerp(OutColor.rgb, treeColor, 0.5);
+    }
+    */
+
+    // Create 3x3 grid from UV2 coordinates
+    //float2 cell = floor(VSOut.UV2 * 3.0);
+    //OutColor.rgb = float3(cell.x / 3.0, cell.y / 3.0, 0.0); // Yellow
+
     OutColor.rgb *= BaseColor.a;
 
 #else
