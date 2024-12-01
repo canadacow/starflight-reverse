@@ -451,11 +451,11 @@ struct GraphicsContext
         bool rightDown;
     };
 
-    const float TileSize = 4.0f;    
+    static inline const float TileSize = 4.0f;    
 
     float3 terrainDelta{};
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
-    float3 terrainMovement = { 354.0f * TileSize, -40.0f, 208.0f * TileSize };
+    float3 terrainMovement = { 388.0f * TileSize, -40.0f, 245.0f * TileSize };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
 
@@ -5055,7 +5055,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_c:
                     {
-                        s_gc.terrainMovement = {};
+                        s_gc.terrainMovement = { 388.0f * GraphicsContext::TileSize, -40.0f, 245.0f * GraphicsContext::TileSize };
                         s_gc.terrainFPVRotation = float4x4::Identity();
                         s_gc.FPVyawAngle = 0.0f;
                         s_gc.FPVpitchAngle = 0.0f;
@@ -5242,13 +5242,13 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover { "Rover", float3{ 0.0f, 10.0f, -1.5f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem ruin  { "AncientRuin", float3{ -4.0f, 9.8f, 0.0f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem endurium { "Endurium", float3{ 0.0f, 9.8f, 3.0f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem recentRuin { "RecentRuin", float3{ 4.0f, 9.8f, 15.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem rover{ "Rover", int2{388, 245}, float2{ 0.0f, -1.5f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", int2{387, 245}, float2{ 0.0f, 0.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem endurium{ "Endurium", int2{388, 246}, float2{ 0.0f, -1.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", int2{388, 252}, float2{ 0.0f, -1.0f }, Quaternion<float>{} };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
-    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin });
+    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin }, s_gc.heightmapData);
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
@@ -5311,7 +5311,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    auto trans = float4x4::Translation(s_gc.terrainMovement);
+    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, s_gc.terrainMovement.y, -s_gc.terrainMovement.z);
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
     //CameraView = trans * CameraRotationMatrix;

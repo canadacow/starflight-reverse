@@ -357,9 +357,9 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
             auto& instance = node.Instances[instanceIdx];
 
             float3 translation = float3{
-                (float)tile.x * -m_TileSize.x,
+                (float)tile.x * m_TileSize.x,
                 0.0f,
-                (float)tile.y * -m_TileSize.y
+                (float)tile.y * m_TileSize.y
             };
 
             instance.NodeMatrix = float4x4::Translation(translation);
@@ -375,7 +375,104 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     }
 }
 
-void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems)
+float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, int mode /* 0 == nearest, 1 == bicubic*/)
+{
+    if(mode == 0)
+    {
+        // Convert tile position to texture coordinates
+        int x = tilePosition.x;
+        int y = tilePosition.y;
+
+        // Mirror coordinates by taking absolute value and modulo texture size
+        x = std::abs(x) % static_cast<int>(m_TextureSize.x); 
+        y = std::abs(y) % static_cast<int>(m_TextureSize.y);
+
+        // Point sample from terrain heightmap
+        size_t index = y * static_cast<size_t>(m_TextureSize.x) + x;
+        
+        // Return height value if terrain data exists
+        if (!terrain.empty() && index < terrain.size()) {
+            return terrain[index];
+        }
+        
+        return 0.0f;
+    }
+    else
+    {
+        // Convert tile position to texture coordinates
+        float x = static_cast<float>(tilePosition.x);
+        float y = static_cast<float>(tilePosition.y);
+
+        // Mirror coordinates by taking absolute value and modulo texture size
+        x = std::fabs(std::fmod(x, m_TextureSize.x));
+        y = std::fabs(std::fmod(y, m_TextureSize.y));
+
+        // Get integer coordinates
+        int x0 = static_cast<int>(std::floor(x - 1));
+        int x1 = static_cast<int>(std::floor(x));
+        int x2 = static_cast<int>(std::floor(x + 1)); 
+        int x3 = static_cast<int>(std::floor(x + 2));
+
+        int y0 = static_cast<int>(std::floor(y - 1));
+        int y1 = static_cast<int>(std::floor(y));
+        int y2 = static_cast<int>(std::floor(y + 1));
+        int y3 = static_cast<int>(std::floor(y + 2));
+
+        // Ensure coordinates wrap around texture edges
+        x0 = std::abs(x0) % static_cast<int>(m_TextureSize.x);
+        x1 = std::abs(x1) % static_cast<int>(m_TextureSize.x);
+        x2 = std::abs(x2) % static_cast<int>(m_TextureSize.x);
+        x3 = std::abs(x3) % static_cast<int>(m_TextureSize.x);
+
+        y0 = std::abs(y0) % static_cast<int>(m_TextureSize.y);
+        y1 = std::abs(y1) % static_cast<int>(m_TextureSize.y);
+        y2 = std::abs(y2) % static_cast<int>(m_TextureSize.y);
+        y3 = std::abs(y3) % static_cast<int>(m_TextureSize.y);
+
+        // Get fractional parts
+        float fx = x - std::floor(x);
+        float fy = y - std::floor(y);
+
+        // Simple bicubic weights
+        float wx0 = -0.5f * fx + fx * fx - 0.5f * fx * fx * fx;
+        float wx1 = 1.0f - 2.5f * fx * fx + 1.5f * fx * fx * fx;
+        float wx2 = 0.5f * fx + 2.0f * fx * fx - 1.5f * fx * fx * fx;
+        float wx3 = -0.5f * fx * fx + 0.5f * fx * fx * fx;
+
+        float wy0 = -0.5f * fy + fy * fy - 0.5f * fy * fy * fy;
+        float wy1 = 1.0f - 2.5f * fy * fy + 1.5f * fy * fy * fy;
+        float wy2 = 0.5f * fy + 2.0f * fy * fy - 1.5f * fy * fy * fy;
+        float wy3 = -0.5f * fy * fy + 0.5f * fy * fy * fy;
+
+        float result = 0.0f;
+        if (!terrain.empty()) {
+            size_t width = static_cast<size_t>(m_TextureSize.x);
+            result += terrain[y0 * width + x0] * wx0 * wy0;
+            result += terrain[y0 * width + x1] * wx1 * wy0;
+            result += terrain[y0 * width + x2] * wx2 * wy0;
+            result += terrain[y0 * width + x3] * wx3 * wy0;
+            
+            result += terrain[y1 * width + x0] * wx0 * wy1;
+            result += terrain[y1 * width + x1] * wx1 * wy1;
+            result += terrain[y1 * width + x2] * wx2 * wy1;
+            result += terrain[y1 * width + x3] * wx3 * wy1;
+            
+            result += terrain[y2 * width + x0] * wx0 * wy2;
+            result += terrain[y2 * width + x1] * wx1 * wy2;
+            result += terrain[y2 * width + x2] * wx2 * wy2;
+            result += terrain[y2 * width + x3] * wx3 * wy2;
+            
+            result += terrain[y3 * width + x0] * wx0 * wy3;
+            result += terrain[y3 * width + x1] * wx1 * wy3;
+            result += terrain[y3 * width + x2] * wx2 * wy3;
+            result += terrain[y3 * width + x3] * wx3 * wy3;
+        }
+
+        return result;
+    }
+}
+
+void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::vector<float>& terrain)
 {
     ClearTerrainItems();
 
@@ -397,7 +494,17 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems)
 
             NodeInstance ni;
 
-            float4x4 translationMatrix = float4x4::Translation(item.position.x, item.position.y, item.position.z);
+            float height = sampleTerrain(terrain, item.tilePosition, 1);
+
+            float3 worldOffset = float3{
+                ((float)item.tilePosition.x + 0.5f) * m_TileSize.x,
+                height,
+                ((float)item.tilePosition.y + 0.5f) * m_TileSize.y
+            };
+
+            worldOffset += float3(item.worldOffset.x, 0, item.worldOffset.y);
+
+            float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
             ni.NodeMatrix = translationMatrix * rotationMatrix;
 

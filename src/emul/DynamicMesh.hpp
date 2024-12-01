@@ -12,7 +12,8 @@ namespace SF_GLTF
 struct TerrainItem
 {
     std::string name;
-    float3 position;
+    int2 tilePosition;
+    float2 worldOffset;
     Quaternion<float> rotation;
 };
 
@@ -41,7 +42,7 @@ public:
     }
 
     void ReplaceTerrain(const float3& terrainMovement);
-    void SetTerrainItems(const TerrainItems& terrainItems);
+    void SetTerrainItems(const TerrainItems& terrainItems, const std::vector<float>& terrain);
     void ClearTerrainItems();
 
     virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
@@ -68,6 +69,8 @@ private:
     float2 m_TextureSize = { 1024.0f, 1024.0f };
     
     void InitializeVertexAndIndexData();
+
+    float sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, int mode);
 
     struct VertexBuff
     {
