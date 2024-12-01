@@ -375,7 +375,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     }
 }
 
-float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePosition)
+float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, float4x4* outTerrainSlope)
 {
     // terrain is actually (m_TextureSize.x + 1, m_TextureSize.y + 1)
     // terrain represents the bounds of each individual tile
@@ -399,6 +399,39 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePos
     float h2 = terrain[tilePosition.y * (m_TextureSize.x + 1) + (tilePosition.x + 1)];
     float h3 = terrain[(tilePosition.y + 1) * (m_TextureSize.x + 1) + tilePosition.x];
     float h4 = terrain[(tilePosition.y + 1) * (m_TextureSize.x + 1) + (tilePosition.x + 1)];
+
+    if(outTerrainSlope)
+    {
+        // Calculate normal vector from cross product of two edges
+        float3 v1 = float3(m_TileSize.x, h2 - h1, 0.0f);
+        float3 v2 = float3(0.0f, h3 - h1, m_TileSize.y);
+        
+        float3 normal = normalize(cross(v2, v1));
+        
+        // Create rotation matrix that aligns y-axis with normal
+        float3 up = float3(0.0f, 1.0f, 0.0f);
+        float3 axis = cross(up, normal);
+        float angle = -acos(dot(up, normal));
+        
+        // Convert axis-angle to rotation matrix
+        if (length(axis) < 0.0001f) {
+            // Normal is nearly parallel to up vector, no rotation needed
+            *outTerrainSlope = float4x4::Identity();
+        }
+        else {
+            axis = normalize(axis);
+            float c = cos(angle);
+            float s = sin(angle);
+            float t = 1.0f - c;
+
+            *outTerrainSlope = float4x4(
+                t*axis.x*axis.x + c,      t*axis.x*axis.y - s*axis.z, t*axis.x*axis.z + s*axis.y, 0.0f,
+                t*axis.x*axis.y + s*axis.z, t*axis.y*axis.y + c,      t*axis.y*axis.z - s*axis.x, 0.0f, 
+                t*axis.x*axis.z - s*axis.y, t*axis.y*axis.z + s*axis.x, t*axis.z*axis.z + c,      0.0f,
+                0.0f,                       0.0f,                       0.0f,                     1.0f
+            );
+        }
+    }
 
     return (h1 + h2 + h3 + h4) / 4.0f;
 }
@@ -424,8 +457,10 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
             ourNode.Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
 
             NodeInstance ni;
+            float4x4 terrainSlope = float4x4::Identity();
+            float4x4* terrainSlopePtr = item.alignToTerrain ? &terrainSlope : nullptr;
 
-            float height = sampleTerrain(terrain, item.tilePosition);
+            float height = sampleTerrain(terrain, item.tilePosition, terrainSlopePtr);
 
             float3 worldOffset = float3{
                 ((float)item.tilePosition.x + 0.5f) * m_TileSize.x,
@@ -437,7 +472,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
 
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
-            ni.NodeMatrix = translationMatrix * rotationMatrix;
+            ni.NodeMatrix = terrainSlope * translationMatrix * rotationMatrix;
 
             ni.ScaleX = 1.0f;
             ni.ScaleY = 1.0f;

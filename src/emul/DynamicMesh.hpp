@@ -15,6 +15,7 @@ struct TerrainItem
     int2 tilePosition;
     float2 worldOffset;
     Quaternion<float> rotation;
+    bool alignToTerrain = false;
 };
 
 typedef std::vector<TerrainItem> TerrainItems;
@@ -70,7 +71,7 @@ private:
     
     void InitializeVertexAndIndexData();
 
-    float sampleTerrain(const std::vector<float>& terrain, int2 tilePosition);
+    float sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, float4x4* outTerrainSlope);
 
     struct VertexBuff
     {
