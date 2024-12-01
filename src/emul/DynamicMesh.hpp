@@ -40,6 +40,7 @@ public:
         return m_Model->GetMaterials();
     }
 
+    void ReplaceTerrain(const float3& terrainMovement);
     void SetTerrainItems(const TerrainItems& terrainItems);
     void ClearTerrainItems();
 
@@ -63,7 +64,9 @@ public:
 private:
 
     const int numBigTiles = 61;
-
+    float2 m_TileSize = { 4.0f, 4.0f };
+    float2 m_TextureSize = { 1024.0f, 1024.0f };
+    
     void InitializeVertexAndIndexData();
 
     struct VertexBuff

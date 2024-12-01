@@ -97,6 +97,8 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, fl
     const int numTiles = 8;
     const int numVerticesPerRow = numTiles + 1;
     const int numVertices = numVerticesPerRow * numVerticesPerRow;
+    m_TileSize = float2{ width, height };
+    m_TextureSize = textureSize;
 
     m_Vertices.resize(numVertices); // 4 coordinates per vertex (x, y, z, padding)
     m_Indices.resize(numTiles * numTiles * 6); // 6 indices per tile (2 triangles)
@@ -324,6 +326,53 @@ void DynamicMesh::InitializeVertexAndIndexData()
 
     NumTextureAttributes = m_Model->GetNumTextureAttributes();
     TextureAttributes = m_Model->TextureAttributes;
+}
+
+// Takes world space coordinates and generates an amalgamation of terrain tiles underneath the coordinates
+// with UVs that map to the terrain heightmap
+void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
+{
+    auto& node = Nodes[0];
+
+    // Calculate the size of the entire grid of tiles
+    float totalWidth = numBigTiles * m_TileSize.x;
+    float totalHeight = numBigTiles * m_TileSize.y;
+    
+    // Find the center tile coordinate by rounding camera position to the nearest tile grid
+    int2 centerTile = int2{
+        static_cast<int>(std::round(terrainMovement.x / m_TileSize.x)),
+        static_cast<int>(std::round(terrainMovement.z / m_TileSize.y))
+    };
+
+    int2 ulTile = centerTile - int2{numBigTiles / 2, numBigTiles / 2};
+
+    size_t instanceIdx = 0;
+    for (int i = 0; i < numBigTiles; ++i)
+    {
+        for (int j = 0; j < numBigTiles; ++j)
+        {
+            int2 tile = ulTile + int2{i, j};
+            
+            // Update the instance matrix while preserving UV mappings
+            auto& instance = node.Instances[instanceIdx];
+
+            float3 translation = float3{
+                (float)tile.x * -m_TileSize.x,
+                0.0f,
+                (float)tile.y * -m_TileSize.y
+            };
+
+            instance.NodeMatrix = float4x4::Translation(translation);
+            
+            // Update UV scale/offset to match the new world position
+            instance.ScaleX = 1.0f / m_TextureSize.x;
+            instance.ScaleY = 1.0f / m_TextureSize.y;
+            instance.OffsetX = (float)tile.x / m_TextureSize.x;
+            instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            
+            instanceIdx++;
+        }
+    }
 }
 
 void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems)

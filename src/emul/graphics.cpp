@@ -451,9 +451,11 @@ struct GraphicsContext
         bool rightDown;
     };
 
+    const float TileSize = 4.0f;    
+
     float3 terrainDelta{};
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
-    float3 terrainMovement = { 354.0f, -15.0f, 208.0f };
+    float3 terrainMovement = { 354.0f * TileSize, -40.0f, 208.0f * TileSize };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
 
@@ -5237,14 +5239,15 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
     s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
-    s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
-    s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
+    //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
+    //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
     SF_GLTF::TerrainItem rover { "Rover", float3{ 0.0f, 10.0f, -1.5f }, Quaternion<float>{} };
     SF_GLTF::TerrainItem ruin  { "AncientRuin", float3{ -4.0f, 9.8f, 0.0f }, Quaternion<float>{} };
     SF_GLTF::TerrainItem endurium { "Endurium", float3{ 0.0f, 9.8f, 3.0f }, Quaternion<float>{} };
     SF_GLTF::TerrainItem recentRuin { "RecentRuin", float3{ 4.0f, 9.8f, 15.0f }, Quaternion<float>{} };
 
+    s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
     s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin });
 
     float4x4 RotationMatrixCam = float4x4::Identity();
@@ -5308,7 +5311,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    auto trans = float4x4::Translation( 0.0f, -40.0f, 0.0 ); // float4x4::Translation(s_gc.terrainMovement);
+    auto trans = float4x4::Translation(s_gc.terrainMovement);
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
     //CameraView = trans * CameraRotationMatrix;
