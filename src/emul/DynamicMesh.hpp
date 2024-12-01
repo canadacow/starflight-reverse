@@ -70,7 +70,7 @@ private:
     
     void InitializeVertexAndIndexData();
 
-    float sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, int mode);
+    float sampleTerrain(const std::vector<float>& terrain, int2 tilePosition);
 
     struct VertexBuff
     {
