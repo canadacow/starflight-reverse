@@ -494,7 +494,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
 
             NodeInstance ni;
 
-            float height = sampleTerrain(terrain, item.tilePosition, 1);
+            float height = sampleTerrain(terrain, item.tilePosition, 0);
 
             float3 worldOffset = float3{
                 ((float)item.tilePosition.x + 0.5f) * m_TileSize.x,

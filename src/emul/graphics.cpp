@@ -5242,10 +5242,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover{ "Rover", int2{388, 245}, float2{ 0.0f, -1.5f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem ruin{ "AncientRuin", int2{387, 245}, float2{ 0.0f, 0.0f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem endurium{ "Endurium", int2{388, 246}, float2{ 0.0f, -1.0f }, Quaternion<float>{} };
-    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", int2{388, 252}, float2{ 0.0f, -1.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem rover{ "Rover", int2{389, 245}, float2{ 0.0f, -1.5f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", int2{388, 245}, float2{ 0.0f, 0.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem endurium{ "Endurium", int2{389, 246}, float2{ 0.0f, -1.0f }, Quaternion<float>{} };
+    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", int2{389, 249}, float2{ 0.0f, -1.0f }, Quaternion<float>{} };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
     s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin }, s_gc.heightmapData);
