@@ -120,6 +120,7 @@ private:
     std::vector<VertexBuff> m_Vertices;
     std::vector<Uint32> m_Indices;
     std::shared_ptr<SF_GLTF::Mesh> m_Mesh;
+    BoundBox m_TileBB;
 
     bool m_GPUDataInitialized = false;
 };

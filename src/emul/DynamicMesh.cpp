@@ -62,7 +62,11 @@ void DynamicMesh::ComputeTransforms(Uint32           SceneIndex,
 
 BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::ModelTransforms& Transforms, const SF_GLTF::ModelTransforms* DynamicTransforms) const
 {
+#if 0
     BoundBox ModelAABB;
+
+    ModelAABB.Min = float3{ std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
+    ModelAABB.Max = float3{ std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest() };
 
     // Measure the nodes on this object directly
     if (CompatibleWithTransforms(*DynamicTransforms))
@@ -78,6 +82,18 @@ BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::Model
                 const auto& GlobalMatrix = DynamicTransforms->NodeGlobalMatrices[pN->Index];
                 const auto  NodeAABB     = pN->pMesh->BB.Transform(GlobalMatrix);
 
+                // If this node has instances, transform the AABB for each instance
+                if (!pN->Instances.empty())
+                {
+                    for (const auto& instance : pN->Instances)
+                    {
+                        const auto InstanceAABB = NodeAABB.Transform(instance.NodeMatrix);
+                        ModelAABB.Min = min(ModelAABB.Min, InstanceAABB.Min);
+                        ModelAABB.Max = max(ModelAABB.Max, InstanceAABB.Max);
+                    }
+                    continue; // Skip adding the original node AABB since we've handled all instances
+                }
+
                 ModelAABB.Min = std::min(ModelAABB.Min, NodeAABB.Min);
                 ModelAABB.Max = std::max(ModelAABB.Max, NodeAABB.Max);
             }
@@ -89,7 +105,8 @@ BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::Model
     }
 
     return ModelAABB;
-
+#endif
+    return m_Mesh->BB;
 }
 
 void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, float2 textureSize)
@@ -180,6 +197,9 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, fl
 
     auto& node = Nodes[0];
     node.pMesh = m_Mesh.get();
+
+    m_TileBB.Min = minBB;
+    m_TileBB.Max = maxBB;
 
     float3 baseMinBB = minBB;
     float3 baseMaxBB = maxBB;
@@ -346,6 +366,12 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
     int2 ulTile = centerTile - int2{numBigTiles / 2, numBigTiles / 2};
 
+    float3 baseMinBB = m_TileBB.Min;
+    float3 baseMaxBB = m_TileBB.Max;
+
+    float3 minBB = float3{ std::numeric_limits<float>::max() };
+    float3 maxBB = float3{ std::numeric_limits<float>::lowest() };    
+
     size_t instanceIdx = 0;
     for (int i = 0; i < numBigTiles; ++i)
     {
@@ -369,10 +395,48 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
             instance.ScaleY = 1.0f / m_TextureSize.y;
             instance.OffsetX = (float)tile.x / m_TextureSize.x;
             instance.OffsetY = (float)tile.y / m_TextureSize.y;
+
+            float3 minTranslatedPos = baseMinBB * instance.NodeMatrix;
+            float3 maxTranslatedPos = baseMaxBB * instance.NodeMatrix;
+
+            minBB = float3{
+                std::min(minBB.x, minTranslatedPos.x),
+                std::min(minBB.y, minTranslatedPos.y),
+                std::min(minBB.z, minTranslatedPos.z)
+            };
+
+            maxBB = float3{
+                std::max(maxBB.x, maxTranslatedPos.x),
+                std::max(maxBB.y, maxTranslatedPos.y),
+                std::max(maxBB.z, maxTranslatedPos.z)
+            };            
             
             instanceIdx++;
         }
     }
+
+    float yValues[] = { -2.0f, 10.0f };
+
+    for (float y : yValues)
+    {
+        float3 minTranslatedPos = minBB * float4x4::Translation(0.0f, y, 0.0f);
+        float3 maxTranslatedPos = maxBB * float4x4::Translation(0.0f, y, 0.0f);
+
+        minBB = float3{
+            std::min(minBB.x, minTranslatedPos.x),
+            std::min(minBB.y, minTranslatedPos.y),
+            std::min(minBB.z, minTranslatedPos.z)
+        };
+
+        maxBB = float3{
+            std::max(maxBB.x, maxTranslatedPos.x),
+            std::max(maxBB.y, maxTranslatedPos.y),
+            std::max(maxBB.z, maxTranslatedPos.z)
+        };
+    }
+
+    m_Mesh->BB.Min = minBB;
+    m_Mesh->BB.Max = maxBB;    
 }
 
 float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, float4x4* outTerrainSlope)

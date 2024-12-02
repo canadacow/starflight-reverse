@@ -778,9 +778,9 @@ void GLTF_PBR_Renderer::InitMaterialSRB(GLTF::Model&            Model,
 void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>& mesh)
 {
     m_ShadowSRBs.clear();
-    m_ShadowSRBs.resize(2);
+    m_ShadowSRBs.resize(3);
 
-    for (size_t shaderIdx = 0; shaderIdx < 2; ++shaderIdx)
+    for (size_t shaderIdx = 0; shaderIdx < 3; ++shaderIdx)
     {
         m_ShadowSRBs[shaderIdx].resize(mesh->GetMaterials().size());
         for (Uint32 mat = 0; mat < mesh->GetMaterials().size(); ++mat)
@@ -808,7 +808,18 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
             RefCntAutoPtr<IPipelineState> pPSO;
 
-            int shaderIdx = (pNode->isTerrain) ? 1 : 0;
+            int shaderIdx = 0;
+            if(pNode->Instances.size() > 0)
+            {
+                if(pNode->isTerrain)
+                {
+                    shaderIdx = 1;
+                }
+                else
+                {
+                    shaderIdx = 2;
+                }
+            }
 
             pPSO = m_RenderMeshShadowPSO[shaderIdx];
 
@@ -1114,7 +1125,7 @@ static float3 Vec3(const float4& v)
 static float4x4 Orthographic(float left, float right, float bottom, float top, float nearPlane, float farPlane)
 {
     float4x4 orthoMatrix;
-    orthoMatrix._11 = 2.0f / (left - right);
+    orthoMatrix._11 = 2.0f / (right - left);
     orthoMatrix._22 = 2.0f / (top - bottom);
     orthoMatrix._33 = 1.0f / (farPlane - nearPlane);
     orthoMatrix._41 = -(right + left) / (right - left);
@@ -1214,22 +1225,24 @@ struct CascadeMatrices {
      return Result;
  }
 
-CascadeMatrices ComputeCascadeViewProj(const float3& lightDirection, const BoundBox& aabb, const ShadowMap::ShadowSettings& shadowSettings)
+CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs,const float3& lightDirection, const BoundBox& aabb, const ShadowMap::ShadowSettings& shadowSettings)
 {
-    float3 lightPos = float3(0, 0, 0); // Arbitrary position
-    float3 lookAt = lightPos - lightDirection; // Look in direction of light
-    float4x4 WorldToLightView = LookAt(lightPos, lookAt, float3(0.0f, -1.0f, 0.0f));
+    float4x4 WorldToLightView = LookAt(float3(0), -lightDirection, float3(0.0f, 1.0f, 0.0f));
+
+    //float3 cameraPos = float3(-cameraAttribs.f4Position.x, 0.0f, -cameraAttribs.f4Position.z); 
+    //BoundBox box = aabb.Transform(float4x4::Translation(cameraPos));
+    BoundBox box = aabb;
 
     // Get the corners of the model's bounding box
     std::array<float3, 8> corners = {
-        float3(aabb.Min.x, aabb.Min.y, aabb.Min.z),
-        float3(aabb.Max.x, aabb.Min.y, aabb.Min.z),
-        float3(aabb.Min.x, aabb.Max.y, aabb.Min.z),
-        float3(aabb.Max.x, aabb.Max.y, aabb.Min.z),
-        float3(aabb.Min.x, aabb.Min.y, aabb.Max.z),
-        float3(aabb.Max.x, aabb.Min.y, aabb.Max.z),
-        float3(aabb.Min.x, aabb.Max.y, aabb.Max.z),
-        float3(aabb.Max.x, aabb.Max.y, aabb.Max.z)
+        float3(box.Min.x, box.Min.y, box.Min.z),
+        float3(box.Max.x, box.Min.y, box.Min.z),
+        float3(box.Min.x, box.Max.y, box.Min.z),
+        float3(box.Max.x, box.Max.y, box.Min.z),
+        float3(box.Min.x, box.Min.y, box.Max.z),
+        float3(box.Max.x, box.Min.y, box.Max.z),
+        float3(box.Min.x, box.Max.y, box.Max.z),
+        float3(box.Max.x, box.Max.y, box.Max.z)
     };
 
     // Transform the corners to light space
@@ -1278,7 +1291,24 @@ CascadeMatrices ComputeCascadeViewProj(const float3& lightDirection, const Bound
     float4x4 lightProj = Orthographic(minCorner.x, maxCorner.x, minCorner.y, maxCorner.y, maxCorner.z, minCorner.z);
 
     // Return the combined view-projection matrix
-    return {WorldToLightView, WorldToLightView * lightProj, lightProj};
+    CascadeMatrices res = {WorldToLightView, WorldToLightView * lightProj, lightProj};
+
+    {
+        // Test that the center of the bounding box projects to the center of the depth buffer
+        float3 boxCenter = (box.Min + box.Max) * 0.5f;
+        float4 centerViewSpace = float4(boxCenter, 1.0f) * WorldToLightView;
+        float4 centerLightSpace = centerViewSpace * lightProj;
+
+        // Perspective divide to get NDC coordinates
+        float3 centerNDC = float3(centerLightSpace) / centerLightSpace.w;
+        
+        // NDC coordinates should be very close to (0,0,z) since we centered the projection
+        const float epsilon = 0.001f;
+        assert(std::abs(centerNDC.x) < epsilon && "Box center X not at depth buffer center");
+        assert(std::abs(centerNDC.y) < epsilon && "Box center Y not at depth buffer center");
+    }
+
+    return res;
 }
 
 CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAttribs, const float4x4& modelTransform, const BoundBox& aabb, const float3& lightDirection, 
@@ -1289,6 +1319,9 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     //ExtractViewFrustumPlanesFromMatrix(cameraAttribs.mViewProj.Transpose(), Frustum, false);
     //auto box = GetBoxInsideFrustum(Frustum, aabb);
 
+    float3 cameraPos = float3(cameraAttribs.f4Position.x, 0.0f, cameraAttribs.f4Position.z); 
+    //BoundBox box = aabb.Transform(float4x4::Translation(cameraPos));
+
     BoundBox box = aabb;
     box.Min.x = -18.0f;
     box.Max.x = 18.0f;
@@ -1296,8 +1329,9 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     box.Max.z = 18.0f;
 
     box = box.Transform(modelTransform);
+    box = box.Transform(float4x4::Translation(cameraPos));
 
-    CascadeMatrices res = ComputeCascadeViewProj(lightDirection, box, shadowSettings);
+    CascadeMatrices res = ComputeCascadeViewProj(cameraAttribs, lightDirection, box, shadowSettings);
 
     return res;
 }
@@ -1425,7 +1459,7 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
         }
         else
         {
-            cascadeViewProj = ComputeCascadeViewProj(Direction, model.aabb, m_ShadowSettings);
+            cascadeViewProj = ComputeCascadeViewProj(CurrCamAttribs, Direction, model.aabb, m_ShadowSettings);
         }
 
         ShadowCameraAttribs.mViewProj = cascadeViewProj.ViewProj.Transpose();
@@ -5330,7 +5364,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
     SF_GLTF::TerrainItem rover{ "Rover", int2{389, 245}, float2{ 0.0f, -1.5f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ruin{ "AncientRuin", int2{388, 245}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, false };
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", int2{388, 245}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem endurium{ "Endurium", int2{389, 246}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem recentRuin{ "RecentRuin", int2{389, 249}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
 
