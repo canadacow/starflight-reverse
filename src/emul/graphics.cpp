@@ -461,6 +461,8 @@ struct GraphicsContext
 
     float2 tvLocation = {389.0f, 245.0f};
     float2 tvDelta{};
+    Quaternion<float> tvNudge = {};
+    Quaternion<float> tvRotation = {};
 
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
@@ -5241,21 +5243,25 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_t:
                     {
                         s_gc.tvDelta.y = -0.05f;
+                        s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI);
                     }
                     break;
                 case SDLK_g:
                     {
                         s_gc.tvDelta.y = 0.05f;
+                        s_gc.tvNudge = {};
                     }
                     break;
                 case SDLK_f:
                     {
                         s_gc.tvDelta.x = -0.05f;
+                        s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), -PI_F / 2.0f);
                     }
                     break;
                 case SDLK_h:
                     {
                         s_gc.tvDelta.x = 0.05f;
+                        s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI_F / 2.0f);
                     }
                     break;
                 default:
@@ -5385,10 +5391,15 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
     s_gc.tvLocation += s_gc.tvDelta;
+
+    // Smoothly interpolate tvRotation towards tvNudge using a low-pass filter
+    const float rotationLerpFactor = 0.1f;
+    s_gc.tvRotation = slerp(s_gc.tvRotation, s_gc.tvNudge, rotationLerpFactor);
+
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, -1.5f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, -1.5f }, s_gc.tvRotation, true };
     SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };

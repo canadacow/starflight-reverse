@@ -460,6 +460,9 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tileP
                    tilePosition.y >= m_TextureSize.y + 1 ? 2*m_TextureSize.y + 1 - tilePosition.y :
                    tilePosition.y;
 
+    float fx = wrappedPos.x - floor(wrappedPos.x);
+    float fy = wrappedPos.y - floor(wrappedPos.y);                   
+
     // Convert to integer indices for array access
     int x = static_cast<int>(floor(wrappedPos.x));
     int y = static_cast<int>(floor(wrappedPos.y));
@@ -469,6 +472,10 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tileP
     float h2 = terrain[y * (m_TextureSize.x + 1) + (x + 1)];
     float h3 = terrain[(y + 1) * (m_TextureSize.x + 1) + x];
     float h4 = terrain[(y + 1) * (m_TextureSize.x + 1) + (x + 1)];
+
+    float top = h1 * (1.0f - fx) + h2 * fx;
+    float bottom = h3 * (1.0f - fx) + h4 * fx;
+    float height = top * (1.0f - fy) + bottom * fy;     
 
     if(outTerrainSlope)
     {
@@ -542,7 +549,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
 
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
-            ni.NodeMatrix = terrainSlope * translationMatrix * rotationMatrix;
+            ni.NodeMatrix = rotationMatrix * terrainSlope * translationMatrix;
 
             ni.ScaleX = 1.0f;
             ni.ScaleY = 1.0f;
