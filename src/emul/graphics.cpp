@@ -455,9 +455,11 @@ struct GraphicsContext
 
     float3 terrainDelta{};
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
-    float3 terrainMovement = { 388.0f * TileSize, -40.0f, 245.0f * TileSize };
+    float3 terrainMovement = { 389.0f * TileSize, -40.0f, 245.0f * TileSize };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
+
+    float2 tvLocation = {389.0f, 245.0f};
 
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
@@ -5363,10 +5365,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover{ "Rover", int2{389, 245}, float2{ 0.0f, -1.5f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ruin{ "AncientRuin", int2{388, 245}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem endurium{ "Endurium", int2{389, 246}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", int2{389, 249}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem rover{ "Rover", float2{389.0f, 245.0f}, float2{ 0.0f, -1.5f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
     s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin }, s_gc.heightmapDataBicubic);

@@ -439,7 +439,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     m_Mesh->BB.Max = maxBB;    
 }
 
-float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, float4x4* outTerrainSlope)
+float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tilePosition, float4x4* outTerrainSlope)
 {
     // terrain is actually (m_TextureSize.x + 1, m_TextureSize.y + 1)
     // terrain represents the bounds of each individual tile
@@ -451,18 +451,24 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, int2 tilePos
 
     // Wrap coordinates to handle infinite terrain
     // Mirror coordinates by reflecting across texture boundaries
-    tilePosition.x = tilePosition.x < 0 ? -tilePosition.x : 
-                    tilePosition.x >= m_TextureSize.x + 1 ? 2*m_TextureSize.x + 1 - tilePosition.x : 
-                    tilePosition.x;
-    tilePosition.y = tilePosition.y < 0 ? -tilePosition.y :
-                    tilePosition.y >= m_TextureSize.y + 1 ? 2*m_TextureSize.y + 1 - tilePosition.y :
-                    tilePosition.y;
+    // Convert float coordinates to array indices by rounding down
+    float2 wrappedPos;
+    wrappedPos.x = tilePosition.x < 0 ? -tilePosition.x : 
+                   tilePosition.x >= m_TextureSize.x + 1 ? 2*m_TextureSize.x + 1 - tilePosition.x : 
+                   tilePosition.x;
+    wrappedPos.y = tilePosition.y < 0 ? -tilePosition.y :
+                   tilePosition.y >= m_TextureSize.y + 1 ? 2*m_TextureSize.y + 1 - tilePosition.y :
+                   tilePosition.y;
+
+    // Convert to integer indices for array access
+    int x = static_cast<int>(floor(wrappedPos.x));
+    int y = static_cast<int>(floor(wrappedPos.y));
 
     // Sample the center point of the tile by averaging the 4 corners
-    float h1 = terrain[tilePosition.y * (m_TextureSize.x + 1) + tilePosition.x];
-    float h2 = terrain[tilePosition.y * (m_TextureSize.x + 1) + (tilePosition.x + 1)];
-    float h3 = terrain[(tilePosition.y + 1) * (m_TextureSize.x + 1) + tilePosition.x];
-    float h4 = terrain[(tilePosition.y + 1) * (m_TextureSize.x + 1) + (tilePosition.x + 1)];
+    float h1 = terrain[y * (m_TextureSize.x + 1) + x];
+    float h2 = terrain[y * (m_TextureSize.x + 1) + (x + 1)];
+    float h3 = terrain[(y + 1) * (m_TextureSize.x + 1) + x];
+    float h4 = terrain[(y + 1) * (m_TextureSize.x + 1) + (x + 1)];
 
     if(outTerrainSlope)
     {

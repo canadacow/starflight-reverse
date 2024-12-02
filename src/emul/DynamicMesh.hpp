@@ -12,7 +12,7 @@ namespace SF_GLTF
 struct TerrainItem
 {
     std::string name;
-    int2 tilePosition;
+    float2 tilePosition;
     float2 worldOffset;
     Quaternion<float> rotation;
     bool alignToTerrain = false;
@@ -71,7 +71,7 @@ private:
     
     void InitializeVertexAndIndexData();
 
-    float sampleTerrain(const std::vector<float>& terrain, int2 tilePosition, float4x4* outTerrainSlope);
+    float sampleTerrain(const std::vector<float>& terrain, float2 tilePosition, float4x4* outTerrainSlope);
 
     struct VertexBuff
     {
