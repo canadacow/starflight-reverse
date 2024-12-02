@@ -460,6 +460,7 @@ struct GraphicsContext
     float2 terrainSize = {};
 
     float2 tvLocation = {389.0f, 245.0f};
+    float2 tvDelta{};
 
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
@@ -5237,6 +5238,26 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                         }
                     }
                     break;
+                case SDLK_t:
+                    {
+                        s_gc.tvDelta.y = -0.05f;
+                    }
+                    break;
+                case SDLK_g:
+                    {
+                        s_gc.tvDelta.y = 0.05f;
+                    }
+                    break;
+                case SDLK_f:
+                    {
+                        s_gc.tvDelta.x = -0.05f;
+                    }
+                    break;
+                case SDLK_h:
+                    {
+                        s_gc.tvDelta.x = 0.05f;
+                    }
+                    break;
                 default:
                     break;
             }
@@ -5248,6 +5269,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     shiftDown = false;
                 }
                 s_gc.terrainDelta = {};
+                s_gc.tvDelta = {};
             }
             break;
         case SDL_MOUSEMOTION:
@@ -5362,10 +5384,11 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
     s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
+    s_gc.tvLocation += s_gc.tvDelta;
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover{ "Rover", float2{389.0f, 245.0f}, float2{ 0.0f, -1.5f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, -1.5f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
