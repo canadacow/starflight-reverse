@@ -510,7 +510,7 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tileP
         }
     }
 
-    return (h1 + h2 + h3 + h4) / 4.0f;
+    return height;
 }
 
 void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::vector<float>& terrain)
@@ -538,6 +538,44 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
             float4x4* terrainSlopePtr = item.alignToTerrain ? &terrainSlope : nullptr;
 
             float height = sampleTerrain(terrain, item.tilePosition, terrainSlopePtr);
+
+#if 0
+            if(item.name == "Rover")
+            {
+                std::vector<float> yValues;
+                std::vector<float> sampledHeights;
+                std::vector<float> originalValues;
+
+                // Sample in 1/20th increments
+                for (float y = -3.0f; y <= 3.0f; y += 0.05f)  // 0.05 = 1/20
+                {
+                    int x = static_cast<int>(floor(item.tilePosition.x));
+                    int ogY = static_cast<int>(floor(y + item.tilePosition.y));
+                    float h1 = terrain[ogY * (m_TextureSize.x + 1) + x];
+                    originalValues.push_back(h1);
+
+                    yValues.push_back(y + item.tilePosition.y);
+                    float sampledHeight = sampleTerrain(terrain, item.tilePosition + float2{0.0f, y}, nullptr);
+                    sampledHeights.push_back(sampledHeight);
+                }
+
+                // Create JSON string
+                std::ostringstream jsonStream;
+                jsonStream << "{ \"values\": [";
+                for (size_t i = 0; i < yValues.size(); ++i)
+                {
+                    jsonStream << "[" << yValues[i] << ", " << sampledHeights[i] << ", " << originalValues[i] << "]";
+                    if (i < yValues.size() - 1) jsonStream << ", ";
+                }
+                jsonStream << "] }";
+
+                std::string jsonString = jsonStream.str();
+
+                printf("%s\n", jsonString.c_str());
+
+                _exit(0);
+            }
+#endif
 
             float3 worldOffset = float3{
                 ((float)item.tilePosition.x + 0.5f) * m_TileSize.x,
