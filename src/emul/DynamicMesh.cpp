@@ -439,7 +439,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     m_Mesh->BB.Max = maxBB;    
 }
 
-float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tilePosition, float4x4* outTerrainSlope)
+float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition)
 {
     // terrain is actually (m_TextureSize.x + 1, m_TextureSize.y + 1)
     // terrain represents the bounds of each individual tile
@@ -452,12 +452,15 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tileP
     // Wrap coordinates to handle infinite terrain
     // Mirror coordinates by reflecting across texture boundaries
     // Convert float coordinates to array indices by rounding down
+
+    tilePosition *= 2.0f;
+
     float2 wrappedPos;
     wrappedPos.x = tilePosition.x < 0 ? -tilePosition.x : 
-                   tilePosition.x >= m_TextureSize.x + 1 ? 2*m_TextureSize.x + 1 - tilePosition.x : 
+                   tilePosition.x >= terrain.textureSize.x * terrain.textureScale.x ? 2*terrain.textureSize.x * terrain.textureScale.x - tilePosition.x : 
                    tilePosition.x;
     wrappedPos.y = tilePosition.y < 0 ? -tilePosition.y :
-                   tilePosition.y >= m_TextureSize.y + 1 ? 2*m_TextureSize.y + 1 - tilePosition.y :
+                   tilePosition.y >= terrain.textureSize.y * terrain.textureScale.y ? 2*terrain.textureSize.y * terrain.textureScale.y - tilePosition.y :
                    tilePosition.y;
 
     float fx = wrappedPos.x - floor(wrappedPos.x);
@@ -468,52 +471,65 @@ float DynamicMesh::sampleTerrain(const std::vector<float>& terrain, float2 tileP
     int y = static_cast<int>(floor(wrappedPos.y));
 
     // Sample the center point of the tile by averaging the 4 corners
-    float h1 = terrain[y * (m_TextureSize.x + 1) + x];
-    float h2 = terrain[y * (m_TextureSize.x + 1) + (x + 1)];
-    float h3 = terrain[(y + 1) * (m_TextureSize.x + 1) + x];
-    float h4 = terrain[(y + 1) * (m_TextureSize.x + 1) + (x + 1)];
+    float h1 = terrain.heightmap[y * (terrain.textureSize.x * terrain.textureScale.x) + x];
+    float h2 = terrain.heightmap[y * (terrain.textureSize.x * terrain.textureScale.x) + (x + 1)];
+    float h3 = terrain.heightmap[(y + 1) * (terrain.textureSize.x * terrain.textureScale.x) + x];
+    float h4 = terrain.heightmap[(y + 1) * (terrain.textureSize.x * terrain.textureScale.x) + (x + 1)];
 
     float top = h1 * (1.0f - fx) + h2 * fx;
     float bottom = h3 * (1.0f - fx) + h4 * fx;
     float height = top * (1.0f - fy) + bottom * fy;     
 
-    if(outTerrainSlope)
-    {
-        // Calculate normal vector from cross product of two edges
-        float3 v1 = float3(m_TileSize.x, h2 - h1, 0.0f);
-        float3 v2 = float3(0.0f, h3 - h1, m_TileSize.y);
-        
-        float3 normal = normalize(cross(v2, v1));
-        
-        // Create rotation matrix that aligns y-axis with normal
-        float3 up = float3(0.0f, 1.0f, 0.0f);
-        float3 axis = cross(up, normal);
-        float angle = -acos(dot(up, normal));
-        
-        // Convert axis-angle to rotation matrix
-        if (length(axis) < 0.0001f) {
-            // Normal is nearly parallel to up vector, no rotation needed
-            *outTerrainSlope = float4x4::Identity();
-        }
-        else {
-            axis = normalize(axis);
-            float c = cos(angle);
-            float s = sin(angle);
-            float t = 1.0f - c;
-
-            *outTerrainSlope = float4x4(
-                t*axis.x*axis.x + c,      t*axis.x*axis.y - s*axis.z, t*axis.x*axis.z + s*axis.y, 0.0f,
-                t*axis.x*axis.y + s*axis.z, t*axis.y*axis.y + c,      t*axis.y*axis.z - s*axis.x, 0.0f, 
-                t*axis.x*axis.z - s*axis.y, t*axis.y*axis.z + s*axis.x, t*axis.z*axis.z + c,      0.0f,
-                0.0f,                       0.0f,                       0.0f,                     1.0f
-            );
-        }
-    }
-
     return height;
 }
 
-void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::vector<float>& terrain)
+// Takes the bounding rectangle of a model produces a rotation matrix that aligns the y-axis with the terrain slope
+// Think buildings and vehicles aligned properly with the terrain
+float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope)
+{
+    // Sample heights at the four corners
+    float3 corners[4] = {
+        float3(ul.x * m_TileSize.x, sampleTerrain(terrain, ul), ul.y * m_TileSize.y),      // Upper Left
+        float3(br.x * m_TileSize.x, sampleTerrain(terrain, float2(br.x, ul.y)), ul.y * m_TileSize.y),  // Upper Right
+        float3(ul.x * m_TileSize.x, sampleTerrain(terrain, float2(ul.x, br.y)), br.y * m_TileSize.y),  // Lower Left
+        float3(br.x * m_TileSize.x, sampleTerrain(terrain, br), br.y * m_TileSize.y)       // Lower Right
+    };
+
+    // Calculate normal using diagonal vectors
+    float3 diag1 = corners[3] - corners[0];  // Lower Right - Upper Left
+    float3 diag2 = corners[2] - corners[1];  // Lower Left - Upper Right
+    float3 normal = normalize(cross(diag1, diag2));
+
+    // Create rotation matrix that aligns y-axis with normal
+    float3 up(0.0f, 1.0f, 0.0f);
+    float3 axis = cross(up, normal);
+    float angle = -acos(dot(up, normal));
+
+    //if (length(axis) < 0.0001f)
+    if(true)
+    {
+        // Normal is nearly parallel to up vector, no rotation needed
+        *outTerrainSlope = float4x4::Identity();
+    }
+    else
+    {
+        axis = normalize(axis);
+        float c = cos(angle);
+        float s = sin(angle);
+        float t = 1.0f - c;
+
+        *outTerrainSlope = float4x4(
+            t*axis.x*axis.x + c,      t*axis.x*axis.y - s*axis.z, t*axis.x*axis.z + s*axis.y, 0.0f,
+            t*axis.x*axis.y + s*axis.z, t*axis.y*axis.y + c,      t*axis.y*axis.z - s*axis.x, 0.0f,
+            t*axis.x*axis.z - s*axis.y, t*axis.y*axis.z + s*axis.x, t*axis.z*axis.z + c,      0.0f,
+            0.0f,                       0.0f,                       0.0f,                     1.0f
+        );
+    }
+
+    return (corners[0] + corners[1] + corners[2] + corners[3]) * 0.25f;
+}
+
+void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain)
 {
     ClearTerrainItems();
 
@@ -523,6 +539,8 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
             return std::equal(node.Name.begin(), node.Name.end(), item.name.begin(), item.name.end(),
                             [](char a, char b) { return tolower(a) == tolower(b); });
         });
+
+        assert(it != m_Model->Nodes.end());
 
         if (it != m_Model->Nodes.end())
         {
@@ -537,7 +555,27 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
             float4x4 terrainSlope = float4x4::Identity();
             float4x4* terrainSlopePtr = item.alignToTerrain ? &terrainSlope : nullptr;
 
-            float height = sampleTerrain(terrain, item.tilePosition, terrainSlopePtr);
+            float2 ul = float2{-0.5f, -0.5f};
+            float2 br = float2{0.5f, 0.5f};
+            //float2 ul = float2{-0.125f, -0.125f};
+            //float2 br = float2{0.125f, 0.125f};
+
+            // Rotate ul and br by the item rotation quaternion
+            float3 ul3 = float3(ul.x, 0.0f, ul.y);
+            float3 br3 = float3(br.x, 0.0f, br.y);
+            
+            ul3 = item.rotation.RotateVector(ul3);
+            br3 = item.rotation.RotateVector(br3);
+            
+            ul = float2(ul3.x, ul3.z);
+            br = float2(br3.x, br3.z);
+
+            // Translate ul and br by the tile position
+            ul += item.tilePosition + float2{0.5f, 0.5f};
+            br += item.tilePosition + float2{0.5f, 0.5f};
+
+            float3 worldOffset = levelPlane(ul, br, terrain, terrainSlopePtr);
+            float val = sampleTerrain(terrain, item.tilePosition);
 
 #if 0
             if(item.name == "Rover")
@@ -577,13 +615,9 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const std::v
             }
 #endif
 
-            float3 worldOffset = float3{
-                ((float)item.tilePosition.x + 0.5f) * m_TileSize.x,
-                height,
-                ((float)item.tilePosition.y + 0.5f) * m_TileSize.y
-            };
-
             worldOffset += float3(item.worldOffset.x, 0, item.worldOffset.y);
+
+            worldOffset.y = val;
 
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();

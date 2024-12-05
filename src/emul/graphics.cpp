@@ -489,6 +489,7 @@ struct GraphicsContext
     RefCntAutoPtr<ITextureView> heightmapView;
 
     int2 heightmapSize;
+    int2 heightmapSizeBicubic;
     std::vector<float> heightmapData;
     std::vector<float> heightmapDataBicubic;
 
@@ -942,6 +943,7 @@ void ShadowMap::Initialize()
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbHeightmapAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearMirror);
+            //ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_PointWrap);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
         }
         else if (shaderInit == 2)
@@ -3489,16 +3491,21 @@ static float2 InitHeightmap()
     s_gc.m_pImmediateContext->TransitionResourceStates(1, &HeightmapTransitionDesc);
 
     {
+        s_gc.heightmapSizeBicubic = int2(MapWidth * 2, MapHeight * 2);
+
         // Create bicubic resampled version of heightmap
-        s_gc.heightmapDataBicubic.resize((MapWidth + 1) * (MapHeight + 1));
+        s_gc.heightmapDataBicubic.resize(s_gc.heightmapSizeBicubic.x * s_gc.heightmapSizeBicubic.y);
         // For each output pixel
-        for (int y = 0; y < MapHeight + 1; y++) {
-            for (int x = 0; x < MapWidth + 1; x++) {
+        for (int y = 0; y < s_gc.heightmapSizeBicubic.y; y++) {
+            for (int x = 0; x < s_gc.heightmapSizeBicubic.x; x++) {
+
                 // Convert to texture coordinates
-                float2 st = float2((float)x / MapWidth, (float)y / MapHeight);
+                //float2 st = float2((float)x / s_gc.heightmapSizeBicubic.x, (float)y / s_gc.heightmapSizeBicubic.y);
                 
                 // Convert to pixel coordinates
-                st = st * float2(MapWidth - 1, MapHeight - 1) - float2(0.5f, 0.5f);
+                //st = st * float2(MapWidth - 1, MapHeight - 1) - float2(0.5f, 0.5f);
+
+                float2 st = float2((float)x * 0.5f, (float)y * 0.5f);
 
                 // Get fractional parts
                 float2 fxy = float2(fmod(st.x, 1.0f), fmod(st.y, 1.0f));
@@ -3569,7 +3576,7 @@ static float2 InitHeightmap()
                     sy
                 );
 
-                s_gc.heightmapDataBicubic[y * (MapWidth + 1) + x] = result;
+                s_gc.heightmapDataBicubic[y * s_gc.heightmapSizeBicubic.x + x] = result;
             }
         }
     }
@@ -5242,25 +5249,25 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_t:
                     {
-                        s_gc.tvDelta.y = -0.05f;
+                        //s_gc.tvDelta.y = -0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI);
                     }
                     break;
                 case SDLK_g:
                     {
-                        s_gc.tvDelta.y = 0.05f;
+                        //s_gc.tvDelta.y = 0.05f;
                         s_gc.tvNudge = {};
                     }
                     break;
                 case SDLK_f:
                     {
-                        s_gc.tvDelta.x = -0.05f;
+                        //s_gc.tvDelta.x = -0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), -PI_F / 2.0f);
                     }
                     break;
                 case SDLK_h:
                     {
-                        s_gc.tvDelta.x = 0.05f;
+                        //s_gc.tvDelta.x = 0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI_F / 2.0f);
                     }
                     break;
@@ -5399,13 +5406,23 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, -1.5f }, s_gc.tvRotation, true };
+    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, 0.0f }, s_gc.tvRotation, true };
     SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, -1.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 247.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    
+    SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.5f, 247.0f - 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball2{ "Ball", float2{389.0f + 0.5f, 247.0f - 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball3{ "Ball", float2{389.0f - 0.5f, 247.0f + 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.5f, 247.0f + 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
-    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin }, s_gc.heightmapDataBicubic);
+
+    //SF_GLTF::TerrainData terrainData{ s_gc.heightmapDataBicubic, s_gc.heightmapSizeBicubic, {2.0f, 2.0f} };
+    SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
+
+    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin, ball, ball1, ball2, ball3, ball4 }, terrainData);
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();

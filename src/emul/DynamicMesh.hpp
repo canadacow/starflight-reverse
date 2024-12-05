@@ -9,6 +9,13 @@ namespace Diligent
 namespace SF_GLTF
 {
 
+struct TerrainData
+{
+    const std::vector<float>& heightmap;
+    int2 textureSize;
+    float2 textureScale;
+};
+
 struct TerrainItem
 {
     std::string name;
@@ -43,7 +50,7 @@ public:
     }
 
     void ReplaceTerrain(const float3& terrainMovement);
-    void SetTerrainItems(const TerrainItems& terrainItems, const std::vector<float>& terrain);
+    void SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain);
     void ClearTerrainItems();
 
     virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
@@ -71,7 +78,8 @@ private:
     
     void InitializeVertexAndIndexData();
 
-    float sampleTerrain(const std::vector<float>& terrain, float2 tilePosition, float4x4* outTerrainSlope);
+    float sampleTerrain(const TerrainData& terrain, float2 tilePosition);
+    float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope);
 
     struct VertexBuff
     {
