@@ -5422,7 +5422,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //SF_GLTF::TerrainData terrainData{ s_gc.heightmapDataBicubic, s_gc.heightmapSizeBicubic, {2.0f, 2.0f} };
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
-    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin, ball, ball1, ball2, ball3, ball4 }, terrainData);
+    //s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin, ball, ball1, ball2, ball3, ball4 }, terrainData);
+    s_gc.terrain.dynamicMesh->SetTerrainItems({ ball, ball1, ball2, ball3, ball4 }, terrainData);
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
