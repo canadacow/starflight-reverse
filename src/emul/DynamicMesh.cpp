@@ -492,12 +492,16 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     // Sample heights at the four corners and center
     float2 center = (ul + br) * 0.5f;
 
+    float2 ulHeightMap = (float2{ul.x, ul.y} / m_TileSize) - float2{0.5f, 0.5f};
+    float2 brHeightMap = (float2{br.x, br.y} / m_TileSize) - float2{0.5f, 0.5f};
+    float2 centerHeightMap = (float2{center.x, center.y} / m_TileSize) - float2{0.5f, 0.5f};
+    
     float3 corners[5] = {
-        float3((ul.x + 0.5f) * m_TileSize.x, sampleTerrain(terrain, ul), (ul.y + 0.5f) * m_TileSize.y),      // Upper Left
-        float3((br.x + 0.5f) * m_TileSize.x, sampleTerrain(terrain, float2(br.x, ul.y)), (ul.y + 0.5f) * m_TileSize.y),  // Upper Right
-        float3((ul.x + 0.5f) * m_TileSize.x, sampleTerrain(terrain, float2(ul.x, br.y)), (br.y + 0.5f) * m_TileSize.y),  // Lower Left
-        float3((br.x + 0.5f) * m_TileSize.x, sampleTerrain(terrain, br), (br.y + 0.5f) * m_TileSize.y),      // Lower Right
-        float3((center.x + 0.5f) * m_TileSize.x, sampleTerrain(terrain, center), (center.y + 0.5f) * m_TileSize.y)  // Center
+        float3(ul.x, sampleTerrain(terrain, ulHeightMap), ul.y),      // Upper Left
+        float3(br.x, sampleTerrain(terrain, float2(brHeightMap.x, ulHeightMap.y)), br.y),  // Upper Right
+        float3(ul.x, sampleTerrain(terrain, float2(ulHeightMap.x, brHeightMap.y)), br.y),  // Lower Left
+        float3(br.x, sampleTerrain(terrain, brHeightMap), br.y),      // Lower Right
+        float3(center.x, sampleTerrain(terrain, centerHeightMap), center.y)  // Center
     };
 
     // Calculate normal using vectors from center to corners
@@ -568,10 +572,12 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             float4x4 terrainSlope = float4x4::Identity();
             float4x4* terrainSlopePtr = item.alignToTerrain ? &terrainSlope : nullptr;
 
+            float2 modelSize = float2{it->pMesh->BB.Max.x - it->pMesh->BB.Min.x, it->pMesh->BB.Max.z - it->pMesh->BB.Min.z};
+
             //float2 ul = float2{-0.5f, -0.5f};
             //float2 br = float2{0.5f, 0.5f};
-            float2 ul = float2{-0.05f, -0.05f};
-            float2 br = float2{0.05f, 0.05f};
+            float2 ul = float2{-modelSize.x / 2.0f, -modelSize.y / 2.0f};
+            float2 br = float2{modelSize.x / 2.0f, modelSize.y / 2.0f};
 
             // Rotate ul and br by the item rotation quaternion
             float3 ul3 = float3(ul.x, 0.0f, ul.y);
@@ -584,8 +590,8 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             br = float2(br3.x, br3.z);
 
             // Translate ul and br by the tile position
-            ul += item.tilePosition;
-            br += item.tilePosition;
+            ul += (item.tilePosition + float2{0.5f, 0.5f}) * m_TileSize;
+            br += (item.tilePosition + float2{0.5f, 0.5f}) * m_TileSize;
 
             float3 worldOffset = levelPlane(ul, br, terrain, terrainSlopePtr);
 

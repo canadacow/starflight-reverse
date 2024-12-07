@@ -5410,20 +5410,20 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 247.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     
-    SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.5f, 247.0f - 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball2{ "Ball", float2{389.0f + 0.5f, 247.0f - 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball3{ "Ball", float2{389.0f - 0.5f, 247.0f + 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.5f, 247.0f + 0.5f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball2{ "Ball", float2{389.0f + 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball3{ "Ball", float2{389.0f - 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
 
     //SF_GLTF::TerrainData terrainData{ s_gc.heightmapDataBicubic, s_gc.heightmapSizeBicubic, {2.0f, 2.0f} };
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
-    //s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin, ball, ball1, ball2, ball3, ball4 }, terrainData);
-    s_gc.terrain.dynamicMesh->SetTerrainItems({ ball, ball1, ball2, ball3, ball4 }, terrainData);
+    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin, ball, ball1, ball2, ball3, ball4 }, terrainData);
+    //s_gc.terrain.dynamicMesh->SetTerrainItems({ ball, ball1, ball2, ball3, ball4 }, terrainData);
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
