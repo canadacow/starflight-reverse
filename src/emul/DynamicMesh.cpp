@@ -498,7 +498,7 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     
     float3 corners[5] = {
         float3(ul.x, sampleTerrain(terrain, ulHeightMap), ul.y),      // Upper Left
-        float3(br.x, sampleTerrain(terrain, float2(brHeightMap.x, ulHeightMap.y)), br.y),  // Upper Right
+        float3(br.x, sampleTerrain(terrain, float2(brHeightMap.x, ulHeightMap.y)), ul.y),  // Upper Right
         float3(ul.x, sampleTerrain(terrain, float2(ulHeightMap.x, brHeightMap.y)), br.y),  // Lower Left
         float3(br.x, sampleTerrain(terrain, brHeightMap), br.y),      // Lower Right
         float3(center.x, sampleTerrain(terrain, centerHeightMap), center.y)  // Center
@@ -543,7 +543,7 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
         );
     }
 
-    return corners[4];
+    return (corners[0] + corners[1] + corners[2] + corners[3] + corners[4]) / 5.0f;
 }
 
 void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain)
