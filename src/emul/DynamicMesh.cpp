@@ -518,16 +518,19 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     float3 axis = cross(up, normal);
     float angle = acos(dot(up, normal));
 
-    if (length(axis) < 0.0001f)
+    if (outTerrainSlope)
     {
-        // Normal is nearly parallel to up vector, no rotation needed
-        *outTerrainSlope = float4x4::Identity();
-    }
-    else
-    {
-        axis = normalize(axis);
-        QuaternionF rotation = QuaternionF::RotationFromAxisAngle(axis, angle);
-        *outTerrainSlope = rotation.ToMatrix();
+        if (length(axis) < 0.0001f)
+        {
+            // Normal is nearly parallel to up vector, no rotation needed
+            *outTerrainSlope = float4x4::Identity();
+        }
+        else
+        {
+            axis = normalize(axis);
+            QuaternionF rotation = QuaternionF::RotationFromAxisAngle(axis, angle);
+            *outTerrainSlope = rotation.ToMatrix();
+        }
     }
 
     return (corners[0] + corners[1] + corners[2] + corners[3] + corners[4]) / 5.0f;

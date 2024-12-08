@@ -489,9 +489,7 @@ struct GraphicsContext
     RefCntAutoPtr<ITextureView> heightmapView;
 
     int2 heightmapSize;
-    int2 heightmapSizeBicubic;
     std::vector<float> heightmapData;
-    std::vector<float> heightmapDataBicubic;
 
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<Bloom> bloom;
@@ -3490,97 +3488,6 @@ static float2 InitHeightmap()
     StateTransitionDesc HeightmapTransitionDesc = {s_gc.heightmap, RESOURCE_STATE_COPY_DEST, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE};
     s_gc.m_pImmediateContext->TransitionResourceStates(1, &HeightmapTransitionDesc);
 
-    {
-        s_gc.heightmapSizeBicubic = int2(MapWidth * 2, MapHeight * 2);
-
-        // Create bicubic resampled version of heightmap
-        s_gc.heightmapDataBicubic.resize(s_gc.heightmapSizeBicubic.x * s_gc.heightmapSizeBicubic.y);
-        // For each output pixel
-        for (int y = 0; y < s_gc.heightmapSizeBicubic.y; y++) {
-            for (int x = 0; x < s_gc.heightmapSizeBicubic.x; x++) {
-
-                // Convert to texture coordinates
-                //float2 st = float2((float)x / s_gc.heightmapSizeBicubic.x, (float)y / s_gc.heightmapSizeBicubic.y);
-                
-                // Convert to pixel coordinates
-                //st = st * float2(MapWidth - 1, MapHeight - 1) - float2(0.5f, 0.5f);
-
-                float2 st = float2((float)x * 0.5f, (float)y * 0.5f);
-
-                // Get fractional parts
-                float2 fxy = float2(fmod(st.x, 1.0f), fmod(st.y, 1.0f));
-                st.x -= fxy.x;
-                st.y -= fxy.y;
-
-                // Calculate cubic weights
-                auto calcCubicWeights = [](float v) {
-                    float4 n = float4(1.0f, 2.0f, 3.0f, 4.0f) - float4(v, v, v, v);
-                    float4 s = n * n * n;
-                    float4 o;
-                    o.x = s.x;
-                    o.y = s.y - 4.0f * s.x;
-                    o.z = s.z - 4.0f * s.y + 6.0f * s.x;
-                    o.w = 6.0f - o.x - o.y - o.z;
-                    return o;
-                };
-
-                float4 xcubic = calcCubicWeights(fxy.x);
-                float4 ycubic = calcCubicWeights(fxy.y);
-
-                // Calculate offset positions
-                float4 c = float4(st.x, st.x, st.y, st.y) + float4(-0.5f, 1.5f, -0.5f, 1.5f);
-                
-                float4 s = float4(xcubic.x + xcubic.y, xcubic.z + xcubic.w, 
-                                ycubic.x + ycubic.y, ycubic.z + ycubic.w);
-                                
-                float4 offset = c + float4(xcubic.y, xcubic.w, ycubic.y, ycubic.w) / s;
-
-                // Sample 4 points
-                auto sampleHeight = [&](float px, float py) -> float {
-                    int x0 = (int)floor(px);
-                    int y0 = (int)floor(py);
-                    int x1 = x0 + 1;
-                    int y1 = y0 + 1;
-
-                    // Clamp coordinates
-                    x0 = x0 < 0 ? -x0 : x0 >= MapWidth ? 2*(MapWidth-1) - x0 : x0;
-                    y0 = y0 < 0 ? -y0 : y0 >= MapHeight ? 2*(MapHeight-1) - y0 : y0;
-                    x1 = x1 < 0 ? -x1 : x1 >= MapWidth ? 2*(MapWidth-1) - x1 : x1;
-                    y1 = y1 < 0 ? -y1 : y1 >= MapHeight ? 2*(MapHeight-1) - y1 : y1;
-
-                    float fx = px - x0;
-                    float fy = py - y0;
-
-                    float v00 = s_gc.heightmapData[y0 * MapWidth + x0];
-                    float v10 = s_gc.heightmapData[y0 * MapWidth + x1];
-                    float v01 = s_gc.heightmapData[y1 * MapWidth + x0];
-                    float v11 = s_gc.heightmapData[y1 * MapWidth + x1];
-
-                    float v0 = lerp(v00, v10, fx);
-                    float v1 = lerp(v01, v11, fx);
-                    return lerp(v0, v1, fy);
-                };
-
-                float sample0 = sampleHeight(offset.x, offset.z);
-                float sample1 = sampleHeight(offset.y, offset.z); 
-                float sample2 = sampleHeight(offset.x, offset.w);
-                float sample3 = sampleHeight(offset.y, offset.w);
-
-                // Interpolate samples
-                float sx = s.x / (s.x + s.y);
-                float sy = s.z / (s.z + s.w);
-
-                float result = lerp(
-                    lerp(sample3, sample2, sx),
-                    lerp(sample1, sample0, sx),
-                    sy
-                );
-
-                s_gc.heightmapDataBicubic[y * s_gc.heightmapSizeBicubic.x + x] = result;
-            }
-        }
-    }
-
     return float2((float)MapWidth, (float)MapHeight);
 }   
 
@@ -5410,20 +5317,25 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    // tree-stylized-01
+    SF_GLTF::TerrainItem tree{ "tree-stylized-01", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, false };
+
+#if 0
+    // Debug balls
     SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    
     SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ball2{ "Ball", float2{389.0f + 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ball3{ "Ball", float2{389.0f - 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+#endif
+
+    std::vector<SF_GLTF::TerrainItem> terrainItems = { rover, ruin, endurium, recentRuin, tree };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
 
-    //SF_GLTF::TerrainData terrainData{ s_gc.heightmapDataBicubic, s_gc.heightmapSizeBicubic, {2.0f, 2.0f} };
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
-    s_gc.terrain.dynamicMesh->SetTerrainItems({ rover, ruin, endurium, recentRuin, ball, ball1, ball2, ball3, ball4 }, terrainData);
-    //s_gc.terrain.dynamicMesh->SetTerrainItems({ ball, ball1, ball2, ball3, ball4 }, terrainData);
+    s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData);
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
