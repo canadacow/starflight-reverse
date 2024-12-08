@@ -79,6 +79,9 @@ private:
     void InitializeVertexAndIndexData();
 
     float sampleTerrain(const TerrainData& terrain, float2 tilePosition);
+    float sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition);
+    float sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv);
+    float sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition);
     float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope);
 
     struct VertexBuff

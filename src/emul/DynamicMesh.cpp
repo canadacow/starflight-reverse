@@ -3,6 +3,8 @@
 
 #include <Windows.h>
 
+extern float bicubicOffset;
+
 namespace Diligent
 {
 
@@ -441,7 +443,81 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     m_Mesh->BB.Max = maxBB;    
 }
 
-float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition)
+float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition)
+{
+    // Bicubic sampling helper function
+    auto sampleBicubic = [](float v) {
+        float4 n = float4{1.0f, 2.0f, 3.0f, 4.0f};
+        n = n - float4(v);
+        float4 s;
+        s.x = n.x * n.x * n.x;
+        s.y = n.y * n.y * n.y; 
+        s.z = n.z * n.z * n.z;
+        s.w = n.w * n.w * n.w;
+        float4 o;
+        o.x = s.x;
+        o.y = s.y - 4.0f * s.x;
+        o.z = s.z - 4.0f * s.y + 6.0f * s.x;
+        o.w = 6.0f - o.x - o.y - o.z;
+        return o;
+    };
+
+    // Convert UV coordinates to texture space
+    float2 st = tilePosition;
+    st += float2(bicubicOffset);
+
+    // Get fractional and integer parts
+    float2 fxy;
+    fxy.x = st.x - floor(st.x);
+    fxy.y = st.y - floor(st.y); 
+    st.x -= fxy.x;
+    st.y -= fxy.y;
+
+    // Get cubic weights
+    float4 xcubic = sampleBicubic(fxy.x);
+    float4 ycubic = sampleBicubic(fxy.y);
+
+    // Calculate sample positions
+    float4 c;
+    c.x = st.x - 0.5f;
+    c.y = st.x + 1.5f;
+    c.z = st.y - 0.5f;
+    c.w = st.y + 1.5f;
+
+    float4 s;
+    s.x = xcubic.x + xcubic.z;
+    s.y = xcubic.y + xcubic.w;
+    s.z = ycubic.x + ycubic.z;
+    s.w = ycubic.y + ycubic.w;
+
+    float4 offset;
+    offset.x = c.x + xcubic.y/s.x + xcubic.w/s.x;
+    offset.y = c.y + xcubic.y/s.y + xcubic.w/s.y;
+    offset.z = c.z + ycubic.y/s.z + ycubic.w/s.z;
+    offset.w = c.w + ycubic.y/s.w + ycubic.w/s.w;
+
+    // Sample using linear interpolation
+    float sample0 = sampleTerrainLinear(terrain, float2(offset.x, offset.z));
+    float sample1 = sampleTerrainLinear(terrain, float2(offset.y, offset.z));
+    float sample2 = sampleTerrainLinear(terrain, float2(offset.x, offset.w));
+    float sample3 = sampleTerrainLinear(terrain, float2(offset.y, offset.w));
+
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
+
+    // Final bicubic blend
+    float bottom = sample3 * (1.0f - sx) + sample2 * sx;
+    float top = sample1 * (1.0f - sx) + sample0 * sx;
+    return top * (1.0f - sy) + bottom * sy;
+}
+
+float DynamicMesh::sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv)
+{
+    float2 tilePosition = uv * m_TextureSize;
+    return sampleTerrainLinear(terrain, tilePosition);
+}
+
+float DynamicMesh::sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition)
 {
     // terrain is actually (m_TextureSize.x + 1, m_TextureSize.y + 1)
     // terrain represents the bounds of each individual tile
@@ -483,6 +559,11 @@ float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition
     float height = top * (1.0f - fy) + bottom * fy;     
 
     return height;
+}
+
+float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition)
+{
+    return sampleTerrainLinear(terrain, tilePosition);
 }
 
 // Takes the bounding rectangle of a model produces a rotation matrix that aligns the y-axis with the terrain slope
@@ -589,7 +670,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             //sprintf_s(debugStr, "WorldOffset for %s (node %d): %.2f, %.2f, %.2f\n", item.name.c_str(), ourNode.Index, worldOffset.x, worldOffset.y, worldOffset.z);
             //OutputDebugStringA(debugStr);
 
-            float val = sampleTerrain(terrain, item.tilePosition);
+            float val = sampleTerrainLinear(terrain, item.tilePosition);
             //worldOffset.x = (item.tilePosition.x + 0.5f) * m_TileSize.x;
             //worldOffset.z = (item.tilePosition.y + 0.5f) * m_TileSize.y;
 

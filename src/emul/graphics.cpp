@@ -5002,6 +5002,8 @@ void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
     RenderSFModel(inFlightIndex, s_gc.planet);
 }
 
+float bicubicOffset = -0.5f;
+
 void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
 {
     auto now = std::chrono::steady_clock::now();
@@ -5130,30 +5132,6 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                         }
                     }
                     break;
-                case SDLK_o:
-                    {
-                        if(shiftDown)
-                        {
-                            s_gc.terrainTextureOffset.x += 0.01f;
-                        }
-                        else
-                        {
-                            s_gc.terrainTextureOffset.x -= 0.01f;
-                        }
-                    }
-                    break;
-                case SDLK_p:
-                    {
-                        if(shiftDown)
-                        {
-                            s_gc.terrainTextureOffset.y += 0.01f;
-                        }
-                        else
-                        {
-                            s_gc.terrainTextureOffset.y -= 0.01f;
-                        }
-                    }
-                    break;
                 case SDLK_t:
                     {
                         s_gc.tvDelta.y = -0.05f;
@@ -5176,6 +5154,22 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     {
                         s_gc.tvDelta.x = 0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI_F / 2.0f);
+                    }
+                    break;
+                case SDLK_o:
+                    {
+                        bicubicOffset += 0.01f; 
+                        char debugStr[256];
+                        sprintf_s(debugStr, "Bicubic offset: %.3f\n", bicubicOffset);
+                        OutputDebugStringA(debugStr);
+                    }
+                    break;
+                case SDLK_p:
+                    {
+                        bicubicOffset -= 0.01f;
+                        char debugStr[256];
+                        sprintf_s(debugStr, "Bicubic offset: %.3f\n", bicubicOffset);
+                        OutputDebugStringA(debugStr);
                     }
                     break;
                 default:
@@ -5320,7 +5314,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     // tree-stylized-01
     SF_GLTF::TerrainItem tree{ "tree-stylized-01", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, false };
 
-#if 0
+#if 1
     // Debug balls
     SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
@@ -5329,7 +5323,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
 #endif
 
-    std::vector<SF_GLTF::TerrainItem> terrainItems = { rover, ruin, endurium, recentRuin, tree };
+    std::vector<SF_GLTF::TerrainItem> terrainItems = { rover, ruin, endurium, recentRuin, tree, ball, ball1, ball2, ball3, ball4 };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
 
