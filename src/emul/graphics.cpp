@@ -5249,25 +5249,25 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_t:
                     {
-                        //s_gc.tvDelta.y = -0.05f;
+                        s_gc.tvDelta.y = -0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI);
                     }
                     break;
                 case SDLK_g:
                     {
-                        //s_gc.tvDelta.y = 0.05f;
+                        s_gc.tvDelta.y = 0.05f;
                         s_gc.tvNudge = {};
                     }
                     break;
                 case SDLK_f:
                     {
-                        //s_gc.tvDelta.x = -0.05f;
+                        s_gc.tvDelta.x = -0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), -PI_F / 2.0f);
                     }
                     break;
                 case SDLK_h:
                     {
-                        //s_gc.tvDelta.x = 0.05f;
+                        s_gc.tvDelta.x = 0.05f;
                         s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI_F / 2.0f);
                     }
                     break;
