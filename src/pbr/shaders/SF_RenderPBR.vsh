@@ -51,7 +51,7 @@ float4 sampleBicubic(float v) {
     return o;
 }
 
-#if 0
+#if 1
 float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 {
     int2 texResolution;
