@@ -504,26 +504,21 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
         float3(center.x, sampleTerrain(terrain, centerHeightMap), center.y)  // Center
     };
 
-    // Calculate normal using vectors from center to corners
-    float3 v1 = corners[0] - corners[4];  // Center to Upper Left
-    float3 v2 = corners[1] - corners[4];  // Center to Upper Right
-    float3 v3 = corners[2] - corners[4];  // Center to Lower Left 
-    float3 v4 = corners[3] - corners[4];  // Center to Lower Right
-
-    // Average the normals from each triangle
-    float3 n1 = normalize(cross(v2, v1));
-    float3 n2 = normalize(cross(v3, v2));
-    float3 n3 = normalize(cross(v4, v3));
-    float3 n4 = normalize(cross(v1, v4));
-    float3 normal = normalize(n1 + n2 + n3 + n4);
+    // Calculate normal using height differences
+    float3 v1 = float3(br.x - ul.x, corners[1].y - corners[0].y, 0.0f);
+    float3 v2 = float3(0.0f, corners[2].y - corners[0].y, br.y - ul.y);
+    
+    float3 normal = normalize(cross(v2, v1));
+    if (normal.y < 0) {
+        normal = -normal;  // Ensure normal points upward
+    }
 
     // Create rotation matrix that aligns y-axis with normal
     float3 up(0.0f, 1.0f, 0.0f);
     float3 axis = cross(up, normal);
-    float angle = -acos(dot(up, normal));
+    float angle = acos(dot(up, normal));
 
-    //if (length(axis) < 0.0001f)
-    if(true)
+    if (length(axis) < 0.0001f)
     {
         // Normal is nearly parallel to up vector, no rotation needed
         *outTerrainSlope = float4x4::Identity();
@@ -531,16 +526,8 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     else
     {
         axis = normalize(axis);
-        float c = cos(angle);
-        float s = sin(angle);
-        float t = 1.0f - c;
-
-        *outTerrainSlope = float4x4(
-            t*axis.x*axis.x + c,      t*axis.x*axis.y - s*axis.z, t*axis.x*axis.z + s*axis.y, 0.0f,
-            t*axis.x*axis.y + s*axis.z, t*axis.y*axis.y + c,      t*axis.y*axis.z - s*axis.x, 0.0f,
-            t*axis.x*axis.z - s*axis.y, t*axis.y*axis.z + s*axis.x, t*axis.z*axis.z + c,      0.0f,
-            0.0f,                       0.0f,                       0.0f,                     1.0f
-        );
+        QuaternionF rotation = QuaternionF::RotationFromAxisAngle(axis, angle);
+        *outTerrainSlope = rotation.ToMatrix();
     }
 
     return (corners[0] + corners[1] + corners[2] + corners[3] + corners[4]) / 5.0f;
