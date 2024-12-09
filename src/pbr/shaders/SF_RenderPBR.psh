@@ -452,21 +452,40 @@ float CalculateOverlayedWaves2D(float2 coords, float AnimationTime, Texture2D no
     return sqrt(waves0 * waves1); // geometric mean
 }
 
-float4 Water_BaseColor(in VSOutput VSOut)
+SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime)
 {
-    float2 texcoord = VSOut.UV0;
-    float AnimationTime = g_Frame.Renderer.Time * 0.9;
+    SurfaceShadingInfo Shading;
     
+    // Calculate wave height/normal
+    float2 texcoord = VSOut.UV0;
     float waves = CalculateOverlayedWaves2D(texcoord, AnimationTime, g_Noise, g_Noise_sampler);
     
-    // Base water color
+    // Base water color (can be customized via parameters if needed)
     float3 waterColor = float3(0.0, 0.3, 0.8);
+    Shading.BaseLayer.Srf.Reflectance0 = lerp(waterColor, float3(1.0, 1.0, 1.0), waves * 0.3);
     
-    // Modulate color based on waves
-    float3 finalColor = lerp(waterColor, float3(1.0, 1.0, 1.0), waves * 0.3);
+    // PBR properties
+    Shading.BaseLayer.Metallic = 0.0;  // Non-metallic
+    Shading.BaseLayer.Srf.PerceptualRoughness = 0.1; // Smooth surface
     
-    return float4(finalColor, 1.0);
+    // Compute normal based on waves
+    float waveStrength = 0.5;
+    Shading.BaseLayer.Normal = normalize(float3(
+        ddx(waves) * waveStrength,
+        ddy(waves) * waveStrength,
+        1.0
+    ));
+    
+    // Set other SurfaceShadingInfo properties
+    Shading.Pos = VSOut.WorldPos.xyz;
+    Shading.View = normalize(g_Frame.Camera.f4Position.xyz - VSOut.WorldPos.xyz);
+    Shading.Occlusion = 1.0; // Default occlusion
+    Shading.Emissive = float3(0.0, 0.0, 0.0); // No emissive color
+    Shading.IBLScale = g_Frame.Renderer.IBLScale.rgb;
+
+    return Shading;
 }
+
 #endif
 
 PSOutput main(in VSOutput VSOut,
@@ -474,6 +493,7 @@ PSOutput main(in VSOutput VSOut,
 {
 
     float4 BaseColor = GetBaseColor(VSOut, PRIMITIVE.Material, g_Frame.Renderer.MipBias);
+    SurfaceShadingInfo waterPBRProperties;
 
 #if USE_TERRAINING
 
@@ -484,6 +504,7 @@ PSOutput main(in VSOutput VSOut,
     float bottomTransitionHeight = g_Terrain.startBiomHeight - wideNoise;
     float topTransitionHeight = g_Terrain.endBiomHeight + wideNoise;
 
+
     if (VSOut.Height < bottomTransitionHeight || VSOut.Height >= topTransitionHeight)
     {
         discard;
@@ -491,7 +512,10 @@ PSOutput main(in VSOutput VSOut,
 
     if(VSOut.Height < g_Terrain.waterHeight)
     {
-        BaseColor = Water_BaseColor(VSOut);
+        float AnimationTime = g_Frame.Renderer.Time * 0.9;
+        waterPBRProperties = ComputeWaterProperties(VSOut, AnimationTime);        
+
+        BaseColor = float4(waterPBRProperties.BaseLayer.Srf.Reflectance0, 1.0);
     }
 #endif
 
@@ -575,6 +599,14 @@ PSOutput main(in VSOutput VSOut,
 #endif
 
     SurfaceShadingInfo Shading = GetSurfaceShadingInfo(VSOut, PRIMITIVE.Material, BaseColor, NormalInfo, NMUVInfo, ClearCoatNMUVInfo);
+
+#if USE_TERRAINING
+    if(VSOut.Height < g_Terrain.waterHeight)
+    {
+        Shading = waterPBRProperties;
+    }
+#endif
+
     SurfaceLightingInfo SrfLighting = GetDefaultSurfaceLightingInfo();
 
     float4 OutColor;
