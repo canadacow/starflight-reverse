@@ -865,6 +865,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 TerrainAttribs->endBiomHeight = 0.0f;
                 TerrainAttribs->textureOffsetX = s_gc.terrainTextureOffset.x;
                 TerrainAttribs->textureOffsetY = s_gc.terrainTextureOffset.y;
+                TerrainAttribs->waterHeight = 2.0f;
             }
             
             // Iterate through each primitive in the mesh

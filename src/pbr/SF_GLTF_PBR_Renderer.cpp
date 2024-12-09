@@ -750,6 +750,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         TerrainAttribs->endBiomHeight = it->EndBiomHeight; 
                         TerrainAttribs->textureOffsetX = RenderParams.TerrainTextureOffset.x;
                         TerrainAttribs->textureOffsetY = RenderParams.TerrainTextureOffset.y;
+                        TerrainAttribs->waterHeight = 2.0f;
                     }
                 }
 

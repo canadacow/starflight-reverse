@@ -151,12 +151,17 @@ void MeshVS(in  VSInput  VSIn,
     #endif
 
     float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
-#if IS_WATER
-    // Water is always flush with land
-    float3 adjustedPos = VSIn.Position + float3(0.0, g_Terrain.endBiomHeight, 0.0);
-#else
-    float3 adjustedPos = VSIn.Position + float3(0.0, height, 0.0);
-#endif
+
+    float3 adjustedPos = VSIn.Position;
+    if(height < g_Terrain.waterHeight)
+    {
+        // Water is always flush with land
+        adjustedPos += float3(0.0, g_Terrain.waterHeight, 0.0);
+    }
+    else
+    {
+        adjustedPos += float3(0.0, height, 0.0);
+    }
 
 #else
     float3 adjustedPos = VSIn.Position;
