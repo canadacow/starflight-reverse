@@ -467,8 +467,8 @@ SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime
     float3 whiteCapColor = float3(1.0, 1.0, 1.0); // White caps for high waves
 
     // Adjust color based on height
-    float depthFactor = 0.0; // - ((g_Terrain.waterHeight - VSOut.Height) / g_Terrain.waterHeight);
-    float waveFactor = 0.0; // Adjust this factor for more/less white caps
+    float depthFactor = ((g_Terrain.waterHeight - VSOut.Height) / g_Terrain.waterHeight);
+    float waveFactor = 0.5; // Adjust this factor for more/less white caps
 
     float3 waterColor = lerp(deepWaterColor, shallowWaterColor, depthFactor);
     waterColor = lerp(waterColor, whiteCapColor, waveFactor);
