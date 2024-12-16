@@ -65,6 +65,8 @@ cbuffer cbTerrainAttribs
 }
 Texture2D<float4> g_Noise;
 SamplerState g_Noise_sampler;
+Texture2D<float> g_WaterHeightMap;
+SamplerState g_WaterHeightMap_sampler;
 #endif
 
 #if PRIMITIVE_ARRAY_SIZE > 0
@@ -456,7 +458,7 @@ SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime
 {
     SurfaceShadingInfo Shading;
     
-#if 1
+#if 0
     // Calculate wave height/normal
     float2 texcoord = VSOut.UV0;
     float waves = CalculateOverlayedWaves2D(texcoord, AnimationTime, g_Noise, g_Noise_sampler);
@@ -488,11 +490,36 @@ SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime
 
     //Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
     Shading.BaseLayer.NdotV = 1.0;
-#else
+#elif 0
     // Basic default water properties for debugging
-    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(float3(1.0, 0.0, 0.0), 0.0, 0.2);
+    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(float3(0.0, 0.5, 0.8), 0.0, 0.2);
     Shading.BaseLayer.Metallic = 0.0;
     Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
+    Shading.BaseLayer.NdotV = 1.0;
+#else
+    float waterHeight = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0, 0).r;
+
+    // Lerp between blue water color and white foam based on wave height
+    float3 waterColor = lerp(float3(0.0, 0.5, 0.8), float3(1.0, 1.0, 1.0), waterHeight);
+
+    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(waterColor, 0.0, 0.2);
+    Shading.BaseLayer.Metallic = 0.0;
+    
+    // Compute tangent space normal from height map using central differences
+    float2 texelSize = g_Frame.Camera.f4ViewportSize.zw; // 1/width, 1/height
+    float heightL = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(-texelSize.x, 0), 0).r;
+    float heightR = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(texelSize.x, 0), 0).r;
+    float heightU = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(0, texelSize.y), 0).r;
+    float heightD = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(0, -texelSize.y), 0).r;
+    
+    float3 normal = normalize(float3(
+        heightL - heightR,
+        heightD - heightU,
+        0.0
+    ));
+    Shading.BaseLayer.Normal = normal;
+
+    
     Shading.BaseLayer.NdotV = 1.0;
 #endif
     

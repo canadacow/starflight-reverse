@@ -117,6 +117,8 @@ public:
         std::vector<TerrainInfo> TerrainInfos;
 
         float2 TerrainTextureOffset = { 0.5f, 0.5f };
+
+        ITextureView* pWaterHeightMap = nullptr;
     };
 
     /// GLTF Model shader resource binding information

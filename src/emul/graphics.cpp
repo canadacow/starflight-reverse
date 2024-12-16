@@ -356,6 +356,8 @@ struct GraphicsContext
         ITexture* offscreenColorBuffer;
         ITexture* offscreenDepthBuffer;
 
+        constexpr static uint32_t waterHeightMapSize = 2048;
+
         ITexture* waterHeightMap;
     };
     
@@ -886,7 +888,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                     continue;
                 
                 IShaderResourceBinding* pSRB = m_ShadowSRBs[shaderIdx][primitive.MaterialId];
-                pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+                pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
                 if(pNode->Instances.size() > 0)
                 {
@@ -3585,7 +3587,11 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     }
     else if (frameSync.demoMode == 2)
     {
-        s_gc.terrain.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.terrain.model, s_gc.frameAttribsCB, shadowMap, s_gc.heightmapAttribsCB, s_gc.heightmapView);
+        s_gc.terrain.bindings = s_gc.pbrRenderer->CreateResourceBindings(*s_gc.terrain.model, 
+                                                                          s_gc.frameAttribsCB, 
+                                                                          shadowMap, 
+                                                                          s_gc.heightmapAttribsCB, 
+                                                                          s_gc.heightmapView);
     }
 
     StateTransitionDesc Barriers[] = {
@@ -4023,13 +4029,13 @@ static int GraphicsInitThread()
 
         cbDesc = {};
         cbDesc.Type = RESOURCE_DIM_TEX_2D;
-        cbDesc.Width = 2048;
-        cbDesc.Height = 2048;
+        cbDesc.Width = GraphicsContext::BufferData::waterHeightMapSize;
+        cbDesc.Height = GraphicsContext::BufferData::waterHeightMapSize;
         cbDesc.Format = TEX_FORMAT_R32_FLOAT;
         cbDesc.MipLevels = 1;
         cbDesc.SampleCount = 1;
         cbDesc.Usage = USAGE_DEFAULT;
-        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET | BIND_STORAGE;
+        cbDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET | BIND_UNORDERED_ACCESS;
         pDeviceVk->CreateTexture(cbDesc, nullptr, &bd.waterHeightMap);
      
         s_gc.vc.record_and_submit_with_fence({
@@ -5470,7 +5476,7 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
         const char* csSource = R"(
         // Wave parameters
         static const float PI = 3.141592;
-        static const float SEA_HEIGHT = 0.6;
+        static const float SEA_HEIGHT = 0.3;
         static const float SEA_CHOPPY = 4.0;
         static const float SEA_SPEED = 0.8;
         static const float SEA_FREQ = 0.16;
@@ -5498,6 +5504,8 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
 
         float noise(float2 p)
         {
+            // Use seamless noise by wrapping coordinates
+            p = fmod(p, 256.0); // Large number to avoid obvious repetition
             float2 i = floor(p);
             float2 f = frac(p);
             float2 u = f * f * (3.0 - 2.0 * f);
@@ -5557,16 +5565,23 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
                 return;
             
             // Convert pixel coordinates to UV space
-            float2 uv = float2(DTid.xy) / float2(width, height);
-            uv = uv * 2.0 - 1.0;
-            uv *= 8.0; // Scale factor for wave size (adjust as needed)
+            float2 origUV = float2(DTid.xy) / float2(width, height);
+            float2 uv = origUV * 2.0 - 1.0;
             
-            // Calculate height and normalize to [0,1] range
-            float height = get_height(uv);
-            height = height * 0.5 + 0.5;
+            uv *= 32.0; // Scale factor for wave size (adjust as needed)
             
-            // Write to output texture
-            OutputHeightMap[DTid.xy] = height;
+            float wave_height = get_height(uv);
+
+#if 0
+            // Create a border region with height 1.0
+            if (origUV.x < 0.025f || origUV.x > 0.975f || 
+                origUV.y < 0.025f || origUV.y > 0.975f)
+            {
+                wave_height = 1.0f;
+            }
+#endif
+
+            OutputHeightMap[DTid.xy] = wave_height;
         }
         )";
 
@@ -5583,7 +5598,7 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
         PipelineResourceSignatureDescX SignatureDesc{ "Water Height Map Generator PSO" };
         SignatureDesc
             .AddResource(SHADER_TYPE_COMPUTE, "TimeConstants", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-            .AddResource(SHADER_TYPE_COMPUTE, "OutputHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_UAV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+            .AddResource(SHADER_TYPE_COMPUTE, "OutputHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_UAV, SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
 
         RefCntAutoPtr<IPipelineResourceSignature> pResSig;
         s_gc.m_pDevice->CreatePipelineResourceSignature(SignatureDesc, &pResSig);
@@ -5596,7 +5611,7 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
         s_gc.m_pDevice->CreatePipelineState(CPSOCreateInfo, &s_gc.waterComputeShader.pWaterComputePSO);
         VERIFY_EXPR(s_gc.waterComputeShader.pWaterComputePSO);
 
-        s_gc.waterComputeShader.pResSig->CreateShaderResourceBinding(&s_gc.waterComputeShader.pWaterComputeSRB, true);
+        pResSig->CreateShaderResourceBinding(&s_gc.waterComputeShader.pWaterComputeSRB, true);
         VERIFY_EXPR(s_gc.waterComputeShader.pWaterComputeSRB);
 
         // Create time constant buffer
@@ -5609,10 +5624,10 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
 
         s_gc.m_pDevice->CreateBuffer(CBDesc, nullptr, &s_gc.waterComputeShader.pTimeConstantBuffer);
         VERIFY_EXPR(s_gc.waterComputeShader.pTimeConstantBuffer);
-
-        // Set the output heightmap texture
-        s_gc.waterComputeShader.pSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "OutputHeightMap")->Set(s_gc.heightmap->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS));
     }
+
+    // Set the output heightmap texture for the current in-flight frame
+    s_gc.waterComputeShader.pWaterComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "OutputHeightMap")->Set(s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS));
 
     // Update time value
     {
@@ -5622,12 +5637,12 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
     }
 
     // Set the constant buffer
-    s_gc.waterComputeShader.pSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "TimeConstants")->Set(s_gc.waterComputeShader.pTimeConstantBuffer);
+    s_gc.waterComputeShader.pWaterComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "TimeConstants")->Set(s_gc.waterComputeShader.pTimeConstantBuffer);
 
     // Calculate dispatch dimensions based on heightmap size
     DispatchComputeAttribs DispatchAttrs;
-    DispatchAttrs.ThreadGroupCountX = (s_gc.heightmapSize.x + 7) / 8;
-    DispatchAttrs.ThreadGroupCountY = (s_gc.heightmapSize.y + 7) / 8;
+    DispatchAttrs.ThreadGroupCountX = (GraphicsContext::BufferData::waterHeightMapSize + 7) / 8;
+    DispatchAttrs.ThreadGroupCountY = (GraphicsContext::BufferData::waterHeightMapSize + 7) / 8;
     DispatchAttrs.ThreadGroupCountZ = 1;
 
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.waterComputeShader.pWaterComputePSO);
@@ -7041,6 +7056,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
                     ri.TerrainInfos = std::vector<TerrainInfo>(terrainInfos.begin(), terrainInfos.end());
                 }
+
+                ri.pWaterHeightMap = s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
                 
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
             }

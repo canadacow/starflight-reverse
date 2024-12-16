@@ -665,10 +665,16 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
                 IShaderResourceBinding* const pSRB = pModelBindings->MaterialSRB[PrimRI.MaterialIndex];
                 DEV_CHECK_ERR(pSRB != nullptr, "Unable to find SRB for GLTF material.");
-                if (pCurrSRB != pSRB)
+
+                if(isTerrain)
+                {
+                    pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_WaterHeightMap")->Set(RenderParams.pWaterHeightMap);
+                }
+
+                //if (pCurrSRB != pSRB)
                 {
                     pCurrSRB = pSRB;
-                    pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+                    pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
                 }
             }
             else
