@@ -390,6 +390,8 @@ struct GraphicsContext
     avk::image_sampler boxArtImage;
     avk::image_sampler fourDeeNoise;
 
+    ITextureView* diligentFourDeeNoise;
+
     avk::image_sampler alienColorImage;
     avk::image_sampler alienDepthImage;
     avk::image_sampler alienBackgroundImage;
@@ -3019,6 +3021,30 @@ void LoadSplashImages()
         );
         image.clear();
     }
+
+    // Load noise.png into diligentFourDeeNoise
+    unsigned error = lodepng::decode(image, width, height, "noise.png", LCT_RGBA, 8);
+    if (error)
+    {
+        printf("decoder error %d, %s loading noise.png\n", error, lodepng_error_text(error));
+        exit(-1);
+    }
+
+    TextureDesc texDesc{};
+    texDesc.Type = RESOURCE_DIM_TEX_2D;
+    texDesc.Width = width;
+    texDesc.Height = height;
+    texDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+    texDesc.MipLevels = 1;
+    texDesc.SampleCount = 1;
+    texDesc.Usage = USAGE_DEFAULT;
+    texDesc.BindFlags = BIND_SHADER_RESOURCE;
+    TextureSubResData Level0Data{image.data(), width * 4};
+    TextureData InitData{&Level0Data, 1};
+    ITexture* dcb{};
+    s_gc.m_pDevice->CreateTexture(texDesc, &InitData, &dcb);
+    s_gc.diligentFourDeeNoise = dcb->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    image.clear();
 }
 
 void LoadSDFImages()
@@ -5488,6 +5514,10 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
             float Time;
         }
 
+        // Noise texture
+        Texture2D NoiseTexture : register(t0);
+        SamplerState NoiseSampler : register(s0);
+
         // Output texture
         RWTexture2D<float> OutputHeightMap : register(u0);
 
@@ -5496,26 +5526,9 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
 
         #define SEA_TIME (1.0 + Time * SEA_SPEED)
 
-        float hash(float2 p)
-        {
-            float h = dot(p, float2(127.1, 311.7));
-            return frac(sin(h) * 43758.5453123);
-        }
-
         float noise(float2 p)
         {
-            // Use seamless noise by wrapping coordinates
-            p = fmod(p, 256.0); // Large number to avoid obvious repetition
-            float2 i = floor(p);
-            float2 f = frac(p);
-            float2 u = f * f * (3.0 - 2.0 * f);
-            
-            return -1.0 + 2.0 * lerp(
-                lerp(hash(i + float2(0.0, 0.0)),
-                    hash(i + float2(1.0, 0.0)), u.x),
-                lerp(hash(i + float2(0.0, 1.0)),
-                    hash(i + float2(1.0, 1.0)), u.x), 
-                u.y);
+            return NoiseTexture.SampleLevel(NoiseSampler, p * 0.1, 0).r * 2.0 - 1.0;
         }
 
         float sea_octave(float2 uv, float choppy)
@@ -5581,6 +5594,8 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
             }
 #endif
 
+            wave_height = wave_height * 0.5 + 0.5;
+
             OutputHeightMap[DTid.xy] = wave_height;
         }
         )";
@@ -5598,7 +5613,10 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
         PipelineResourceSignatureDescX SignatureDesc{ "Water Height Map Generator PSO" };
         SignatureDesc
             .AddResource(SHADER_TYPE_COMPUTE, "TimeConstants", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+            .AddResource(SHADER_TYPE_COMPUTE, "NoiseTexture", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
             .AddResource(SHADER_TYPE_COMPUTE, "OutputHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_UAV, SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_COMPUTE, "NoiseSampler", Sam_LinearWrap);
 
         RefCntAutoPtr<IPipelineResourceSignature> pResSig;
         s_gc.m_pDevice->CreatePipelineResourceSignature(SignatureDesc, &pResSig);
@@ -5628,6 +5646,9 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
 
     // Set the output heightmap texture for the current in-flight frame
     s_gc.waterComputeShader.pWaterComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "OutputHeightMap")->Set(s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS));
+
+    // Set the noise texture
+    s_gc.waterComputeShader.pWaterComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "NoiseTexture")->Set(s_gc.diligentFourDeeNoise);
 
     // Update time value
     {
