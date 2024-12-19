@@ -5528,7 +5528,7 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
 
         float noise(float2 p)
         {
-            return NoiseTexture.SampleLevel(NoiseSampler, p * 0.1, 0).r * 2.0 - 1.0;
+            return NoiseTexture.SampleLevel(NoiseSampler, p * 0.01, 0).r * 2.0 - 1.0;
         }
 
         float sea_octave(float2 uv, float choppy)
@@ -5581,7 +5581,7 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
             float2 origUV = float2(DTid.xy) / float2(width, height);
             float2 uv = origUV * 2.0 - 1.0;
             
-            uv *= 32.0; // Scale factor for wave size (adjust as needed)
+            uv *= 8.0; // Scale factor for wave size (adjust as needed)
             
             float wave_height = get_height(uv);
 
