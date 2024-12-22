@@ -119,6 +119,9 @@ public:
         float2 TerrainTextureOffset = { 0.5f, 0.5f };
 
         ITextureView* pWaterHeightMap = nullptr;
+
+        bool UseEGA = false;
+        float3 EGAColor = float3(1.0, 1.0, 1.0);
     };
 
     /// GLTF Model shader resource binding information

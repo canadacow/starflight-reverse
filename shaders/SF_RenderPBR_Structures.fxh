@@ -69,9 +69,7 @@ struct PBRTerrainAttribs
     float textureOffsetX;
     float textureOffsetY;
     float waterHeight;
-    float padding0;
-    float padding1;
-    float padding2;
+    float3 egaColor;
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRTerrainAttribs);

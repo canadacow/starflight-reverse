@@ -1794,9 +1794,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
                         bool isEarth = p.second.species == 18;
+                        bool isMars = p.second.seed == 0x10a2;
 
                         //if(true)
                         //if (!isEarth)
+                        //    continue;
+
+                        if (!isMars)
                             continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
@@ -1842,7 +1846,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 unsigned error = lodepng::encode(png, planet_image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
                                 if (!error)
                                 {
-                                    lodepng::save_file(png, "output.png");
+                                    lodepng::save_file(png, "mars_output.png");
                                 }
                                 else
                                 {
@@ -1853,7 +1857,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 error = lodepng::encode(albedo_png, (uint8_t*)planet_albedo.data(), planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_RGBA, 8);
                                 if (!error)
                                 {
-                                    lodepng::save_file(albedo_png, "albedo_output.png");
+                                    lodepng::save_file(albedo_png, "heaven_albedo_output.png");
                                 }
                                 else
                                 {

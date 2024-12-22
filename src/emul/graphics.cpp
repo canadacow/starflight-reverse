@@ -470,14 +470,21 @@ struct GraphicsContext
 
     float3 terrainDelta{};
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
-    float3 terrainMovement = { 389.0f * TileSize, -40.0f, 245.0f * TileSize };
-    float2 terrainTextureOffset = { 0.0f, 0.0f };
-    float2 terrainSize = {};
-
-    float2 tvLocation = {389.0f, 245.0f};
+    //#define TV_LOCATION_START_X 389.0f
+    //#define TV_LOCATION_START_Y 245.0f
+    #define TV_LOCATION_START_X (1608.0f + 30.f)
+    #define TV_LOCATION_START_Y (230.0f + 30.f)
+    float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
     Quaternion<float> tvRotation = {};
+
+    //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
+    float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -200.0f, TV_LOCATION_START_Y * TileSize };
+    float2 terrainTextureOffset = { 0.0f, 0.0f };
+    float2 terrainSize = {};
+
+    
 
     MouseState mouseState;
     float FPVpitchAngle = 0.18f;
@@ -3457,15 +3464,28 @@ static float2 InitHeightmap()
     static constexpr MapHeight = 9;
     */
 
+#define USE_LOFI_EARTH 1
+//#define USE_HEAVEN 1
+
+#if !defined(USE_LOFI_EARTH) && !defined(USE_HEAVEN)
+    #error "Must define either USE_LOFI_EARTH or USE_HEAVEN"
+#endif
+
     std::vector<unsigned char> image;
     unsigned MapWidth, MapHeight;
+#if defined(USE_LOFI_EARTH)
     unsigned error = lodepng::decode(image, MapWidth, MapHeight, "lofi_earth.png", LCT_GREY, 8);
+#else
+    unsigned error = lodepng::decode(image, MapWidth, MapHeight, "heaven_output.png", LCT_GREY, 8);
+#endif
     if (error)
     {
         printf("decoder error %d, %s loading lofi_earth.png\n", error, lodepng_error_text(error));
         exit(-1);
     }
 
+#if defined(USE_LOFI_EARTH)
+    // For lofi_earth.png
     auto convertToHeightValue = [](unsigned char val) {
         if (val == 0) {
             return (unsigned char)0xf0; // Water
@@ -3483,6 +3503,12 @@ static float2 InitHeightmap()
         
         return (unsigned char)height_val;
     };
+
+#else
+    auto convertToHeightValue = [](unsigned char val) {
+        return (unsigned char)(val);
+    };
+#endif
 
     std::transform(image.begin(), image.end(), image.begin(), convertToHeightValue);
 
@@ -5546,7 +5572,6 @@ void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
             float amp = SEA_HEIGHT;
             float choppy = SEA_CHOPPY;
             float2 uv = p;
-            uv.x *= 0.75;
             
             float d, h = 0.0;
             

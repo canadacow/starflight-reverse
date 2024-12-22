@@ -633,6 +633,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 PSOFlags |= PSO_FLAG_USE_TERRAINING;
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
+
+                if(RenderParams.UseEGA)
+                {
+                    PSOFlags |= PSO_FLAG_USE_EGA_COLOR;
+                }
             }
 
             if (RenderParams.Wireframe)

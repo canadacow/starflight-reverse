@@ -205,13 +205,14 @@ std::string SF_PBR_Renderer::GetPSOFlagsString(PSO_FLAGS Flags)
             case PSO_FLAG_USE_HEIGHTMAP:             FlagsStr += "HEIGHTMAP"; break;
             case PSO_FLAG_USE_INSTANCING:            FlagsStr += "INSTANCING"; break;
             case PSO_FLAG_USE_TERRAINING:            FlagsStr += "TERRAINING"; break;
+            case PSO_FLAG_USE_EGA_COLOR:             FlagsStr += "EGA_COLOR"; break;
                 // clang-format on
 
             default:
                 FlagsStr += std::to_string(PlatformMisc::GetLSB(Flag));
         }
     }
-    static_assert(PSO_FLAG_LAST == 1ull << 41ull, "Please update the switch above to handle the new flag");
+    static_assert(PSO_FLAG_LAST == 1ull << 42ull, "Please update the switch above to handle the new flag");
 
     return FlagsStr;
 }
@@ -1328,7 +1329,7 @@ ShaderMacroHelper SF_PBR_Renderer::DefineMacros(const PSOKey& Key) const
     Macros.Add("LOADING_ANIMATION_TRANSITIONING", static_cast<int>(LoadingAnimationMode::Transitioning));
     // clang-format on
 
-    static_assert(PSO_FLAG_LAST == PSO_FLAG_BIT(41), "Did you add new PSO Flag? You may need to handle it here.");
+    static_assert(PSO_FLAG_LAST == PSO_FLAG_BIT(42), "Did you add new PSO Flag? You may need to handle it here.");
 #define ADD_PSO_FLAG_MACRO(Flag) Macros.Add(#Flag, (PSOFlags & PSO_FLAG_##Flag) != PSO_FLAG_NONE)
     ADD_PSO_FLAG_MACRO(USE_COLOR_MAP);
     ADD_PSO_FLAG_MACRO(USE_NORMAL_MAP);
@@ -1375,6 +1376,7 @@ ShaderMacroHelper SF_PBR_Renderer::DefineMacros(const PSOKey& Key) const
     ADD_PSO_FLAG_MACRO(USE_HEIGHTMAP);
     ADD_PSO_FLAG_MACRO(USE_INSTANCING);
     ADD_PSO_FLAG_MACRO(USE_TERRAINING);
+    ADD_PSO_FLAG_MACRO(USE_EGA_COLOR);
 #undef ADD_PSO_FLAG_MACRO
 
     Macros.Add("TEX_COLOR_CONVERSION_MODE_NONE", CreateInfo::TEX_COLOR_CONVERSION_MODE_NONE);

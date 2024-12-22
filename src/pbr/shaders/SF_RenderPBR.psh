@@ -656,6 +656,14 @@ PSOutput main(in VSOutput VSOut,
         //Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
         //Shading.BaseLayer.NdotV = 1.0;
     }
+
+#if USE_EGA_COLOR
+    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(g_Terrain.egaColor, 0.0, 0.2);
+    Shading.BaseLayer.Metallic = 0.0;
+    Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
+    Shading.BaseLayer.NdotV = 1.0;
+#endif // USE_EGA_COLOR
+
 #endif
 
     SurfaceLightingInfo SrfLighting = GetDefaultSurfaceLightingInfo();
