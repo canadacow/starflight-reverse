@@ -399,6 +399,25 @@ int FindCascadeIndex(float3 WorldPos, int LightIndex)
 }
 #endif
 
+#if USE_EGA_COLOR
+SurfaceShadingInfo GetEGAColorSurface(in VSOutput VSOut, float3 color)
+{
+    SurfaceShadingInfo Shading;
+    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(color, 0.0, 0.2); // Non-metallic, slightly rough
+    Shading.BaseLayer.Metallic = 0.0;
+    Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
+    Shading.BaseLayer.NdotV = 1.0;
+
+    Shading.Pos = VSOut.WorldPos.xyz;
+    Shading.View = normalize(g_Frame.Camera.f4Position.xyz - VSOut.WorldPos.xyz);
+    Shading.Occlusion = 1.0; // Default occlusion
+    Shading.Emissive = float3(0.0, 0.0, 0.0); // No emissive color
+    Shading.IBLScale = g_Frame.Renderer.IBLScale.rgb;
+
+    return Shading;
+}
+#endif
+
 #if USE_TERRAINING
 static const float WAVE_FREQ = 0.5;
 
@@ -658,10 +677,7 @@ PSOutput main(in VSOutput VSOut,
     }
 
 #if USE_EGA_COLOR
-    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(g_Terrain.egaColor, 0.0, 0.2);
-    Shading.BaseLayer.Metallic = 0.0;
-    Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
-    Shading.BaseLayer.NdotV = 1.0;
+    Shading = GetEGAColorSurface(VSOut, g_Terrain.egaColor);
 #endif // USE_EGA_COLOR
 
 #endif

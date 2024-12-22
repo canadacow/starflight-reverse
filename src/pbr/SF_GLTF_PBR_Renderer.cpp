@@ -633,11 +633,9 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 PSOFlags |= PSO_FLAG_USE_TERRAINING;
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
+                PSOFlags |= PSO_FLAG_USE_EGA_COLOR;
 
-                if(RenderParams.UseEGA)
-                {
-                    PSOFlags |= PSO_FLAG_USE_EGA_COLOR;
-                }
+                VERIFY(PSOFlags & PSO_FLAG_USE_EGA_COLOR, "PSO_FLAG_USE_EGA_COLOR must be set for terrain");
             }
 
             if (RenderParams.Wireframe)
@@ -762,6 +760,13 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         TerrainAttribs->textureOffsetX = RenderParams.TerrainTextureOffset.x;
                         TerrainAttribs->textureOffsetY = RenderParams.TerrainTextureOffset.y;
                         TerrainAttribs->waterHeight = 2.0f;
+
+                        // Compute EGA color based on biome height
+                        float heightNormalized = TerrainAttribs->endBiomHeight / 16.0f;
+                        // Clamp to 0-1 range
+                        heightNormalized = std::max(0.0f, std::min(1.0f, heightNormalized));
+                        // Convert to greyscale EGA color (0-255)
+                        TerrainAttribs->egaColor = float3(heightNormalized, heightNormalized, heightNormalized);
                     }
                 }
 

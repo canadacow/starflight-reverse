@@ -7078,6 +7078,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
+                ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_EGA_COLOR;
+
                 ri.TerrainTextureOffset = s_gc.terrainTextureOffset;
 
                 const std::string showPlanet = "Earth-like";

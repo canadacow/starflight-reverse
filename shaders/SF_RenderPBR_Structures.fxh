@@ -68,8 +68,9 @@ struct PBRTerrainAttribs
     float endBiomHeight;
     float textureOffsetX;
     float textureOffsetY;
-    float waterHeight;
+    
     float3 egaColor;
+    float waterHeight;    
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRTerrainAttribs);
