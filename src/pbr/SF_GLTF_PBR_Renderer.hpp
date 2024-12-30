@@ -112,6 +112,7 @@ public:
             Uint32 MaterialIndex = 0;
             float StartBiomHeight = 0.0f;
             float EndBiomHeight = 0.0f;
+            float3 EGAColor = float3(1.0, 1.0, 1.0);
         };
 
         std::vector<TerrainInfo> TerrainInfos;
@@ -324,13 +325,16 @@ private:
         const SF_GLTF::Primitive& Primitive;
         const SF_GLTF::Node&      Node;
         const Uint32              MaterialIndex;
+        const Uint32              TerrainInfoIndex;
 
         PrimitiveRenderInfo(const SF_GLTF::Primitive& _Primitive,
                             const SF_GLTF::Node&      _Node,
-                            Uint32                     _MaterialIndex) noexcept :
+                            Uint32                     _MaterialIndex,
+                            Uint32                     _TerrainInfoIndex) noexcept :
             Primitive{_Primitive},
             Node{_Node},
-            MaterialIndex{_MaterialIndex}
+            MaterialIndex{_MaterialIndex},
+            TerrainInfoIndex{_TerrainInfoIndex}
         {}
     };
     std::array<std::vector<PrimitiveRenderInfo>, SF_GLTF::Material::ALPHA_MODE_NUM_MODES> m_RenderLists;

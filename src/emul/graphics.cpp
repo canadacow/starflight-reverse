@@ -10,6 +10,7 @@
 #include "graphics.h"
 #include "../util/lodepng.h"
 #include <direct.h> 
+#include "starsystem.h"
 
 #include <vector>
 #include <assert.h>
@@ -210,6 +211,10 @@ static vec2<int16_t> s_pastWorld = {};
 static std::chrono::time_point<std::chrono::steady_clock> s_deadReckoningSet;
 
 static uint64_t s_frameAccelCount;
+
+// Defined in call.cpp. Don't want to add it call.h because that means
+// including BasicMath.hpp in a .h file and who knows trouble that might cause.
+float3 ToAlbedoWithIndex(const uint8_t* palette, int ordinal);
 
 struct ApplyPosteffects
 {
@@ -5345,7 +5350,7 @@ void InitTerrain()
     s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f, s_gc.terrainSize );
 
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
+        { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}, {"Ice", 12.01f}, {"Ice", 14.01f}}},
         { "Earth-dead", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Barren", 3.01f }, { "HighBarren", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
@@ -7093,13 +7098,19 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 {
                     using TerrainInfo = SF_GLTF_PBR_Renderer::RenderInfo::TerrainInfo;
 
+                    //const uint8_t* palette = GetPlanetColorMap(18); // Erf
+                    const uint8_t* palette = GetPlanetColorMap(34);
+
                     std::deque<TerrainInfo> terrainInfos;
                     float endBiomHeight = 16.0f;
+                    int albedoIndex = 7;
                     for (auto it_biom = it->boundaries.rbegin(); it_biom != it->boundaries.rend(); ++it_biom)
                     {
+                        auto egaColor = ToAlbedoWithIndex(palette, albedoIndex);
                         auto materialIndex = model.biomMaterialIndex[it_biom->name];
-                        terrainInfos.push_front({ materialIndex, it_biom->startHeight, endBiomHeight });
+                        terrainInfos.push_front({ materialIndex, it_biom->startHeight, endBiomHeight, egaColor });
                         endBiomHeight = it_biom->startHeight;
+                        --albedoIndex;
                     }
 
                     ri.TerrainInfos = std::vector<TerrainInfo>(terrainInfos.begin(), terrainInfos.end());

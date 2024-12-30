@@ -1118,7 +1118,7 @@ const uint8_t planet_color_map[][0x40]=
 
 typedef struct { int idx; int d1, surftype, mass, lseed, d8, tseed, d0, min, d2, d3, d4, d5, d6, coldest, warmest, atmoactivity, atmodensity, d7; } PLANETTYPEENTRY;
 
-PLANETTYPEENTRY planettypes[]=
+static const PLANETTYPEENTRY planettypes[]=
 {
   {.idx= 0, .d1=32, .surftype=32, .mass=8224, .lseed= 32, .d8= 8224, .tseed=0x2020, .d0= 32, .min= 32, .d2= 32, .d3= 32, .d4=32, .d5=32, .d6=32, .coldest=32, .warmest=8224, .atmoactivity=32, .atmodensity=32, .d7=32},
   {.idx= 1, .d1= 1, .surftype= 4, .mass=   0, .lseed=  0, .d8=    0, .tseed=0x0000, .d0=  0, .min=  0, .d2=  0, .d3=  0, .d4= 0, .d5= 0, .d6= 0, .coldest= 0, .warmest= 0, .atmoactivity= 0, .atmodensity= 0, .d7= 0},

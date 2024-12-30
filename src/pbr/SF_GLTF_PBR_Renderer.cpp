@@ -523,6 +523,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
             if(isTerrain)
             {
+                Uint32 TerrainInfoIndex = 0;
                 for(const auto& terrainInfo : RenderParams.TerrainInfos)
                 {
                     const auto& Material  = GLTFModel.GetMaterials()[terrainInfo.MaterialIndex];
@@ -530,7 +531,8 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
                         continue;
 
-                    m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, terrainInfo.MaterialIndex);
+                    m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, terrainInfo.MaterialIndex, TerrainInfoIndex);
+                    TerrainInfoIndex++;
                 }
             }
             else
@@ -540,7 +542,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 if ((RenderParams.AlphaModes & (1u << AlphaMode)) == 0)
                     continue;
 
-                m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, primitive.MaterialId);
+                m_RenderLists[AlphaMode].emplace_back(primitive, *pNode, primitive.MaterialId, 0);
             }
         }
     }
@@ -750,9 +752,8 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 if(isTerrain)
                 {
                     MapHelper<HLSL::PBRTerrainAttribs> TerrainAttribs{ pCtx, m_TerrainAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
-                    auto it = std::find_if(RenderParams.TerrainInfos.begin(), RenderParams.TerrainInfos.end(), [PrimRI](const auto& terrainInfo) {
-                        return terrainInfo.MaterialIndex == PrimRI.MaterialIndex;
-                    });
+
+                    auto it = RenderParams.TerrainInfos.begin() + PrimRI.TerrainInfoIndex;
                     if(it != RenderParams.TerrainInfos.end())
                     {
                         TerrainAttribs->startBiomHeight = it->StartBiomHeight;
@@ -761,12 +762,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         TerrainAttribs->textureOffsetY = RenderParams.TerrainTextureOffset.y;
                         TerrainAttribs->waterHeight = 2.0f;
 
-                        // Compute EGA color based on biome height
-                        float heightNormalized = TerrainAttribs->endBiomHeight / 16.0f;
-                        // Clamp to 0-1 range
-                        heightNormalized = std::max(0.0f, std::min(1.0f, heightNormalized));
-                        // Convert to greyscale EGA color (0-255)
-                        TerrainAttribs->egaColor = float3(heightNormalized, heightNormalized, heightNormalized);
+                        TerrainAttribs->egaColor = it->EGAColor;
                     }
                 }
 

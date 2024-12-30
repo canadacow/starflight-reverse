@@ -33,6 +33,10 @@
 #include <zstd.h>
 #include <xxhash.h>
 
+#include "BasicMath.hpp"
+
+using namespace Diligent;
+
 unsigned int debuglevel = 0;
 
 const unsigned short cs = StarflightBaseSegment;
@@ -58,6 +62,28 @@ std::vector<uint32_t> planet_albedo(planet_contour_width * planet_contour_height
 // ------------------------------------------------
 
 std::deque<uint16_t> inputbuffer{};
+
+uint32_t ToAlbedo(const uint8_t* palette, int val)
+{
+    int c = val;
+    c = c < 0 ? 0 : ((c >> 1) & 0x38);
+    c = palette[c] & 0xF;
+
+    uint32_t argb = colortable[c & 0xf] | 0xFF000000;
+    uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
+                    ((argb & 0xFF) << 16) | // Move red to third position
+                    ((argb & 0xFF00)) | // Keep green as is
+                    ((argb & 0xFF0000) >> 16); // Move blue to rightmost
+    return abgr;
+}
+
+float3 ToAlbedoWithIndex(const uint8_t* palette, int ordinal)
+{
+    int val = (ordinal & 0x7) << 4;
+    uint32_t abgr = ToAlbedo(palette, val);
+    float3 unnormalized = float3(abgr & 0xFF, (abgr >> 8) & 0xFF, (abgr >> 16) & 0xFF);
+    return unnormalized / 255.0f;
+}
 
 void FillKeyboardBufferString(const char *str)
 {
@@ -1662,19 +1688,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                 if (nextInstr == 0xb5aa) // HIMUS
                 {
-                    auto toAlbedo = [](const uint8_t* palette, int val) -> uint32_t {
-                        int c = val;
-                        c = c < 0 ? 0 : ((c >> 1) & 0x38);
-                        c = palette[c] & 0xF;
-
-                        uint32_t argb = colortable[c & 0xf] | 0xFF000000;
-                        uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
-                            ((argb & 0xFF) << 16) | // Move red to third position
-                            ((argb & 0xFF00)) | // Keep green as is
-                            ((argb & 0xFF0000) >> 16); // Move blue to rightmost
-                        return abgr;
-                    };
-
                     std::vector<unsigned char> png;
                     unsigned width, height;
                     unsigned error = lodepng::decode(png, width, height, "lofi_earth.png", LCT_GREY, 8);
@@ -1715,7 +1728,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                                         planet_image[image_index] = val;
                                     }
-                                    planet_albedo[image_index] = toAlbedo(palette, val);
+                                    planet_albedo[image_index] = ToAlbedo(palette, val);
                                 }
                             }
 
@@ -1783,7 +1796,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 }
                                 
                                 ps.relief[t] = val + 128;
-                                ps.albedo[t] = toAlbedo(palette, val);
+                                ps.albedo[t] = ToAlbedo(palette, val);
                                 ++t;
                             }
                         }
