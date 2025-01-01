@@ -7286,10 +7286,16 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.ssao->Execute(SSAORenderAttribs);
     }
 
-    s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-    // Clear the back buffer
-    const float ClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
-    s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    const float ClearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    if (s_gc.currentScene == Scene::SCENE_TERRAIN) {
+        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        // Clear the back buffer
+        s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    } else {
+        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        // Clear the back buffer
+        s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    }
 
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
     s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.bloom->GetBloomTextureSRV());
