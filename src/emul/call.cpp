@@ -1813,7 +1813,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         //if (!isEarth)
                         //    continue;
 
-                        if (!isMars)
+                        if (!isHeaven)
                             continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
@@ -1847,7 +1847,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                             int image_y = (planet_usable_height * yscale - 1) - (((ycon / yscale) * planet_contour_height) + y);
                                             int image_index = image_y * (planet_contour_width * planet_usable_width) + image_x;
                                             planet_image[image_index] = val;
-                                            
+                                            planet_albedo[image_index] = ToAlbedo(palette, val);
                                         }
                                     }
 
@@ -1859,7 +1859,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 unsigned error = lodepng::encode(png, planet_image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
                                 if (!error)
                                 {
-                                    lodepng::save_file(png, "mars_output.png");
+                                    lodepng::save_file(png, "heaven_output.png");
                                 }
                                 else
                                 {
@@ -2508,6 +2508,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     printf("XCON: %d, YCON: %d { \n", xcon, ycon);
 
+#if 0
                     for(int y = 0; y < planet_contour_height; ++y)
                     {
                         for(int x = 0; x < planet_contour_width; ++x)
@@ -2541,6 +2542,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         }
                         printf("\n");
                     }
+#endif
                     fflush(stdout);
                     printf("\n");                  
                 }

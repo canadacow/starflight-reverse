@@ -1,5 +1,6 @@
 #include "BasicStructures.fxh"
 #include "SF_PBR_Structures.fxh"
+#include "SF_PBR_Shading.fxh"
 #include "VertexProcessing.fxh"
 #include "SF_RenderPBR_Structures.fxh"
 
@@ -37,57 +38,6 @@ cbuffer cbHeightmapAttribs
 Texture2D g_Heightmap;
 SamplerState g_Heightmap_sampler : register(s0);
 
-float4 sampleBicubic(float v) {
-    float4 n = float4(1.0, 2.0, 3.0, 4.0) - v;
-    float4 s = n * n * n;
-    float4 o;
-    o.x = s.x;
-    o.y = s.y - 4.0 * s.x;
-    o.z = s.z - 4.0 * s.y + 6.0 * s.x;
-    o.w = 6.0 - o.x - o.y - o.z;
-    return o;
-}
-
-#if 1
-float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
-{
-    int2 texResolution;
-    tex.GetDimensions(texResolution.x, texResolution.y);
-    float2 pixel = 1.0 / float2(texResolution);
-
-    st = st * texResolution - 0.5;
-
-    float2 fxy = frac(st);
-    st -= fxy;
-
-    float4 xcubic = sampleBicubic(fxy.x);
-    float4 ycubic = sampleBicubic(fxy.y);
-
-    float4 c = st.xxyy + float2 (-0.5, 1.5).xyxy;
-
-    float4 s = float4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
-    float4 offset = c + float4(xcubic.yw, ycubic.yw) / s;
-
-    offset *= pixel.xxyy;
-    
-    float4 sample0 = tex.Sample(samplerState, offset.xz);
-    float4 sample1 = tex.Sample(samplerState, offset.yz);
-    float4 sample2 = tex.Sample(samplerState, offset.xw);
-    float4 sample3 = tex.Sample(samplerState, offset.yw);
-
-    float sx = s.x / (s.x + s.y);
-    float sy = s.z / (s.z + s.w);
-
-    return lerp(    lerp(sample3, sample2, sx), 
-                    lerp(sample1, sample0, sx), 
-                    sy);
-}
-#else
-float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
-{
-    return tex.Sample(samplerState, st);
-}
-#endif
 #endif
 
 #if USE_INSTANCING

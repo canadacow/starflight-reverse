@@ -71,6 +71,8 @@ struct PBRTerrainAttribs
 
     float3 egaColor;
     float waterHeight;
+
+    float4 convertEgaColors[8];
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRTerrainAttribs);

@@ -117,7 +117,38 @@ void PrepareForNewFrame(void* pEpipolarLightScattering, EpipolarLightScattering:
 #include "FidelityFX/host/backends/vk/ffx_vk.h"
 #include "FidelityFX/host/ffx_sssr.h"
 
+#include "ShaderSourceFactoryUtils.hpp"
+
+namespace Diligent
+{   
+#include "../pbr/shaders_inc/Shaders.h"
+}
+
 using namespace Diligent;
+
+class GraphicsRendererShaderSourceStreamFactory final
+{
+public:
+    static IShaderSourceInputStreamFactory& GetInstance();
+
+private:
+    GraphicsRendererShaderSourceStreamFactory();
+
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pFactory;
+};
+
+GraphicsRendererShaderSourceStreamFactory::GraphicsRendererShaderSourceStreamFactory()
+{
+    MemoryShaderSourceFactoryCreateInfo CI{g_Shaders, _countof(g_Shaders), false};
+
+    CreateMemoryShaderSourceFactory(CI, &m_pFactory);
+}
+
+IShaderSourceInputStreamFactory& GraphicsRendererShaderSourceStreamFactory::GetInstance()
+{
+    static GraphicsRendererShaderSourceStreamFactory TheFactory;
+    return *TheFactory.m_pFactory;
+}
 
 enum GBUFFER_RT : Uint32
 {
@@ -238,7 +269,7 @@ RefCntAutoPtr<IShaderSourceInputStreamFactory> SFCreateCompoundShaderSourceFacto
 {
     RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
     pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("shaders", &pShaderSourceFactory);
-    return CreateCompoundShaderSourceFactory({ &DiligentFXShaderSourceStreamFactory::GetInstance(), pShaderSourceFactory });
+    return CreateCompoundShaderSourceFactory({&GraphicsRendererShaderSourceStreamFactory::GetInstance(), &DiligentFXShaderSourceStreamFactory::GetInstance(), pShaderSourceFactory });
 }
 
 void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVFormat, IBuffer* pFrameAttribsCB)
@@ -477,22 +508,21 @@ struct GraphicsContext
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
-    #define TV_LOCATION_START_X (1608.0f + 30.f)
-    #define TV_LOCATION_START_Y (230.0f + 30.f)
+    #define TV_LOCATION_START_X (1745.0f * 2.0f) // 2318
+    //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
+    #define TV_LOCATION_START_Y (729.0f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
     Quaternion<float> tvRotation = {};
 
     //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
-    float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -200.0f, TV_LOCATION_START_Y * TileSize };
+    float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -80.0f, TV_LOCATION_START_Y * TileSize };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
 
-    
-
     MouseState mouseState;
-    float FPVpitchAngle = 0.18f;
+    float FPVpitchAngle = -PI_F/2.0f;
     float FPVyawAngle = 0.23f;
     float NormalizedXCoordForSunRotation = 0.0f;
     float4x4 terrainFPVRotation = float4x4::Identity();
@@ -3469,8 +3499,8 @@ static float2 InitHeightmap()
     static constexpr MapHeight = 9;
     */
 
-#define USE_LOFI_EARTH 1
-//#define USE_HEAVEN 1
+//#define USE_LOFI_EARTH 1
+#define USE_HEAVEN 1
 
 #if !defined(USE_LOFI_EARTH) && !defined(USE_HEAVEN)
     #error "Must define either USE_LOFI_EARTH or USE_HEAVEN"
@@ -3527,6 +3557,7 @@ static float2 InitHeightmap()
         for (int x = 0; x < MapWidth; ++x)
         {
             s_gc.heightmapData[y * MapWidth + x] = static_cast<float>(ptr[y * MapWidth + x] + 16) / 8.0f;
+            //s_gc.heightmapData[invertedY * MapWidth + x] = static_cast<float>(ptr[y * MapWidth + x]);
         }
     }
 
@@ -5478,7 +5509,32 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, s_gc.terrainMovement.y, -s_gc.terrainMovement.z);
+    float requiredYFov = 0.0f;
+
+    {
+        const float TILE_SIZE = 4.0f; // Size of each tile
+        const float DESIRED_GRID = 15.0f; // We want to see 15x15 tiles
+        const float TOTAL_VISIBLE_WORLD_SIZE = DESIRED_GRID * TILE_SIZE;
+
+        float aspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+        float halfWorldSize = TOTAL_VISIBLE_WORLD_SIZE * 0.5f;
+        
+        // For a symmetric view frustum looking straight down:
+        // halfWorldSize = height * tan(FOV/2)
+        // Therefore: height = halfWorldSize / tan(FOV/2)
+        float fovY = pCamera->Perspective.YFov;
+        requiredYFov = halfWorldSize / std::tan(fovY * 0.5f);
+
+        // Adjust for aspect ratio to ensure we see the same number of tiles horizontally
+        float horizontalHalfSize = halfWorldSize * aspectRatio;
+        float requiredYFovHorizontal = horizontalHalfSize / std::tan(fovY * 0.5f);
+        
+        // Use the larger height to ensure both dimensions are fully visible
+        requiredYFov = std::max(requiredYFov, requiredYFovHorizontal);
+    }
+
+    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, -requiredYFov, -s_gc.terrainMovement.z);
+    
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
     //CameraView = trans * CameraRotationMatrix;
@@ -7102,7 +7158,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                     const uint8_t* palette = GetPlanetColorMap(34);
 
                     std::deque<TerrainInfo> terrainInfos;
-                    float endBiomHeight = 16.0f;
+                    float endBiomHeight = 18.0f;
                     int albedoIndex = 7;
                     for (auto it_biom = it->boundaries.rbegin(); it_biom != it->boundaries.rend(); ++it_biom)
                     {
@@ -7287,7 +7343,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     }
 
     const float ClearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    if (s_gc.currentScene == Scene::SCENE_TERRAIN) {
+    //if (s_gc.currentScene == Scene::SCENE_TERRAIN) {
+    if(false) {
         s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // Clear the back buffer
         s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -7314,7 +7371,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
 
-    if(s_gc.currentScene == Scene::SCENE_TERRAIN)
+    //if(s_gc.currentScene == Scene::SCENE_TERRAIN)
+    if(false)
     {
         //s_gc.m_pImmediateContext->BeginDebugGroup("EpipolarLightScattering");
 

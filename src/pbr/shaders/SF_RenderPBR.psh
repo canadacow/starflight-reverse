@@ -676,7 +676,7 @@ PSOutput main(in VSOutput VSOut,
     }
 
 #if USE_EGA_COLOR
-    Shading = GetEGAColorSurface(VSOut, Shading,g_Terrain.egaColor);
+    //Shading = GetEGAColorSurface(VSOut, Shading,g_Terrain.egaColor);
 #endif // USE_EGA_COLOR
 
 #endif
@@ -790,7 +790,30 @@ PSOutput main(in VSOutput VSOut,
         OutColor.rgb *= BaseColor.a;
     }
 #endif
-    
+
+#if USE_EGA_COLOR
+    //BaseColor = float4(g_Terrain.egaColor, 1.0);
+    if(VSOut.Height < 0)
+    {
+        BaseColor = g_Terrain.convertEgaColors[0];
+    }
+    else
+    {
+        // c = c < 0 ? 0 : ((c >> 1) & 0x38);
+        int val = (VSOut.Height * 8.0) - 16.0;
+        val = val >> 4;
+
+        BaseColor = g_Terrain.convertEgaColors[val];
+    }
+
+    if (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975)
+    {
+        BaseColor.rgb = float3(1.0, 1.0, 0.0); // Set to yellow
+    }
+
+    OutColor.rgba = BaseColor;
+#endif // USE_EGA_COLOR
+
     // Add highlight color
     OutColor.rgb = lerp(OutColor.rgb, g_Frame.Renderer.HighlightColor.rgb, g_Frame.Renderer.HighlightColor.a);
         

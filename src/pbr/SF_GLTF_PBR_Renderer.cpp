@@ -764,6 +764,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
                         TerrainAttribs->egaColor = it->EGAColor;
                     }
+
+                    for(int i = 0; i < 8; ++i)
+                    {
+                        TerrainAttribs->convertEgaColors[i] = float4(RenderParams.TerrainInfos[i].EGAColor, 1.0);
+                    }
                 }
 
                 if(Node.Instances.size() > 0)

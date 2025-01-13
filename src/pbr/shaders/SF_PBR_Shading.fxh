@@ -889,6 +889,8 @@ float4 sampleBicubic(float v) {
 #if 1
 float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 {
+    st.x *= 0.5;
+
     int2 texResolution;
     tex.GetDimensions(texResolution.x, texResolution.y);
     float2 pixel = 1.0 / float2(texResolution);
