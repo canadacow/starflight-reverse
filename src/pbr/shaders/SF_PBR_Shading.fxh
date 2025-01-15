@@ -886,10 +886,10 @@ float4 sampleBicubic(float v) {
     return o;
 }
 
-#if 1
+#if 0
 float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 {
-    st.x *= 0.5;
+    //st.x *= 0.5;
 
     int2 texResolution;
     tex.GetDimensions(texResolution.x, texResolution.y);
@@ -925,6 +925,7 @@ float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 #else
 float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 {
+    //st.x *= 0.5;
     return tex.Sample(samplerState, st);
 }
 #endif

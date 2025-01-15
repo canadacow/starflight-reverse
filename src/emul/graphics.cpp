@@ -502,13 +502,13 @@ struct GraphicsContext
         bool rightDown;
     };
 
-    static inline const float TileSize = 4.0f;    
+    static inline const float2 TileSize = { 8.0f, 4.0f };
 
     float3 terrainDelta{};
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
-    #define TV_LOCATION_START_X (1745.0f * 2.0f) // 2318
+    #define TV_LOCATION_START_X (1745.0f) // 2318
     //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
     #define TV_LOCATION_START_Y (729.0f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
@@ -517,7 +517,7 @@ struct GraphicsContext
     Quaternion<float> tvRotation = {};
 
     //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
-    float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -80.0f, TV_LOCATION_START_Y * TileSize };
+    float3 terrainMovement = { TV_LOCATION_START_X * TileSize.x, -80.0f, TV_LOCATION_START_Y * TileSize.y };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
 
@@ -5214,7 +5214,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_c:
                     {
-                        s_gc.terrainMovement = { 388.0f * GraphicsContext::TileSize, -40.0f, 245.0f * GraphicsContext::TileSize };
+                        s_gc.terrainMovement = { 388.0f * GraphicsContext::TileSize.x, -40.0f, 245.0f * GraphicsContext::TileSize.y };
                         s_gc.terrainFPVRotation = float4x4::Identity();
                         s_gc.FPVyawAngle = 0.0f;
                         s_gc.FPVpitchAngle = 0.0f;
@@ -5378,7 +5378,7 @@ void InitTerrain()
     s_gc.terrainSize = InitHeightmap();
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlanes(4.0f, 4.0f, 0.0f, s_gc.terrainSize );
+    s_gc.terrain.dynamicMesh->GeneratePlanes(8.0f, 4.0f, 0.0f, s_gc.terrainSize );
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}, {"Ice", 12.01f}, {"Ice", 14.01f}}},
