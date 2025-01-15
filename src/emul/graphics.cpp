@@ -502,15 +502,15 @@ struct GraphicsContext
         bool rightDown;
     };
 
-    static inline const float2 TileSize = { 8.0f, 4.0f };
+    static inline const float2 TileSize = { 6.666f, 4.0f };
 
     float3 terrainDelta{};
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
-    #define TV_LOCATION_START_X (1745.0f) // 2318
+    #define TV_LOCATION_START_X (1747.5f) // 2318
     //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
-    #define TV_LOCATION_START_Y (729.0f) // 909
+    #define TV_LOCATION_START_Y (728.5f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
@@ -5378,7 +5378,7 @@ void InitTerrain()
     s_gc.terrainSize = InitHeightmap();
 
     s_gc.terrain.dynamicMesh = std::make_unique<SF_GLTF::DynamicMesh>(s_gc.m_pDevice, s_gc.m_pImmediateContext, s_gc.terrain.model);
-    s_gc.terrain.dynamicMesh->GeneratePlanes(8.0f, 4.0f, 0.0f, s_gc.terrainSize );
+    s_gc.terrain.dynamicMesh->GeneratePlanes(GraphicsContext::TileSize.x, GraphicsContext::TileSize.y, 0.0f, s_gc.terrainSize );
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}, {"Ice", 12.01f}, {"Ice", 14.01f}}},
@@ -5509,31 +5509,35 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    float requiredYFov = 0.0f;
+    float finalCameraY = 0.0f;
 
     {
         const float TILE_SIZE = 4.0f; // Size of each tile
         const float DESIRED_GRID = 15.0f; // We want to see 15x15 tiles
         const float TOTAL_VISIBLE_WORLD_SIZE = DESIRED_GRID * TILE_SIZE;
 
+        // Define the desired pixel size for the region
+        const float DESIRED_PIXEL_SIZE = 860.0f; // Desired pixel size for the region
+
+        // Calculate the aspect ratio of the desired pixel size
         float aspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+
+        // Calculate the world size that corresponds to the desired pixel size
         float halfWorldSize = TOTAL_VISIBLE_WORLD_SIZE * 0.5f;
-        
-        // For a symmetric view frustum looking straight down:
-        // halfWorldSize = height * tan(FOV/2)
-        // Therefore: height = halfWorldSize / tan(FOV/2)
+
+        // Calculate the required Y position of the camera to fit the world size into the desired pixel size
         float fovY = pCamera->Perspective.YFov;
-        requiredYFov = halfWorldSize / std::tan(fovY * 0.5f);
+        float requiredCameraY = halfWorldSize / std::tan(fovY * 0.5f);
 
         // Adjust for aspect ratio to ensure we see the same number of tiles horizontally
         float horizontalHalfSize = halfWorldSize * aspectRatio;
-        float requiredYFovHorizontal = horizontalHalfSize / std::tan(fovY * 0.5f);
-        
-        // Use the larger height to ensure both dimensions are fully visible
-        requiredYFov = std::max(requiredYFov, requiredYFovHorizontal);
+        float requiredCameraYHorizontal = horizontalHalfSize / std::tan(fovY * 0.5f);
+
+        // Use the larger Y position to ensure both dimensions are fully visible
+        finalCameraY = std::max(requiredCameraY, requiredCameraYHorizontal);
     }
 
-    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, -requiredYFov, -s_gc.terrainMovement.z);
+    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, -finalCameraY, -s_gc.terrainMovement.z);
     
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
