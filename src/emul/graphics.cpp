@@ -517,7 +517,7 @@ struct GraphicsContext
     Quaternion<float> tvRotation = {};
 
     //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
-    float3 terrainMovement = { TV_LOCATION_START_X * TileSize.x, -80.0f, TV_LOCATION_START_Y * TileSize.y };
+    float3 terrainMovement = { TV_LOCATION_START_X * TileSize.x, -99.0f, TV_LOCATION_START_Y * TileSize.y };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
 
@@ -5386,6 +5386,7 @@ void InitTerrain()
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
+        { "EGA", { { "Water", -15.0f } } },
     };
 
     for (const auto& planetType : s_gc.terrain.planetTypes)
@@ -5509,6 +5510,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
+    #if 0
+
     float finalCameraY = 0.0f;
 
     {
@@ -5517,10 +5520,11 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
         const float TOTAL_VISIBLE_WORLD_SIZE = DESIRED_GRID * TILE_SIZE;
 
         // Define the desired pixel size for the region
-        const float DESIRED_PIXEL_SIZE = 860.0f; // Desired pixel size for the region
+        //const float DESIRED_PIXEL_SIZE = 860.0f; // Desired pixel size for the region
+        const float DESIRED_PIXEL_SIZE = 860.0f / 1.5f; // Desired pixel size for the region
 
         // Calculate the aspect ratio of the desired pixel size
-        float aspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+        float aspectRatio = pCamera->Perspective.AspectRatio;
 
         // Calculate the world size that corresponds to the desired pixel size
         float halfWorldSize = TOTAL_VISIBLE_WORLD_SIZE * 0.5f;
@@ -5537,7 +5541,11 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
         finalCameraY = std::max(requiredCameraY, requiredCameraYHorizontal);
     }
 
+    finalCameraY = 99.0f;
     auto trans = float4x4::Translation(-s_gc.terrainMovement.x, -finalCameraY, -s_gc.terrainMovement.z);
+    #else
+    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, s_gc.terrainMovement.y, -s_gc.terrainMovement.z);
+    #endif
     
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
@@ -7147,7 +7155,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
                 ri.TerrainTextureOffset = s_gc.terrainTextureOffset;
 
-                const std::string showPlanet = "Earth-like";
+                //const std::string showPlanet = "Earth-like";
+                const std::string showPlanet = "EGA";
 
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
                 auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [showPlanet](const auto& planetType) {
@@ -7163,17 +7172,20 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
                     std::deque<TerrainInfo> terrainInfos;
                     float endBiomHeight = 18.0f;
-                    int albedoIndex = 7;
                     for (auto it_biom = it->boundaries.rbegin(); it_biom != it->boundaries.rend(); ++it_biom)
                     {
-                        auto egaColor = ToAlbedoWithIndex(palette, albedoIndex);
                         auto materialIndex = model.biomMaterialIndex[it_biom->name];
-                        terrainInfos.push_front({ materialIndex, it_biom->startHeight, endBiomHeight, egaColor });
+                        terrainInfos.push_front({ materialIndex, it_biom->startHeight, endBiomHeight });
                         endBiomHeight = it_biom->startHeight;
-                        --albedoIndex;
                     }
 
                     ri.TerrainInfos = std::vector<TerrainInfo>(terrainInfos.begin(), terrainInfos.end());
+
+                    for(int albedoIndex = 0; albedoIndex < 8; ++albedoIndex)
+                    {
+                        auto egaColor = ToAlbedoWithIndex(palette, albedoIndex);
+                        ri.EgaColors[albedoIndex] = egaColor;
+                    }
                 }
 
                 ri.pWaterHeightMap = s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);

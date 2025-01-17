@@ -761,13 +761,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         TerrainAttribs->textureOffsetX = RenderParams.TerrainTextureOffset.x;
                         TerrainAttribs->textureOffsetY = RenderParams.TerrainTextureOffset.y;
                         TerrainAttribs->waterHeight = 2.0f;
-
-                        TerrainAttribs->egaColor = it->EGAColor;
                     }
 
                     for(int i = 0; i < 8; ++i)
                     {
-                        TerrainAttribs->convertEgaColors[i] = float4(RenderParams.TerrainInfos[i].EGAColor, 1.0);
+                        TerrainAttribs->convertEgaColors[i] = float4(RenderParams.EgaColors[i], 1.0);
                     }
                 }
 
@@ -781,6 +779,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         InstanceAttribs[i].HeightmapAttribs.ScaleY = Node.Instances[i].ScaleY;
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = Node.Instances[i].OffsetX;
                         InstanceAttribs[i].HeightmapAttribs.OffsetY = Node.Instances[i].OffsetY;
+                        InstanceAttribs[i].planetLocation = Node.Instances[i].PlanetLocation;
                     }
 
                     StateTransitionDesc Barriers[] = {

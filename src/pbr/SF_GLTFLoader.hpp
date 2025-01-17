@@ -487,6 +487,8 @@ struct NodeInstance
     float ScaleY;
     float OffsetX;
     float OffsetY;
+
+    int2 PlanetLocation;
 };
 
 struct Node

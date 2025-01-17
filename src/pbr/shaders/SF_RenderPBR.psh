@@ -569,7 +569,6 @@ PSOutput main(in VSOutput VSOut,
     float bottomTransitionHeight = g_Terrain.startBiomHeight - wideNoise;
     float topTransitionHeight = g_Terrain.endBiomHeight + wideNoise;
 
-
     if (VSOut.Height < bottomTransitionHeight || VSOut.Height >= topTransitionHeight)
     {
         discard;
@@ -800,10 +799,29 @@ PSOutput main(in VSOutput VSOut,
     else
     {
         // c = c < 0 ? 0 : ((c >> 1) & 0x38);
-        int val = (VSOut.Height * 8.0) - 16.0;
-        val = val >> 4;
+        float height = VSOut.Height;
+        float val = (height * 8.0) - 16.0;
+        //val = val >> 4;
+        val = val / 16.0;
 
-        BaseColor = g_Terrain.convertEgaColors[val];
+        int colorIndex = min((int)floor(val), 7);
+        #if 0
+        float frac = frac(val);
+        float3 color1 = g_Terrain.convertEgaColors[max(colorIndex - 1, 0)].rgb;
+        float3 color2 = g_Terrain.convertEgaColors[colorIndex].rgb;
+        float3 color3 = g_Terrain.convertEgaColors[min(colorIndex + 1, 7)].rgb;
+        
+        float dist1 = abs(val - (colorIndex - 1));
+        float dist2 = abs(val - colorIndex);
+        float dist3 = abs(val - (colorIndex + 1));
+        float weight1 = 1.0 - saturate(dist1);
+        float weight2 = 1.0 - saturate(dist2);
+        float weight3 = 1.0 - saturate(dist3);
+        
+        BaseColor = float4((color1 * weight1 + color2 * weight2 + color3 * weight3) / (weight1 + weight2 + weight3), 1.0);
+        #else
+        BaseColor = g_Terrain.convertEgaColors[colorIndex];
+        #endif
     }
 
     if (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975)

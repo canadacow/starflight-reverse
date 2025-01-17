@@ -112,17 +112,17 @@ public:
             Uint32 MaterialIndex = 0;
             float StartBiomHeight = 0.0f;
             float EndBiomHeight = 0.0f;
-            float3 EGAColor = float3(1.0, 1.0, 1.0);
         };
 
         std::vector<TerrainInfo> TerrainInfos;
+
+        std::array<float3, 8> EgaColors;
 
         float2 TerrainTextureOffset = { 0.5f, 0.5f };
 
         ITextureView* pWaterHeightMap = nullptr;
 
         bool UseEGA = false;
-        float3 EGAColor = float3(1.0, 1.0, 1.0);
     };
 
     /// GLTF Model shader resource binding information
