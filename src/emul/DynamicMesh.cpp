@@ -399,6 +399,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
             instance.ScaleY = 1.0f / m_TextureSize.y;
             instance.OffsetX = (float)tile.x / m_TextureSize.x;
             instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            instance.PlanetLocation = tile;
 
             float3 minTranslatedPos = baseMinBB * instance.NodeMatrix;
             float3 maxTranslatedPos = baseMaxBB * instance.NodeMatrix;

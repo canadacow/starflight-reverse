@@ -779,7 +779,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         InstanceAttribs[i].HeightmapAttribs.ScaleY = Node.Instances[i].ScaleY;
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = Node.Instances[i].OffsetX;
                         InstanceAttribs[i].HeightmapAttribs.OffsetY = Node.Instances[i].OffsetY;
-                        InstanceAttribs[i].planetLocation = Node.Instances[i].PlanetLocation;
+                        InstanceAttribs[i].PlanetLocation = Node.Instances[i].PlanetLocation;
                     }
 
                     StateTransitionDesc Barriers[] = {

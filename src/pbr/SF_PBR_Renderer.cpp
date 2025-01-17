@@ -1020,8 +1020,8 @@ void SF_PBR_Renderer::CreateSignature()
         SignatureDesc.AddImmutableSampler(SHADER_TYPE_PIXEL, "g_LinearClampSampler", Sam_LinearClamp);
         Samplers.emplace("g_LinearClampSampler");
 
-        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap_sampler", Sam_LinearMirror);
-        //SignatureDesc.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap_sampler", Sam_PointWrap);
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_Heightmap_sampler", Sam_LinearMirror);
+        //SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_Heightmap_sampler", Sam_PointWrap);
         Samplers.emplace("g_Heightmap_sampler");
 
         SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_WaterHeightMap_sampler", Sam_LinearMirror);
@@ -1600,6 +1600,7 @@ std::string SF_PBR_Renderer::GetVSOutputStruct(PSO_FLAGS PSOFlags, bool UseVkPoi
     if (PSOFlags & PSO_FLAG_USE_TERRAINING)
     {
         ss << "    float2 UV2      : UV2;" << std::endl;
+        ss << "    float2 UV3      : UV3;" << std::endl;
     }
     if (PSOFlags & PSO_FLAG_USE_VERTEX_TANGENTS)
     {

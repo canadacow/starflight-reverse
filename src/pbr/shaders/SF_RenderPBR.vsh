@@ -220,6 +220,8 @@ void main(in  VSInput  VSIn,
     VSOut.UV0 = float2(frac(megaUV.x * 9.0 * 38.0), frac(megaUV.y * 9.0 * 14.9));
     VSOut.UV1 = megaUV;
 
+    VSOut.UV3 = float2(instance.PlanetLocation);
+
 #endif // USE_TERRAINING
 #endif // USE_TEXCOORD0
 

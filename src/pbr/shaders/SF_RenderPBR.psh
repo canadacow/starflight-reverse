@@ -67,6 +67,10 @@ Texture2D<float4> g_Noise;
 SamplerState g_Noise_sampler;
 Texture2D<float> g_WaterHeightMap;
 SamplerState g_WaterHeightMap_sampler;
+
+Texture2D g_Heightmap;
+SamplerState g_Heightmap_sampler;
+
 #endif
 
 #if PRIMITIVE_ARRAY_SIZE > 0
@@ -799,7 +803,11 @@ PSOutput main(in VSOutput VSOut,
     else
     {
         // c = c < 0 ? 0 : ((c >> 1) & 0x38);
+        #if 0
         float height = VSOut.Height;
+        #else
+        float height = g_Heightmap.Load(int3(VSOut.UV3.x, VSOut.UV3.y, 0)).r;
+        #endif
         float val = (height * 8.0) - 16.0;
         //val = val >> 4;
         val = val / 16.0;
