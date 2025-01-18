@@ -245,4 +245,8 @@ void main(in  VSInput  VSIn,
 #if PRIMITIVE_ARRAY_SIZE > 0
     VSOut.PrimitiveID = PRIMITIVE_ID;
 #endif
+
+#if USE_INSTANCING
+    VSOut.InstanceID = VSIn.InstanceID;
+#endif
 }

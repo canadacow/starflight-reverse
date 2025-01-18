@@ -938,6 +938,9 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
     {
         if (auto* pInstanceAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer"))
             pInstanceAttribsVar->Set(m_InstanceAttribsSBView);
+
+        if (auto* pInstanceAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "instanceBuffer"))
+            pInstanceAttribsVar->Set(m_InstanceAttribsSBView);
     }
 
     if(m_TerrainAttribsCB != nullptr)
@@ -1621,6 +1624,10 @@ std::string SF_PBR_Renderer::GetVSOutputStruct(PSO_FLAGS PSOFlags, bool UseVkPoi
     if (PSOFlags & PSO_FLAG_USE_HEIGHTMAP)
     {
         ss << "    float Height : HEIGHT;" << std::endl;
+    }
+    if (PSOFlags & PSO_FLAG_USE_INSTANCING)
+    {
+        ss << "    uint InstanceID : SV_InstanceID;" << std::endl;
     }
     ss << "};" << std::endl;
     return ss.str();

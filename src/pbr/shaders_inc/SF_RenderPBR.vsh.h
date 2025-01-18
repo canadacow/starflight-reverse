@@ -245,4 +245,8 @@
 "#if PRIMITIVE_ARRAY_SIZE > 0\n"
 "    VSOut.PrimitiveID = PRIMITIVE_ID;\n"
 "#endif\n"
+"\n"
+"#if USE_INSTANCING\n"
+"    VSOut.InstanceID = VSIn.InstanceID;\n"
+"#endif\n"
 "}\n"

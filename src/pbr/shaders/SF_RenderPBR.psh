@@ -25,6 +25,7 @@
 //     float2 UV1      : UV1;
 //     float2 UV2      : UV2;
 //     float Height : HEIGHT;
+//     uint InstanceID : SV_InstanceID;
 // };
 
 #include "PSOutputStruct.generated"
@@ -84,6 +85,9 @@ Texture2DArray<float>  g_ShadowMap;
 SamplerComparisonState g_ShadowMap_sampler;
 #endif
 
+#if USE_INSTANCING
+StructuredBuffer<PBRInstanceAttribs> instanceBuffer : register(t1);
+#endif
 
 PBRMaterialTextureAttribs GetDefaultTextureAttribs()
 {
@@ -806,7 +810,8 @@ PSOutput main(in VSOutput VSOut,
         #if 0
         float height = VSOut.Height;
         #else
-        float height = g_Heightmap.Load(int3(VSOut.UV3.x, VSOut.UV3.y, 0)).r;
+        PBRInstanceAttribs instance = instanceBuffer[VSOut.InstanceID];
+        float height = g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y, 0)).r;
         #endif
         float val = (height * 8.0) - 16.0;
         //val = val >> 4;
