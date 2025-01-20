@@ -635,9 +635,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
             {
                 PSOFlags |= PSO_FLAG_USE_TERRAINING;
                 PSOFlags |= PSO_FLAG_USE_HEIGHTMAP;
-                PSOFlags |= PSO_FLAG_USE_EGA_COLOR;
 
-                VERIFY(PSOFlags & PSO_FLAG_USE_EGA_COLOR, "PSO_FLAG_USE_EGA_COLOR must be set for terrain");
+                if(RenderParams.Flags & PSO_FLAG_USE_EGA_COLOR)
+                {
+                    PSOFlags |= PSO_FLAG_USE_EGA_COLOR;
+                }
             }
 
             if (RenderParams.Wireframe)

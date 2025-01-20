@@ -231,6 +231,7 @@ static double toneInHz = 440.0;
 static bool s_useRotoscope = true;
 static bool s_shouldToggleMenu = true;
 static bool s_useEGA = true;
+static bool s_useEGATerrain = false;
 static bool s_showHelp = false;
 static bool s_helpShown = false;
 static std::atomic<uint32_t> s_alienVar1 = 0;
@@ -2468,6 +2469,10 @@ public:
                     else if(event.key.keysym.sym == SDLK_F3)
                     {
                         s_useEGA = !s_useEGA;
+                    }
+                    else if(event.key.keysym.sym == SDLK_F4)
+                    {
+                        s_useEGATerrain = !s_useEGATerrain;
                     }
                     else if (event.key.keysym.sym == SDLK_F4)
                     {
@@ -7151,12 +7156,15 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
-                ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_EGA_COLOR;
+                std::string showPlanet = "Earth-like";
+
+                if(s_useEGATerrain)
+                {
+                    ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_EGA_COLOR;
+                    showPlanet = "EGA";
+                }
 
                 ri.TerrainTextureOffset = s_gc.terrainTextureOffset;
-
-                //const std::string showPlanet = "Earth-like";
-                const std::string showPlanet = "EGA";
 
                 // Pick the earth-like planet and convert it to the TerrainInfo on RenderInfo
                 auto it = std::find_if(model.planetTypes.begin(), model.planetTypes.end(), [showPlanet](const auto& planetType) {
