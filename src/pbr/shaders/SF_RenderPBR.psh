@@ -843,8 +843,7 @@ PSOutput main(in VSOutput VSOut,
                 normalizedUV.x = quadPos.x * 2.0; // Map 0.0-0.5 to 0.0-1.0
                 normalizedUV.y = quadPos.y * 2.0; // Map 0.0-0.5 to 0.0-1.0
 
-                // Split diagonally - check if we're above or below diagonal
-                if (normalizedUV.x + normalizedUV.y < 1.0) {
+                if (pow(normalizedUV.x - 1.0, 2) + pow(normalizedUV.y - 1.0, 2) > 1.0) {
                     tileColor = g_Terrain.convertEgaColors[heightIndex[5]]; // Left triangle
                 } else {
                     tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
@@ -860,11 +859,10 @@ PSOutput main(in VSOutput VSOut,
                 normalizedUV.x = (quadPos.x - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
                 normalizedUV.y = quadPos.y * 2.0; // Map 0.0-0.5 to 0.0-1.0
 
-                // Split diagonally - check if we're above or below diagonal
-                if (normalizedUV.y > normalizedUV.x) {
-                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Lower triangle
-                } else {
+                if (pow(normalizedUV.x, 2) + pow(normalizedUV.y - 1.0, 2) > 1.0) {
                     tileColor = g_Terrain.convertEgaColors[heightIndex[0]]; // Upper triangle
+                } else {
+                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Lower triangle
                 }
             }
         }
@@ -878,10 +876,10 @@ PSOutput main(in VSOutput VSOut,
                 normalizedUV.y = (quadPos.y - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
 
                 // Split diagonally - check if we're above or below diagonal
-                if (normalizedUV.x > normalizedUV.y) {
-                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
-                } else {
+                if (pow(normalizedUV.x - 1.0, 2) + pow(normalizedUV.y, 2) > 1.0) {
                     tileColor = g_Terrain.convertEgaColors[heightIndex[4]]; // Left triangle
+                } else {
+                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
                 }
             }
         }
@@ -895,7 +893,7 @@ PSOutput main(in VSOutput VSOut,
                 normalizedUV.y = (quadPos.y - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
 
                 // Split diagonally - check if we're above or below diagonal
-                if (normalizedUV.x + normalizedUV.y > 1.0) {
+                if (pow(normalizedUV.x, 2) + pow(normalizedUV.y, 2) > 1.0) {
                     tileColor = g_Terrain.convertEgaColors[heightIndex[8]]; // Right triangle
                 } else {
                     tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Left triangle
