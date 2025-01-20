@@ -76,7 +76,8 @@ int GetHeightIndex(float height)
 {
     float val = (height * 8.0) - 16.0;
     val = val / 16.0;
-    return min((int)floor(val), 7);
+    int index = min((int)floor(val), 7);
+    return max(index, 0); // Ensure index is not negative
 }
 
 #endif
@@ -688,11 +689,6 @@ PSOutput main(in VSOutput VSOut,
         //Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
         //Shading.BaseLayer.NdotV = 1.0;
     }
-
-#if USE_EGA_COLOR
-    //Shading = GetEGAColorSurface(VSOut, Shading,g_Terrain.egaColor);
-#endif // USE_EGA_COLOR
-
 #endif
 
     SurfaceLightingInfo SrfLighting = GetDefaultSurfaceLightingInfo();
@@ -806,103 +802,98 @@ PSOutput main(in VSOutput VSOut,
 #endif
 
 #if USE_EGA_COLOR
+
     //BaseColor = float4(g_Terrain.egaColor, 1.0);
-    if(VSOut.Height < 0)
-    {
-        BaseColor = g_Terrain.convertEgaColors[0];
+
+    // c = c < 0 ? 0 : ((c >> 1) & 0x38);
+    PBRInstanceAttribs instance = instanceBuffer[VSOut.InstanceID];
+
+    int heightIndex[9];
+    heightIndex[0] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y - 1, 0)).r); // top
+    heightIndex[1] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y, 0)).r); // left  
+    heightIndex[2] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y, 0)).r); // center
+    heightIndex[3] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y, 0)).r); // right
+    heightIndex[4] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y + 1, 0)).r); // bottom
+
+    // Load corner heights
+    heightIndex[5] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y - 1, 0)).r); // top-left
+    heightIndex[6] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y - 1, 0)).r); // top-right
+    heightIndex[7] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y + 1, 0)).r); // bottom-left
+    heightIndex[8] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y + 1, 0)).r); // bottom-right
+
+    // Determine the EGA color based on the center height
+    int centerHeightIndex = heightIndex[2];
+    float4 tileColor = g_Terrain.convertEgaColors[centerHeightIndex];
+
+    // Determine which quadrant we're in using UV2 coordinates
+    float2 quadPos = VSOut.UV2;
+    if (quadPos.x < 0.5 && quadPos.y < 0.5) {
+        // Top-left quadrant
+        if(heightIndex[0] != centerHeightIndex && heightIndex[1] != centerHeightIndex)
+        {
+            float2 normalizedUV;
+            normalizedUV.x = quadPos.x * 2.0; // Map 0.0-0.5 to 0.0-1.0
+            normalizedUV.y = quadPos.y * 2.0; // Map 0.0-0.5 to 0.0-1.0
+
+            if (pow(normalizedUV.x - 1.0, 2) + pow(normalizedUV.y - 1.0, 2) > 1.0) {
+                tileColor = g_Terrain.convertEgaColors[heightIndex[5]]; // Left triangle
+            } else {
+                tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
+            }
+        }
     }
-    else
-    {
-        // c = c < 0 ? 0 : ((c >> 1) & 0x38);
-        PBRInstanceAttribs instance = instanceBuffer[VSOut.InstanceID];
+    else if (quadPos.x >= 0.5 && quadPos.y < 0.5) {
+        // Top-right quadrant
+        if(heightIndex[0] != centerHeightIndex && heightIndex[3] != centerHeightIndex)
+        {
+            // Compute normalized UV coordinates for this quadrant (0.5-1.0, 0.0-0.5)
+            float2 normalizedUV;
+            normalizedUV.x = (quadPos.x - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
+            normalizedUV.y = quadPos.y * 2.0; // Map 0.0-0.5 to 0.0-1.0
 
-        int heightIndex[9];
-        heightIndex[0] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y - 1, 0)).r); // top
-        heightIndex[1] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y, 0)).r); // left  
-        heightIndex[2] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y, 0)).r); // center
-        heightIndex[3] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y, 0)).r); // right
-        heightIndex[4] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y + 1, 0)).r); // bottom
-
-        // Load corner heights
-        heightIndex[5] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y - 1, 0)).r); // top-left
-        heightIndex[6] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y - 1, 0)).r); // top-right
-        heightIndex[7] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y + 1, 0)).r); // bottom-left
-        heightIndex[8] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y + 1, 0)).r); // bottom-right
-
-        // Determine the EGA color based on the center height
-        int centerHeightIndex = heightIndex[2];
-        float4 tileColor = g_Terrain.convertEgaColors[centerHeightIndex];
-
-        // Determine which quadrant we're in using UV2 coordinates
-        float2 quadPos = VSOut.UV2;
-        if (quadPos.x < 0.5 && quadPos.y < 0.5) {
-            // Top-left quadrant
-            if(heightIndex[0] != centerHeightIndex && heightIndex[1] != centerHeightIndex)
-            {
-                float2 normalizedUV;
-                normalizedUV.x = quadPos.x * 2.0; // Map 0.0-0.5 to 0.0-1.0
-                normalizedUV.y = quadPos.y * 2.0; // Map 0.0-0.5 to 0.0-1.0
-
-                if (pow(normalizedUV.x - 1.0, 2) + pow(normalizedUV.y - 1.0, 2) > 1.0) {
-                    tileColor = g_Terrain.convertEgaColors[heightIndex[5]]; // Left triangle
-                } else {
-                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
-                }
+            if (pow(normalizedUV.x, 2) + pow(normalizedUV.y - 1.0, 2) > 1.0) {
+                tileColor = g_Terrain.convertEgaColors[heightIndex[0]]; // Upper triangle
+            } else {
+                tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Lower triangle
             }
         }
-        else if (quadPos.x >= 0.5 && quadPos.y < 0.5) {
-            // Top-right quadrant
-            if(heightIndex[0] != centerHeightIndex && heightIndex[3] != centerHeightIndex)
-            {
-                // Compute normalized UV coordinates for this quadrant (0.5-1.0, 0.0-0.5)
-                float2 normalizedUV;
-                normalizedUV.x = (quadPos.x - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
-                normalizedUV.y = quadPos.y * 2.0; // Map 0.0-0.5 to 0.0-1.0
-
-                if (pow(normalizedUV.x, 2) + pow(normalizedUV.y - 1.0, 2) > 1.0) {
-                    tileColor = g_Terrain.convertEgaColors[heightIndex[0]]; // Upper triangle
-                } else {
-                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Lower triangle
-                }
-            }
-        }
-        else if (quadPos.x < 0.5 && quadPos.y >= 0.5) {
-            // Bottom-left quadrant
-            if(heightIndex[4] != centerHeightIndex && heightIndex[1] != centerHeightIndex)
-            {
-                // Compute normalized UV coordinates for this quadrant (0.0-0.5, 0.5-1.0)
-                float2 normalizedUV;
-                normalizedUV.x = quadPos.x * 2.0; // Map 0.0-0.5 to 0.0-1.0
-                normalizedUV.y = (quadPos.y - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
-
-                // Split diagonally - check if we're above or below diagonal
-                if (pow(normalizedUV.x - 1.0, 2) + pow(normalizedUV.y, 2) > 1.0) {
-                    tileColor = g_Terrain.convertEgaColors[heightIndex[4]]; // Left triangle
-                } else {
-                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
-                }
-            }
-        }
-        else {
-            // Bottom-right quadrant
-            if(heightIndex[4] != centerHeightIndex && heightIndex[3] != centerHeightIndex)
-            {
-                // Compute normalized UV coordinates for this quadrant (0.5-1.0, 0.5-1.0)
-                float2 normalizedUV;
-                normalizedUV.x = (quadPos.x - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
-                normalizedUV.y = (quadPos.y - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
-
-                // Split diagonally - check if we're above or below diagonal
-                if (pow(normalizedUV.x, 2) + pow(normalizedUV.y, 2) > 1.0) {
-                    tileColor = g_Terrain.convertEgaColors[heightIndex[8]]; // Right triangle
-                } else {
-                    tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Left triangle
-                }
-            }
-        }
-
-        BaseColor = tileColor;
     }
+    else if (quadPos.x < 0.5 && quadPos.y >= 0.5) {
+        // Bottom-left quadrant
+        if(heightIndex[4] != centerHeightIndex && heightIndex[1] != centerHeightIndex)
+        {
+            // Compute normalized UV coordinates for this quadrant (0.0-0.5, 0.5-1.0)
+            float2 normalizedUV;
+            normalizedUV.x = quadPos.x * 2.0; // Map 0.0-0.5 to 0.0-1.0
+            normalizedUV.y = (quadPos.y - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
+
+            // Split diagonally - check if we're above or below diagonal
+            if (pow(normalizedUV.x - 1.0, 2) + pow(normalizedUV.y, 2) > 1.0) {
+                tileColor = g_Terrain.convertEgaColors[heightIndex[4]]; // Left triangle
+            } else {
+                tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Right triangle
+            }
+        }
+    }
+    else {
+        // Bottom-right quadrant
+        if(heightIndex[4] != centerHeightIndex && heightIndex[3] != centerHeightIndex)
+        {
+            // Compute normalized UV coordinates for this quadrant (0.5-1.0, 0.5-1.0)
+            float2 normalizedUV;
+            normalizedUV.x = (quadPos.x - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
+            normalizedUV.y = (quadPos.y - 0.5) * 2.0; // Map 0.5-1.0 to 0.0-1.0
+
+            // Split diagonally - check if we're above or below diagonal
+            if (pow(normalizedUV.x, 2) + pow(normalizedUV.y, 2) > 1.0) {
+                tileColor = g_Terrain.convertEgaColors[heightIndex[8]]; // Right triangle
+            } else {
+                tileColor = g_Terrain.convertEgaColors[centerHeightIndex]; // Left triangle
+            }
+        }
+    }
+
+    BaseColor = tileColor;
 
     if (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975)
     {

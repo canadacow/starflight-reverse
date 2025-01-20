@@ -509,9 +509,9 @@ struct GraphicsContext
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
-    #define TV_LOCATION_START_X (1747.5f) // 2318
+    #define TV_LOCATION_START_X (1745.0f) // 2318
     //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
-    #define TV_LOCATION_START_Y (728.5f) // 909
+    #define TV_LOCATION_START_Y (727.0f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
@@ -5391,7 +5391,7 @@ void InitTerrain()
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
-        { "EGA", { { "Water", -15.0f } } },
+        { "EGA", { { "EGASurface", -15.0f } } },
     };
 
     for (const auto& planetType : s_gc.terrain.planetTypes)
@@ -5430,14 +5430,24 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
     //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
 
-    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, 0.0f }, s_gc.tvRotation, true };
-    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    // tree-stylized-01
-    SF_GLTF::TerrainItem tree{ "tree-stylized-01", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, false };
+    std::vector<SF_GLTF::TerrainItem> terrainItems;
 
-#if 1
+    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, 0.0f }, s_gc.tvRotation, true };
+    terrainItems.push_back(rover);
+    SF_GLTF::TerrainItem mineral1{ "Mineral", float2{1743.0f, 722.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    terrainItems.push_back(mineral1);
+    SF_GLTF::TerrainItem mineral2{ "Mineral", float2{1749.0f, 723.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    terrainItems.push_back(mineral2);
+    SF_GLTF::TerrainItem mineral3{ "Mineral", float2{1741.0f, 723.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    terrainItems.push_back(mineral3);
+
+    //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    //SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
+    // tree-stylized-01
+    //SF_GLTF::TerrainItem tree{ "tree-stylized-01", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, false };
+
+#if 0
     // Debug balls
     SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
@@ -5445,8 +5455,6 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainItem ball3{ "Ball", float2{389.0f - 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
 #endif
-
-    std::vector<SF_GLTF::TerrainItem> terrainItems = { rover, ruin, endurium, recentRuin, tree, ball, ball1, ball2, ball3, ball4 };
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
 
