@@ -7201,9 +7201,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                     {
                         auto egaColor = ToAlbedoWithIndex(palette, albedoIndex);
 
-                        egaColor.x = std::pow(egaColor.x, 2.2f);
-                        egaColor.y = std::pow(egaColor.y, 2.2f);
-                        egaColor.z = std::pow(egaColor.z, 2.2f);
                         ri.EgaColors[albedoIndex] = egaColor;
                     }
                 }
