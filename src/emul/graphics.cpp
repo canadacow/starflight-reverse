@@ -5386,8 +5386,22 @@ void InitTerrain()
     s_gc.terrain.dynamicMesh->GeneratePlanes(GraphicsContext::TileSize.x, GraphicsContext::TileSize.y, 0.0f, s_gc.terrainSize );
 
     s_gc.terrain.planetTypes = {
-        { "Earth-like", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Grass2", 3.01f }, { "HighGrass", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}, {"Ice", 12.01f}, {"Ice", 14.01f}}},
-        { "Earth-dead", { { "Water", -15.0f }, { "Beach", 2.01f }, { "Barren", 3.01f }, { "HighBarren", 6.01f}, { "Rock", 8.51f }, {"Ice", 10.01f}}},
+        { "Earth-like", { 
+            { "Water", -2.01f }, 
+            { "Beach", 4.01f }, 
+            { "Grass2", 6.01f }, 
+            { "HighGrass", 8.01f }, 
+            { "Barren", 10.01f }, 
+            { "Rock", 14.01f },
+            { "Ice", 16.01f }, 
+        }},
+        { "Earth-dead", { 
+            { "Water", -15.01f }, 
+            { "Beach", 4.01f }, 
+            { "Barren", 6.01f }, 
+            { "Rock", 12.01f }, 
+            { "Ice", 16.01f } 
+        }},
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
@@ -6974,6 +6988,45 @@ void RenderStation(VulkanContext::frame_id_t inFlightIndex)
     RenderSFModel(inFlightIndex, s_gc.station, sunBehavior);
 }
 
+float colorDistance(const float3& a, const float3& b) {
+    return std::sqrt((a.r - b.r) * (a.r - b.r) +
+                     (a.g - b.g) * (a.g - b.g) +
+                     (a.b - b.b) * (a.b - b.b));
+}
+
+std::string GetEGAColorName(const float3& color) {
+    static const std::vector<std::pair<float3, std::string>> egaColorMap = {
+        {{0.0f, 0.0f, 0.0f}, "Black"},
+        {{0.0f, 0.0f, 0.67f}, "Blue"},
+        {{0.0f, 0.67f, 0.0f}, "Green"},
+        {{0.0f, 0.67f, 0.67f}, "Cyan"},
+        {{0.67f, 0.0f, 0.0f}, "Red"},
+        {{0.67f, 0.0f, 0.67f}, "Magenta"},
+        {{0.67f, 0.33f, 0.0f}, "Brown"},
+        {{0.67f, 0.67f, 0.67f}, "Light Gray"},
+        {{0.33f, 0.33f, 0.33f}, "Dark Gray"},
+        {{0.33f, 0.33f, 1.0f}, "Light Blue"},
+        {{0.33f, 1.0f, 0.33f}, "Light Green"},
+        {{0.33f, 1.0f, 1.0f}, "Light Cyan"},
+        {{1.0f, 0.33f, 0.33f}, "Light Red"},
+        {{1.0f, 0.33f, 1.0f}, "Light Magenta"},
+        {{1.0f, 1.0f, 0.33f}, "Yellow"},
+        {{1.0f, 1.0f, 1.0f}, "White"}
+    };
+
+    float minDistance = std::numeric_limits<float>::max();
+    std::string closestColorName = "Unknown";
+
+    for (const auto& [egaColor, name] : egaColorMap) {
+        float distance = colorDistance(color, egaColor);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestColorName = name;
+        }
+    }
+    return closestColorName;
+}
+
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
 {
     ITextureView*        pRTVOffscreen   = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
@@ -7186,6 +7239,52 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                     //const uint8_t* palette = GetPlanetColorMap(18); // Erf
                     const uint8_t* palette = GetPlanetColorMap(34);
 
+                    auto GetHeightFromIndex = [](int index) -> float {
+                        index = std::max(index, 0); // Ensure index is not negative
+                        index = std::min(index, 7); // Ensure index is not greater than 7
+                        float val = index * 16.0 + 16.0;
+                        return val / 8.0;
+                    };
+
+                    struct PlanetColorMapItem
+                    {
+                        std::string colorName;
+                        float heightStart;
+                        float heightEnd;
+                    };
+
+                    std::vector<PlanetColorMapItem> planetColorMap;
+
+                    for(int albedoIndex = 0; albedoIndex < 8; ++albedoIndex)
+                    {
+                        auto egaColor = ToAlbedoWithIndex(palette, albedoIndex);
+
+                        PlanetColorMapItem item;
+                        item.colorName = GetEGAColorName(egaColor);
+                        item.heightStart = GetHeightFromIndex(albedoIndex);
+                        item.heightEnd = GetHeightFromIndex(albedoIndex + 1);
+                        planetColorMap.push_back(item);
+
+                        ri.EgaColors[albedoIndex] = egaColor;
+                    }
+
+                    // Consolidate adjacent color regions with the same name
+                    std::vector<PlanetColorMapItem> consolidatedMap;
+                    for (size_t i = 0; i < planetColorMap.size(); ++i) {
+                        if (consolidatedMap.empty()) {
+                            consolidatedMap.push_back(planetColorMap[i]);
+                            consolidatedMap.back().heightStart = -2.0f;
+                        } else if (consolidatedMap.back().colorName != planetColorMap[i].colorName) {
+                            consolidatedMap.push_back(planetColorMap[i]);
+                        } else {
+                            consolidatedMap.back().heightEnd = planetColorMap[i].heightEnd;
+                        }
+                    }
+                    if (!consolidatedMap.empty()) {
+                        consolidatedMap.back().heightEnd = 18.0f;
+                    }
+                    planetColorMap = std::move(consolidatedMap);
+
                     std::deque<TerrainInfo> terrainInfos;
                     float endBiomHeight = 18.0f;
                     for (auto it_biom = it->boundaries.rbegin(); it_biom != it->boundaries.rend(); ++it_biom)
@@ -7196,13 +7295,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                     }
 
                     ri.TerrainInfos = std::vector<TerrainInfo>(terrainInfos.begin(), terrainInfos.end());
-
-                    for(int albedoIndex = 0; albedoIndex < 8; ++albedoIndex)
-                    {
-                        auto egaColor = ToAlbedoWithIndex(palette, albedoIndex);
-
-                        ri.EgaColors[albedoIndex] = egaColor;
-                    }
                 }
 
                 ri.pWaterHeightMap = s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
