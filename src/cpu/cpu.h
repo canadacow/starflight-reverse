@@ -29,35 +29,25 @@ unsigned long ComputeAddress(unsigned short segment, unsigned short offset);
 void Push(unsigned short x);
 unsigned short Pop();
 #else
-static inline unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
-{
-    unsigned long addr = ((unsigned long)segment << 4) + offset;
-    return addr;
-}
 
-static inline void Write8Long(unsigned short s, unsigned short o, unsigned char x)
-{
-    unsigned long addr = ComputeAddress(s, o);
+#define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
 
-    m[addr] = x;
-}
+#define Write8Long(s, o, x) do { \
+    unsigned long addr = ComputeAddress(s, o); \
+    m[addr] = x; \
+} while(0)
 
-static inline void Write8(unsigned short offset, unsigned char x)
-{
-    Write8Long(StarflightBaseSegment, offset, x);
-}
+#define Write8(offset, x) Write8Long(StarflightBaseSegment, offset, x)
 
-static inline void Write16(unsigned short offset, unsigned short x)
-{
-    Write8Long(StarflightBaseSegment, offset, (x>>0)&0xFF);
-    Write8Long(StarflightBaseSegment, offset+1, (x>>8)&0xFF);
-}
+#define Write16(offset, x) do { \
+    uint16_t* addr = reinterpret_cast<uint16_t*>(&m[ComputeAddress(StarflightBaseSegment, offset)]); \
+    *addr = (x); \
+} while(0)
 
-static inline void Write16Long(unsigned short s, unsigned short o, unsigned short x)
-{
-    Write8Long(s, o, x&0xFF);
-    Write8Long(s, o +1, x>>8);
-}
+#define Write16Long(s, o, x) do { \
+    uint16_t* addr = reinterpret_cast<uint16_t*>(&m[ComputeAddress(s, o)]); \
+    *addr = (x); \
+} while(0)
 
 static inline unsigned char Read8(unsigned short offset)
 {
