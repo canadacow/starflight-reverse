@@ -1844,6 +1844,7 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
             {!IsUnshaded ? "PBR PS" : "Unshaded PS", SHADER_TYPE_PIXEL, UseCombinedSamplers},
         };
         ShaderCI.CompileFlags                   = ShaderCompileFlags;
+        ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
         ShaderCI.WebGPUEmulatedArrayIndexSuffix = "_";
 
         pPS = m_Device.CreateShader(ShaderCI);

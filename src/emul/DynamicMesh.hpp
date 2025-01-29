@@ -20,7 +20,7 @@ struct TerrainItem
 {
     std::string name;
     float2 tilePosition;
-    float2 worldOffset;
+    float3 worldOffset;
     Quaternion<float> rotation;
     bool alignToTerrain = false;
 };

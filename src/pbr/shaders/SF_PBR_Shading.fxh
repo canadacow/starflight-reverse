@@ -886,7 +886,7 @@ float4 sampleBicubic(float v) {
     return o;
 }
 
-#if 0
+#if 1
 float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 {
     //st.x *= 0.5;
@@ -910,10 +910,10 @@ float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 
     offset *= pixel.xxyy;
     
-    float4 sample0 = tex.Sample(samplerState, offset.xz);
-    float4 sample1 = tex.Sample(samplerState, offset.yz);
-    float4 sample2 = tex.Sample(samplerState, offset.xw);
-    float4 sample3 = tex.Sample(samplerState, offset.yw);
+    float4 sample0 = tex.SampleLevel(samplerState, offset.xz, 0.0);
+    float4 sample1 = tex.SampleLevel(samplerState, offset.yz, 0.0);
+    float4 sample2 = tex.SampleLevel(samplerState, offset.xw, 0.0);
+    float4 sample3 = tex.SampleLevel(samplerState, offset.yw, 0.0);
 
     float sx = s.x / (s.x + s.y);
     float sy = s.z / (s.z + s.w);

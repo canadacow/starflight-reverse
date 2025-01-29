@@ -524,7 +524,8 @@ struct GraphicsContext
 
     MouseState mouseState;
     float FPVpitchAngle = -PI_F/2.0f;
-    float FPVyawAngle = 0.23f;
+    //float FPVyawAngle = 0.23f;
+    float FPVyawAngle = 0.0f;
     float NormalizedXCoordForSunRotation = 0.0f;
     float4x4 terrainFPVRotation = float4x4::Identity();
 
@@ -931,6 +932,14 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             {
                 if (primitive.VertexCount == 0 && primitive.IndexCount == 0)
                     continue;
+
+                const auto& material = GLTFModel.GetMaterials()[primitive.MaterialId];
+
+                if(material.Attribs.AlphaMode == SF_GLTF::Material::ALPHA_MODE_BLEND &&
+                   material.Attribs.BaseColorFactor.a < material.Attribs.AlphaCutoff)
+                {
+                    continue;
+                }
                 
                 IShaderResourceBinding* pSRB = m_ShadowSRBs[shaderIdx][primitive.MaterialId];
                 pCtx->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -1056,6 +1065,7 @@ void ShadowMap::Initialize()
             ShaderCI.Desc.Name = "Mesh VS";
             ShaderCI.FilePath = "MeshVS.vsh";
             ShaderCI.Macros = Macros;
+            ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
             s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowVS);
         }
         PSOCreateInfo.pVS = pShadowVS;
@@ -5170,7 +5180,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_w:
                     if (currentCameraIndex == 0)
                     {
-                        MoveDirection.y += 1.0f;
+                        MoveDirection.y += 10.0f;
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.y -= delta;
                     }
@@ -5182,7 +5192,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_s:
                     if (currentCameraIndex == 0)
                     {
-                         MoveDirection.y -= 1.0f;
+                         MoveDirection.y -= 10.0f;
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.y += delta;
                     }
@@ -5194,24 +5204,24 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_q:
                     if (currentCameraIndex == 0)
                     {
-                        MoveDirection.z -= 1.0f;
+                        MoveDirection.z -= 10.0f;
                     }
                     break;
                 case SDLK_e:
                     if (currentCameraIndex == 0)
                     {
-                        MoveDirection.z += 1.0f;
+                        MoveDirection.z += 10.0f;
                     }
                     break;
                 case SDLK_a:
-                    MoveDirection.x -= 1.0f;
+                    MoveDirection.x -= 10.0f;
                     {
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.x -= delta;
                     }
                     break;
                 case SDLK_d:
-                    MoveDirection.x += 1.0f;
+                    MoveDirection.x += 10.0f;
                     {
                         //const float delta = 1.0f / 61.0f;
                         //s_gc.terrainTextureOffset.x += delta;
@@ -5446,14 +5456,19 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     std::vector<SF_GLTF::TerrainItem> terrainItems;
 
-    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float2{ 0.0f, 0.0f }, s_gc.tvRotation, true };
+    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float3{}, s_gc.tvRotation, true };
     terrainItems.push_back(rover);
-    SF_GLTF::TerrainItem mineral1{ "Mineral", float2{1743.0f, 722.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    terrainItems.push_back(mineral1);
-    SF_GLTF::TerrainItem mineral2{ "Mineral", float2{1749.0f, 723.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    terrainItems.push_back(mineral2);
-    SF_GLTF::TerrainItem mineral3{ "Mineral", float2{1741.0f, 723.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    terrainItems.push_back(mineral3);
+
+    auto addMineral = [&terrainItems](float2 worldCoord) {
+        SF_GLTF::TerrainItem mineral{ "Mineral", worldCoord, float3{}, Quaternion<float>{}, true };
+        terrainItems.push_back(mineral);
+        SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
+        terrainItems.push_back(miningSymbol);
+    };
+
+    addMineral({1743.0f, 722.0f});
+    addMineral({1749.0f, 723.0f});
+    addMineral({1741.0f, 723.0f});
 
     //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
@@ -5579,12 +5594,12 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     //CameraView = trans * CameraRotationMatrix;
     s_gc.renderParams.ModelTransform = RotationMatrixModel;
 
+    auto viewBox = s_gc.terrain.aabb.Transform(CameraView);
+
+    // Ensure minimum near plane distance for numerical stability
     YFov = pCamera->Perspective.YFov;
-    ZNear = pCamera->Perspective.ZNear;
-    ZFar = pCamera->Perspective.ZFar;
-    ZNear = 1.0f;
-    ZFar = 400.0f;
-    //ZFar = 10000.0f;
+    ZNear = std::max(viewBox.Min.z - 20.0f, 0.1f);
+    ZFar = viewBox.Max.z + 20.0f;
 
     // Apply pretransform matrix that rotates the scene according the surface orientation
     CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
@@ -7536,7 +7551,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
        
        */
 
-        const float WORLD_TO_EARTH_SCALE = 1511.4625f;
+        //const float WORLD_TO_EARTH_SCALE = 1511.4625f;
+        const float WORLD_TO_EARTH_SCALE = 80.0f;
 
         auto adjustedCamAttribs = CamAttribs;
         auto adjustedLightAttribs = LightAttrs;
@@ -7548,19 +7564,27 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         //adjustedLightAttribs.f4Intensity = float4(10.0f, 10.0f, 10.0f, 10.0f);
 
         //adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * WORLD_TO_EARTH_SCALE);
-        adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * 133.0f);
-        adjustedCamAttribs.f4Position.w = 1.0f;
-        
+        //adjustedCamAttribs.f4Position = (adjustedCamAttribs.f4Position * 133.0f);
         //adjustedCamAttribs.f4Position = float4(0.0f, 8000.0f, 0.0f, 1.0f);
+        
+        adjustedCamAttribs.f4Position *= WORLD_TO_EARTH_SCALE;
+        adjustedCamAttribs.f4Position.x = 0.0f;
+        adjustedCamAttribs.f4Position.z = 0.0f;
+        adjustedCamAttribs.f4Position.w = 1.0f;
 
-        float originalNear = 0.f, originalFar = 0.f;
-        adjustedCamAttribs.mProj.GetNearFarClipPlanes(originalNear, originalFar, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+        //float originalNear = 0.f, originalFar = 0.f;
+        //adjustedCamAttribs.mProj.GetNearFarClipPlanes(originalNear, originalFar, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
+        
+        float originalNear = adjustedCamAttribs.fNearPlaneZ, originalFar = adjustedCamAttribs.fFarPlaneZ;
+        
+        adjustedCamAttribs.fNearPlaneZ = originalNear * WORLD_TO_EARTH_SCALE;
+        adjustedCamAttribs.fFarPlaneZ = originalFar * WORLD_TO_EARTH_SCALE;
 
         adjustedCamAttribs.mProj = float4x4::Projection(
             CamAttribs.f4ExtraData[0].x, // FOV
             CamAttribs.f4ViewportSize.x / CamAttribs.f4ViewportSize.y,
-            originalNear * -WORLD_TO_EARTH_SCALE,
-            originalFar * -WORLD_TO_EARTH_SCALE,
+            adjustedCamAttribs.fNearPlaneZ,
+            adjustedCamAttribs.fFarPlaneZ,
             s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1
         );
 

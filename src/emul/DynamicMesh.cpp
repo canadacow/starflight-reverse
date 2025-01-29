@@ -713,7 +713,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             }
 #endif
 
-            worldOffset += float3(item.worldOffset.x, 0, item.worldOffset.y);
+            worldOffset += item.worldOffset;
 
             //worldOffset.y = val;
 
