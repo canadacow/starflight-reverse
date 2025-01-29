@@ -1,6 +1,8 @@
 #include<stdio.h>
 #include<stdlib.h>
 
+#define USE_INLINE_MEMORY
+
 #include "fract.h"
 
 void RRND()
