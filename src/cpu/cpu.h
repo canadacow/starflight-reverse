@@ -67,12 +67,10 @@ static inline unsigned char* Read8Addr(unsigned short offset)
     Write16(regsp, x); \
 } while(0)
 
-static inline unsigned short Pop()
-{
-    unsigned short x = Read16(regsp);
-    regsp += 2;
-    return x;
-}
+#define Pop() ( \
+    regsp += 2, \
+    Read16(regsp - 2) \
+)
 #endif
 
 void InitCPU();
