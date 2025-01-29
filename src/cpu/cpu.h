@@ -49,43 +49,23 @@ unsigned short Pop();
     *addr = (x); \
 } while(0)
 
-static inline unsigned char Read8(unsigned short offset)
-{
-    return mem[offset];
-}
-
-static inline unsigned char Read8Long(unsigned short s, unsigned short o)
-{
-    unsigned long addr = ComputeAddress(s, o);
-
-    return m[addr];
-}
+#define Read8(offset) (mem[offset])
 
 static inline unsigned char* Read8Addr(unsigned short offset)
 {
     return &mem[offset];
 }
 
+#define Read8Long(s, o) (m[ComputeAddress(s, o)])
 
-static inline unsigned short Read16(unsigned short offset)
-{
-    unsigned short val = mem[offset+0] | (mem[offset+1]<<8);
+#define Read16(offset) (*reinterpret_cast<uint16_t*>(&mem[offset]))
 
-    return val;
-}
+#define Read16Long(s, o) (*reinterpret_cast<uint16_t*>(&m[ComputeAddress(s, o)]))
 
-static inline unsigned short Read16Long(unsigned short s, unsigned short o)
-{
-    unsigned long addr = ComputeAddress(s, o);
-
-    return m[addr + 0] | (m[addr + 1]<<8);
-}
-
-static inline void Push(unsigned short x)
-{
-    regsp -= 2;
-    Write16(regsp, x);
-}
+#define Push(x) do { \
+    regsp -= 2; \
+    Write16(regsp, x); \
+} while(0)
 
 static inline unsigned short Pop()
 {
