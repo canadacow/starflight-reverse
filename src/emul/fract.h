@@ -7,4 +7,6 @@ void FRACT_FILLARRAY();
 void FRACT_StoreHeight();
 void FRACT_FRACTALIZE();
 
+void FRACT_NEWCONTOUR();
+
 #endif

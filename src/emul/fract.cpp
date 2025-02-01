@@ -1,7 +1,9 @@
 #include<stdio.h>
 #include<stdlib.h>
 
+#ifndef DEBUG
 #define USE_INLINE_MEMORY
+#endif
 
 #include "fract.h"
 
@@ -23,6 +25,8 @@ const unsigned short int pp_XLL = 0x4e49;
 const unsigned short int pp_YLL = 0x4e53;
 const unsigned short int pp_XUR = 0x4e5d;
 const unsigned short int pp_YUR = 0x4e67;
+const unsigned short CONTOUR_RATIO_1 = 20882;
+const unsigned short CONTOUR_RATIO_2 = 32767;
 
 typedef struct
 {
@@ -1064,7 +1068,9 @@ void FRACT_FRACT_CONTOUR() // FRACT_CONTOUR
   SETLARRAY(); // SETLARRAY
   Push(pp_XYANCHOR); // XYANCHOR
   ON_3(); // ON_3
-  Push2Words("CONTOUR-RATIO");
+  //Push2Words("CONTOUR-RATIO");
+  Push(CONTOUR_RATIO_1);
+  Push(CONTOUR_RATIO_2);
   Push(Read16(cc_CONTOUR_dash_SCALE)); // CONTOUR-SCALE
   SETSCALE(); // SETSCALE
 
