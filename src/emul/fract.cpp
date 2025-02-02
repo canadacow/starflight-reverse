@@ -41,8 +41,8 @@ ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
 
 void Store()
 {
-    unsigned short value = Pop();   // Get the value to store
     unsigned short address = Pop(); // Get the address to store the value at
+    unsigned short value = Pop();   // Get the value to store
     Write16(address, value);        // Write the value to the specified address
 }
 
@@ -153,42 +153,7 @@ void ROT()
 
 void IsUPDATE() // ?UPDATE
 {
-    unsigned short cx, dx, bx;
-    cx = Pop();
-
-    // or cx,cx / jns 6D4D
-    if (cx & 0x8000) { // if negative
-        bx = Read16(0x54A1); // 1BUFADR
-        dx = bx;
-        dx += 7;
-        if (cx <= dx) goto label_6D4B;
-
-        dx += 0x401;
-        if (dx <= cx) goto label_6D32;
-        Write8(bx + 2, 0xFF);
-        goto label_6D4B;
-
-    label_6D32:
-        bx = Read16(0x54A5); // 2BUFADR
-        dx = bx;
-        dx += 7;
-        if (cx <= dx) goto label_6D4B;
-
-        dx += 0x401;
-        if (dx <= cx) goto label_6D4B;
-        Write8(bx + 2, 0xFF);
-
-    label_6D4B:
-        goto label_6D5F;
-    }
-
-    // Not negative path
-    if ((short)cx < 0x63EF) goto label_6D5F;
-    if ((short)cx >= 0x64FD) goto label_6D5F;
-    Write8(0x63EE, 0xFF);
-
-label_6D5F:
-    Push(cx);
+    // No-op for our purposes
 }
 
 void OFF() // OFF
