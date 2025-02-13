@@ -35,6 +35,9 @@
 
 #include "BasicMath.hpp"
 
+extern "C" __declspec(dllimport) void __stdcall OutputDebugStringA(const char* lpOutputString);
+
+
 using namespace Diligent;
 
 unsigned int debuglevel = 0;
@@ -1756,8 +1759,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     std::unordered_map<uint32_t, PlanetSurface> surfaces{};
 
+                    int planetCount = 0;
                     for (const auto& p : planets)
                     {
+                        {
+                            char buf[1024];
+                            sprintf(buf, "Generating planet %d of %d with seed %08x\n", planetCount, planets.size(), p.second.seed);
+                            OutputDebugStringA(buf);
+                        }
+                        ++planetCount;
+                        
                         Push(p.second.seed);
                         ForthCall(0xc302); // MERCATOR-GEN
 
@@ -1803,7 +1814,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         surfaces.emplace(p.second.seed, std::move(ps));
 
-                        continue;
+                        //continue;
 
                         bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
                         bool isEarth = p.second.species == 18;
@@ -1813,8 +1824,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         //if (!isEarth)
                         //    continue;
 
-                        if (!isHeaven)
-                            continue;
+                        //if (!isHeaven)
+                        //    continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
                         {
@@ -1822,6 +1833,38 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             //const int16_t yscale = 40;
                             // 2318 / 61 = 38
                             // 909 / 101 = 9
+
+                            // Print hex map of mercator projection
+                            {
+                                char buf[4096];
+                                char line[256];
+                                int pos = 0;
+                                pos += snprintf(buf + pos, sizeof(buf) - pos, "Mercator map for seed 0x%04x:\n", p.second.seed);
+                                
+                                for (int j = 0; j < 24; j++)
+                                {
+                                    int linePos = 0;
+                                    linePos += snprintf(line + linePos, sizeof(line) - linePos, "%2d: ", j);
+
+                                    for (int i = 0; i < 48; i++)
+                                    {
+                                        int val = 0;
+                                        if(p.second.species != 18)
+                                        {
+                                            val = (int32_t)(int8_t)Read8Long(seg, j * 48 + i);
+                                        }
+                                        else
+                                        {
+                                            auto jat = 23 - j;
+                                            val = mini_png[jat * 48 + i];
+                                        }
+                                        linePos += snprintf(line + linePos, sizeof(line) - linePos, "%02x ", val & 0xff);
+                                    }
+                                    linePos += snprintf(line + linePos, sizeof(line) - linePos, "\n");
+                                    pos += snprintf(buf + pos, sizeof(buf) - pos, "%s", line);
+                                }
+                                OutputDebugStringA(buf);
+                            }
 
                             const int16_t xscale = 61;
                             const int16_t yscale = 101;
@@ -1833,7 +1876,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                     Write16(0x5916, xcon);
                                     Write16(0x5921, ycon);
 
-                                    ForthCall(0xc317); // NEWCONTOUR writen to segment 0x7cbe
+                                    auto start = std::chrono::high_resolution_clock::now();
+                                    //ForthCall(0xc317); // NEWCONTOUR writen to segment 0x7cbe
+                                    FRACT_NEWCONTOUR();
+                                    auto end = std::chrono::high_resolution_clock::now();
+                                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                                    char buf[256];
+                                    snprintf(buf, sizeof(buf), "NEWCONTOUR took %lld microseconds\n", duration.count());
+                                    OutputDebugStringA(buf);
 
                                     uint16_t segment = 0x7cbe; // NEWCONTOUR segment
 
@@ -1855,11 +1905,13 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
 
                             {
+                                #if 1
                                 std::vector<unsigned char> png;
                                 unsigned error = lodepng::encode(png, planet_image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
                                 if (!error)
                                 {
-                                    lodepng::save_file(png, "heaven_output.png");
+                                    std::string filename = "planets/" + std::to_string(p.second.seed) + ".png";
+                                    lodepng::save_file(png, filename);
                                 }
                                 else
                                 {
@@ -1870,17 +1922,19 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 error = lodepng::encode(albedo_png, (uint8_t*)planet_albedo.data(), planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_RGBA, 8);
                                 if (!error)
                                 {
-                                    lodepng::save_file(albedo_png, "heaven_albedo_output.png");
+                                    std::string filename = "planets/" + std::to_string(p.second.seed) + "_albedo.png";
+                                    lodepng::save_file(albedo_png, filename);
                                 }
                                 else
                                 {
                                     fprintf(stderr, "Error encoding albedo PNG: %u: %s\n", error, lodepng_error_text(error));
                                 }
+                                #endif
                             }
                         }
-
-                        //_exit(0);
                     }
+
+                    _exit(0);
 
                     GraphicsInitPlanets(surfaces);
 
