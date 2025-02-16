@@ -7,6 +7,10 @@
 
 #include "fract.h"
 
+extern "C" {
+    __declspec(dllimport) void __stdcall OutputDebugStringA(const char* lpOutputString);
+}
+
 const unsigned short int cc_FNULL = 0xe364;
 const unsigned short int cc_MERCATOR_dash_SCALE = 0xe386;
 const unsigned short int cc_CONTOUR_dash_SCALE = 0xe7fd;
@@ -60,14 +64,10 @@ void _2_ex__2() // 2!_2
 
 void SWAP()
 {
-    unsigned short temp;
-    unsigned short a = Pop(); // Pop the top element
-    unsigned short b = Pop(); // Pop the second element
-    temp = a;                 // Store the top element in a temporary variable
-    a = b;                    // Move the second element to the top
-    b = temp;                 // Move the temporary variable to the second position
-    Push(a);                  // Push the new top element
-    Push(b);                  // Push the new second element
+    unsigned short a = Pop();
+    unsigned short b = Pop();
+    Push(a);
+    Push(b);
 }
 
 void _slash_() // /
@@ -398,6 +398,9 @@ void A_ex_() // [A!]
     Write8Long(Read16(0xe378), Read16(0xe37c), (unsigned char)value); // SCELL OCELL
 }
 
+//#define USE_OG_AV_MIDPT 1
+
+#if defined(USE_OG_AV_MIDPT)
 void AV_dash_MIDPT() // AV-MIDPT
 {
     unsigned short int a, b, c;
@@ -423,6 +426,43 @@ void AV_dash_MIDPT() // AV-MIDPT
     ACELLADDR(); // ACELLADDR
     A_ex_(); // A!
 }
+#else
+
+void Readable_AV_dash_MIDPT(int x1, int y1, int x2, int y2) {
+    // Get value at first point (x1,y1)
+    Push(x1);
+    Push(y1);
+    ACELLADDR();
+    AGet();
+    int val1 = Pop();
+
+    // Get value at second point (x2,y2)
+    Push(x2);
+    Push(y2);
+    ACELLADDR();
+    AGet();
+    int val2 = Pop();
+
+    // Calculate average value
+    int avgVal = (val1 + val2) >> 1;  // Average of the two points' values
+
+    // Calculate midpoint coordinates
+    int midX = (x1 + x2) >> 1;  // Midpoint X coordinate
+    int midY = (y1 + y2) >> 1;  // Midpoint Y coordinate
+
+    // Store average value at midpoint
+    Push(avgVal);
+    Push(midX);
+    Push(midY);
+    ACELLADDR();
+    A_ex_();  // Store to memory (A!)
+}
+
+void AV_dash_MIDPT()
+{
+    Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
+}
+#endif
 
 void FRACT_StoreHeight() // Set Anchor
 {
@@ -686,6 +726,10 @@ void FRACT_FRACTALIZE()
     dummy2 = Read16(regsp+10);
     std = Read16(regsp+12);
     //printf("FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
+    char debug_str[256];
+    sprintf(debug_str, "FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
+    OutputDebugStringA(debug_str);
+
     Write16(0xe392, regbp); // RTEMP
     FRACTAL();
     regbp = Read16(0xe392); // RTEMP
@@ -987,6 +1031,9 @@ void FRACT_dash_REGION() // FRACT-REGION
   FRACT_FRACTALIZE(); // FRACTALIZE
 }
 
+#define USE_OG_SUB_CON_FRACT 1
+
+#if defined(USE_OG_SUB_CON_FRACT)
 void SUB_dash_CON_dash_FRACT() // SUB-CON-FRACT
 {
   unsigned short int a;
@@ -1022,6 +1069,39 @@ void SUB_dash_CON_dash_FRACT() // SUB-CON-FRACT
   Pop(); Pop(); // 2DROP
 }
 
+#else
+
+void SUB_dash_CON_dash_FRACT(int x, int y) {
+    // Scale coordinates to grid units
+    int scaledY = y * 0x14;  // y * 20
+    int scaledX = x * 0x0C;  // x * 12
+
+    // Check first position (x+1, y+1)
+    Push(scaledX + 1);
+    Push(scaledY + 1);
+    ACELLADDR();
+    AGet();
+    bool firstIsFNull = (Pop() == Read16(cc_FNULL));
+
+    // Check second position (x+11, y+19)
+    Push(scaledX + 0x0B);  // x + 11
+    Push(scaledY + 0x13);  // y + 19
+    ACELLADDR();
+    AGet();
+    
+    // Only proceed if both positions contain FNULL
+    if (firstIsFNull && (Pop() == Read16(cc_FNULL))) {
+        // Set up region for fractal generation
+        Push(scaledX + 0x0C);  // x + 12
+        Push(scaledY + 0x14);  // y + 20
+        SETREGION();
+        FRACT_dash_REGION();
+        return;
+    }
+}
+
+#endif
+
 void FRACT_FRACT_CONTOUR() // FRACT_CONTOUR
 {
   unsigned short int i, imax, j, jmax;
@@ -1048,9 +1128,13 @@ void FRACT_FRACT_CONTOUR() // FRACT_CONTOUR
     jmax = 5;
     do // (DO)
     {
+      #if defined(USE_OG_SUB_CON_FRACT)
       Push(j); // I
       Push(i); // J
       SUB_dash_CON_dash_FRACT(); // SUB-CON-FRACT
+      #else
+      SUB_dash_CON_dash_FRACT(j, i); // SUB-CON-FRACT
+      #endif
       j++;
     } while(j<jmax); // (LOOP)
 
