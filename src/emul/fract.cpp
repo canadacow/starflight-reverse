@@ -43,6 +43,10 @@ typedef struct
 ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
 ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
 
+static const uint16_t MERCATOR_ARRAY = 0x6a99;
+static const uint16_t CONANCHOR_ARRAY = 0x6aad;
+static const uint16_t CONTOUR_ARRAY = 0x6ac1;
+
 void Store()
 {
     unsigned short address = Pop(); // Get the address to store the value at
@@ -188,6 +192,9 @@ void LC_at_() // LC@
     Push((unsigned short)value);
 }
 
+//#define USE_OG_READARRAY 1
+
+#if defined(USE_OG_READARRAY)
 void ReadArray(ArrayType& array) {
     // Get indices from stack
     unsigned short row = Pop();    // i * 2
@@ -200,6 +207,28 @@ void ReadArray(ArrayType& array) {
     Push(array.ds);    // segment
     Push(offset);      // offset
 }
+#else
+void ReadArray(uint16_t arrayDescriptor) {
+    // Get indices from stack
+    unsigned short y = Pop();    // row index
+    unsigned short x = Pop();    // column index
+    
+    // Get array descriptor (similar to ACELLADDR)
+    unsigned short segmentAddr = Read16(arrayDescriptor + 6);
+    unsigned short rowTable = Read16(arrayDescriptor + 4);
+
+    // Calculate row offset using lookup table
+    unsigned short rowIndex = y << 1;            // Multiply y by 2 for word indexing
+    unsigned short rowOffset = Read16Long(segmentAddr, rowTable + rowIndex);
+
+    // Calculate final offset
+    unsigned short finalOffset = rowOffset + x;
+
+    // Push segment:offset address for LC_ex_
+    Push(segmentAddr);    // segment
+    Push(finalOffset);    // offset
+}
+#endif
 
 void SETLARRAY() // SETLARRAY
 {
@@ -837,13 +866,13 @@ void MERC_gt_CONANCHOR() {
             int value = Pop();
 
             Push(value);
-            
+
             // Store in CONANCHOR array
             int x_index = j * 4;            // X index in CONANCHOR
             int y_index = i * 2;            // Y index in CONANCHOR
             Push(x_index);
             Push(y_index);
-            ReadArray(CONANCHOR);           // Get CONANCHOR array address
+            ReadArray(CONANCHOR_ARRAY);           // Get CONANCHOR array address
             LC_ex_();                       // Store value in CONANCHOR
         }
     }
@@ -1024,11 +1053,11 @@ void CONANCHOR_gt_CONTOUR() // CONANCHOR>CONTOUR
       Push(Pop() + j); //  I +
       OVER(); // OVER
       Push(Pop() + i); //  J +
-      ReadArray(CONANCHOR); // CONANCHOR
+      ReadArray(CONANCHOR_ARRAY); // CONANCHOR
       LC_at_(); // LC@
       Push(j * 0x000c); // I 0x000c *
       Push(i * 0x0014); // J 0x0014 *
-      ReadArray(CONTOUR); // CONTOUR
+      ReadArray(CONTOUR_ARRAY); // CONTOUR
       LC_ex_(); // LC!
       j++;
     } while(j<jmax); // (LOOP)
