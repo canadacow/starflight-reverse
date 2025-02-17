@@ -754,6 +754,9 @@ void FRACT_INIT_CONTOUR() // INIT-CONTOUR
   FRACT_FILLARRAY(); // FILLARRAY
 }
 
+//#define USE_OG_MERC_gt_CONANCHOR 1
+
+#if defined(USE_OG_MERC_gt_CONANCHOR)
 void MERC_gt_CONANCHOR() // MERC>CONANCHOR
 {
   unsigned short int i, imax, j, jmax;
@@ -796,6 +799,56 @@ void MERC_gt_CONANCHOR() // MERC>CONANCHOR
   } while(i<imax); // (LOOP)
 
 }
+#else
+void MERC_gt_CONANCHOR() {
+    // Calculate grid dimensions
+    int yOffset = Read16(pp_YCON) / 0x28;  // Divide YCON by 40 for Y offset
+    int xOffset = Read16(pp_XCON) / 0x30;  // Divide XCON by 48 for X offset
+    
+    // Store grid offsets
+    Push(yOffset);
+    Push(pp_Y2);
+    Store_3();  // Store Y2 offset
+    
+    Push(xOffset); 
+    Push(pp_X2);
+    Store_3();  // Store X2 offset
+
+    // Set up array parameters
+    Push(pp_SPHEREWRAP);
+    ON_3();                    // Enable sphere wrapping
+    Push(0x6a99);             // 'MERCATOR' constant
+    SETLARRAY();              // Set up large array
+
+    // Copy 4x3 grid of values from MERCATOR to CONANCHOR
+    for(int i = 0; i < 4; i++) {           // Vertical loop
+        for(int j = 0; j < 3; j++) {       // Horizontal loop
+            // Get value from MERCATOR array
+            int x_offset = Read16(pp_X2);
+            int y_offset = Read16(pp_Y2);
+            
+            int x_coord = j + x_offset;
+            int y_coord = y_offset + i;
+            
+            Push(x_coord);       // X coordinate 
+            Push(y_coord);       // Y coordinate
+            ACELLADDR();
+            AGet();
+            int value = Pop();
+
+            Push(value);
+            
+            // Store in CONANCHOR array
+            int x_index = j * 4;            // X index in CONANCHOR
+            int y_index = i * 2;            // Y index in CONANCHOR
+            Push(x_index);
+            Push(y_index);
+            ReadArray(CONANCHOR);           // Get CONANCHOR array address
+            LC_ex_();                       // Store value in CONANCHOR
+        }
+    }
+}
+#endif
 
 void CONANCHOR_dash_HOR() // CONANCHOR-HOR
 {
