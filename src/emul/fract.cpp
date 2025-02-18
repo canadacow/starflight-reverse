@@ -427,35 +427,6 @@ void A_ex_() // [A!]
     Write8Long(Read16(0xe378), Read16(0xe37c), (unsigned char)value); // SCELL OCELL
 }
 
-//#define USE_OG_AV_MIDPT 1
-
-#if defined(USE_OG_AV_MIDPT)
-void AV_dash_MIDPT() // AV-MIDPT
-{
-    unsigned short int a, b, c;
-    _2OVER(); // 2OVER
-    ACELLADDR(); // ACELLADDR
-    AGet(); // A@
-    a = Pop(); // >R
-    _2DUP(); // 2DUP
-    ACELLADDR(); // ACELLADDR
-    AGet(); // A@
-    Push(Pop() + a >> 1); //  R> + 2/
-    b = Pop(); // >R
-    ROT(); // ROT
-    Push(Pop() + Pop()); // +
-    Push(Pop() >> 1); //  2/
-    c = Pop(); // >R
-    Push(Pop() + Pop()); // +
-    Push(Pop() >> 1); //  2/
-    Push(c); // R>
-    Push(b); // R>
-    ROT(); // ROT
-    ROT(); // ROT
-    ACELLADDR(); // ACELLADDR
-    A_ex_(); // A!
-}
-#else
 
 void Readable_AV_dash_MIDPT(int x1, int y1, int x2, int y2) {
     // Get value at first point (x1,y1)
@@ -491,7 +462,6 @@ void AV_dash_MIDPT()
 {
     Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
 }
-#endif
 
 void FRACT_StoreHeight() // Set Anchor
 {
@@ -783,52 +753,6 @@ void FRACT_INIT_CONTOUR() // INIT-CONTOUR
   FRACT_FILLARRAY(); // FILLARRAY
 }
 
-//#define USE_OG_MERC_gt_CONANCHOR 1
-
-#if defined(USE_OG_MERC_gt_CONANCHOR)
-void MERC_gt_CONANCHOR() // MERC>CONANCHOR
-{
-  unsigned short int i, imax, j, jmax;
-  Push(Read16(pp_YCON)); // YCON @
-  Push(0x0028);
-  _slash_(); // /
-  Push(pp_Y2); // Y2
-  Store_3(); // !_3
-  Push(Read16(pp_XCON)); // XCON @
-  Push(0x0030);
-  _slash_(); // /
-  Push(pp_X2); // X2
-  Store_3(); // !_3
-  Push(pp_SPHEREWRAP); // SPHEREWRAP
-  ON_3(); // ON_3
-  Push(0x6a99); // 'MERCATOR'
-  SETLARRAY(); // SETLARRAY
-
-  i = 0;
-  imax = 4;
-  do // (DO)
-  {
-
-    j = 0;
-    jmax = 3;
-    do // (DO)
-    {
-      Push(j + Read16(pp_X2)); // I X2 @ +
-      Push(Read16(pp_Y2) + i); // Y2 @ J +
-      ACELLADDR(); // ACELLADDR
-      AGet(); // A@
-      Push(j * 4); // I 4 *
-      Push(i * 2); // J 2*
-      ReadArray(CONANCHOR); // CONANCHOR
-      LC_ex_(); // LC!
-      j++;
-    } while(j<jmax); // (LOOP)
-
-    i++;
-  } while(i<imax); // (LOOP)
-
-}
-#else
 void MERC_gt_CONANCHOR() {
     // Calculate grid dimensions
     int yOffset = Read16(pp_YCON) / 0x28;  // Divide YCON by 40 for Y offset
@@ -877,7 +801,6 @@ void MERC_gt_CONANCHOR() {
         }
     }
 }
-#endif
 
 void CONANCHOR_dash_HOR() // CONANCHOR-HOR
 {
@@ -1113,7 +1036,7 @@ void FRACT_dash_REGION() // FRACT-REGION
   FRACT_FRACTALIZE(); // FRACTALIZE
 }
 
-#define USE_OG_SUB_CON_FRACT 1
+#define USE_OG_SUB_CON_FRACT 0
 
 #if defined(USE_OG_SUB_CON_FRACT)
 void SUB_dash_CON_dash_FRACT() // SUB-CON-FRACT

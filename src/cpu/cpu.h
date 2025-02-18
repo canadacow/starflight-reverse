@@ -39,7 +39,7 @@ unsigned short Pop();
 #define USE_MACRO_READ8LONG 1
 #define USE_MACRO_READ16 1
 #define USE_MACRO_READ16LONG 1
-#define USE_MACRO_PUSH 1
+#define USE_MACRO_PUSH 0
 #define USE_MACRO_POP 1
 
 #if USE_MACRO_COMPUTE_ADDRESS
@@ -106,10 +106,11 @@ uint16_t Read16Long(unsigned short s, unsigned short o);
 #endif
 
 #if USE_MACRO_PUSH
-#define Push(x) do { \
-    regsp -= 2; \
-    Write16(regsp, x); \
-} while(0)
+#define Push(x) \
+    [x](){ \
+        regsp -= 2; \
+        Write16(regsp, x); \
+    }(x)
 #else
 void Push(uint16_t x);
 #endif
