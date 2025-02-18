@@ -94,7 +94,7 @@ unsigned char Read8Long(unsigned short s, unsigned short o);
 #endif
 
 #if USE_MACRO_READ16
-#define Read16(offset) (*reinterpret_cast<uint16_t*>(&mem[offset]))
+#define Read16(offset) (*reinterpret_cast<uint16_t*>(&m[ComputeAddress(StarflightBaseSegment, offset)]))
 #else
 uint16_t Read16(unsigned short offset);
 #endif
