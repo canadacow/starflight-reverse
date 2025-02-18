@@ -647,16 +647,14 @@ void NEWSTD()
 void FRACTAL()
 {
     unsigned short ax, cx;
-    regsp -= 2; // instruction pointer
-
+    regsp -= 2; // Adjust stack pointer for instruction pointer
     regbp = regsp;
 
-    ax = Read16(regbp+4) - Read16(regbp+8) - 1;
-    if ((signed short)ax <= 0) ax = 0; else ax = 1; // not sure
+    // Calculate DX>1 and DY>1
+    ax = (Read16(regbp + 4) - Read16(regbp + 8) - 1) > 0 ? 1 : 0;
     Write16(0xe36c, ax); // DX>1
 
-    cx = Read16(regbp+2) - Read16(regbp+6) - 1;
-    if ((signed short)cx <= 0) cx = 0; else cx = 1; // not sure
+    cx = (Read16(regbp + 2) - Read16(regbp + 6) - 1) > 0 ? 1 : 0;
     Write16(0xe368, cx); // DY>1
 
     if (cx > 0 || ax > 0)
@@ -666,52 +664,47 @@ void FRACTAL()
         CENTER();
         NEWSTD();
 
-        ax = 0;
-        Push(Read16(regbp+0xe));
-        Push(ax);
-        Push(ax);
-        Push(Read16(regbp+0x8));
-        Push(Read16(regbp+0x6));
-        Push(Read16(regbp+0xC));
-        Push(Read16(regbp+0xA));
-        FRACTAL(); // recursive
-
-        ax = 0;
-        Push(Read16(regbp+0xe));
-        Push(ax);
-        Push(ax);
-        Push(Read16(regbp+0xC));
-        Push(Read16(regbp+0x6));
-        Push(Read16(regbp+0x4));
-        Push(Read16(regbp+0xA));
-        FRACTAL(); // recursive
-
-        ax = 0;
-        Push(Read16(regbp+0xe));
-        Push(ax);
-        Push(ax);
-        Push(Read16(regbp+0x8));
-        Push(Read16(regbp+0xA));
-        Push(Read16(regbp+0xC));
-        Push(Read16(regbp+0x2));
-        FRACTAL(); // recursive
-
-        ax = 0;
-        Push(Read16(regbp+0xe));
-        Push(ax);
-        Push(ax);
-        Push(Read16(regbp+0xC));
-        Push(Read16(regbp+0xA));
-        Push(Read16(regbp+0x4));
-        Push(Read16(regbp+0x2));
-        FRACTAL(); // recursive
+        // Recursive calls with different parameters
+        for (int i = 0; i < 4; ++i) {
+            ax = 0;
+            Push(Read16(regbp + 0xe));
+            Push(ax);
+            Push(ax);
+            switch (i) {
+                case 0:
+                    Push(Read16(regbp + 0x8));
+                    Push(Read16(regbp + 0x6));
+                    Push(Read16(regbp + 0xC));
+                    Push(Read16(regbp + 0xA));
+                    break;
+                case 1:
+                    Push(Read16(regbp + 0xC));
+                    Push(Read16(regbp + 0x6));
+                    Push(Read16(regbp + 0x4));
+                    Push(Read16(regbp + 0xA));
+                    break;
+                case 2:
+                    Push(Read16(regbp + 0x8));
+                    Push(Read16(regbp + 0xA));
+                    Push(Read16(regbp + 0xC));
+                    Push(Read16(regbp + 0x2));
+                    break;
+                case 3:
+                    Push(Read16(regbp + 0xC));
+                    Push(Read16(regbp + 0xA));
+                    Push(Read16(regbp + 0x4));
+                    Push(Read16(regbp + 0x2));
+                    break;
+            }
+            FRACTAL(); // Recursive call
+        }
     }
 
     ax = Pop();
-    regsp += 0x0e; // 14
+    regsp += 0x0e; // Restore stack pointer
     regbp = regsp;
     Push(ax);
-    regsp += 2; //instruction pointer
+    regsp += 2; // Adjust for instruction pointer
 }
 
 void FRACT_FRACTALIZE()
