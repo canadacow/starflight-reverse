@@ -82,7 +82,7 @@ void Write16Long(unsigned short s, unsigned short o, uint16_t x);
 #endif
 
 #if USE_MACRO_READ8
-#define Read8(offset) (mem[offset])
+#define Read8(offset) (m[ComputeAddress(StarflightBaseSegment, offset)])
 #else
 unsigned char Read8(unsigned short offset);
 #endif
