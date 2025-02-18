@@ -11,6 +11,14 @@ extern "C" {
     __declspec(dllimport) void __stdcall OutputDebugStringA(const char* lpOutputString);
 }
 
+#if defined(__GNUC__)
+    #define FORCE_INLINE __attribute__((always_inline)) inline
+#elif defined(_MSC_VER)
+    #define FORCE_INLINE __forceinline
+#else
+    #define FORCE_INLINE inline
+#endif
+
 const unsigned short int cc_FNULL = 0xe364;
 const unsigned short int cc_MERCATOR_dash_SCALE = 0xe386;
 const unsigned short int cc_CONTOUR_dash_SCALE = 0xe7fd;
@@ -258,7 +266,7 @@ void Store_3() // !_3
   Store(); // !
 }
 
-void RRND()
+FORCE_INLINE void RRND()
 {
     unsigned short ax, bx, cx, dx;
     ax = Read16(0x4ab0); // SEED
@@ -275,7 +283,7 @@ void RRND()
     Push(dx);
 }
 
-void C_PLUS_LIMIT()
+FORCE_INLINE void C_PLUS_LIMIT()
 {
     signed short bx, ax, cx;
     ax = Pop();
@@ -292,7 +300,7 @@ void C_PLUS_LIMIT()
     Push(ax);
 }
 
-void DISPLACEMENT()
+FORCE_INLINE void DISPLACEMENT()
 {
     unsigned short ax, cx, dx;
     ax = Pop();
@@ -349,7 +357,7 @@ void DISPLACEMENT()
     RRND();
 }
 
-void SWRAP()
+FORCE_INLINE void SWRAP()
 {
     signed short ax, cx, bx;
     ax = Pop(); // y
@@ -385,7 +393,71 @@ void SWRAP()
     Push(ax);
 }
 
-void ACELLADDR()
+FORCE_INLINE uint16_t GetArrayDescriptor() {
+    return Read16(0x4cf1); // 'ARRAY
+}
+
+FORCE_INLINE bool IsSphereWrap() {
+    return Read16(0x4cca) != 0; // SPHEREWRAP
+}
+
+FORCE_INLINE bool IsSignExtend() {
+    return Read16(0x4cd8) != 0; // SIGNEXTEND  
+}
+
+FORCE_INLINE void ACELLADDR_TO_SEG_OFF(uint16_t& segment, uint16_t& offset) {
+    // Cache frequently accessed values
+    const uint16_t arrayDesc = GetArrayDescriptor();
+    segment = Read16(arrayDesc + 6);
+    const uint16_t rowTable = Read16(arrayDesc + 4);
+    
+    // Get coordinates from stack
+    const uint16_t y = Pop();
+    const uint16_t x = Pop();
+
+    // Handle sphere wrapping if needed
+    uint16_t finalX = x;
+    uint16_t finalY = y;
+    if (IsSphereWrap()) {
+        Push(x);
+        Push(y);
+        SWRAP();
+        finalY = Pop();
+        finalX = Pop();
+    }
+
+    // Calculate final address
+    const uint16_t rowIndex = finalY << 1;
+    const uint16_t rowOffset = Read16Long(segment, rowTable + rowIndex);
+    offset = rowOffset + finalX;
+}
+
+FORCE_INLINE void ACELLADDR_AND_GET() {
+    uint16_t segment;
+    uint16_t offset;
+    ACELLADDR_TO_SEG_OFF(segment, offset);
+
+    // Read the value and handle sign extension
+    const uint8_t value = Read8Long(segment, offset);
+
+    if (IsSignExtend()) {
+        Push((int16_t)((int8_t)value));
+    } else {
+        Push((uint16_t)value);
+    }
+}
+
+FORCE_INLINE void ACELLADDR_AND_STORE() {
+    uint16_t segment;
+    uint16_t offset;
+    ACELLADDR_TO_SEG_OFF(segment, offset);
+
+    // Write the value to the calculated address
+    const uint8_t value = (uint8_t)Pop();
+    Write8Long(segment, offset, value);
+}
+
+FORCE_INLINE void ACELLADDR()
 {
     unsigned short ax, bx, cx, dx;
        
@@ -403,7 +475,7 @@ void ACELLADDR()
     Write16(0xe37c, cx); // OCELL
 }
 
-void AGet() // [A@]
+FORCE_INLINE void AGet() // [A@]
 {
     unsigned short ax, cx, temp;
     unsigned char al;
@@ -420,7 +492,7 @@ void AGet() // [A@]
     Push(ax);
 }
 
-void A_ex_() // [A!]
+FORCE_INLINE void A_ex_() // [A!]
 {
     unsigned short value = Pop();
     // Write to same memory locations that AGet reads from
@@ -432,15 +504,17 @@ void Readable_AV_dash_MIDPT(int x1, int y1, int x2, int y2) {
     // Get value at first point (x1,y1)
     Push(x1);
     Push(y1);
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
     int16_t val1 = Pop();
 
     // Get value at second point (x2,y2)
     Push(x2);
     Push(y2);
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
     int16_t val2 = Pop();
 
     // Calculate average value
@@ -454,8 +528,9 @@ void Readable_AV_dash_MIDPT(int x1, int y1, int x2, int y2) {
     Push(avgVal & 0xFF);
     Push(midX);
     Push(midY);
-    ACELLADDR();
-    A_ex_();  // Store to memory (A!)
+    //ACELLADDR();
+    //A_ex_();  // Store to memory (A!)
+    ACELLADDR_AND_STORE();
 }
 
 void AV_dash_MIDPT()
@@ -463,16 +538,16 @@ void AV_dash_MIDPT()
     Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
 }
 
-void FRACT_StoreHeight() // Set Anchor
+FORCE_INLINE void FRACT_StoreHeight() // Set Anchor
 {
     unsigned short ax;
-    ACELLADDR();
-    AGet();
-    ax = Pop();
-    if (ax == 0xFF80) // not set yet
+    uint16_t segment, offset;
+    ACELLADDR_TO_SEG_OFF(segment, offset); // Get segment and offset
+    ax = Read8Long(segment, offset); // Read value using segment and offset
+    if (ax == 0x80) // not set yet
     {
         ax = Pop();
-        Write8Long(Read16(0xe378), Read16(0xe37c), ax&0xFF); // SCELL OCELL
+        Write8Long(segment, offset, ax & 0xFF); // Write value using segment and offset
     }
     else
     {
@@ -480,18 +555,24 @@ void FRACT_StoreHeight() // Set Anchor
     }
 }
 
-void XSHIFT()
+void Ext_FRACT_StoreHeight() {
+    FRACT_StoreHeight();
+}
+
+FORCE_INLINE void XSHIFT()
 {
     unsigned short ax, bx, cx;
     Write16(0xe396, Pop()); // TY
     Push(Read16(regbp+8));
     Push(Read16(0xe396)); // TY
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
     Push(Read16(regbp+4));
     Push(Read16(0xe396)); // TY
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
     ax = Pop();
 
     cx = Pop();
@@ -514,18 +595,20 @@ void XSHIFT()
     FRACT_StoreHeight();
 }
 
-void YSHIFT()
+FORCE_INLINE void YSHIFT()
 {
     unsigned short ax, bx, cx;
     Write16(0xe396, Pop()); // TY
     Push(Read16(0xe396)); // TY
     Push(Read16(regbp+6));
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
     Push(Read16(0xe396)); // TY
     Push(Read16(regbp+2));
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
     ax = Pop();
 
     cx = Pop();
@@ -547,7 +630,7 @@ void YSHIFT()
     FRACT_StoreHeight();
 }
 
-void EDGES()
+FORCE_INLINE void EDGES()
 {
     unsigned short ax;
     ax = Read16(0xe368); // DY>1
@@ -576,7 +659,7 @@ void EDGES()
     }
 }
 
-void CENTER()
+FORCE_INLINE void CENTER()
 {
     unsigned short ax, cx;
     ax = Read16(0xe368) & Read16(0xe36c); // DY>1 and DX>1
@@ -584,23 +667,27 @@ void CENTER()
 
     Push(Read16(regbp+0xC));
     Push(Read16(regbp+0x6));
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
 
     Push(Read16(regbp+0xC));
     Push(Read16(regbp+0x2));
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
 
     Push(Read16(regbp+0x8));
     Push(Read16(regbp+0xA));
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
 
     Push(Read16(regbp+0x4));
     Push(Read16(regbp+0xA));
-    ACELLADDR();
-    AGet();
+    //ACELLADDR();
+    //AGet();
+    ACELLADDR_AND_GET();
 
     // calculate average
     ax = Pop() + Pop() + Pop() + Pop();
@@ -778,8 +865,9 @@ void MERC_gt_CONANCHOR() {
             
             Push(x_coord);       // X coordinate 
             Push(y_coord);       // Y coordinate
-            ACELLADDR();
-            AGet();
+            //ACELLADDR();
+            //AGet();
+            ACELLADDR_AND_GET();
             int value = Pop();
 
             Push(value);
@@ -1043,16 +1131,18 @@ void SUB_dash_CON_dash_FRACT() // SUB-CON-FRACT
   Push(Pop() + 1); //  1+
   OVER(); // OVER
   Push(Pop() + 1); //  1+
-  ACELLADDR(); // ACELLADDR
-  AGet(); // A@
+  //ACELLADDR(); // ACELLADDR
+  //AGet(); // A@
+  ACELLADDR_AND_GET();
   Push(Pop()==Read16(cc_FNULL)?1:0); //  FNULL =
   a = Pop(); // >R
   OVER(); // OVER
   Push(Pop() + 0x000b); //  0x000b +
   OVER(); // OVER
   Push(Pop() + 0x0013); //  0x0013 +
-  ACELLADDR(); // ACELLADDR
-  AGet(); // A@
+  //ACELLADDR(); // ACELLADDR
+  //AGet(); // A@
+  ACELLADDR_AND_GET();
   Push((Pop()==Read16(cc_FNULL)?1:0) & a); //  FNULL = R> AND
   if (Pop() != 0)
   {
