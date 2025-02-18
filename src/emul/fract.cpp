@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<stdlib.h>
+#include<assert.h>
 
 #ifndef DEBUG
 #define USE_INLINE_MEMORY
@@ -40,13 +41,15 @@ const unsigned short int pp_YUR = 0x4e67;
 const unsigned short CONTOUR_RATIO_1 = 20882;
 const unsigned short CONTOUR_RATIO_2 = 32767;
 
+#pragma pack(push, 1)
 typedef struct
 {
     unsigned short int width;
     unsigned short int height;
-    unsigned short bx;
-    unsigned short ds;
+    unsigned short rowTable;
+    unsigned short segment;
 } ArrayType;
+#pragma pack(pop)
 
 ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
 ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
@@ -357,6 +360,45 @@ FORCE_INLINE void DISPLACEMENT()
     RRND();
 }
 
+FORCE_INLINE void SWRAP_REF(uint16_t& x, uint16_t& y, const ArrayType* arrayDescriptor)
+{
+    signed short ax = y;
+    signed short cx = x;
+    signed short bx;
+    if (ax < 0)
+    {
+        ax = -(ax + 1);
+        bx = arrayDescriptor->width >> 1; // 'ARRAY
+        cx += bx;
+    }
+    else
+    {
+        bx = arrayDescriptor->height; // 'ARRAY
+        if ((unsigned short)bx <= (unsigned short)ax)
+        {
+            ax = bx - ax + bx + 1;
+            bx = arrayDescriptor->width; // 'ARRAY
+            bx = bx >> 1;
+            cx += bx;
+        }
+    }
+
+    if (cx < 0)
+    {
+        cx += arrayDescriptor->width; // 'ARRAY
+    }
+    else
+    {
+        bx = arrayDescriptor->width; // 'ARRAY
+        if ((unsigned short)bx <= (unsigned short)cx)
+        {
+            cx -= bx;
+        }
+    }
+    x = cx;
+    y = ax;
+}
+
 FORCE_INLINE void SWRAP()
 {
     signed short ax, cx, bx;
@@ -407,9 +449,14 @@ FORCE_INLINE bool IsSignExtend() {
 
 FORCE_INLINE void ACELLADDR_TO_SEG_OFF(uint16_t& segment, uint16_t& offset) {
     // Cache frequently accessed values
-    const uint16_t arrayDesc = GetArrayDescriptor();
-    segment = Read16(arrayDesc + 6);
-    const uint16_t rowTable = Read16(arrayDesc + 4);
+    //const uint16_t arrayDesc = GetArrayDescriptor();
+    static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
+
+    const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
+    uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
+    const ArrayType* arrayDescriptor = reinterpret_cast<const ArrayType*>(&m[arrayDescAddress]);
+    segment = arrayDescriptor->segment;
+    const uint16_t rowTable = arrayDescriptor->rowTable;
     
     // Get coordinates from stack
     const uint16_t y = Pop();
@@ -419,11 +466,7 @@ FORCE_INLINE void ACELLADDR_TO_SEG_OFF(uint16_t& segment, uint16_t& offset) {
     uint16_t finalX = x;
     uint16_t finalY = y;
     if (IsSphereWrap()) {
-        Push(x);
-        Push(y);
-        SWRAP();
-        finalY = Pop();
-        finalX = Pop();
+        SWRAP_REF(finalX, finalY, arrayDescriptor);
     }
 
     // Calculate final address
