@@ -755,9 +755,9 @@ void FRACT_FRACTALIZE()
     dummy2 = Read16(regsp+10);
     std = Read16(regsp+12);
     //printf("FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
-    char debug_str[256];
-    sprintf(debug_str, "FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
-    OutputDebugStringA(debug_str);
+    //char debug_str[256];
+    //sprintf(debug_str, "FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
+    //OutputDebugStringA(debug_str);
 
     Write16(0xe392, regbp); // RTEMP
     FRACTAL();
