@@ -68,8 +68,8 @@ static inline unsigned char* Read8Addr(unsigned short offset)
 } while(0)
 
 #define Pop() ( \
-    regsp += 2, \
-    Read16(regsp - 2) \
+    Read16(regsp) \
+    regsp += 2 \
 )
 #endif
 
