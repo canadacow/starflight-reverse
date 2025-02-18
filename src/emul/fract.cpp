@@ -463,24 +463,24 @@ void Readable_AV_dash_MIDPT(int x1, int y1, int x2, int y2) {
     Push(y1);
     ACELLADDR();
     AGet();
-    int val1 = Pop();
+    int16_t val1 = Pop();
 
     // Get value at second point (x2,y2)
     Push(x2);
     Push(y2);
     ACELLADDR();
     AGet();
-    int val2 = Pop();
+    int16_t val2 = Pop();
 
     // Calculate average value
-    int avgVal = (val1 + val2) >> 1;  // Average of the two points' values
+    int16_t avgVal = (val1 + val2) >> 1;  // Average of the two points' values
 
     // Calculate midpoint coordinates
     int midX = (x1 + x2) >> 1;  // Midpoint X coordinate
     int midY = (y1 + y2) >> 1;  // Midpoint Y coordinate
 
     // Store average value at midpoint
-    Push(avgVal);
+    Push(avgVal & 0xFF);
     Push(midX);
     Push(midY);
     ACELLADDR();
