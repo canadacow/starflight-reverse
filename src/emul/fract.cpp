@@ -75,6 +75,8 @@ struct FractalState {
     
     // Temporary storage
     uint16_t temp_y;          // 0xe396 TY
+
+    int recursion_depth;
     
     // Array and wrapping control
     //uint16_t xy_anchor;       // 0xe356 XYANCHOR
@@ -486,11 +488,11 @@ FORCE_INLINE uint16_t GetArrayDescriptor() {
 }
 
 FORCE_INLINE bool IsSphereWrap() {
-    return Read16(0x4cca) != 0; // SPHEREWRAP
+    return Read16(pp_SPHEREWRAP) != 0; // SPHEREWRAP
 }
 
 FORCE_INLINE bool IsSignExtend() {
-    return Read16(0x4cd8) != 0; // SIGNEXTEND  
+    return Read16(pp_SIGNEXTEND) != 0; // SIGNEXTEND  
 }
 
 FORCE_INLINE void ACELLADDR_TO_SEG_OFF(uint16_t& segment, uint16_t& offset) {
@@ -650,10 +652,10 @@ void Ext_FRACT_StoreHeight() {
     FRACT_StoreHeight();
 }
 
-void XSHIFT(FractalState& fractalState)
+void XSHIFT(uint16_t xVal, FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
-    fractalState.temp_y = Pop(); // TY
+    fractalState.temp_y = xVal; // TY
 
     Push(fractalState.x_lower_left);
     Push(fractalState.temp_y); // TY
@@ -687,11 +689,11 @@ void XSHIFT(FractalState& fractalState)
     FRACT_StoreHeight();
 }
 
-void YSHIFT(FractalState& fractalState)
+void YSHIFT(uint16_t yVal, FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
 
-    fractalState.temp_y = Pop(); // TY
+    fractalState.temp_y = yVal; // TY
 
     Push(fractalState.temp_y); // TY
     Push(fractalState.y_lower_left);
@@ -732,11 +734,9 @@ void EDGES(FractalState& fractalState)
     {
         ax = fractalState.x_lower_left;
         if (ax == 0) {
-            Push(ax);
-            YSHIFT(fractalState);
+            YSHIFT(ax, fractalState);
         }
-        Push(fractalState.x_upper_right);
-        YSHIFT(fractalState);
+        YSHIFT(fractalState.x_upper_right, fractalState);
     }
 
     ax = fractalState.dx_greater_than_one; // DX>1
@@ -745,11 +745,9 @@ void EDGES(FractalState& fractalState)
         ax = fractalState.y_lower_left;
         if (ax == 0)
         {
-            Push(ax);
-            XSHIFT(fractalState);
+            XSHIFT(ax, fractalState);
         }
-        Push(fractalState.y_upper_right);
-        XSHIFT(fractalState);
+        XSHIFT(fractalState.y_upper_right, fractalState);
     }
 }
 
@@ -844,6 +842,7 @@ void FRACTAL(FractalState fractalState)
         NEWSTD(fractalState);
 
         FractalState newfractalState = fractalState;
+        newfractalState.recursion_depth++;
 
         // Recursive calls with different parameters
         for (int i = 0; i < 4; ++i) {
