@@ -280,12 +280,15 @@ void Store_3() // !_3
 
 FORCE_INLINE void RRND()
 {
+    static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
+    static uint16_t* seed = reinterpret_cast<uint16_t*>(&m[seedOffset]);
+
     unsigned short ax, bx, cx, dx;
-    ax = Read16(0x4ab0); // SEED
+    ax = *seed; // SEED
     cx = 0x7abd;
     ax = ((signed short)cx) * ((signed short)ax);
     ax += 0x1b0f;
-    Write16(0x4ab0, ax); // SEED
+    *seed = ax; // SEED
 
     bx = Pop(); // range
     cx = Pop(); // low
@@ -603,7 +606,7 @@ FORCE_INLINE void FRACT_StoreHeight() // Set Anchor
 void Ext_FRACT_StoreHeight() {
 
     if(GlobalArrayDescriptor == nullptr) {
-      static uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
+      static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
 
       const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
       uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
