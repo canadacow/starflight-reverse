@@ -129,7 +129,7 @@ set_source_files_properties(
 
 set_source_files_properties(src/cpu/8086emu.cpp PROPERTIES COMPILE_FLAGS -O3)
 
-add_definitions(-DDIAGHUB_ENABLE_TRACE_SYSTEM)
+# add_definitions(-DDIAGHUB_ENABLE_TRACE_SYSTEM)
 
 set(HEADER_FILES
     src/emul/UserMarks.h
