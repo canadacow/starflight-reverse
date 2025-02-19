@@ -531,6 +531,38 @@ FORCE_INLINE void ACELLADDR_AND_GET() {
     }
 }
 
+FORCE_INLINE void ACELLADDR_XY_TO_SEG_OFF(uint16_t x, uint16_t y, uint16_t& segment, uint16_t& offset) {
+    segment = GlobalArrayDescriptor->segment;
+    const uint16_t rowTable = GlobalArrayDescriptor->rowTable;
+    
+    // Handle sphere wrapping if needed
+    uint16_t finalX = x;
+    uint16_t finalY = y;
+    if (IsSphereWrap()) {
+        SWRAP_REF(finalX, finalY, GlobalArrayDescriptor);
+    }
+
+    // Calculate final address
+    const uint16_t rowIndex = finalY << 1;
+    const uint16_t rowOffset = Read16Long(segment, rowTable + rowIndex);
+    offset = rowOffset + finalX;
+}
+
+FORCE_INLINE void ACELLADDR_XY_AND_GET(uint16_t x, uint16_t y) {
+    uint16_t segment;
+    uint16_t offset;
+    ACELLADDR_XY_TO_SEG_OFF(x, y, segment, offset);
+
+    // Read the value and handle sign extension
+    const uint8_t value = Read8Long(segment, offset);
+
+    if (IsSignExtend()) {
+        Push((int16_t)((int8_t)value));
+    } else {
+        Push((uint16_t)value);
+    }
+}
+
 FORCE_INLINE void ACELLADDR_AND_STORE() {
     uint16_t segment;
     uint16_t offset;
@@ -622,11 +654,11 @@ void AV_dash_MIDPT()
     Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
 }
 
-void FRACT_StoreHeight() // Set Anchor
+void FRACT_StoreHeight(uint16_t x, uint16_t y) // Set Anchor
 {
     unsigned short ax;
     uint16_t segment, offset;
-    ACELLADDR_TO_SEG_OFF(segment, offset); // Get segment and offset
+    ACELLADDR_XY_TO_SEG_OFF(x, y, segment, offset); // Get segment and offset
     ax = Read8Long(segment, offset); // Read value using segment and offset
     if (ax == 0x80) // not set yet
     {
@@ -649,7 +681,9 @@ void Ext_FRACT_StoreHeight() {
       GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&m[arrayDescAddress]);
     }
 
-    FRACT_StoreHeight();
+    uint16_t y = Pop();
+    uint16_t x = Pop();
+    FRACT_StoreHeight(x, y);
 }
 
 void XSHIFT(uint16_t xVal, FractalState& fractalState)
@@ -657,16 +691,12 @@ void XSHIFT(uint16_t xVal, FractalState& fractalState)
     unsigned short ax, bx, cx;
     fractalState.temp_y = xVal; // TY
 
-    Push(fractalState.x_lower_left);
-    Push(fractalState.temp_y); // TY
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
-    Push(fractalState.x_upper_right);
-    Push(fractalState.temp_y); // TY
+    ACELLADDR_XY_AND_GET(fractalState.x_lower_left, fractalState.temp_y);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
+    ACELLADDR_XY_AND_GET(fractalState.x_upper_right, fractalState.temp_y);
     ax = Pop();
 
     cx = Pop();
@@ -684,9 +714,7 @@ void XSHIFT(uint16_t xVal, FractalState& fractalState)
     DISPLACEMENT(fractalState);
     C_PLUS_LIMIT();
 
-    Push(fractalState.x_mid);
-    Push(fractalState.temp_y); // TY
-    FRACT_StoreHeight();
+    FRACT_StoreHeight(fractalState.x_mid, fractalState.temp_y);
 }
 
 void YSHIFT(uint16_t yVal, FractalState& fractalState)
@@ -695,16 +723,12 @@ void YSHIFT(uint16_t yVal, FractalState& fractalState)
 
     fractalState.temp_y = yVal; // TY
 
-    Push(fractalState.temp_y); // TY
-    Push(fractalState.y_lower_left);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
-    Push(fractalState.temp_y); // TY
-    Push(fractalState.y_upper_right);
+    ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_lower_left);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
+    ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_upper_right);
     ax = Pop();
 
     cx = Pop();
@@ -721,9 +745,7 @@ void YSHIFT(uint16_t yVal, FractalState& fractalState)
     DISPLACEMENT(fractalState);
     C_PLUS_LIMIT();
 
-    Push(fractalState.temp_y); // TY
-    Push(fractalState.y_mid);
-    FRACT_StoreHeight();
+    FRACT_StoreHeight(fractalState.temp_y, fractalState.y_mid);
 }
 
 void EDGES(FractalState& fractalState)
@@ -757,29 +779,21 @@ void CENTER(FractalState& fractalState)
     ax = fractalState.dy_greater_than_one & fractalState.dx_greater_than_one; // DY>1 and DX>1
     if (ax == 0) return;
 
-    Push(fractalState.x_mid);
-    Push(fractalState.y_lower_left);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
+    ACELLADDR_XY_AND_GET(fractalState.x_mid, fractalState.y_lower_left);
 
-    Push(fractalState.x_mid);
-    Push(fractalState.y_upper_right);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
+    ACELLADDR_XY_AND_GET(fractalState.x_mid, fractalState.y_upper_right);
 
-    Push(fractalState.x_lower_left);
-    Push(fractalState.y_mid);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
+    ACELLADDR_XY_AND_GET(fractalState.x_lower_left, fractalState.y_mid);
 
-    Push(fractalState.x_upper_right);
-    Push(fractalState.y_mid);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_AND_GET();
+    ACELLADDR_XY_AND_GET(fractalState.x_upper_right, fractalState.y_mid);
 
     // calculate average
     ax = Pop() + Pop() + Pop() + Pop();
@@ -791,9 +805,7 @@ void CENTER(FractalState& fractalState)
     DISPLACEMENT(fractalState);
     C_PLUS_LIMIT();
 
-    Push(fractalState.x_mid);
-    Push(fractalState.y_mid);
-    FRACT_StoreHeight();
+    FRACT_StoreHeight(fractalState.x_mid, fractalState.y_mid);
 }
 
 void MIDPT(FractalState& fractalState)
