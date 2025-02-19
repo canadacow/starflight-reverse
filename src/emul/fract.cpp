@@ -51,6 +51,41 @@ typedef struct
 } ArrayType;
 #pragma pack(pop)
 
+struct FractalState {
+    // Original memory locations shown in comments
+    
+    // Core fractal parameters
+    uint16_t x_lower_left;    // regbp+8
+    uint16_t y_lower_left;    // regbp+6  
+    uint16_t x_upper_right;   // regbp+4
+    uint16_t y_upper_right;   // regbp+2
+    uint16_t std;             // regbp+0xe (standard deviation/roughness)
+    
+    // Midpoint coordinates calculated in MIDPT()
+    uint16_t x_mid;           // regbp+0xC
+    uint16_t y_mid;           // regbp+0xA
+    
+    // Control flags
+    uint16_t dx_greater_than_one;  // 0xe36c DX>1
+    uint16_t dy_greater_than_one;  // 0xe368 DY>1
+    
+    // Ratio values used in NEWSTD()
+    uint16_t ratio1;          // 0xe35e RATIO
+    uint16_t ratio2;          // 0xe360 RATIO
+    
+    // Temporary storage
+    uint16_t temp_y;          // 0xe396 TY
+    
+    // Array and wrapping control
+    uint16_t xy_anchor;       // 0xe356 XYANCHOR
+    uint16_t sphere_wrap;     // 0x4cca SPHEREWRAP
+    uint16_t sign_extend;     // 0x4cd8 SIGNEXTEND
+    
+    // Original coordinate storage
+    uint16_t x0;             // 0xe370 X0'
+    uint16_t y0;             // 0xe374 Y0'
+};
+
 ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
 ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
 
@@ -314,7 +349,7 @@ FORCE_INLINE void C_PLUS_LIMIT()
     Push(ax);
 }
 
-FORCE_INLINE void DISPLACEMENT()
+FORCE_INLINE void DISPLACEMENT(FractalState& fractalState)
 {
     unsigned short ax, cx, dx;
     ax = Pop();
@@ -364,7 +399,7 @@ FORCE_INLINE void DISPLACEMENT()
         *RandomSeed = ax; // SEED
     }
 
-    ax = Read16(regbp+0xe);
+    ax = fractalState.std;
     cx = -ax;
     Push(cx);
     Push(ax);
@@ -615,17 +650,18 @@ void Ext_FRACT_StoreHeight() {
     FRACT_StoreHeight();
 }
 
-FORCE_INLINE void XSHIFT()
+FORCE_INLINE void XSHIFT(FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
-    Write16(0xe396, Pop()); // TY
-    Push(Read16(regbp+8));
-    Push(Read16(0xe396)); // TY
+    fractalState.temp_y = Pop(); // TY
+
+    Push(fractalState.x_lower_left);
+    Push(fractalState.temp_y); // TY
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
-    Push(Read16(regbp+4));
-    Push(Read16(0xe396)); // TY
+    Push(fractalState.x_upper_right);
+    Push(fractalState.temp_y); // TY
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
@@ -641,27 +677,29 @@ FORCE_INLINE void XSHIFT()
     bx = ((signed short)bx) >> 1;
     Push(bx);
 
-    Push(Read16(0xe396)); // TY
+    Push(fractalState.temp_y); // TY
 
-    DISPLACEMENT();
+    DISPLACEMENT(fractalState);
     C_PLUS_LIMIT();
 
-    Push(Read16(regbp+0xc));
-    Push(Read16(0xe396)); // TY
+    Push(fractalState.x_mid);
+    Push(fractalState.temp_y); // TY
     FRACT_StoreHeight();
 }
 
-FORCE_INLINE void YSHIFT()
+FORCE_INLINE void YSHIFT(FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
-    Write16(0xe396, Pop()); // TY
-    Push(Read16(0xe396)); // TY
-    Push(Read16(regbp+6));
+
+    fractalState.temp_y = Pop(); // TY
+
+    Push(fractalState.temp_y); // TY
+    Push(fractalState.y_lower_left);
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
-    Push(Read16(0xe396)); // TY
-    Push(Read16(regbp+2));
+    Push(fractalState.temp_y); // TY
+    Push(fractalState.y_upper_right);
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
@@ -672,75 +710,75 @@ FORCE_INLINE void YSHIFT()
     ax = ((signed short)ax) >> 1;
     Push(ax);
 
-    Push(Read16(0xe396)); // TY
-    bx = Read16(regbp+6);
-    bx += Read16(regbp+2);
+    Push(fractalState.temp_y); // TY
+    bx = fractalState.y_lower_left;
+    bx += fractalState.y_upper_right;
     bx = ((signed short)bx) >> 1;
     Push(bx);
 
-    DISPLACEMENT();
+    DISPLACEMENT(fractalState);
     C_PLUS_LIMIT();
 
-    Push(Read16(0xe396)); // TY
-    Push(Read16(regbp+0xa));
+    Push(fractalState.temp_y); // TY
+    Push(fractalState.y_mid);
     FRACT_StoreHeight();
 }
 
-FORCE_INLINE void EDGES()
+FORCE_INLINE void EDGES(FractalState& fractalState)
 {
     unsigned short ax;
-    ax = Read16(0xe368); // DY>1
+    ax = fractalState.dy_greater_than_one; // DY>1
     if (ax != 0)
     {
-        ax = Read16(regbp+8);
+        ax = fractalState.x_lower_left;
         if (ax == 0) {
             Push(ax);
-            YSHIFT();
+            YSHIFT(fractalState);
         }
-        Push(Read16(regbp+4));
-        YSHIFT();
+        Push(fractalState.x_upper_right);
+        YSHIFT(fractalState);
     }
 
-    ax = Read16(0xe36c); // DX>1
+    ax = fractalState.dx_greater_than_one; // DX>1
     if (ax != 0)
     {
-        ax = Read16(regbp+6);
+        ax = fractalState.y_lower_left;
         if (ax == 0)
         {
             Push(ax);
-            XSHIFT();
+            XSHIFT(fractalState);
         }
-        Push(Read16(regbp+2));
-        XSHIFT();
+        Push(fractalState.y_upper_right);
+        XSHIFT(fractalState);
     }
 }
 
-FORCE_INLINE void CENTER()
+FORCE_INLINE void CENTER(FractalState& fractalState)
 {
     unsigned short ax, cx;
-    ax = Read16(0xe368) & Read16(0xe36c); // DY>1 and DX>1
+    ax = fractalState.dy_greater_than_one & fractalState.dx_greater_than_one; // DY>1 and DX>1
     if (ax == 0) return;
 
-    Push(Read16(regbp+0xC));
-    Push(Read16(regbp+0x6));
+    Push(fractalState.x_mid);
+    Push(fractalState.y_lower_left);
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
 
-    Push(Read16(regbp+0xC));
-    Push(Read16(regbp+0x2));
+    Push(fractalState.x_mid);
+    Push(fractalState.y_upper_right);
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
 
-    Push(Read16(regbp+0x8));
-    Push(Read16(regbp+0xA));
+    Push(fractalState.x_lower_left);
+    Push(fractalState.y_mid);
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
 
-    Push(Read16(regbp+0x4));
-    Push(Read16(regbp+0xA));
+    Push(fractalState.x_upper_right);
+    Push(fractalState.y_mid);
     //ACELLADDR();
     //AGet();
     ACELLADDR_AND_GET();
@@ -750,104 +788,96 @@ FORCE_INLINE void CENTER()
     ax = ((signed short)ax) >> 2;
     Push(ax);
 
-    Push(Read16(regbp+0xC));
-    Push(Read16(regbp+0xA));
+    Push(fractalState.x_mid);
+    Push(fractalState.y_mid);
     DISPLACEMENT();
     C_PLUS_LIMIT();
 
-    Push(Read16(regbp+0xC));
-    Push(Read16(regbp+0xA));
+    Push(fractalState.x_mid);
+    Push(fractalState.y_mid);
     FRACT_StoreHeight();
 }
 
-void MIDPT()
+void MIDPT(FractalState& fractalState)
 {
     unsigned short ax;
-    ax = Read16(regbp+8);
-    ax += Read16(regbp+4);
+    ax = fractalState.x_lower_left;
+    ax += fractalState.x_upper_right;
     ax = ((signed short)ax) >> 1;
-    Write16(regbp+0xC, ax);
+    fractalState.x_mid = ax;
 
-    ax = Read16(regbp+6);
-    ax += Read16(regbp+2);
+    ax = fractalState.y_lower_left;
+    ax += fractalState.y_upper_right;
     ax = ((signed short)ax) >> 1;
-    Write16(regbp+0xA, ax);
+    fractalState.y_mid = ax;
 }
 
-void NEWSTD()
+void NEWSTD(FractalState& fractalState)
 {
-    unsigned int ax = Read16(regbp + 0xe);
-    unsigned int ratio1 = Read16(0xe35e); // RATIO
-    unsigned int ratio2 = Read16(0xe360); // RATIO
+    unsigned int ax = fractalState.std;
+    unsigned int ratio1 = fractalState.ratio1; // RATIO
+    unsigned int ratio2 = fractalState.ratio2; // RATIO
     ax = (ax * ratio2) / ratio1;
     if (((signed int)ax) <= 0) // not sure
     {
         ax = 1;
     }
-    Write16(regbp+0xe, ax);
+    fractalState.std = ax;
 }
 
-void FRACTAL()
+void FRACTAL(FractalState fractalState)
 {
     unsigned short ax, cx;
-    regsp -= 2; // Adjust stack pointer for instruction pointer
-    regbp = regsp;
 
     // Calculate DX>1 and DY>1
-    ax = (Read16(regbp + 4) - Read16(regbp + 8) - 1) > 0 ? 1 : 0;
-    Write16(0xe36c, ax); // DX>1
+    ax = (fractalState.x_upper_right - fractalState.x_lower_left - 1) > 0 ? 1 : 0;
+    fractalState.dx_greater_than_one = ax;
 
-    cx = (Read16(regbp + 2) - Read16(regbp + 6) - 1) > 0 ? 1 : 0;
-    Write16(0xe368, cx); // DY>1
+    cx = (fractalState.y_upper_right - fractalState.y_lower_left - 1) > 0 ? 1 : 0;
+    fractalState.dy_greater_than_one = cx;
 
     if (cx > 0 || ax > 0)
     {
-        MIDPT();
-        EDGES();
-        CENTER();
-        NEWSTD();
+        MIDPT(fractalState);
+        EDGES(fractalState);
+        CENTER(fractalState);
+        NEWSTD(fractalState);
 
         // Recursive calls with different parameters
         for (int i = 0; i < 4; ++i) {
             ax = 0;
-            Push(Read16(regbp + 0xe));
-            Push(ax);
-            Push(ax);
+
+            FractalState newfractalState = fractalState;
+
             switch (i) {
                 case 0:
-                    Push(Read16(regbp + 0x8));
-                    Push(Read16(regbp + 0x6));
-                    Push(Read16(regbp + 0xC));
-                    Push(Read16(regbp + 0xA));
+                    Push(Read16(regbp + 0x8)); newfractalState.x_lower_left = fractalState.x_lower_left;
+                    Push(Read16(regbp + 0x6)); newfractalState.y_lower_left = fractalState.y_lower_left;
+                    Push(Read16(regbp + 0xC)); newfractalState.x_upper_right = fractalState.x_mid;
+                    Push(Read16(regbp + 0xA)); newfractalState.y_upper_right = fractalState.y_mid;
                     break;
                 case 1:
-                    Push(Read16(regbp + 0xC));
-                    Push(Read16(regbp + 0x6));
-                    Push(Read16(regbp + 0x4));
-                    Push(Read16(regbp + 0xA));
+                    Push(Read16(regbp + 0xC)); newfractalState.x_lower_left = fractalState.x_mid; 
+                    Push(Read16(regbp + 0x6)); newfractalState.y_lower_left = fractalState.y_lower_left;
+                    Push(Read16(regbp + 0x4)); newfractalState.x_upper_right = fractalState.x_upper_right;
+                    Push(Read16(regbp + 0xA)); newfractalState.y_upper_right = fractalState.y_mid;
                     break;
                 case 2:
-                    Push(Read16(regbp + 0x8));
-                    Push(Read16(regbp + 0xA));
-                    Push(Read16(regbp + 0xC));
-                    Push(Read16(regbp + 0x2));
+                    Push(Read16(regbp + 0x8)); newfractalState.x_lower_left = fractalState.x_lower_left;
+                    Push(Read16(regbp + 0xA)); newfractalState.y_lower_left = fractalState.y_mid;
+                    Push(Read16(regbp + 0xC)); newfractalState.x_upper_right = fractalState.x_mid;
+                    Push(Read16(regbp + 0x2)); newfractalState.y_upper_right = fractalState.y_upper_right;
                     break;
                 case 3:
-                    Push(Read16(regbp + 0xC));
-                    Push(Read16(regbp + 0xA));
-                    Push(Read16(regbp + 0x4));
-                    Push(Read16(regbp + 0x2));
+                    Push(Read16(regbp + 0xC)); newfractalState.x_lower_left = fractalState.x_mid;
+                    Push(Read16(regbp + 0xA)); newfractalState.y_lower_left = fractalState.y_mid;
+                    Push(Read16(regbp + 0x4)); newfractalState.x_upper_right = fractalState.x_upper_right;
+                    Push(Read16(regbp + 0x2)); newfractalState.y_upper_right = fractalState.y_upper_right;
                     break;
             }
-            FRACTAL(); // Recursive call
+            FRACTAL(fractalState); // Recursive call
         }
     }
-
-    ax = Pop();
-    regsp += 0x0e; // Restore stack pointer
-    regbp = regsp;
-    Push(ax);
-    regsp += 2; // Adjust for instruction pointer
 }
 
 void FRACT_FRACTALIZE()
@@ -865,9 +895,16 @@ void FRACT_FRACTALIZE()
     //sprintf(debug_str, "FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
     //OutputDebugStringA(debug_str);
 
-    Write16(0xe392, regbp); // RTEMP
-    FRACTAL();
-    regbp = Read16(0xe392); // RTEMP
+    FractalState fractalState = {};
+    fractalState.x_lower_left = xll;
+    fractalState.y_lower_left = yll;
+    fractalState.x_upper_right = xur;
+    fractalState.y_upper_right = yur;
+    fractalState.std = std;
+    fractalState.ratio1 = Read16(0xe35e); // RATIO
+    fractalState.ratio2 = Read16(0xe360); // RATIO
+
+    FRACTAL(fractalState);
 }
 
 void FRACT_FILLARRAY()
