@@ -77,13 +77,13 @@ struct FractalState {
     uint16_t temp_y;          // 0xe396 TY
     
     // Array and wrapping control
-    uint16_t xy_anchor;       // 0xe356 XYANCHOR
-    uint16_t sphere_wrap;     // 0x4cca SPHEREWRAP
-    uint16_t sign_extend;     // 0x4cd8 SIGNEXTEND
+    //uint16_t xy_anchor;       // 0xe356 XYANCHOR
+    //uint16_t sphere_wrap;     // 0x4cca SPHEREWRAP
+    //uint16_t sign_extend;     // 0x4cd8 SIGNEXTEND
     
     // Original coordinate storage
-    uint16_t x0;             // 0xe370 X0'
-    uint16_t y0;             // 0xe374 Y0'
+    //uint16_t x0;             // 0xe370 X0'
+    //uint16_t y0;             // 0xe374 Y0'
 };
 
 ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
@@ -620,7 +620,7 @@ void AV_dash_MIDPT()
     Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
 }
 
-FORCE_INLINE void FRACT_StoreHeight() // Set Anchor
+void FRACT_StoreHeight() // Set Anchor
 {
     unsigned short ax;
     uint16_t segment, offset;
@@ -650,7 +650,7 @@ void Ext_FRACT_StoreHeight() {
     FRACT_StoreHeight();
 }
 
-FORCE_INLINE void XSHIFT(FractalState& fractalState)
+void XSHIFT(FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
     fractalState.temp_y = Pop(); // TY
@@ -687,7 +687,7 @@ FORCE_INLINE void XSHIFT(FractalState& fractalState)
     FRACT_StoreHeight();
 }
 
-FORCE_INLINE void YSHIFT(FractalState& fractalState)
+void YSHIFT(FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
 
@@ -724,7 +724,7 @@ FORCE_INLINE void YSHIFT(FractalState& fractalState)
     FRACT_StoreHeight();
 }
 
-FORCE_INLINE void EDGES(FractalState& fractalState)
+void EDGES(FractalState& fractalState)
 {
     unsigned short ax;
     ax = fractalState.dy_greater_than_one; // DY>1
@@ -753,7 +753,7 @@ FORCE_INLINE void EDGES(FractalState& fractalState)
     }
 }
 
-FORCE_INLINE void CENTER(FractalState& fractalState)
+void CENTER(FractalState& fractalState)
 {
     unsigned short ax, cx;
     ax = fractalState.dy_greater_than_one & fractalState.dx_greater_than_one; // DY>1 and DX>1
@@ -843,11 +843,11 @@ void FRACTAL(FractalState fractalState)
         CENTER(fractalState);
         NEWSTD(fractalState);
 
+        FractalState newfractalState = fractalState;
+
         // Recursive calls with different parameters
         for (int i = 0; i < 4; ++i) {
             ax = 0;
-
-            FractalState newfractalState = fractalState;
 
             switch (i) {
                 case 0:
