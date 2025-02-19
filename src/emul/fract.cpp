@@ -55,6 +55,8 @@ ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
 ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
 
 ArrayType* GlobalArrayDescriptor = nullptr;
+static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
+static uint16_t* RandomSeed = reinterpret_cast<uint16_t*>(&m[seedOffset]);
 
 static const uint16_t MERCATOR_ARRAY = 0x6a99;
 static const uint16_t CONANCHOR_ARRAY = 0x6aad;
@@ -280,15 +282,12 @@ void Store_3() // !_3
 
 FORCE_INLINE void RRND()
 {
-    static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
-    static uint16_t* seed = reinterpret_cast<uint16_t*>(&m[seedOffset]);
-
     unsigned short ax, bx, cx, dx;
-    ax = *seed; // SEED
+    ax = *RandomSeed; // SEED
     cx = 0x7abd;
     ax = ((signed short)cx) * ((signed short)ax);
     ax += 0x1b0f;
-    *seed = ax; // SEED
+    *RandomSeed = ax; // SEED
 
     bx = Pop(); // range
     cx = Pop(); // low
@@ -339,7 +338,7 @@ FORCE_INLINE void DISPLACEMENT()
                 cx += 0x480;
             }
         }
-        Write16(0x4ab0, ax); // SEED
+        *RandomSeed = ax; // SEED
         Push(cx);
 
         ax = 1;
@@ -349,7 +348,7 @@ FORCE_INLINE void DISPLACEMENT()
         RRND();
 
         cx = Pop();
-        Write16(0x4ab0, Pop()); // SEED
+        *RandomSeed = Pop(); // SEED
         Push(cx);
 
         ax = 1;
@@ -362,7 +361,7 @@ FORCE_INLINE void DISPLACEMENT()
         cx = Pop();
         ax = ax ^ Read16(0x5979); // GLOBALSEED
         ax = ax ^ cx;
-        Write16(0x4ab0, ax); // SEED
+        *RandomSeed = ax; // SEED
     }
 
     ax = Read16(regbp+0xe);

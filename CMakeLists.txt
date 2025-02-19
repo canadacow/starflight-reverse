@@ -129,7 +129,12 @@ set_source_files_properties(
 
 set_source_files_properties(src/cpu/8086emu.cpp PROPERTIES COMPILE_FLAGS -O3)
 
+add_definitions(-DDIAGHUB_ENABLE_TRACE_SYSTEM)
+
 set(HEADER_FILES
+    src/emul/UserMarks.h
+    src/emul/vstrace.h
+    src/emul/vstrace.cpp
     src/emul/call.h
     src/cpu/cpu.h
     src/emul/findword.h
@@ -176,6 +181,7 @@ add_executable(emulatesdl WIN32
     src/pbr/SF_GLTFBuilder.cpp
     src/emul/DynamicMesh.cpp
     src/emul/importfix.cpp
+    src/emul/vstrace.cpp
 )
 
 include(DiligentUtils.cmake)

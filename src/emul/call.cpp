@@ -35,6 +35,8 @@
 
 #include "BasicMath.hpp"
 
+#include "vstrace.h"
+
 extern "C" __declspec(dllimport) void __stdcall OutputDebugStringA(const char* lpOutputString);
 
 
@@ -1824,8 +1826,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         //if (!isEarth)
                         //    continue;
 
-                        //if (!isHeaven)
-                        //    continue;
+                        if (!isHeaven)
+                            continue;
 
                         //for(int16_t yscale = 100; yscale < 110; ++yscale)
                         {
@@ -1869,6 +1871,10 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             const int16_t xscale = 61;
                             const int16_t yscale = 101;
 
+                            auto start = std::chrono::high_resolution_clock::now();
+
+                            auto userMarkRange = UserMarks::getInstance().createUserMarkRange("NEWCONTOUR");
+
                             for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ycon += yscale)
                             {
                                 for (int16_t xcon = 0; xcon < planet_usable_width * xscale; xcon += xscale)
@@ -1876,14 +1882,8 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                     Write16(0x5916, xcon);
                                     Write16(0x5921, ycon);
 
-                                    auto start = std::chrono::high_resolution_clock::now();
                                     //ForthCall(0xc317); // NEWCONTOUR writen to segment 0x7cbe
                                     FRACT_NEWCONTOUR();
-                                    auto end = std::chrono::high_resolution_clock::now();
-                                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                                    char buf[256];
-                                    snprintf(buf, sizeof(buf), "NEWCONTOUR took %lld microseconds\n", duration.count());
-                                    OutputDebugStringA(buf);
 
                                     uint16_t segment = 0x7cbe; // NEWCONTOUR segment
 
@@ -1903,6 +1903,15 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                                 }
                             }
+
+                            userMarkRange.reset();
+
+                            auto end = std::chrono::high_resolution_clock::now();
+                            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                            float milliseconds = duration.count() / 1000.0f;
+                            char buf[256];
+                            snprintf(buf, sizeof(buf), "NEWCONTOUR took %.3f milliseconds\n", milliseconds);
+                            OutputDebugStringA(buf);
 
                             {
                                 #if 1
@@ -1929,6 +1938,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 {
                                     fprintf(stderr, "Error encoding albedo PNG: %u: %s\n", error, lodepng_error_text(error));
                                 }
+                                _exit(0);
                                 #endif
                             }
                         }
@@ -4928,7 +4938,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
         // ------- fract-ov operations -------
         case 0xe770: FRACT_FILLARRAY(); break;
-        case 0xe537: FRACT_StoreHeight(); break;
+        case 0xe537: Ext_FRACT_StoreHeight(); break;
         case 0xe75e: FRACT_FRACTALIZE(); break;
         case 0xead1:
             {

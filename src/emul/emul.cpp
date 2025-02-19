@@ -14,6 +14,8 @@
 
 #include <SDL2/SDL.h>
 
+#include "vstrace.h"
+
 std::binary_semaphore& GraphicsInit();
 void GraphicsQuit();
 
@@ -29,10 +31,17 @@ int SDL_main(int argc, char *argv[]) {
             i++;
         }
     }
+
+    UserMarks& userMarks = UserMarks::getInstance();
+
+    userMarks.startTraceSystem();
+    userMarks.initialize("Starflight");
    
     auto& shutdown = GraphicsInit();
 
     shutdown.acquire();
+
+    userMarks.stopTraceSystem();
 
     GraphicsQuit();
     return 0;
