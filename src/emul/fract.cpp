@@ -672,8 +672,8 @@ FORCE_INLINE void XSHIFT(FractalState& fractalState)
     ax = ((signed short)ax) >> 1;
     Push(ax);
 
-    bx = Read16(regbp+8);
-    bx += Read16(regbp+4);
+    bx = fractalState.x_lower_left;
+    bx += fractalState.x_upper_right;
     bx = ((signed short)bx) >> 1;
     Push(bx);
 
@@ -790,7 +790,7 @@ FORCE_INLINE void CENTER(FractalState& fractalState)
 
     Push(fractalState.x_mid);
     Push(fractalState.y_mid);
-    DISPLACEMENT();
+    DISPLACEMENT(fractalState);
     C_PLUS_LIMIT();
 
     Push(fractalState.x_mid);
@@ -851,31 +851,31 @@ void FRACTAL(FractalState fractalState)
 
             switch (i) {
                 case 0:
-                    Push(Read16(regbp + 0x8)); newfractalState.x_lower_left = fractalState.x_lower_left;
-                    Push(Read16(regbp + 0x6)); newfractalState.y_lower_left = fractalState.y_lower_left;
-                    Push(Read16(regbp + 0xC)); newfractalState.x_upper_right = fractalState.x_mid;
-                    Push(Read16(regbp + 0xA)); newfractalState.y_upper_right = fractalState.y_mid;
+                    newfractalState.x_lower_left  = fractalState.x_lower_left;  // Push(Read16(regbp + 0x8));
+                    newfractalState.y_lower_left  = fractalState.y_lower_left;  // Push(Read16(regbp + 0x6));
+                    newfractalState.x_upper_right = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
+                    newfractalState.y_upper_right = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
                     break;
                 case 1:
-                    Push(Read16(regbp + 0xC)); newfractalState.x_lower_left = fractalState.x_mid; 
-                    Push(Read16(regbp + 0x6)); newfractalState.y_lower_left = fractalState.y_lower_left;
-                    Push(Read16(regbp + 0x4)); newfractalState.x_upper_right = fractalState.x_upper_right;
-                    Push(Read16(regbp + 0xA)); newfractalState.y_upper_right = fractalState.y_mid;
+                    newfractalState.x_lower_left  = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
+                    newfractalState.y_lower_left  = fractalState.y_lower_left;  // Push(Read16(regbp + 0x6));
+                    newfractalState.x_upper_right = fractalState.x_upper_right; // Push(Read16(regbp + 0x4));
+                    newfractalState.y_upper_right = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
                     break;
                 case 2:
-                    Push(Read16(regbp + 0x8)); newfractalState.x_lower_left = fractalState.x_lower_left;
-                    Push(Read16(regbp + 0xA)); newfractalState.y_lower_left = fractalState.y_mid;
-                    Push(Read16(regbp + 0xC)); newfractalState.x_upper_right = fractalState.x_mid;
-                    Push(Read16(regbp + 0x2)); newfractalState.y_upper_right = fractalState.y_upper_right;
+                    newfractalState.x_lower_left  = fractalState.x_lower_left;  // Push(Read16(regbp + 0x8));
+                    newfractalState.y_lower_left  = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
+                    newfractalState.x_upper_right = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
+                    newfractalState.y_upper_right = fractalState.y_upper_right; // Push(Read16(regbp + 0x2));
                     break;
                 case 3:
-                    Push(Read16(regbp + 0xC)); newfractalState.x_lower_left = fractalState.x_mid;
-                    Push(Read16(regbp + 0xA)); newfractalState.y_lower_left = fractalState.y_mid;
-                    Push(Read16(regbp + 0x4)); newfractalState.x_upper_right = fractalState.x_upper_right;
-                    Push(Read16(regbp + 0x2)); newfractalState.y_upper_right = fractalState.y_upper_right;
+                    newfractalState.x_lower_left  = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
+                    newfractalState.y_lower_left  = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
+                    newfractalState.x_upper_right = fractalState.x_upper_right; // Push(Read16(regbp + 0x4));
+                    newfractalState.y_upper_right = fractalState.y_upper_right; // Push(Read16(regbp + 0x2));
                     break;
             }
-            FRACTAL(fractalState); // Recursive call
+            FRACTAL(newfractalState); // Recursive call
         }
     }
 }
