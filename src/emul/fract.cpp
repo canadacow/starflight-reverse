@@ -882,25 +882,22 @@ void FRACTAL(FractalState fractalState)
 
 void FRACT_FRACTALIZE()
 {
+    FractalState fractalState = {};
+
     unsigned short int yur, xur, yll, xll, dummy1, dummy2, std;
-    yur = Read16(regsp+0);
-    xur = Read16(regsp+2);
-    yll = Read16(regsp+4);
-    xll = Read16(regsp+6);
-    dummy1 = Read16(regsp+8);
-    dummy2 = Read16(regsp+10);
-    std = Read16(regsp+12);
+    fractalState.y_upper_right = Pop();
+    fractalState.x_upper_right = Pop();
+    fractalState.y_lower_left = Pop();
+    fractalState.x_lower_left = Pop();
+    Pop();
+    Pop();
+    fractalState.std = Pop();
+
     //printf("FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
     //char debug_str[256];
     //sprintf(debug_str, "FRACTALIZE xll=%i yll=%i xur=%i yur=%i std=%i\n", xll, yll, xur, yur, std);
     //OutputDebugStringA(debug_str);
 
-    FractalState fractalState = {};
-    fractalState.x_lower_left = xll;
-    fractalState.y_lower_left = yll;
-    fractalState.x_upper_right = xur;
-    fractalState.y_upper_right = yur;
-    fractalState.std = std;
     fractalState.ratio1 = Read16(0xe35e); // RATIO
     fractalState.ratio2 = Read16(0xe360); // RATIO
 
