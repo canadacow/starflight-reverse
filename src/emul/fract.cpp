@@ -54,6 +54,8 @@ typedef struct
 ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
 ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
 
+ArrayType* GlobalArrayDescriptor = nullptr;
+
 static const uint16_t MERCATOR_ARRAY = 0x6a99;
 static const uint16_t CONANCHOR_ARRAY = 0x6aad;
 static const uint16_t CONTOUR_ARRAY = 0x6ac1;
@@ -245,6 +247,13 @@ void SETLARRAY() // SETLARRAY
 {
   Push(0x4cf1); // 'ARRAY
   Store(); // !
+
+  static uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
+
+  const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
+  uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
+  GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&m[arrayDescAddress]);
+
   Push(0x4d5c); // 'W4D5C'
   Push(0x4cdc); // W4CDC
   Store(); // !
@@ -448,15 +457,8 @@ FORCE_INLINE bool IsSignExtend() {
 }
 
 FORCE_INLINE void ACELLADDR_TO_SEG_OFF(uint16_t& segment, uint16_t& offset) {
-    // Cache frequently accessed values
-    //const uint16_t arrayDesc = GetArrayDescriptor();
-    static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
-
-    const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
-    uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
-    const ArrayType* arrayDescriptor = reinterpret_cast<const ArrayType*>(&m[arrayDescAddress]);
-    segment = arrayDescriptor->segment;
-    const uint16_t rowTable = arrayDescriptor->rowTable;
+    segment = GlobalArrayDescriptor->segment;
+    const uint16_t rowTable = GlobalArrayDescriptor->rowTable;
     
     // Get coordinates from stack
     const uint16_t y = Pop();
@@ -466,7 +468,7 @@ FORCE_INLINE void ACELLADDR_TO_SEG_OFF(uint16_t& segment, uint16_t& offset) {
     uint16_t finalX = x;
     uint16_t finalY = y;
     if (IsSphereWrap()) {
-        SWRAP_REF(finalX, finalY, arrayDescriptor);
+        SWRAP_REF(finalX, finalY, GlobalArrayDescriptor);
     }
 
     // Calculate final address
@@ -599,6 +601,15 @@ FORCE_INLINE void FRACT_StoreHeight() // Set Anchor
 }
 
 void Ext_FRACT_StoreHeight() {
+
+    if(GlobalArrayDescriptor == nullptr) {
+      static uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
+
+      const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
+      uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
+      GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&m[arrayDescAddress]);
+    }
+
     FRACT_StoreHeight();
 }
 

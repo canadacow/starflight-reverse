@@ -13,6 +13,7 @@ unsigned short int regsi; // current vocabulary address (the forth pc pointer)
 
 unsigned short regbx;
 
+#if 0
 unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
 {
     unsigned long addr = ((unsigned long)segment << 4) + offset;
@@ -28,6 +29,7 @@ unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
     }
     return addr;
 }
+#endif
 
 void Write8(unsigned short offset, unsigned char x)
 {

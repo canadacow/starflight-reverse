@@ -24,7 +24,8 @@ unsigned short Read16Long(unsigned short s, unsigned short o);
 
 unsigned char* Read8Addr(unsigned short offset);
 
-unsigned long ComputeAddress(unsigned short segment, unsigned short offset);
+#define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
+//unsigned long ComputeAddress(unsigned short segment, unsigned short offset);
 
 void Push(unsigned short x);
 unsigned short Pop();
