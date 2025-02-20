@@ -334,6 +334,23 @@ FORCE_INLINE void RRND()
     Push(dx);
 }
 
+FORCE_INLINE uint16_t RRND_WITHRES(uint16_t low, uint16_t range)
+{
+    unsigned short ax, bx, cx, dx;
+    ax = *RandomSeed; // SEED
+    cx = 0x7abd;
+    ax = ((signed short)cx) * ((signed short)ax);
+    ax += 0x1b0f;
+    *RandomSeed = ax; // SEED
+
+    bx = range; // Pop()
+    cx = low; // Pop()
+    bx -= cx;
+    unsigned int mul = ((unsigned int)ax) * ((unsigned int)bx);
+    dx = ((mul >> 16)&0xFFFF) + cx;
+    return dx; // Push(dx)
+}
+
 FORCE_INLINE void C_PLUS_LIMIT()
 {
     signed short bx, ax, cx;
@@ -351,61 +368,47 @@ FORCE_INLINE void C_PLUS_LIMIT()
     Push(ax);
 }
 
-FORCE_INLINE void DISPLACEMENT(FractalState& fractalState)
-{
-    unsigned short ax, cx, dx;
-    ax = Pop();
-    cx = Pop();
-    dx = Read16(0xe356); // XYANCHOR
-    if (dx)
-    {
-        cx += Read16(pp_X0_i_); // X0'
-        ax += Read16(pp_Y0_i_); // Y0'
-        if (ax&0x8000)
-        {
-            ax = -(ax + 1);
-            cx += 0x0480;
-        }
-        else
-        {
-            dx = 0x3c0;
-            if (dx <= ax)
-            {
-                ax = dx - ax + dx + 1;
-                cx += 0x480;
+FORCE_INLINE void DISPLACEMENT(FractalState& fractalState) {
+    uint16_t y = Pop();
+    uint16_t x = Pop();
+    
+    if (Read16(0xe356)) { // XYANCHOR
+        // Adjust coordinates
+        x += Read16(pp_X0_i_);  // X0'
+        y += Read16(pp_Y0_i_);  // Y0'
+        
+        // Handle Y wrapping
+        if (y & 0x8000) {
+            y = -(y + 1);
+            x += 0x0480;
+        } else {
+            uint16_t heightLimit = 0x3c0;
+            if (heightLimit <= y) {
+                y = heightLimit - y + heightLimit + 1;
+                x += 0x480;
             }
         }
-        *RandomSeed = ax; // SEED
-        Push(cx);
-
-        ax = 1;
-        Push(ax);
-        ax = -1;
-        Push(ax);
-        RRND();
-
-        cx = Pop();
-        *RandomSeed = Pop(); // SEED
-        Push(cx);
-
-        ax = 1;
-        Push(ax);
-        ax = -1;
-        Push(ax);
-        RRND();
-
-        ax = Pop();
-        cx = Pop();
-        ax = ax ^ Read16(0x5979); // GLOBALSEED
-        ax = ax ^ cx;
-        *RandomSeed = ax; // SEED
+        
+        // First random sequence
+        *RandomSeed = y;  // First seed update
+        uint16_t savedX = x;  // Save x for later seed restore
+        
+        uint16_t rand1 = RRND_WITHRES(1, -1);
+        
+        // Restore and save seed
+        *RandomSeed = savedX;  // Second seed update
+        
+        // Generate second random number
+        uint16_t rand2 = RRND_WITHRES(1, -1);
+        
+        // Final seed calculation
+        *RandomSeed = rand2 ^ Read16(0x5979) ^ rand1;  // Third seed update
     }
-
-    ax = fractalState.std;
-    cx = -ax;
-    Push(cx);
-    Push(ax);
-    RRND();
+    
+    // Generate final displacement value
+    uint16_t range = fractalState.std;
+    uint16_t displacement = RRND_WITHRES(-range, range);  // Generate random value in range [-std, std]
+    Push(displacement);
 }
 
 FORCE_INLINE void SWRAP_REF(uint16_t& x, uint16_t& y, const ArrayType* arrayDescriptor)
