@@ -300,7 +300,7 @@ void SETLARRAY() // SETLARRAY
   Push(0x2ee5); // 'LC!'
   Push(0x4ce0); // W4CE0
   Store(); // !
-  Push(Read16(0x4cd8)); // SIGNEXTEND @
+  Push(Read16(pp_SIGNEXTEND)); // SIGNEXTEND @
   if (Pop() != 0)
   {
     Push(0x49f0); // 'L+-@'
@@ -703,11 +703,7 @@ void YSHIFT(uint16_t yVal, FractalState& fractalState)
 
     fractalState.temp_y = yVal; // TY
 
-    //ACELLADDR();
-    //AGet();
     cx = ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_lower_left);
-    //ACELLADDR();
-    //AGet();
     ax = ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_upper_right);
 
     ax += cx;
