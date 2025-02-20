@@ -368,9 +368,7 @@ FORCE_INLINE void C_PLUS_LIMIT()
     Push(ax);
 }
 
-FORCE_INLINE void DISPLACEMENT(FractalState& fractalState) {
-    uint16_t y = Pop();
-    uint16_t x = Pop();
+FORCE_INLINE uint16_t DISPLACEMENT(uint16_t x, uint16_t y, FractalState& fractalState) {
     
     if (Read16(0xe356)) { // XYANCHOR
         // Adjust coordinates
@@ -408,7 +406,7 @@ FORCE_INLINE void DISPLACEMENT(FractalState& fractalState) {
     // Generate final displacement value
     uint16_t range = fractalState.std;
     uint16_t displacement = RRND_WITHRES(-range, range);  // Generate random value in range [-std, std]
-    Push(displacement);
+    return displacement;
 }
 
 FORCE_INLINE void SWRAP_REF(uint16_t& x, uint16_t& y, const ArrayType* arrayDescriptor)
@@ -710,11 +708,9 @@ void XSHIFT(uint16_t xVal, FractalState& fractalState)
     bx = fractalState.x_lower_left;
     bx += fractalState.x_upper_right;
     bx = ((signed short)bx) >> 1;
-    Push(bx);
 
-    Push(fractalState.temp_y); // TY
-
-    DISPLACEMENT(fractalState);
+    uint16_t displacement = DISPLACEMENT(bx, fractalState.temp_y, fractalState);
+    Push(displacement);
     C_PLUS_LIMIT();
 
     FRACT_StoreHeight(fractalState.x_mid, fractalState.temp_y);
@@ -739,13 +735,12 @@ void YSHIFT(uint16_t yVal, FractalState& fractalState)
     ax = ((signed short)ax) >> 1;
     Push(ax);
 
-    Push(fractalState.temp_y); // TY
     bx = fractalState.y_lower_left;
     bx += fractalState.y_upper_right;
     bx = ((signed short)bx) >> 1;
-    Push(bx);
 
-    DISPLACEMENT(fractalState);
+    uint16_t displacement = DISPLACEMENT(fractalState.temp_y, bx, fractalState);
+    Push(displacement);
     C_PLUS_LIMIT();
 
     FRACT_StoreHeight(fractalState.temp_y, fractalState.y_mid);
@@ -803,9 +798,8 @@ void CENTER(FractalState& fractalState)
     ax = ((signed short)ax) >> 2;
     Push(ax);
 
-    Push(fractalState.x_mid);
-    Push(fractalState.y_mid);
-    DISPLACEMENT(fractalState);
+    uint16_t displacement = DISPLACEMENT(fractalState.x_mid, fractalState.y_mid, fractalState);
+    Push(displacement);
     C_PLUS_LIMIT();
 
     FRACT_StoreHeight(fractalState.x_mid, fractalState.y_mid);
