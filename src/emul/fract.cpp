@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<assert.h>
+#include<algorithm>
 
 #ifndef DEBUG
 #define USE_INLINE_MEMORY
@@ -351,21 +352,9 @@ FORCE_INLINE uint16_t RRND_WITHRES(uint16_t low, uint16_t range)
     return dx; // Push(dx)
 }
 
-FORCE_INLINE void C_PLUS_LIMIT()
-{
-    signed short bx, ax, cx;
-    ax = Pop();
-    cx = Pop();
-    ax += cx;
-    if (ax > 0x7F)
-    {
-        ax = 0x7F;
-    }
-    if (ax < -0x7F)
-    {
-        ax = -0x7F;
-    }
-    Push(ax);
+FORCE_INLINE int16_t C_PLUS_LIMIT(int16_t a, int16_t b) {
+    int16_t sum = a + b;
+    return std::clamp(sum, int16_t(-0x7F), int16_t(0x7F));
 }
 
 FORCE_INLINE uint16_t DISPLACEMENT(uint16_t x, uint16_t y, FractalState& fractalState) {
@@ -549,7 +538,7 @@ FORCE_INLINE void ACELLADDR_XY_TO_SEG_OFF(uint16_t x, uint16_t y, uint16_t& segm
     offset = rowOffset + finalX;
 }
 
-FORCE_INLINE void ACELLADDR_XY_AND_GET(uint16_t x, uint16_t y) {
+FORCE_INLINE uint16_t ACELLADDR_XY_AND_GET(uint16_t x, uint16_t y) {
     uint16_t segment;
     uint16_t offset;
     ACELLADDR_XY_TO_SEG_OFF(x, y, segment, offset);
@@ -557,11 +546,15 @@ FORCE_INLINE void ACELLADDR_XY_AND_GET(uint16_t x, uint16_t y) {
     // Read the value and handle sign extension
     const uint8_t value = Read8Long(segment, offset);
 
+    uint16_t result;
+
     if (IsSignExtend()) {
-        Push((int16_t)((int8_t)value));
+        result = (uint16_t)((int16_t)((int8_t)value));
     } else {
-        Push((uint16_t)value);
+        result = ((uint16_t)value);
     }
+
+    return result;
 }
 
 FORCE_INLINE void ACELLADDR_AND_STORE() {
@@ -655,7 +648,7 @@ void AV_dash_MIDPT()
     Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
 }
 
-void FRACT_StoreHeight(uint16_t x, uint16_t y) // Set Anchor
+void FRACT_StoreHeight(uint16_t x, uint16_t y, int16_t val) // Set Anchor
 {
     unsigned short ax;
     uint16_t segment, offset;
@@ -663,12 +656,7 @@ void FRACT_StoreHeight(uint16_t x, uint16_t y) // Set Anchor
     ax = Read8Long(segment, offset); // Read value using segment and offset
     if (ax == 0x80) // not set yet
     {
-        ax = Pop();
-        Write8Long(segment, offset, ax & 0xFF); // Write value using segment and offset
-    }
-    else
-    {
-        ax = Pop();
+        Write8Long(segment, offset, val & 0xFF); // Write value using segment and offset
     }
 }
 
@@ -684,7 +672,8 @@ void Ext_FRACT_StoreHeight() {
 
     uint16_t y = Pop();
     uint16_t x = Pop();
-    FRACT_StoreHeight(x, y);
+    int16_t val = Pop();
+    FRACT_StoreHeight(x, y, val);
 }
 
 void XSHIFT(uint16_t xVal, FractalState& fractalState)
@@ -692,28 +681,20 @@ void XSHIFT(uint16_t xVal, FractalState& fractalState)
     unsigned short ax, bx, cx;
     fractalState.temp_y = xVal; // TY
 
-    //ACELLADDR();
-    //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.x_lower_left, fractalState.temp_y);
-    //ACELLADDR();
-    //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.x_upper_right, fractalState.temp_y);
-    ax = Pop();
+    cx = ACELLADDR_XY_AND_GET(fractalState.x_lower_left, fractalState.temp_y);
+    ax = ACELLADDR_XY_AND_GET(fractalState.x_upper_right, fractalState.temp_y);
 
-    cx = Pop();
     ax += cx;
     ax = ((signed short)ax) >> 1;
-    Push(ax);
 
     bx = fractalState.x_lower_left;
     bx += fractalState.x_upper_right;
     bx = ((signed short)bx) >> 1;
 
     uint16_t displacement = DISPLACEMENT(bx, fractalState.temp_y, fractalState);
-    Push(displacement);
-    C_PLUS_LIMIT();
+    int16_t val = C_PLUS_LIMIT(displacement, ax);
 
-    FRACT_StoreHeight(fractalState.x_mid, fractalState.temp_y);
+    FRACT_StoreHeight(fractalState.x_mid, fractalState.temp_y, val);
 }
 
 void YSHIFT(uint16_t yVal, FractalState& fractalState)
@@ -724,26 +705,22 @@ void YSHIFT(uint16_t yVal, FractalState& fractalState)
 
     //ACELLADDR();
     //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_lower_left);
+    cx = ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_lower_left);
     //ACELLADDR();
     //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_upper_right);
-    ax = Pop();
+    ax = ACELLADDR_XY_AND_GET(fractalState.temp_y, fractalState.y_upper_right);
 
-    cx = Pop();
     ax += cx;
     ax = ((signed short)ax) >> 1;
-    Push(ax);
 
     bx = fractalState.y_lower_left;
     bx += fractalState.y_upper_right;
     bx = ((signed short)bx) >> 1;
 
     uint16_t displacement = DISPLACEMENT(fractalState.temp_y, bx, fractalState);
-    Push(displacement);
-    C_PLUS_LIMIT();
+    int16_t val = C_PLUS_LIMIT(displacement, ax);
 
-    FRACT_StoreHeight(fractalState.temp_y, fractalState.y_mid);
+    FRACT_StoreHeight(fractalState.temp_y, fractalState.y_mid, val);
 }
 
 void EDGES(FractalState& fractalState)
@@ -777,32 +754,23 @@ void CENTER(FractalState& fractalState)
     ax = fractalState.dy_greater_than_one & fractalState.dx_greater_than_one; // DY>1 and DX>1
     if (ax == 0) return;
 
-    //ACELLADDR();
-    //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.x_mid, fractalState.y_lower_left);
+    uint16_t val1 = ACELLADDR_XY_AND_GET(fractalState.x_mid, fractalState.y_lower_left);
 
-    //ACELLADDR();
-    //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.x_mid, fractalState.y_upper_right);
+    uint16_t val2 = ACELLADDR_XY_AND_GET(fractalState.x_mid, fractalState.y_upper_right);
 
-    //ACELLADDR();
-    //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.x_lower_left, fractalState.y_mid);
+    uint16_t val3 = ACELLADDR_XY_AND_GET(fractalState.x_lower_left, fractalState.y_mid);
 
-    //ACELLADDR();
-    //AGet();
-    ACELLADDR_XY_AND_GET(fractalState.x_upper_right, fractalState.y_mid);
+    uint16_t val4 = ACELLADDR_XY_AND_GET(fractalState.x_upper_right, fractalState.y_mid);
 
     // calculate average
-    ax = Pop() + Pop() + Pop() + Pop();
+    ax = val1 + val2 + val3 + val4;
     ax = ((signed short)ax) >> 2;
-    Push(ax);
 
     uint16_t displacement = DISPLACEMENT(fractalState.x_mid, fractalState.y_mid, fractalState);
-    Push(displacement);
-    C_PLUS_LIMIT();
 
-    FRACT_StoreHeight(fractalState.x_mid, fractalState.y_mid);
+    int16_t val = C_PLUS_LIMIT(displacement, ax);
+
+    FRACT_StoreHeight(fractalState.x_mid, fractalState.y_mid, val);
 }
 
 void MIDPT(FractalState& fractalState)
