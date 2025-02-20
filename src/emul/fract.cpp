@@ -648,7 +648,7 @@ void AV_dash_MIDPT()
     Readable_AV_dash_MIDPT(Pop(), Pop(), Pop(), Pop());
 }
 
-void FRACT_StoreHeight(uint16_t x, uint16_t y, int16_t val) // Set Anchor
+FORCE_INLINE void FRACT_StoreHeight(uint16_t x, uint16_t y, int16_t val) // Set Anchor
 {
     unsigned short ax;
     uint16_t segment, offset;
@@ -676,7 +676,7 @@ void Ext_FRACT_StoreHeight() {
     FRACT_StoreHeight(x, y, val);
 }
 
-void XSHIFT(uint16_t xVal, FractalState& fractalState)
+FORCE_INLINE void XSHIFT(uint16_t xVal, FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
     fractalState.temp_y = xVal; // TY
@@ -697,7 +697,7 @@ void XSHIFT(uint16_t xVal, FractalState& fractalState)
     FRACT_StoreHeight(fractalState.x_mid, fractalState.temp_y, val);
 }
 
-void YSHIFT(uint16_t yVal, FractalState& fractalState)
+FORCE_INLINE void YSHIFT(uint16_t yVal, FractalState& fractalState)
 {
     unsigned short ax, bx, cx;
 
@@ -798,57 +798,50 @@ void NEWSTD(FractalState& fractalState)
 
 void FRACTAL(FractalState fractalState)
 {
-    unsigned short ax, cx;
-
     // Calculate DX>1 and DY>1
-    ax = (fractalState.x_upper_right - fractalState.x_lower_left - 1) > 0 ? 1 : 0;
-    fractalState.dx_greater_than_one = ax;
+    fractalState.dx_greater_than_one = (fractalState.x_upper_right - fractalState.x_lower_left - 1) > 0 ? 1 : 0;
 
-    cx = (fractalState.y_upper_right - fractalState.y_lower_left - 1) > 0 ? 1 : 0;
-    fractalState.dy_greater_than_one = cx;
+    fractalState.dy_greater_than_one = (fractalState.y_upper_right - fractalState.y_lower_left - 1) > 0 ? 1 : 0;
 
-    if (cx > 0 || ax > 0)
+    if (fractalState.dx_greater_than_one > 0 || fractalState.dy_greater_than_one > 0)
     {
-        MIDPT(fractalState);
+        // Calculate midpoints
+        fractalState.x_mid = (fractalState.x_lower_left + fractalState.x_upper_right) / 2;
+        fractalState.y_mid = (fractalState.y_lower_left + fractalState.y_upper_right) / 2;
+
+        // Process edges and center
         EDGES(fractalState);
         CENTER(fractalState);
         NEWSTD(fractalState);
 
-        FractalState newfractalState = fractalState;
-        newfractalState.recursion_depth++;
+        // Prepare for recursive calls
+        FractalState newFractalState = fractalState;
+        newFractalState.recursion_depth++;
 
         // Recursive calls with different parameters
-        for (int i = 0; i < 4; ++i) {
-            ax = 0;
+        // Quadrant 0: bottom-left
+        newFractalState.x_upper_right = fractalState.x_mid;
+        newFractalState.y_upper_right = fractalState.y_mid;
+        FRACTAL(newFractalState);
 
-            switch (i) {
-                case 0:
-                    newfractalState.x_lower_left  = fractalState.x_lower_left;  // Push(Read16(regbp + 0x8));
-                    newfractalState.y_lower_left  = fractalState.y_lower_left;  // Push(Read16(regbp + 0x6));
-                    newfractalState.x_upper_right = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
-                    newfractalState.y_upper_right = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
-                    break;
-                case 1:
-                    newfractalState.x_lower_left  = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
-                    newfractalState.y_lower_left  = fractalState.y_lower_left;  // Push(Read16(regbp + 0x6));
-                    newfractalState.x_upper_right = fractalState.x_upper_right; // Push(Read16(regbp + 0x4));
-                    newfractalState.y_upper_right = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
-                    break;
-                case 2:
-                    newfractalState.x_lower_left  = fractalState.x_lower_left;  // Push(Read16(regbp + 0x8));
-                    newfractalState.y_lower_left  = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
-                    newfractalState.x_upper_right = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
-                    newfractalState.y_upper_right = fractalState.y_upper_right; // Push(Read16(regbp + 0x2));
-                    break;
-                case 3:
-                    newfractalState.x_lower_left  = fractalState.x_mid;         // Push(Read16(regbp + 0xC));
-                    newfractalState.y_lower_left  = fractalState.y_mid;         // Push(Read16(regbp + 0xA));
-                    newfractalState.x_upper_right = fractalState.x_upper_right; // Push(Read16(regbp + 0x4));
-                    newfractalState.y_upper_right = fractalState.y_upper_right; // Push(Read16(regbp + 0x2));
-                    break;
-            }
-            FRACTAL(newfractalState); // Recursive call
-        }
+        // Quadrant 1: bottom-right
+        newFractalState.x_lower_left = fractalState.x_mid;
+        newFractalState.x_upper_right = fractalState.x_upper_right;
+        FRACTAL(newFractalState);
+
+        // Quadrant 2: top-left
+        newFractalState.x_lower_left = fractalState.x_lower_left;
+        newFractalState.y_lower_left = fractalState.y_mid;
+        newFractalState.x_upper_right = fractalState.x_mid;
+        newFractalState.y_upper_right = fractalState.y_upper_right;
+        FRACTAL(newFractalState);
+
+        // Quadrant 3: top-right
+        newFractalState.x_lower_left = fractalState.x_mid;
+        newFractalState.y_lower_left = fractalState.y_mid;
+        newFractalState.x_upper_right = fractalState.x_upper_right;
+        newFractalState.y_upper_right = fractalState.y_upper_right;
+        FRACTAL(newFractalState);
     }
 }
 
