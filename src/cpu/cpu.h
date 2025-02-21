@@ -31,101 +31,97 @@ void Push(unsigned short x);
 unsigned short Pop();
 #else
 
-#define USE_MACRO_COMPUTE_ADDRESS 1
-#define USE_MACRO_WRITE8LONG 1
-#define USE_MACRO_WRITE8 1
-#define USE_MACRO_WRITE16 1
-#define USE_MACRO_WRITE16LONG 1
-#define USE_MACRO_READ8 1
-#define USE_MACRO_READ8LONG 1
-#define USE_MACRO_READ16 1
-#define USE_MACRO_READ16LONG 1
-#define USE_MACRO_PUSH 1
-#define USE_MACRO_POP 1
-
-#if USE_MACRO_COMPUTE_ADDRESS
 #define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
-#else
-unsigned long ComputeAddress(unsigned short segment, unsigned short offset);
-#endif
 
-#if USE_MACRO_WRITE8LONG
-#define Write8Long(s, o, x) do { \
-    unsigned long addr = ComputeAddress(s, o); \
-    m[addr] = x; \
-} while(0)
-#else
-void Write8Long(unsigned short s, unsigned short o, unsigned char x);
-#endif
+// Template functions for memory operations
+template <typename Memory>
+inline void Write8Long(Memory& memory, unsigned short s, unsigned short o, unsigned char x) {
+    unsigned long addr = ComputeAddress(s, o);
+    memory[addr] = x;
+}
 
-#if USE_MACRO_WRITE8
-#define Write8(offset, x) Write8Long(StarflightBaseSegment, offset, x)
-#else
-void Write8(unsigned short offset, unsigned char x);
-#endif
+template <typename Memory>
+inline void Write8(Memory& memory, unsigned short offset, unsigned char x) {
+    Write8Long(memory, StarflightBaseSegment, offset, x);
+}
 
-#if USE_MACRO_WRITE16
-#define Write16(offset, x) do { \
-    uint16_t* addr = reinterpret_cast<uint16_t*>(&m[ComputeAddress(StarflightBaseSegment, offset)]); \
-    *addr = (x); \
-} while(0)
-#else
-void Write16(unsigned short offset, uint16_t x);
-#endif
+template <typename Memory>
+inline void Write16(Memory& memory, unsigned short offset, uint16_t x) {
+    uint16_t* addr = reinterpret_cast<uint16_t*>(&memory[ComputeAddress(StarflightBaseSegment, offset)]);
+    *addr = x;
+}
 
-#if USE_MACRO_WRITE16LONG
-#define Write16Long(s, o, x) do { \
-    uint16_t* addr = reinterpret_cast<uint16_t*>(&m[ComputeAddress(s, o)]); \
-    *addr = (x); \
-} while(0)
-#else
-void Write16Long(unsigned short s, unsigned short o, uint16_t x);
-#endif
+template <typename Memory>
+inline void Write16Long(Memory& memory, unsigned short s, unsigned short o, uint16_t x) {
+    uint16_t* addr = reinterpret_cast<uint16_t*>(&memory[ComputeAddress(s, o)]);
+    *addr = x;
+}
 
-#if USE_MACRO_READ8
-#define Read8(offset) (m[ComputeAddress(StarflightBaseSegment, offset)])
-#else
-unsigned char Read8(unsigned short offset);
-#endif
+template <typename Memory>
+inline unsigned char Read8(Memory& memory, unsigned short offset) {
+    return memory[ComputeAddress(StarflightBaseSegment, offset)];
+}
 
-#if USE_MACRO_READ8LONG
-#define Read8Long(s, o) (m[ComputeAddress(s, o)])
-#else
-unsigned char Read8Long(unsigned short s, unsigned short o);
-#endif
+template <typename Memory>
+inline unsigned char Read8Long(Memory& memory, unsigned short s, unsigned short o) {
+    return memory[ComputeAddress(s, o)];
+}
 
-#if USE_MACRO_READ16
-#define Read16(offset) (*reinterpret_cast<uint16_t*>(&m[ComputeAddress(StarflightBaseSegment, offset)]))
-#else
-uint16_t Read16(unsigned short offset);
-#endif
+template <typename Memory>
+inline uint16_t Read16(Memory& memory, unsigned short offset) {
+    return *reinterpret_cast<uint16_t*>(&memory[ComputeAddress(StarflightBaseSegment, offset)]);
+}
 
-#if USE_MACRO_READ16LONG
-#define Read16Long(s, o) (*reinterpret_cast<uint16_t*>(&m[ComputeAddress(s, o)]))
-#else
-uint16_t Read16Long(unsigned short s, unsigned short o);
-#endif
+template <typename Memory>
+inline uint16_t Read16Long(Memory& memory, unsigned short s, unsigned short o) {
+    return *reinterpret_cast<uint16_t*>(&memory[ComputeAddress(s, o)]);
+}
 
-#if USE_MACRO_PUSH
+// Default functions using the 'm' memory array
+inline void Write8Long(unsigned short s, unsigned short o, unsigned char x) {
+    Write8Long(m, s, o, x);
+}
+
+inline void Write8(unsigned short offset, unsigned char x) {
+    Write8(m, offset, x);
+}
+
+inline void Write16(unsigned short offset, uint16_t x) {
+    Write16(m, offset, x);
+}
+
+inline void Write16Long(unsigned short s, unsigned short o, uint16_t x) {
+    Write16Long(m, s, o, x);
+}
+
+inline unsigned char Read8(unsigned short offset) {
+    return Read8(m, offset);
+}
+
+inline unsigned char Read8Long(unsigned short s, unsigned short o) {
+    return Read8Long(m, s, o);
+}
+
+inline uint16_t Read16(unsigned short offset) {
+    return Read16(m, offset);
+}
+
+inline uint16_t Read16Long(unsigned short s, unsigned short o) {
+    return Read16Long(m, s, o);
+}
+
 #define Push(x) \
     [](uint16_t val){ \
         regsp -= 2; \
         Write16(regsp, val); \
     }(x)
-#else
-void Push(uint16_t x);
-#endif
 
-#if USE_MACRO_POP
 #define Pop() \
     [](){ \
         uint16_t x = Read16(regsp); \
         regsp += 2; \
         return x; \
     }()
-#else
-uint16_t Pop();
-#endif
 
 #endif // USE_INLINE_MEMORY
 
