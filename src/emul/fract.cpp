@@ -1,7 +1,11 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<assert.h>
-#include<algorithm>
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+
+#include "../util/lodepng.h"
 
 #ifndef DEBUG
 #define USE_INLINE_MEMORY
@@ -39,8 +43,14 @@ const unsigned short int pp_XLL = 0x4e49;
 const unsigned short int pp_YLL = 0x4e53;
 const unsigned short int pp_XUR = 0x4e5d;
 const unsigned short int pp_YUR = 0x4e67;
+const unsigned short int pp_GLOBALSEED = 0x5979;
+const unsigned short int pp_SEED = 0x4ab0;
 const unsigned short CONTOUR_RATIO_1 = 20882;
 const unsigned short CONTOUR_RATIO_2 = 32767;
+
+const unsigned short MERCATOR_RATIO_1 = 20882;
+const unsigned short MERCATOR_RATIO_2 = 32767;
+const unsigned short MERCATOR_SCALE = 117;
 
 #pragma pack(push, 1)
 typedef struct
@@ -389,7 +399,7 @@ FORCE_INLINE uint16_t DISPLACEMENT(uint16_t x, uint16_t y, FractalState& fractal
         uint16_t rand2 = RRND_WITHRES(1, -1);
         
         // Final seed calculation
-        *RandomSeed = rand2 ^ Read16(0x5979) ^ rand1;  // Third seed update
+        *RandomSeed = rand2 ^ Read16(pp_GLOBALSEED) ^ rand1;  // Third seed update
     }
     
     // Generate final displacement value
@@ -1292,3 +1302,186 @@ void FRACT_NEWCONTOUR() // NEWCONTOUR
   FRACT_ANCHOR_CONTOUR(); // ANCHOR_CONTOUR
   FRACT_FRACT_CONTOUR(); // FRACT_CONTOUR
 }
+
+/*
+{
+    std::ofstream cache("sf1_planet_surfaces.bin", std::ios::binary);
+    size_t mapSize = surfaces.size();
+    cache.write(reinterpret_cast<const char*>(&mapSize), sizeof(mapSize));
+    
+    for (const auto& pair : surfaces) {
+        cache.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
+        
+        size_t size = pair.second.native.size();
+        cache.write(reinterpret_cast<const char*>(&size), sizeof(size));
+        cache.write(reinterpret_cast<const char*>(pair.second.native.data()), size);
+    }
+}
+*/
+
+bool FractalGenerator::Initialize(const std::filesystem::path& planetDatabase)
+{
+    std::ifstream file(planetDatabase, std::ios::binary);
+    if (!file.is_open())
+    {
+        std::cerr << "Could not open file " << planetDatabase << std::endl;
+        return false;
+    }
+
+    // Read the map size
+    size_t mapSize;
+    file.read(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
+    if (file.fail())
+    {
+        std::cerr << "Failed to read map size from file " << planetDatabase << std::endl;
+        return false;
+    }
+
+    // Read each surface entry
+    for (size_t i = 0; i < mapSize; ++i)
+    {
+        uint32_t key;
+        file.read(reinterpret_cast<char*>(&key), sizeof(key));
+        if (file.fail())
+        {
+            std::cerr << "Failed to read key from file " << planetDatabase << std::endl;
+            return false;
+        }
+
+        size_t size;
+        file.read(reinterpret_cast<char*>(&size), sizeof(size));
+        if (file.fail())
+        {
+            std::cerr << "Failed to read size from file " << planetDatabase << std::endl;
+            return false;
+        }
+
+        std::vector<int8_t> native(size);
+        file.read(reinterpret_cast<char*>(native.data()), size);
+        if (file.fail())
+        {
+            std::cerr << "Failed to read native data from file " << planetDatabase << std::endl;
+            return false;
+        }
+
+        nativeImages.emplace(key, std::move(native));
+    }
+
+    file.close();
+    return true;
+}
+
+PlanetSurface FractalGenerator::GetPlanetSurface(uint16_t seed)
+{
+    // Stub implementation
+    return PlanetSurface{};
+}
+
+#include "vstrace.h"
+
+FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
+{
+    std::vector<unsigned char> localMemory(SystemMemorySize);
+
+    MemoryScope memoryScope(localMemory.data());
+
+    FullResPlanetData result{};
+
+    auto native = nativeImages.find(seed);
+    if (native == nativeImages.end())
+    {
+        return FullResPlanetData{};
+    }
+
+    // Emulates the setup done in MERCATOR-GEN
+
+    Write16(pp_SEED, seed);
+    Write16(pp_GLOBALSEED, seed);
+
+    Push(pp_XYANCHOR);
+    OFF();
+
+    Push(MERCATOR_RATIO_1);
+    Push(MERCATOR_RATIO_2);
+    Push(MERCATOR_SCALE);
+    SETSCALE();
+
+    Push(pp_SPHEREWRAP);
+    ON_3();
+    Push(pp_SIGNEXTEND);
+    ON_3();
+
+    const uint16_t seg = 0x7e51;
+
+    // Emulates the call to FRACT-REGION 
+
+    uint32_t t = 0;
+    for (int j = 0; j < 24; j++)
+    {
+        for (int i = 0; i < 48; i++)
+        {
+            Write8Long(seg, j * 48 + i, native->second[t]);
+        }
+    }
+
+    const int16_t xscale = 61;
+    const int16_t yscale = 101;
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    auto userMarkRange = UserMarks::getInstance().createUserMarkRange("NEWCONTOUR");
+
+    for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ycon += yscale)
+    {
+        for (int16_t xcon = 0; xcon < planet_usable_width * xscale; xcon += xscale)
+        {
+            Write16(0x5916, xcon);
+            Write16(0x5921, ycon);
+
+            FRACT_NEWCONTOUR();
+
+            uint16_t segment = 0x7cbe; // NEWCONTOUR segment
+
+            for (int y = 0; y < planet_contour_height; ++y)
+            {
+                for (int x = 0; x < planet_contour_width; ++x)
+                {
+                    uint8_t val = static_cast<uint8_t>(Read8Long(segment, y * planet_contour_width + x));
+
+                    int image_x = ((xcon / xscale) * planet_contour_width) + x;
+                    int image_y = (planet_usable_height * yscale - 1) - (((ycon / yscale) * planet_contour_height) + y);
+                    int image_index = image_y * (planet_contour_width * planet_usable_width) + image_x;
+                    result.image[image_index] = val;
+                    //planet_albedo[image_index] = ToAlbedo(palette, val);
+                }
+            }
+
+        }
+    }
+
+    userMarkRange.reset();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    float milliseconds = duration.count() / 1000.0f;
+    char buf[256];
+    snprintf(buf, sizeof(buf), "NEWCONTOUR took %.3f milliseconds\n", milliseconds);
+    OutputDebugStringA(buf);   
+
+    #if 1
+    std::vector<unsigned char> png;
+    unsigned error = lodepng::encode(png, result.image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
+    if (!error)
+    {
+        std::string filename = "planets/" + std::to_string(seed) + ".png";
+        lodepng::save_file(png, filename);
+    }
+    else
+    {
+        fprintf(stderr, "Error encoding PNG: %u: %s\n", error, lodepng_error_text(error));
+    }
+    #endif
+
+    return result;
+}
+

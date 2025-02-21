@@ -31,83 +31,89 @@ void Push(unsigned short x);
 unsigned short Pop();
 #else
 
+thread_local unsigned char* currentMemory = m;
+
+class MemoryScope {
+    unsigned char* previous;
+public:
+    MemoryScope(unsigned char* mem) { 
+        previous = currentMemory;
+        currentMemory = mem;
+    }
+    ~MemoryScope() { 
+        currentMemory = previous;
+    }
+};
+
 #define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
 
 // Template functions for memory operations
-template <typename Memory>
-inline void Write8Long(Memory& memory, unsigned short s, unsigned short o, unsigned char x) {
+inline void Write8Long(unsigned char* memory, unsigned short s, unsigned short o, unsigned char x) {
     unsigned long addr = ComputeAddress(s, o);
     memory[addr] = x;
 }
 
-template <typename Memory>
-inline void Write8(Memory& memory, unsigned short offset, unsigned char x) {
+inline void Write8(unsigned char* memory, unsigned short offset, unsigned char x) {
     Write8Long(memory, StarflightBaseSegment, offset, x);
 }
 
-template <typename Memory>
-inline void Write16(Memory& memory, unsigned short offset, uint16_t x) {
+inline void Write16(unsigned char* memory, unsigned short offset, uint16_t x) {
     uint16_t* addr = reinterpret_cast<uint16_t*>(&memory[ComputeAddress(StarflightBaseSegment, offset)]);
     *addr = x;
 }
 
-template <typename Memory>
-inline void Write16Long(Memory& memory, unsigned short s, unsigned short o, uint16_t x) {
+inline void Write16Long(unsigned char* memory, unsigned short s, unsigned short o, uint16_t x) {
     uint16_t* addr = reinterpret_cast<uint16_t*>(&memory[ComputeAddress(s, o)]);
     *addr = x;
 }
 
-template <typename Memory>
-inline unsigned char Read8(Memory& memory, unsigned short offset) {
+inline unsigned char Read8(unsigned char* memory, unsigned short offset) {
     return memory[ComputeAddress(StarflightBaseSegment, offset)];
 }
 
-template <typename Memory>
-inline unsigned char Read8Long(Memory& memory, unsigned short s, unsigned short o) {
+inline unsigned char Read8Long(unsigned char* memory, unsigned short s, unsigned short o) {
     return memory[ComputeAddress(s, o)];
 }
 
-template <typename Memory>
-inline uint16_t Read16(Memory& memory, unsigned short offset) {
+inline uint16_t Read16(unsigned char* memory, unsigned short offset) {
     return *reinterpret_cast<uint16_t*>(&memory[ComputeAddress(StarflightBaseSegment, offset)]);
 }
 
-template <typename Memory>
-inline uint16_t Read16Long(Memory& memory, unsigned short s, unsigned short o) {
+inline uint16_t Read16Long(unsigned char* memory, unsigned short s, unsigned short o) {
     return *reinterpret_cast<uint16_t*>(&memory[ComputeAddress(s, o)]);
 }
 
 // Default functions using the 'm' memory array
 inline void Write8Long(unsigned short s, unsigned short o, unsigned char x) {
-    Write8Long(m, s, o, x);
+    Write8Long(currentMemory, s, o, x);
 }
 
 inline void Write8(unsigned short offset, unsigned char x) {
-    Write8(m, offset, x);
+    Write8(currentMemory, offset, x);
 }
 
 inline void Write16(unsigned short offset, uint16_t x) {
-    Write16(m, offset, x);
+    Write16(currentMemory, offset, x);
 }
 
 inline void Write16Long(unsigned short s, unsigned short o, uint16_t x) {
-    Write16Long(m, s, o, x);
+    Write16Long(currentMemory, s, o, x);
 }
 
 inline unsigned char Read8(unsigned short offset) {
-    return Read8(m, offset);
+    return Read8(currentMemory, offset);
 }
 
 inline unsigned char Read8Long(unsigned short s, unsigned short o) {
-    return Read8Long(m, s, o);
+    return Read8Long(currentMemory, s, o);
 }
 
 inline uint16_t Read16(unsigned short offset) {
-    return Read16(m, offset);
+    return Read16(currentMemory, offset);
 }
 
 inline uint16_t Read16Long(unsigned short s, unsigned short o) {
-    return Read16Long(m, s, o);
+    return Read16Long(currentMemory, s, o);
 }
 
 #define Push(x) \

@@ -23,6 +23,7 @@
 #include <xxhash.h>
 
 #include "../emul/call.h"
+#include "fract.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -821,12 +822,6 @@ struct ArchiveHeader {
 };
 
 #pragma pack(pop)
-
-struct PlanetSurface
-{
-    std::vector<uint8_t> relief;
-    std::vector<uint32_t> albedo;
-};
 
 struct NavigationData
 {

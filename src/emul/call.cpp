@@ -55,14 +55,8 @@ static uint16_t CurrentImageTagForHybridBlit = 0;
 
 extern std::vector<uint8_t> serializedRotoscope;
 extern std::vector<uint8_t> serializedSnapshot;
-
-const int16_t planet_usable_width = 38;
-const int16_t planet_usable_height = 9;
-
-const int planet_contour_width = 61;
-const int planet_contour_height = 101;
-std::vector<uint8_t> planet_image(planet_contour_width * planet_contour_height * planet_usable_width * planet_usable_height);
-std::vector<uint32_t> planet_albedo(planet_contour_width * planet_contour_height * planet_usable_width * planet_usable_height);
+std::vector<uint8_t> planet_image(planet_contour_width* planet_contour_height* planet_usable_width* planet_usable_height);
+std::vector<uint32_t> planet_albedo(planet_contour_width* planet_contour_height* planet_usable_width* planet_usable_height);
 
 // ------------------------------------------------
 
@@ -1777,6 +1771,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                         PlanetSurface ps{};
                         ps.relief.resize(48 * 24);
                         ps.albedo.resize(48 * 24);
+                        ps.native.resize(48 * 24);
 
                         uint16_t seg = 0x7e51;
 
@@ -1800,12 +1795,14 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                                 int val = 0;
                                 if(p.second.species != 18)
                                 {
-                                    val = (int32_t)(int8_t)Read8Long(seg, j * 48 + i);
+                                    ps.native[t] = (int8_t)Read8Long(seg, j * 48 + i);
+                                    val = (int32_t)(int8_t)ps.native[t];
                                 }
                                 else
                                 {
                                     auto jat = 23 - j;
                                     val = mini_png[jat * 48 + i];
+                                    ps.native[t] = (int8_t)val;
                                 }
                                 
                                 ps.relief[t] = val + 128;
@@ -1816,7 +1813,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         surfaces.emplace(p.second.seed, std::move(ps));
 
-                        //continue;
+                        continue;
 
                         bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
                         bool isEarth = p.second.species == 18;
@@ -1870,6 +1867,9 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                             const int16_t xscale = 61;
                             const int16_t yscale = 101;
+
+                            // Duplicate the memory array 'm'
+                            std::vector<unsigned char> m_copy(m, m + SystemMemorySize);
 
                             auto start = std::chrono::high_resolution_clock::now();
 
