@@ -7,9 +7,9 @@
 
 #include "../util/lodepng.h"
 
-#ifndef DEBUG
+//#ifndef DEBUG
 #define USE_INLINE_MEMORY
-#endif
+//#endif
 
 #include "fract.h"
 

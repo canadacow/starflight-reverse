@@ -12,7 +12,7 @@ extern unsigned short regsp;
 extern unsigned short regbp;
 extern unsigned short regsi;
 
-#if !defined(USE_INLINE_MEMORY)
+#if 0 //!defined(USE_INLINE_MEMORY)
 void Write8(unsigned short offset, unsigned char x);
 void Write8Long(unsigned short s, unsigned short o, unsigned char x);
 void Write16(unsigned short offset, unsigned short x);
@@ -31,7 +31,7 @@ void Push(unsigned short x);
 unsigned short Pop();
 #else
 
-thread_local unsigned char* currentMemory = m;
+extern thread_local unsigned char* currentMemory;
 
 class MemoryScope {
     unsigned char* previous;
@@ -116,18 +116,24 @@ inline uint16_t Read16Long(unsigned short s, unsigned short o) {
     return Read16Long(currentMemory, s, o);
 }
 
-#define Push(x) \
-    [](uint16_t val){ \
-        regsp -= 2; \
-        Write16(regsp, val); \
-    }(x)
+inline unsigned char* Read8Addr(unsigned char* memory, unsigned short offset) {
+    return &memory[ComputeAddress(StarflightBaseSegment, offset)];
+}
 
-#define Pop() \
-    [](){ \
-        uint16_t x = Read16(regsp); \
-        regsp += 2; \
-        return x; \
-    }()
+inline unsigned char* Read8Addr(unsigned short offset) {
+    return Read8Addr(currentMemory, offset);
+}
+
+inline void Push(uint16_t x) {
+    regsp -= 2;
+    Write16(regsp, x);
+}
+
+inline uint16_t Pop() {
+    uint16_t x = Read16(regsp);
+    regsp += 2;
+    return x;
+}
 
 #endif // USE_INLINE_MEMORY
 

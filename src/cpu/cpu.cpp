@@ -14,6 +14,7 @@ unsigned short int regsi; // current vocabulary address (the forth pc pointer)
 unsigned short regbx;
 
 #if 0
+#if 0
 unsigned long ComputeAddress(unsigned short segment, unsigned short offset)
 {
     unsigned long addr = ((unsigned long)segment << 4) + offset;
@@ -128,6 +129,10 @@ unsigned short Pop()
     regsp += 2;
     return x;
 }
+
+#endif
+
+thread_local unsigned char* currentMemory = m;
 
 void InitCPU()
 {
