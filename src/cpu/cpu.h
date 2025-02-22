@@ -31,21 +31,25 @@ void Push(unsigned short x);
 unsigned short Pop();
 #else
 
+#define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
+
 extern thread_local unsigned char* currentMemory;
+static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
+extern thread_local uint16_t* RandomSeed;
 
 class MemoryScope {
     unsigned char* previous;
 public:
     MemoryScope(unsigned char* mem) { 
         previous = currentMemory;
-        currentMemory = mem;
+        currentMemory = mem;    
+        RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
     }
     ~MemoryScope() { 
         currentMemory = previous;
+        RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
     }
 };
-
-#define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
 
 // Template functions for memory operations
 inline void Write8Long(unsigned char* memory, unsigned short s, unsigned short o, unsigned char x) {

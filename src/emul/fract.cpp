@@ -47,6 +47,7 @@ const unsigned short int pp_GLOBALSEED = 0x5979;
 const unsigned short int pp_SEED = 0x4ab0;
 const unsigned short CONTOUR_RATIO_1 = 20882;
 const unsigned short CONTOUR_RATIO_2 = 32767;
+const unsigned short CONTOUR_SCALE = 20;
 
 const unsigned short MERCATOR_RATIO_1 = 20882;
 const unsigned short MERCATOR_RATIO_2 = 32767;
@@ -99,12 +100,11 @@ struct FractalState {
     //uint16_t y0;             // 0xe374 Y0'
 };
 
-ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x938c};
-ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x91fe};
+ArrayType MERCATOR = {0x0030, 0x0018, 0x0480, 0x7e51};
+ArrayType CONANCHOR = {0x0009, 0x0007, 0x003f, 0x7e4c};
+ArrayType CONTOUR = {0x003d, 0x0065, 0x1811, 0x7cbe};
 
 ArrayType* GlobalArrayDescriptor = nullptr;
-static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
-static uint16_t* RandomSeed = reinterpret_cast<uint16_t*>(&m[seedOffset]);
 
 static const uint16_t MERCATOR_ARRAY = 0x6a99;
 static const uint16_t CONANCHOR_ARRAY = 0x6aad;
@@ -300,9 +300,9 @@ void SETLARRAY() // SETLARRAY
 
   static uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
 
-  const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
+  const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&currentMemory[arrayDescOffset]);
   uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
-  GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&m[arrayDescAddress]);
+  GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&currentMemory[arrayDescAddress]);
 
   Push(0x4d5c); // 'W4D5C'
   Push(0x4cdc); // W4CDC
@@ -675,9 +675,9 @@ void Ext_FRACT_StoreHeight() {
     if(GlobalArrayDescriptor == nullptr) {
       static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
 
-      const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&m[arrayDescOffset]);
+      const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&currentMemory[arrayDescOffset]);
       uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
-      GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&m[arrayDescAddress]);
+      GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&currentMemory[arrayDescAddress]);
     }
 
     uint16_t y = Pop();
@@ -1269,7 +1269,7 @@ void FRACT_FRACT_CONTOUR() // FRACT_CONTOUR
   //Push2Words("CONTOUR-RATIO");
   Push(CONTOUR_RATIO_1);
   Push(CONTOUR_RATIO_2);
-  Push(Read16(cc_CONTOUR_dash_SCALE)); // CONTOUR-SCALE
+  Push(CONTOUR_SCALE); // CONTOUR-SCALE
   SETSCALE(); // SETSCALE
 
   i = 0;
@@ -1379,6 +1379,7 @@ PlanetSurface FractalGenerator::GetPlanetSurface(uint16_t seed)
 
 #include "vstrace.h"
 
+
 FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
 {
     std::vector<unsigned char> localMemory(SystemMemorySize);
@@ -1392,6 +1393,8 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
     {
         return FullResPlanetData{};
     }
+
+    Write16(cc_FNULL, 0xff80);
 
     // Emulates the setup done in MERCATOR-GEN
 
@@ -1411,16 +1414,41 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
     Push(pp_SIGNEXTEND);
     ON_3();
 
+    auto InitArray = [](uint16_t arrayDescriptor, const ArrayType& array) {
+        Write16(arrayDescriptor, array.width);
+        Write16(arrayDescriptor + 2, array.height);
+        Write16(arrayDescriptor + 4, array.rowTable);
+        Write16(arrayDescriptor + 6, array.segment);
+
+        for (int i = 0; i < array.height; i++)
+        {
+            Write16Long(array.segment, array.rowTable + (i * 2), i * array.width);
+        }
+    };
+
+    InitArray(MERCATOR_ARRAY, MERCATOR);
+    InitArray(CONANCHOR_ARRAY, CONANCHOR);
+    InitArray(CONTOUR_ARRAY, CONTOUR);
+
+    Write16(0x4cf1, MERCATOR_ARRAY);
+
+    static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
+
+    const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&currentMemory[arrayDescOffset]);
+    uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
+    GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&currentMemory[arrayDescAddress]);    
+
     const uint16_t seg = 0x7e51;
 
     // Emulates the call to FRACT-REGION 
 
     uint32_t t = 0;
-    for (int j = 0; j < 24; j++)
+    for (int j = 23; j >= 0; j--)
     {
         for (int i = 0; i < 48; i++)
         {
             Write8Long(seg, j * 48 + i, native->second[t]);
+            ++t;
         }
     }
 
