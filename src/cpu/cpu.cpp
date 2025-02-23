@@ -132,8 +132,8 @@ unsigned short Pop()
 
 #endif
 
-thread_local unsigned char* currentMemory = m;
-thread_local uint16_t* RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
+unsigned char* currentMemory = m;
+uint16_t* RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
 
 void InitCPU()
 {

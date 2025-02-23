@@ -729,7 +729,7 @@ FORCE_INLINE void YSHIFT(uint16_t yVal, FractalState& fractalState)
     FRACT_StoreHeight(fractalState.temp_y, fractalState.y_mid, val);
 }
 
-void EDGES(FractalState& fractalState)
+FORCE_INLINE void EDGES(FractalState& fractalState)
 {
     unsigned short ax;
     ax = fractalState.dy_greater_than_one; // DY>1
@@ -754,7 +754,7 @@ void EDGES(FractalState& fractalState)
     }
 }
 
-void CENTER(FractalState& fractalState)
+FORCE_INLINE void CENTER(FractalState& fractalState)
 {
     unsigned short ax, cx;
     ax = fractalState.dy_greater_than_one & fractalState.dx_greater_than_one; // DY>1 and DX>1
@@ -793,7 +793,7 @@ void MIDPT(FractalState& fractalState)
     fractalState.y_mid = ax;
 }
 
-void NEWSTD(FractalState& fractalState)
+FORCE_INLINE void NEWSTD(FractalState& fractalState)
 {
     unsigned int ax = fractalState.std;
     unsigned int ratio1 = fractalState.ratio1; // RATIO
@@ -1410,9 +1410,9 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
     SETSCALE();
 
     Push(pp_SPHEREWRAP);
-    ON_3();
+    OFF();
     Push(pp_SIGNEXTEND);
-    ON_3();
+    OFF();
 
     auto InitArray = [](uint16_t arrayDescriptor, const ArrayType& array) {
         Write16(arrayDescriptor, array.width);
@@ -1454,6 +1454,15 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
 
     const int16_t xscale = 61;
     const int16_t yscale = 101;
+
+
+    // One to throw away. No idea why
+    {
+        Write16(0x5916, 0);
+        Write16(0x5921, 0);
+
+        FRACT_NEWCONTOUR();
+    }
 
     auto start = std::chrono::high_resolution_clock::now();
 

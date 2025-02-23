@@ -33,9 +33,9 @@ unsigned short Pop();
 
 #define ComputeAddress(segment, offset) (((unsigned long)(segment) << 4) + (offset))
 
-extern thread_local unsigned char* currentMemory;
+extern unsigned char* currentMemory;
 static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
-extern thread_local uint16_t* RandomSeed;
+extern uint16_t* RandomSeed;
 
 class MemoryScope {
     unsigned char* previous;
