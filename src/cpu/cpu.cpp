@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "../emul/callstack.h"
 
-unsigned char m[SystemMemorySize];
+__declspec(align(4096)) unsigned char m[SystemMemorySize];
 unsigned char *mem;
 unsigned short regsp;
 unsigned short regbp;

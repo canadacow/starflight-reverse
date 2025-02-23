@@ -27,14 +27,14 @@ void debug_planet_surfaces()
     fract.Initialize("sf1_planet_surfaces.bin");
 
     // Heaven is 0x03b9
-    auto fullRes = fract.GetFullResPlanetData(0x03b9);
+    auto fullRes = fract.GetFullResPlanetData(0x03b8);
 
     _exit(0);
 }
 
 int SDL_main(int argc, char *argv[]) {
 
-    debug_planet_surfaces();
+    //debug_planet_surfaces();
 
     SetCurrentThreadName("Main Thread");
 

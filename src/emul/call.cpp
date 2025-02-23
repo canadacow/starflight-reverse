@@ -1203,7 +1203,6 @@ uint16_t Peek16(uint16_t stackOffset) {
     return Read16(address);
 }
 
-extern unsigned short regbx;
 extern std::atomic<bool> stopEmulationThread;
 uint16_t nparmsStackSi = 0;
 

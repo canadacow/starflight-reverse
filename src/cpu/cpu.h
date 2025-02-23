@@ -11,6 +11,7 @@ extern unsigned char m[SystemMemorySize];
 extern unsigned short regsp;
 extern unsigned short regbp;
 extern unsigned short regsi;
+extern unsigned short regbx;
 
 #if 0 //!defined(USE_INLINE_MEMORY)
 void Write8(unsigned short offset, unsigned char x);
@@ -37,17 +38,56 @@ extern unsigned char* currentMemory;
 static constexpr uint32_t seedOffset = ComputeAddress(StarflightBaseSegment, 0x4ab0);
 extern uint16_t* RandomSeed;
 
+#ifdef _WIN32
+#ifndef DWORD
+typedef unsigned long DWORD;
+#endif
+
+#define PAGE_NOACCESS 0x01
+#define PAGE_READWRITE 0x02;
+#define PAGE_WRITECOPY 0x03;
+#define PAGE_EXECUTE_READ 0x20;
+#define PAGE_EXECUTE_READWRITE 0x40;
+#define PAGE_EXECUTE_WRITECOPY 0x80;
+
+extern "C" __declspec(dllimport) int __stdcall VirtualProtect(void* lpAddress, size_t dwSize, DWORD flNewProtect, DWORD* lpflOldProtect);
+#endif
+
+struct CPUContext {
+    unsigned short regsp;
+    unsigned short regbp;
+    unsigned short regsi;
+    unsigned short regbx;
+};
+
 class MemoryScope {
     unsigned char* previous;
+    CPUContext previousCPU;
+#ifdef _WIN32
+    DWORD previousProtect;
+#endif
 public:
     MemoryScope(unsigned char* mem) { 
+        previousCPU = { regsp, regbp, regsi, regbx };
+
         previous = currentMemory;
         currentMemory = mem;    
         RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
+
+        DWORD oldProtect;
+        VirtualProtect(previous, SystemMemorySize, PAGE_NOACCESS, &oldProtect);
     }
     ~MemoryScope() { 
+        regsp = previousCPU.regsp;
+        regbp = previousCPU.regbp;
+        regsi = previousCPU.regsi;
+        regbx = previousCPU.regbx;
+
         currentMemory = previous;
         RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
+
+        DWORD oldProtect;
+        VirtualProtect(previous, SystemMemorySize, previousProtect, &oldProtect);
     }
 };
 

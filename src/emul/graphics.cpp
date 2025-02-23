@@ -3498,69 +3498,15 @@ struct PSOutput
 
 static float2 InitHeightmap()
 {
-    /*
-    const int8_t image[9][9] = {
-        {-16, -16, 16, 16, 32, 48, 48, 32, 32},
-        {-16, -16, 16, 16, 32, 48, 32, 32, 48},
-        {-16, -16, 16, 16, 32, 32, 32, 48, 48},
-        {-16, -16, -16, 16, 32, 32, 32, 32, 48},
-        {-16, -16, 16, 16, 32, 32, 32, 48, 32},
-        {-16, -16, 16, 16, 32, 32, 32, 32, 48},
-        {-16, -16, 16, 16, 32, 32, 32, 32, 32},
-        {-16, -16, 16, 16, 32, 32, 32, 32, 32},
-        {-16, 16, 16, 16, 16, 32, 32, 32, 32},
-    };
-    static constexpr MapWidth = 9;
-    static constexpr MapHeight = 9;
-    */
+    FractalGenerator fract;
+    fract.Initialize("sf1_planet_surfaces.bin");
 
-//#define USE_LOFI_EARTH 1
-#define USE_HEAVEN 1
+    // Heaven is 0x03b9
+    auto fullRes = fract.GetFullResPlanetData(0x03b9);
 
-#if !defined(USE_LOFI_EARTH) && !defined(USE_HEAVEN)
-    #error "Must define either USE_LOFI_EARTH or USE_HEAVEN"
-#endif
-
-    std::vector<unsigned char> image;
-    unsigned MapWidth, MapHeight;
-#if defined(USE_LOFI_EARTH)
-    unsigned error = lodepng::decode(image, MapWidth, MapHeight, "lofi_earth.png", LCT_GREY, 8);
-#else
-    unsigned error = lodepng::decode(image, MapWidth, MapHeight, "heaven_output.png", LCT_GREY, 8);
-#endif
-    if (error)
-    {
-        printf("decoder error %d, %s loading lofi_earth.png\n", error, lodepng_error_text(error));
-        exit(-1);
-    }
-
-#if defined(USE_LOFI_EARTH)
-    // For lofi_earth.png
-    auto convertToHeightValue = [](unsigned char val) {
-        if (val == 0) {
-            return (unsigned char)0xf0; // Water
-        }
-        
-        float normalized_val = static_cast<float>(val) / 255.0f;
-        int height_val = static_cast<int>(normalized_val * 8.0f);
-        
-        if (height_val > 6) {
-            height_val = 6;
-        }
-        
-        height_val += 1;
-        height_val <<= 4;
-        
-        return (unsigned char)height_val;
-    };
-
-#else
-    auto convertToHeightValue = [](unsigned char val) {
-        return (unsigned char)(val);
-    };
-#endif
-
-    std::transform(image.begin(), image.end(), image.begin(), convertToHeightValue);
+    std::vector<unsigned char>& image = fullRes.image;
+    unsigned MapWidth = planet_usable_width * planet_contour_width;
+    unsigned MapHeight = planet_usable_height * planet_contour_height;
 
     int8_t* ptr = (int8_t*)image.data();
 

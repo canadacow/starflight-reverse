@@ -1382,6 +1382,47 @@ PlanetSurface FractalGenerator::GetPlanetSurface(uint16_t seed)
 
 FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
 {
+    if (seed == 0x03b8) {
+        std::vector<unsigned char> image;
+        unsigned MapWidth, MapHeight;
+        unsigned error = lodepng::decode(image, MapWidth, MapHeight, "lofi_earth.png", LCT_GREY, 8);
+        if (error) {
+            std::cerr << "decoder error " << error << ": " << lodepng_error_text(error) << std::endl;
+            return FullResPlanetData{};
+        }
+
+        if (MapWidth != (planet_usable_width * planet_contour_width) || MapHeight != (planet_usable_height * planet_contour_height)) {
+            printf("Error: Map dimensions are not sane. Expected %dx%d but got %dx%d\n", 
+                   planet_usable_width * planet_contour_width, planet_usable_height * planet_contour_height, 
+                   MapWidth, MapHeight);
+            return FullResPlanetData{};
+        }
+
+        auto convertToHeightValue = [](unsigned char val) {
+            if (val == 0) {
+                return (unsigned char)0xf0; // Water
+            }
+            
+            float normalized_val = static_cast<float>(val) / 255.0f;
+            int height_val = static_cast<int>(normalized_val * 8.0f);
+            
+            if (height_val > 6) {
+                height_val = 6;
+            }
+            
+            height_val += 1;
+            height_val <<= 4;
+            
+            return (unsigned char)height_val;
+        };
+
+        std::transform(image.begin(), image.end(), image.begin(), convertToHeightValue);
+
+        FullResPlanetData earthData;
+        earthData.image = std::move(image);
+        return earthData;
+    }
+
     std::vector<unsigned char> localMemory(SystemMemorySize);
 
     MemoryScope memoryScope(localMemory.data());
@@ -1505,7 +1546,7 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
     snprintf(buf, sizeof(buf), "NEWCONTOUR took %.3f milliseconds\n", milliseconds);
     OutputDebugStringA(buf);   
 
-    #if 1
+    #if 0
     std::vector<unsigned char> png;
     unsigned error = lodepng::encode(png, result.image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
     if (!error)
