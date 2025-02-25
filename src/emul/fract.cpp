@@ -12,6 +12,7 @@
 //#endif
 
 #include "fract.h"
+#include "starsystem.h"
 
 extern "C" {
     __declspec(dllimport) void __stdcall OutputDebugStringA(const char* lpOutputString);
@@ -1380,9 +1381,9 @@ PlanetSurface FractalGenerator::GetPlanetSurface(uint16_t seed)
 #include "vstrace.h"
 
 
-FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
+FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstanceIndex)
 {
-    if (seed == 0x03b8) {
+    if (planetInstanceIndex == 0x10ad) {
         std::vector<unsigned char> image;
         unsigned MapWidth, MapHeight;
         unsigned error = lodepng::decode(image, MapWidth, MapHeight, "lofi_earth.png", LCT_GREY, 8);
@@ -1398,30 +1399,23 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t seed)
             return FullResPlanetData{};
         }
 
+#if 0
         auto convertToHeightValue = [](unsigned char val) {
-            if (val == 0) {
-                return (unsigned char)0xf0; // Water
-            }
-            
-            float normalized_val = static_cast<float>(val) / 255.0f;
-            int height_val = static_cast<int>(normalized_val * 8.0f);
-            
-            if (height_val > 6) {
-                height_val = 6;
-            }
-            
-            height_val += 1;
-            height_val <<= 4;
+
+            uint16_t height_val = val /= 2;
             
             return (unsigned char)height_val;
         };
 
         std::transform(image.begin(), image.end(), image.begin(), convertToHeightValue);
+#endif
 
         FullResPlanetData earthData;
         earthData.image = std::move(image);
         return earthData;
     }
+
+    uint16_t seed = planets.at(planetInstanceIndex).seed;
 
     std::vector<unsigned char> localMemory(SystemMemorySize);
 

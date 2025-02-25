@@ -6,12 +6,11 @@
 #include "../emul/callstack.h"
 
 __declspec(align(4096)) unsigned char m[SystemMemorySize];
-unsigned char *mem;
-unsigned short regsp;
-unsigned short regbp;
-unsigned short int regsi; // current vocabulary address (the forth pc pointer)
-
-unsigned short regbx;
+__declspec(align(4096)) unsigned char *mem = nullptr;
+__declspec(align(4096)) unsigned short regsp = 0;
+__declspec(align(4096)) unsigned short regbp = 0;
+__declspec(align(4096)) unsigned short regsi = 0; // current vocabulary address (the forth pc pointer)
+__declspec(align(4096)) unsigned short regbx = 0;
 
 #if 0
 #if 0

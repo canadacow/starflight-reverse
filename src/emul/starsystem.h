@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <map>
 
 struct STARSYSTEMENTRY { int instanceoffset, species, x, y, nplanets, orbitmask, loggedmask, flaredate; };
 
@@ -282,7 +283,7 @@ static const std::unordered_map<uint32_t, STARSYSTEMENTRY> starsystem =
 
 struct PLANETENTRY { int instanceoffset, starsystemoffset, species, x, y, orbit, seed; };
 
-static const std::unordered_map<uint32_t, PLANETENTRY> planets=
+static const std::map<uint32_t, PLANETENTRY> planets=
 {
   { 0x10c3, { .instanceoffset=0x10c3, .starsystemoffset=0x1063, .species= 6, .x=215, .y= 86, .orbit=1, .seed=0x10c3}},
   { 0x10b8, { .instanceoffset=0x10b8, .starsystemoffset=0x1063, .species= 7, .x=215, .y= 86, .orbit=2, .seed=0x10b8}},
