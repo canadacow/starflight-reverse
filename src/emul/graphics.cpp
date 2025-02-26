@@ -454,6 +454,8 @@ struct GraphicsContext
     bool shouldInitPlanets = false;
     std::binary_semaphore planetsDone{0};
 
+    FractalGenerator fract;
+
     struct SFModel
     {
         std::shared_ptr<SF_GLTF::Model> model;
@@ -547,6 +549,7 @@ struct GraphicsContext
     RefCntAutoPtr<ITexture> heightmap;
     RefCntAutoPtr<ITextureView> heightmapView;
 
+    uint16_t planetInstanceIndex = 0x17a6;
     int2 heightmapSize;
     std::vector<float> heightmapData;
 
@@ -3498,11 +3501,9 @@ struct PSOutput
 
 static float2 InitHeightmap()
 {
-    FractalGenerator fract;
-    fract.Initialize("sf1_planet_surfaces.bin");
+    s_gc.fract.Initialize("sf1_planet_surfaces.bin");
 
-    // Heaven is 0x03b9
-    auto fullRes = fract.GetFullResPlanetData(0x03b9);
+    auto fullRes = s_gc.fract.GetFullResPlanetData(s_gc.planetInstanceIndex);
 
     std::vector<unsigned char>& image = fullRes.image;
     unsigned MapWidth = planet_usable_width * planet_contour_width;
@@ -3522,29 +3523,31 @@ static float2 InitHeightmap()
         }
     }
 
-    TextureDesc HeightmapTexDesc;
-    HeightmapTexDesc.Name = "Dummy Heightmap Texture";
-    HeightmapTexDesc.Type = RESOURCE_DIM_TEX_2D;
-    HeightmapTexDesc.Width = MapWidth;
-    HeightmapTexDesc.Height = MapHeight;
-    HeightmapTexDesc.Format = TEX_FORMAT_R32_FLOAT;
-    HeightmapTexDesc.BindFlags = BIND_SHADER_RESOURCE;
+    if (!s_gc.heightmap)
+    {
+        TextureDesc HeightmapTexDesc;
+        HeightmapTexDesc.Name = "Dummy Heightmap Texture";
+        HeightmapTexDesc.Type = RESOURCE_DIM_TEX_2D;
+        HeightmapTexDesc.Width = MapWidth;
+        HeightmapTexDesc.Height = MapHeight;
+        HeightmapTexDesc.Format = TEX_FORMAT_R32_FLOAT;
+        HeightmapTexDesc.BindFlags = BIND_SHADER_RESOURCE;
 
-    s_gc.m_pDevice->CreateTexture(HeightmapTexDesc, nullptr, &s_gc.heightmap);
-
-    s_gc.heightmapView = s_gc.heightmap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        s_gc.m_pDevice->CreateTexture(HeightmapTexDesc, nullptr, &s_gc.heightmap);
+        s_gc.heightmapView = s_gc.heightmap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    }
 
     Box UpdateBox;
     UpdateBox.MinX = 0;
     UpdateBox.MinY = 0;
     UpdateBox.MinZ = 0;
-    UpdateBox.MaxX = HeightmapTexDesc.Width;
-    UpdateBox.MaxY = HeightmapTexDesc.Height;
+    UpdateBox.MaxX = MapWidth;
+    UpdateBox.MaxY = MapHeight;
     UpdateBox.MaxZ = 1;
 
     TextureSubResData SubresData;
     SubresData.pData = s_gc.heightmapData.data();
-    SubresData.Stride = HeightmapTexDesc.Width * sizeof(float);
+    SubresData.Stride = MapWidth * sizeof(float);
 
     s_gc.m_pImmediateContext->UpdateTexture(s_gc.heightmap, 0, 0, UpdateBox, SubresData, RESOURCE_STATE_TRANSITION_MODE_NONE, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
@@ -6286,6 +6289,113 @@ void DrawUI()
     if(saveGames.empty() && !emulationThreadRunning && !s_helpShown) {
         s_showHelp = true;
         s_helpShown = true;
+    }
+
+    // Planet development mode
+    if(frameSync.demoMode == 2)
+    {
+        float windowWidth = 600.0f;
+        float windowHeight = 600.0f;
+        float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
+        float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
+
+        if (nk_begin(&ctx, "Planet List", nk_rect(windowX, windowY, windowWidth, windowHeight),
+            NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
+
+            nk_layout_row_dynamic(&ctx, 500, 1);
+            if (nk_group_begin(&ctx, "Planets", NK_WINDOW_BORDER)) {
+
+                static char planetIdInput[9];
+                static bool initialized = false;
+                if (!initialized) {
+                    snprintf(planetIdInput, sizeof(planetIdInput), "%04X", s_gc.planetInstanceIndex);
+                    initialized = true;
+                }
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_label(&ctx, "Enter Planet ID (Hex):", NK_TEXT_LEFT);
+                nk_edit_string_zero_terminated(&ctx, NK_EDIT_FIELD, planetIdInput, sizeof(planetIdInput), nk_filter_hex);
+
+                // Check if the Enter key is pressed
+                if (nk_input_is_key_pressed(&ctx.input, NK_KEY_ENTER)) {
+                    // Convert the input hex string to an integer
+                    uint32_t planetId = strtoul(planetIdInput, nullptr, 16);
+
+                    // Check if the planet ID exists in the planets map
+                    auto planetIt = planets.find(planetId);
+                    if (planetIt != planets.end()) {
+                        s_gc.planetInstanceIndex = planetId;
+                        InitHeightmap();
+                    } else {
+                        nk_label(&ctx, "Invalid Planet ID", NK_TEXT_LEFT);
+                    }
+                }
+                // Create the combo box
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                if (nk_combo_begin_label(&ctx, "Select Planet", nk_vec2(nk_widget_width(&ctx), 200))) {
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    for (const auto& planet : planets) {
+                        char buffer[64];
+                        sprintf(buffer, "0x%04X - System %dx%d Orbit %d Species %d seed %d", planet.first, planet.second.x, planet.second.y, planet.second.orbit, planet.second.species, planet.second.seed);
+                        
+                        if (nk_combo_item_label(&ctx, buffer, NK_TEXT_LEFT)) {
+                            s_gc.planetInstanceIndex = planet.first;
+                            sprintf(planetIdInput, "%04X", planet.first);
+                            InitHeightmap();
+                        }
+                    }
+                    nk_combo_end(&ctx);
+                }
+
+                // Display selected planet details
+                auto it = planets.find(s_gc.planetInstanceIndex);
+                if (it != planets.end()) {
+                    const auto& planet = it->second;
+                    
+                    nk_layout_row_dynamic(&ctx, 20, 1);
+                    char buffer[256];
+                    
+                    sprintf(buffer, "Instance: 0x%X", planet.instanceoffset);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                    
+                    sprintf(buffer, "System: 0x%X", planet.starsystemoffset);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                    
+                    sprintf(buffer, "Seed: 0x%X", planet.seed);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                    
+                    sprintf(buffer, "Species: %d", planet.species);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                    
+                    sprintf(buffer, "Position: (%d, %d)", planet.x, planet.y);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                    
+                    sprintf(buffer, "Orbit: %d", planet.orbit);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+
+                    nk_layout_row_dynamic(&ctx, 24, 1);
+                    nk_spacing(&ctx, 1);
+
+                    static struct nk_image planetImage;
+                    static bool initialized = false;
+                    if (!initialized) {
+                        auto planetDataSurface = s_gc.fract.GetPlanetSurface(s_gc.planetInstanceIndex);
+
+                        SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
+                            planetDataSurface.albedo.data(), 48, 24, 32, 48 * 4,
+                            0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
+
+                        nk_handle handle = nk_handle_ptr(surface);
+                        planetImage = nk_image_handle(handle);
+                        initialized = true;
+                    }
+                    nk_image(&ctx, planetImage);
+                }
+                
+                nk_group_end(&ctx);
+            }
+        }
+        nk_end(&ctx);
     }
 
     if(s_showHelp)

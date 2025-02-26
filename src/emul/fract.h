@@ -42,9 +42,11 @@ public:
     // Loads the 48x24 native images
     bool Initialize(const std::filesystem::path& planetDatabase);
 
-    PlanetSurface GetPlanetSurface(uint16_t seed);
+    PlanetSurface GetPlanetSurface(uint16_t planetInstanceIndex);
     FullResPlanetData GetFullResPlanetData(uint16_t planetInstanceIndex);
 
 private:
     std::unordered_map<uint16_t, std::vector<int8_t>> nativeImages;
+
+    bool initialized = false;
 };

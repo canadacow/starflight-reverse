@@ -1322,6 +1322,11 @@ void FRACT_NEWCONTOUR() // NEWCONTOUR
 
 bool FractalGenerator::Initialize(const std::filesystem::path& planetDatabase)
 {
+    if (initialized)
+    {
+        return true;
+    }
+
     std::ifstream file(planetDatabase, std::ios::binary);
     if (!file.is_open())
     {
@@ -1369,17 +1374,84 @@ bool FractalGenerator::Initialize(const std::filesystem::path& planetDatabase)
     }
 
     file.close();
+    initialized = true;
     return true;
 }
 
-PlanetSurface FractalGenerator::GetPlanetSurface(uint16_t seed)
+static uint32_t colortable[16] =
 {
-    // Stub implementation
-    return PlanetSurface{};
+0x000000, // black
+0x0000AA, // blue
+0x00AA00, // green
+0x00AAAA, // cyan
+0xAA0000, // red
+0xAA00AA, // magenta
+0xAA5500, // brown
+0xAAAAAA, // light gray
+0x555555, // dark gray
+0x5555FF,
+0x55FF55,
+0x55FFFF,
+0xFF5555,
+0xFF55FF,
+0xFFFF55,
+0xFFFFFF,
+};
+
+
+static uint32_t ToAlbedo(const uint8_t* palette, int val)
+{
+    int c = val;
+    c = c < 0 ? 0 : ((c >> 1) & 0x38);
+    c = palette[c] & 0xF;
+
+    uint32_t argb = colortable[c & 0xf] | 0xFF000000;
+    uint32_t abgr = ((argb & 0xFF000000)) | // Keep alpha as is
+                    ((argb & 0xFF) << 16) | // Move red to third position
+                    ((argb & 0xFF00)) | // Keep green as is
+                    ((argb & 0xFF0000) >> 16); // Move blue to rightmost
+    return abgr;
+}
+
+PlanetSurface FractalGenerator::GetPlanetSurface(uint16_t planetInstanceIndex)
+{
+
+    auto planet = planets.at(planetInstanceIndex);
+    uint16_t seed = planet.seed;
+
+    PlanetSurface ps{};
+    ps.relief.resize(48 * 24);
+    ps.albedo.resize(48 * 24);
+    ps.native = nativeImages.at(seed);
+
+    const uint8_t* palette = GetPlanetColorMap(planet.species);
+
+    std::vector<unsigned char> mini_png;
+    if (planet.species == 18)
+    {
+        unsigned mini_width, mini_height;
+        unsigned mini_error = lodepng::decode(mini_png, mini_width, mini_height, "mini_earth.png", LCT_GREY, 8);
+        if (mini_error) {
+            fprintf(stderr, "Error decoding mini PNG: %u: %s\n", mini_error, lodepng_error_text(mini_error));
+        }
+    }
+
+    uint32_t t = 0;
+    for (int j = 23; j >= 0; j--)
+    {
+        for (int i = 0; i < 48; i++)
+        {
+            int val = ps.native[t];
+            ps.relief[t] = val + 128;
+            ps.albedo[t] = ToAlbedo(palette, val);
+            ++t;
+        }
+    }
+
+    return ps;
 }
 
 #include "vstrace.h"
-
 
 FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstanceIndex)
 {
