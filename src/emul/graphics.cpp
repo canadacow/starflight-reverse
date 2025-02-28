@@ -512,6 +512,8 @@ struct GraphicsContext
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
     #define TV_LOCATION_START_X (1745.0f) // 2318
+    #define TERRAIN_MAX_X 2318
+    #define TERRAIN_MAX_Y 909
     //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
     #define TV_LOCATION_START_Y (727.0f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
@@ -521,8 +523,19 @@ struct GraphicsContext
 
     //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
     float3 terrainMovement = { TV_LOCATION_START_X * TileSize.x, -99.0f, TV_LOCATION_START_Y * TileSize.y };
+    static const inline float2 TerrainMaxSize = { TERRAIN_MAX_X * TileSize.x, TERRAIN_MAX_Y * TileSize.y };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
+
+    struct ActivePlanet {
+        bool initialized = false;
+        PlanetSurface surface;
+        struct nk_image image;
+        int2 mapPos;
+        uint16_t planetInstanceIndex;
+    };
+
+    ActivePlanet activePlanet;
 
     MouseState mouseState;
     float FPVpitchAngle = -PI_F/2.0f;
@@ -6228,6 +6241,42 @@ std::vector<uint8_t> ExtractPngFromSaveFile(const std::filesystem::path& saveFil
     return compressedScreenshot;
 }
 
+void UpdatePlanetMap(uint16_t planetInstanceIndex) {
+
+    auto& ap = s_gc.activePlanet;
+
+    // Normalize terrainMovement to the map size
+    float2 pos = (float2(s_gc.terrainMovement.x, s_gc.terrainMovement.z) / s_gc.TerrainMaxSize) * float2{ 48.0f, 24.0f };
+
+    int2 mapPos = int2{ (int)pos.x, (int)pos.y };
+
+    if((!ap.initialized) ||
+        (mapPos.x != ap.mapPos.x) ||
+        (mapPos.y != ap.mapPos.y) ||
+        (planetInstanceIndex != ap.planetInstanceIndex)) {
+
+        if (ap.initialized) {
+            SDL_FreeSurface((SDL_Surface*)ap.image.handle.ptr);
+        }
+
+        ap.surface = s_gc.fract.GetPlanetSurface(planetInstanceIndex);
+
+        ap.surface.albedo[mapPos.y * 48 + mapPos.x] = 0x3C14DCFF;
+
+        SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
+            ap.surface.albedo.data(), 48, 24, 32, 48 * 4,
+            0, 0, 0, 0);
+
+        ap.image = nk_image_ptr(surface);
+        ap.image.w = surface->w;
+        ap.image.h = surface->h;
+
+        ap.initialized = true;
+        ap.planetInstanceIndex = planetInstanceIndex;
+        ap.mapPos = mapPos;
+    }
+};
+
 void DrawUI()
 {
     struct SaveGame {
@@ -6367,33 +6416,12 @@ void DrawUI()
                     sprintf(buffer, "Species: %d", planet.species);
                     nk_label(&ctx, buffer, NK_TEXT_LEFT);
                     
-                    sprintf(buffer, "Position: (%d, %d)", planet.x, planet.y);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-                    
-                    sprintf(buffer, "Orbit: %d", planet.orbit);
+                    sprintf(buffer, "System: %d x %d Orbit: %d", planet.x, planet.y, planet.orbit);
                     nk_label(&ctx, buffer, NK_TEXT_LEFT);
 
-                    nk_layout_row_dynamic(&ctx, 24, 1);
-                    nk_spacing(&ctx, 1);
-
-                    static struct nk_image planetImage;
-                    static bool initialized = false;
-                    static PlanetSurface planetDataSurface;
-                    if (!initialized) {
-                        planetDataSurface = s_gc.fract.GetPlanetSurface(s_gc.planetInstanceIndex);
-
-                        SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
-                            planetDataSurface.albedo.data(), 48, 24, 32, 48 * 4,
-                            0, 0, 0, 0);
-
-                        planetImage = nk_image_ptr(surface);
-                        planetImage.w = surface->w;
-                        planetImage.h = surface->h;                            
-
-                        initialized = true;
-                    }
-                    nk_layout_row_static(&ctx, 24, 48, 1);
-                    nk_image(&ctx, planetImage);
+                    UpdatePlanetMap(s_gc.planetInstanceIndex);
+                    nk_layout_row_static(&ctx, 240, 480, 1);
+                    nk_image(&ctx, s_gc.activePlanet.image);
                 }
                 
                 nk_group_end(&ctx);
