@@ -6378,17 +6378,21 @@ void DrawUI()
 
                     static struct nk_image planetImage;
                     static bool initialized = false;
+                    static PlanetSurface planetDataSurface;
                     if (!initialized) {
-                        auto planetDataSurface = s_gc.fract.GetPlanetSurface(s_gc.planetInstanceIndex);
+                        planetDataSurface = s_gc.fract.GetPlanetSurface(s_gc.planetInstanceIndex);
 
                         SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
                             planetDataSurface.albedo.data(), 48, 24, 32, 48 * 4,
-                            0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
+                            0, 0, 0, 0);
 
-                        nk_handle handle = nk_handle_ptr(surface);
-                        planetImage = nk_image_handle(handle);
+                        planetImage = nk_image_ptr(surface);
+                        planetImage.w = surface->w;
+                        planetImage.h = surface->h;                            
+
                         initialized = true;
                     }
+                    nk_layout_row_static(&ctx, 24, 48, 1);
                     nk_image(&ctx, planetImage);
                 }
                 
