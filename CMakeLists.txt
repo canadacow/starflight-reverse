@@ -132,6 +132,7 @@ set_source_files_properties(src/cpu/8086emu.cpp PROPERTIES COMPILE_FLAGS -O3)
 # add_definitions(-DDIAGHUB_ENABLE_TRACE_SYSTEM)
 
 set(HEADER_FILES
+    src/emul/planet_demo.h
     src/emul/UserMarks.h
     src/emul/vstrace.h
     src/emul/vstrace.cpp
@@ -159,6 +160,7 @@ set(HEADER_FILES
 )
 
 add_executable(emulatesdl WIN32
+    src/emul/planet_demo.cpp
     src/emul/emul.cpp 
     src/emul/call.cpp 
     src/emul/platform.cpp

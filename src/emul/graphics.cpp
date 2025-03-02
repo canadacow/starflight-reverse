@@ -6419,6 +6419,18 @@ void DrawUI()
                     sprintf(buffer, "System: %d x %d Orbit: %d", planet.x, planet.y, planet.orbit);
                     nk_label(&ctx, buffer, NK_TEXT_LEFT);
 
+                    const char* surfaceType;
+                    switch (planettypes[planet.species].surftype) {
+                        case 1: surfaceType = "GAS"; break;
+                        case 2: surfaceType = "LIQUID"; break;
+                        case 3: surfaceType = "FROZEN"; break;
+                        case 4: surfaceType = "MOLTEN"; break;
+                        case 5: surfaceType = "ROCK"; break;
+                        default: surfaceType = "UNKNOWN"; break;
+                    }
+                    sprintf(buffer, "PREDOMINATE SURFACE: %s", surfaceType);
+                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
+
                     UpdatePlanetMap(s_gc.planetInstanceIndex);
                     nk_layout_row_static(&ctx, 240, 480, 1);
                     nk_image(&ctx, s_gc.activePlanet.image);
@@ -7320,6 +7332,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
                 ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
+                auto& ap = s_gc.activePlanet;
+                auto planetInfo = planets.at(ap.planetInstanceIndex);
+
                 std::string showPlanet = "Earth-like";
 
                 if(s_useEGATerrain)
@@ -7339,8 +7354,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 {
                     using TerrainInfo = SF_GLTF_PBR_Renderer::RenderInfo::TerrainInfo;
 
-                    //const uint8_t* palette = GetPlanetColorMap(18); // Erf
-                    const uint8_t* palette = GetPlanetColorMap(34);
+                    const uint8_t* palette = GetPlanetColorMap(planetInfo.species);
 
                     auto GetHeightFromIndex = [](int index) -> float {
                         index = std::max(index, 0); // Ensure index is not negative

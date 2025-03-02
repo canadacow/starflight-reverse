@@ -18,6 +18,8 @@
 
 #include "fract.h"
 
+#include "planet_demo.h"
+
 std::binary_semaphore& GraphicsInit();
 void GraphicsQuit();
 
@@ -33,6 +35,9 @@ void debug_planet_surfaces()
 }
 
 int SDL_main(int argc, char *argv[]) {
+
+    //run_planet_demo();
+    //_exit(0);
 
     //debug_planet_surfaces();
 
