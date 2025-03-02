@@ -120,6 +120,8 @@ public:
 
         float2 TerrainTextureOffset = { 0.5f, 0.5f };
 
+        float WaterHeight = 2.0f;
+
         ITextureView* pWaterHeightMap = nullptr;
 
         bool UseEGA = false;

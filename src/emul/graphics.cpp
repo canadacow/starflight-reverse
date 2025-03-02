@@ -526,6 +526,7 @@ struct GraphicsContext
     static const inline float2 TerrainMaxSize = { TERRAIN_MAX_X * TileSize.x, TERRAIN_MAX_Y * TileSize.y };
     float2 terrainTextureOffset = { 0.0f, 0.0f };
     float2 terrainSize = {};
+    float waterHeight = 2.0f;
 
     struct ActivePlanet {
         bool initialized = false;
@@ -940,7 +941,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 TerrainAttribs->endBiomHeight = 0.0f;
                 TerrainAttribs->textureOffsetX = s_gc.terrainTextureOffset.x;
                 TerrainAttribs->textureOffsetY = s_gc.terrainTextureOffset.y;
-                TerrainAttribs->waterHeight = 2.0f;
+                TerrainAttribs->waterHeight = s_gc.waterHeight;
             }
             
             // Iterate through each primitive in the mesh
@@ -5359,7 +5360,7 @@ void InitTerrain()
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { 
-            { "Water", -2.01f }, 
+            { "Water", -15.01f }, 
             { "Beach", 4.01f }, 
             { "Grass2", 6.01f }, 
             { "HighGrass", 8.01f }, 
@@ -5374,6 +5375,13 @@ void InitTerrain()
             { "Rock", 12.01f }, 
             { "Ice", 16.01f } 
         }},
+        { "Ice", {
+            { "Ice4", -15.01f },
+            { "Ice2", 4.01f },
+            { "Ice3", 8.01f},
+            { "Ice", 12.01f },
+            { "Ice5", 16.01f },
+        }},
         { "Moon", { { "Moon", -15.0f } } },
         { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
@@ -5384,18 +5392,18 @@ void InitTerrain()
     {
         for (const auto& biomBoundary : planetType.boundaries)
         {
-            if(s_gc.terrain.biomMaterialIndex.find(biomBoundary.name) != s_gc.terrain.biomMaterialIndex.end())
-                break;
+            bool found = false;
 
             auto& materials = s_gc.terrain.model->GetMaterials();
             for (size_t i = 0; i < materials.size(); ++i) {
                 if (materials[i].Name == biomBoundary.name) {
                     s_gc.terrain.biomMaterialIndex[biomBoundary.name] = static_cast<Uint32>(i);
+                    found = true;
                     break;
                 }
             }
 
-            assert(s_gc.terrain.biomMaterialIndex.find(biomBoundary.name) != s_gc.terrain.biomMaterialIndex.end());
+            assert(found);
         }
     }
 }
@@ -7334,8 +7342,31 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
                 auto& ap = s_gc.activePlanet;
                 auto planetInfo = planets.at(ap.planetInstanceIndex);
+                auto planetType = planettypes[planetInfo.species];
+
+                /* 
+                    case 1: surfaceType = "GAS"; break;
+                    case 2: surfaceType = "LIQUID"; break;
+                    case 3: surfaceType = "FROZEN"; break;
+                    case 4: surfaceType = "MOLTEN"; break;
+                    case 5: surfaceType = "ROCK"; break;
+                    default: surfaceType = "UNKNOWN"; break;
+                */
 
                 std::string showPlanet = "Earth-like";
+                s_gc.waterHeight = 2.0f;
+
+                if(planetType.surftype == 4)
+                {
+                    showPlanet = "Lava";
+                    // No water on lava planets... Hmmm. Maybe do flowing lava at some level?
+                    s_gc.waterHeight = -1000.0f;
+                }
+                else if(planetType.surftype == 3)
+                {
+                    showPlanet = "Ice";
+                    s_gc.waterHeight = -1000.0f;
+                }
 
                 if(s_useEGATerrain)
                 {
@@ -7415,6 +7446,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 }
 
                 ri.pWaterHeightMap = s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+                ri.WaterHeight = s_gc.waterHeight;
                 
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
             }
