@@ -730,6 +730,51 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             Nodes.emplace_back(ourNode);
             Scenes[0].LinearNodes.push_back(&Nodes.back());
             Scenes[0].RootNodes.push_back(&Nodes.back());
+
+            if(item.name == "Rover")
+            {
+                // Reserve space for lights to prevent reallocation
+                Lights.reserve(Lights.size() + 2);
+                
+                // Add headlights to the rover
+                SF_GLTF::Light headlight1;
+                headlight1.Type = SF_GLTF::Light::TYPE::SPOT;
+                headlight1.Color = float3(1.0f, 1.0f, 0.9f);      // Slightly warm white
+                headlight1.Intensity = 50.0f;
+                headlight1.Range = 100.0f;
+                headlight1.InnerConeAngle = PI_F / 12.0f;  // 15 degrees for tight inner beam
+                headlight1.OuterConeAngle = PI_F / 6.0f;   // 30 degrees for wider outer falloff
+                
+                // Create a node for the right headlight
+                SF_GLTF::Node headlightNode1 = Nodes.back();
+                SF_GLTF::NodeInstance ni1;
+                // Use the rover's rotation and position for the headlight
+                float4x4 roverRotation = item.rotation.ToMatrix();
+                float4x4 roverTranslation = float4x4::Translation(worldOffset);
+                // Position the right headlight relative to the rover
+                float4x4 rightHeadlightOffset = float4x4::Translation(float3(0.5f, 0.5f, 0.0f));
+                ni1.NodeMatrix = roverRotation * rightHeadlightOffset * roverTranslation;
+                Lights.push_back(headlight1);
+                
+                headlightNode1.pLight = &Lights.back();
+                headlightNode1.Instances.push_back(ni1);
+                Nodes.push_back(headlightNode1);
+                Scenes[0].LinearNodes.push_back(&Nodes.back());
+                dynamicLights.push_back(&Nodes.back());
+                
+                SF_GLTF::Light headlight2 = headlight1;
+                SF_GLTF::Node headlightNode2 = Nodes.back();
+                SF_GLTF::NodeInstance ni2;
+                // Position the left headlight relative to the rover
+                float4x4 leftHeadlightOffset = float4x4::Translation(float3(-0.5f, 0.5f, 0.0f));
+                ni2.NodeMatrix = roverRotation * leftHeadlightOffset * roverTranslation;
+                Lights.push_back(headlight2);
+                headlightNode2.pLight = &Lights.back();
+                headlightNode2.Instances.push_back(ni2);
+                Nodes.push_back(headlightNode2);
+                Scenes[0].LinearNodes.push_back(&Nodes.back());
+                dynamicLights.push_back(&Nodes.back());
+            }
         }
     }
 }
@@ -739,6 +784,8 @@ void DynamicMesh::ClearTerrainItems()
     Scenes[0].LinearNodes.erase(Scenes[0].LinearNodes.begin() + 1, Scenes[0].LinearNodes.end());
     Scenes[0].RootNodes.erase(Scenes[0].RootNodes.begin() + 1, Scenes[0].RootNodes.end());
     Nodes.erase(Nodes.begin() + 1, Nodes.end());
+
+    Lights.clear();
 }
 
 void DynamicMesh::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node) const

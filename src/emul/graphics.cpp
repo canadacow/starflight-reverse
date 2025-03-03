@@ -520,6 +520,7 @@ struct GraphicsContext
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
     Quaternion<float> tvRotation = {};
+    float3 tvLocationOnTerrain = { tvLocation.x, 0.0f, tvLocation.y };
 
     //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
     float3 terrainMovement = { TV_LOCATION_START_X * TileSize.x, -99.0f, TV_LOCATION_START_Y * TileSize.y };
@@ -5440,6 +5441,12 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     addMineral({1749.0f, 723.0f});
     addMineral({1741.0f, 723.0f});
 
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{1740.0f, 720.0f}, float3{}, Quaternion<float>{}, true };
+    terrainItems.push_back(ruin);
+
+    SF_GLTF::TerrainItem ruin2{ "RecentRuin", float2{1748.0f, 724.0f}, float3{}, Quaternion<float>{}, true };
+    terrainItems.push_back(ruin2);
+
     //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     //SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
@@ -5460,6 +5467,9 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
     s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData);
+
+    s_gc.tvLocationOnTerrain = terrainItems[0].worldOffset;
+    // Add tv headlights to dynamic mesh
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
@@ -7297,6 +7307,43 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     {
         SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, model.scale }, Lights);
         LightCount = 1;
+    }
+
+    if(model.dynamicMesh && model.dynamicMesh->Lights.size() > 0)
+    {
+        assert(model.dynamicMesh->Lights.size() + LightCount <= s_gc.pbrRenderer->GetSettings().MaxLightCount);
+
+        int i = 0;
+        for(auto& light : model.dynamicMesh->Lights)
+        {
+            Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
+
+            const auto& LightNode = *model.dynamicMesh->dynamicLights[i];
+            auto LightGlobalTransform = LightNode.Instances[0].NodeMatrix;
+
+            SF_GLTF::Light l = *LightNode.pLight;
+            l.Intensity /= 512.0f;
+
+            float3 lightDir = {};
+            float3 Direction = {};
+
+            LightGlobalTransform *= s_gc.renderParams.ModelTransform;
+            // The light direction is along the negative Z axis of the light's local space.
+            // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
+            lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+            Direction = -normalize(lightDir);
+
+            float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
+            SF_GLTF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, model.scale };
+
+            AttribsData.ShadowMapIndex = -1;
+            AttribsData.NumCascades = 0;
+            
+            SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + LightCount);                      
+
+            ++LightCount;
+            ++i;
+        }
     }
 
     {
