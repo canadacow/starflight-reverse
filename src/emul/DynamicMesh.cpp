@@ -752,10 +752,20 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
                 float4x4 roverRotation = item.rotation.ToMatrix();
                 float4x4 roverTranslation = float4x4::Translation(worldOffset);
                 // Position the right headlight relative to the rover
-                float4x4 rightHeadlightOffset = float4x4::Translation(float3(0.5f, 0.5f, 0.0f));
-                ni1.NodeMatrix = roverRotation * rightHeadlightOffset * roverTranslation;
+                // Move it forward (positive Z) to place it at the front of the rover
+                float4x4 rightHeadlightOffset = float4x4::Translation(float3(0.5f, 0.5f, 1.0f));
+                
+                // Create a rotation that points the light forward (negative Z in local space)
+                // This ensures the light points in the direction the rover is facing
+                QuaternionF lightRotation = QuaternionF::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI_F);
+                float4x4 lightRotationMatrix = lightRotation.ToMatrix();
+                
+                // Combine transformations: rover rotation * light position * light direction * rover position
+                ni1.NodeMatrix = roverRotation * rightHeadlightOffset * lightRotationMatrix * roverTranslation;
                 Lights.push_back(headlight1);
                 
+                headlightNode1.Name = "RoverRightLight";
+                headlightNode1.pMesh = nullptr;
                 headlightNode1.pLight = &Lights.back();
                 headlightNode1.Instances.push_back(ni1);
                 Nodes.push_back(headlightNode1);
@@ -766,9 +776,13 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
                 SF_GLTF::Node headlightNode2 = Nodes.back();
                 SF_GLTF::NodeInstance ni2;
                 // Position the left headlight relative to the rover
-                float4x4 leftHeadlightOffset = float4x4::Translation(float3(-0.5f, 0.5f, 0.0f));
-                ni2.NodeMatrix = roverRotation * leftHeadlightOffset * roverTranslation;
+                // Also move it forward to place it at the front
+                float4x4 leftHeadlightOffset = float4x4::Translation(float3(-0.5f, 0.5f, 1.0f));
+                
+                // Apply the same rotation to point the light forward
+                ni2.NodeMatrix = roverRotation * leftHeadlightOffset * lightRotationMatrix * roverTranslation;
                 Lights.push_back(headlight2);
+                headlightNode2.Name = "RoverLeftLight";
                 headlightNode2.pLight = &Lights.back();
                 headlightNode2.Instances.push_back(ni2);
                 Nodes.push_back(headlightNode2);
