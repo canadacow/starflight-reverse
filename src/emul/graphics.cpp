@@ -6770,7 +6770,7 @@ void InitializeCommonResources()
 
 void InitStation()
 {
-    InitModel("C:/Users/Dean/Downloads/station29.glb", s_gc.station);
+    InitModel("station29.glb", s_gc.station);
 
     for (int i = 0; i < s_gc.station.model->GetAnimations().size(); ++i) {
         auto& anim = s_gc.station.model->GetAnimations()[i];
@@ -7322,7 +7322,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             auto LightGlobalTransform = LightNode.Instances[0].NodeMatrix;
 
             SF_GLTF::Light l = *LightNode.pLight;
-            l.Intensity /= 512.0f;
+            //l.Intensity /= 512.0f;
 
             float3 lightDir = {};
             float3 Direction = {};
