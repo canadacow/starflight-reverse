@@ -730,6 +730,31 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             Nodes.emplace_back(ourNode);
             Scenes[0].LinearNodes.push_back(&Nodes.back());
             Scenes[0].RootNodes.push_back(&Nodes.back());
+
+            if(item.name == "Rover")
+            {
+                Node* roverNode = &Nodes.back();
+
+                roverNode->Matrix = ni.NodeMatrix;
+                roverNode->Instances.clear();
+
+                for (const auto& child : it->Children)
+                {
+                    if (child->pLight != nullptr)
+                    {
+                        Node lightNode = *child;
+                        auto& newNode = Nodes.emplace_back(lightNode);
+                        newNode.Index = Nodes.size() - 1;
+                        
+                        newNode.Parent = roverNode;
+                        roverNode->Children.push_back(&newNode);
+                        
+                        Scenes[0].LinearNodes.push_back(&newNode);
+
+                        lights.push_back(&newNode);
+                    }
+                }
+            }
         }
     }
 }
@@ -739,6 +764,8 @@ void DynamicMesh::ClearTerrainItems()
     Scenes[0].LinearNodes.erase(Scenes[0].LinearNodes.begin() + 1, Scenes[0].LinearNodes.end());
     Scenes[0].RootNodes.erase(Scenes[0].RootNodes.begin() + 1, Scenes[0].RootNodes.end());
     Nodes.erase(Nodes.begin() + 1, Nodes.end());
+
+    lights.clear();
 }
 
 void DynamicMesh::SetVertexBuffersForNode(IDeviceContext* pCtx, const Node* node) const

@@ -5383,7 +5383,6 @@ void InitTerrain()
             { "Ice5", 16.01f },
         }},
         { "Moon", { { "Moon", -15.0f } } },
-        { "Sulfur", { { "Sulfur", -15.0f } } },
         { "Lava", { { "Lava", -15.0f } } },
         { "EGA", { { "EGASurface", -15.0f } } },
     };
@@ -5439,6 +5438,12 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     addMineral({1743.0f, 722.0f});
     addMineral({1749.0f, 723.0f});
     addMineral({1741.0f, 723.0f});
+
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{1740.0f, 720.0f}, float3{}, Quaternion<float>{}, true };
+    terrainItems.push_back(ruin);
+
+    SF_GLTF::TerrainItem ruin2{ "RecentRuin", float2{1748.0f, 724.0f}, float3{}, Quaternion<float>{}, true };
+    terrainItems.push_back(ruin2);
 
     //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
@@ -7298,6 +7303,43 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs({ &m_DefaultLight, nullptr, &m_LightDirection, model.scale }, Lights);
         LightCount = 1;
     }
+
+    if(model.dynamicMesh && model.dynamicMesh->lights.size() > 0)
+    {
+        assert(model.dynamicMesh->lights.size() + LightCount <= s_gc.pbrRenderer->GetSettings().MaxLightCount);
+
+        int i = 0;
+        for(auto& light : model.dynamicMesh->lights)
+        {
+            Lights = reinterpret_cast<HLSL::PBRLightAttribs*>(FrameAttribs + 1);
+
+            const auto& LightNode = *light;
+            auto LightGlobalTransform = model.dynamicMeshTransforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
+
+            SF_GLTF::Light l = *LightNode.pLight;
+            l.Intensity /= 512.0f;
+
+            float3 lightDir = {};
+            float3 Direction = {};
+
+            LightGlobalTransform *= s_gc.renderParams.ModelTransform;
+            // The light direction is along the negative Z axis of the light's local space.
+            // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual#adding-light-instances-to-nodes
+            lightDir = float3{ LightGlobalTransform._31, LightGlobalTransform._32, LightGlobalTransform._33 };
+            Direction = -normalize(lightDir);
+
+            float3 Position = float3{ LightGlobalTransform._41, LightGlobalTransform._42, LightGlobalTransform._43 };
+            SF_GLTF_PBR_Renderer::PBRLightShaderAttribsData AttribsData = { &l, &Position, &Direction, model.scale };
+
+            AttribsData.ShadowMapIndex = -1;
+            AttribsData.NumCascades = 0;
+            
+            SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + LightCount);                      
+
+            ++LightCount;
+            ++i;
+        }
+    }    
 
     {
         StateTransitionDesc Barriers[] = {

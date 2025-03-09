@@ -70,6 +70,8 @@ public:
     virtual const VertexAttributeDesc GetVertexAttributeForNode(const Node* node, size_t Idx) const override;
     virtual bool IsVertexAttributeEnabledForNode(const Node* node, Uint32 AttribId) const override;
 
+    std::vector<const SF_GLTF::Node*> lights;
+
 private:
 
     const int numBigTiles = 61;
