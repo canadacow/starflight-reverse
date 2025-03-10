@@ -74,8 +74,7 @@ public:
         currentMemory = mem;    
         RandomSeed = reinterpret_cast<uint16_t*>(&currentMemory[seedOffset]);
 
-        DWORD oldProtect;
-        VirtualProtect(previous, SystemMemorySize, PAGE_NOACCESS, &oldProtect);
+        VirtualProtect(previous, SystemMemorySize, PAGE_NOACCESS, &previousProtect);
     }
     ~MemoryScope() { 
         regsp = previousCPU.regsp;

@@ -661,6 +661,14 @@ void AV_dash_MIDPT()
 
 FORCE_INLINE void FRACT_StoreHeight(uint16_t x, uint16_t y, int16_t val) // Set Anchor
 {
+    if (GlobalArrayDescriptor == nullptr) {
+        static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
+
+        const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&currentMemory[arrayDescOffset]);
+        uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
+        GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&currentMemory[arrayDescAddress]);
+    }
+
     unsigned short ax;
     uint16_t segment, offset;
     ACELLADDR_XY_TO_SEG_OFF(x, y, segment, offset); // Get segment and offset
@@ -672,14 +680,7 @@ FORCE_INLINE void FRACT_StoreHeight(uint16_t x, uint16_t y, int16_t val) // Set 
 }
 
 void Ext_FRACT_StoreHeight() {
-
-    if(GlobalArrayDescriptor == nullptr) {
-      static constexpr uint32_t arrayDescOffset = ComputeAddress(StarflightBaseSegment, 0x4cf1);
-
-      const uint16_t arrayDesc = *reinterpret_cast<const uint16_t*>(&currentMemory[arrayDescOffset]);
-      uint32_t arrayDescAddress = ComputeAddress(StarflightBaseSegment, arrayDesc);
-      GlobalArrayDescriptor = reinterpret_cast<ArrayType*>(&currentMemory[arrayDescAddress]);
-    }
+    GlobalArrayDescriptor = nullptr;
 
     uint16_t y = Pop();
     uint16_t x = Pop();

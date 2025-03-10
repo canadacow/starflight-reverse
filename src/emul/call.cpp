@@ -1812,7 +1812,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                         surfaces.emplace(p.second.seed, std::move(ps));
 
-                        //continue;
+                        continue;
 
                         bool isHeaven = (p.second.x == 145) && (p.second.y == 107) && (p.second.orbit == 4);
                         bool isEarth = p.second.species == 18;
@@ -1942,8 +1942,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             }
                         }
                     }
-
-                    _exit(0);
 
                     GraphicsInitPlanets(surfaces);
 
