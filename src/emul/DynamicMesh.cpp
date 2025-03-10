@@ -715,17 +715,22 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
 
             worldOffset += item.worldOffset;
 
-            //worldOffset.y = val;
-
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
-            ni.NodeMatrix = rotationMatrix * terrainSlope * translationMatrix;
-
-            ni.ScaleX = 1.0f;
-            ni.ScaleY = 1.0f;
-            ni.OffsetX = 0.0f;
-            ni.OffsetY = 0.0f;
-            ourNode.Instances.push_back(ni);
+            
+            // Special handling for Rover - don't add instance, use Matrix directly
+            if (item.name == "Rover") {
+                ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
+                // Don't add any instances for the Rover
+            } else {
+                // For all other items, use the instance approach
+                ni.NodeMatrix = rotationMatrix * terrainSlope * translationMatrix;
+                ni.ScaleX = 1.0f;
+                ni.ScaleY = 1.0f;
+                ni.OffsetX = 0.0f;
+                ni.OffsetY = 0.0f;
+                ourNode.Instances.push_back(ni);
+            }
 
             Nodes.emplace_back(ourNode);
             Scenes[0].LinearNodes.push_back(&Nodes.back());
@@ -734,9 +739,6 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             if(item.name == "Rover")
             {
                 Node* roverNode = &Nodes.back();
-
-                roverNode->Matrix = ni.NodeMatrix;
-                roverNode->Instances.clear();
 
                 for (const auto& child : it->Children)
                 {

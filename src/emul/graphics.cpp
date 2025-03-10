@@ -5143,9 +5143,8 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                 case SDLK_w:
                     if (currentCameraIndex == 0)
                     {
+                        s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI);
                         MoveDirection.y += 10.0f;
-                        //const float delta = 1.0f / 61.0f;
-                        //s_gc.terrainTextureOffset.y -= delta;
                     }
                     else
                     {
@@ -5156,8 +5155,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     if (currentCameraIndex == 0)
                     {
                          MoveDirection.y -= 10.0f;
-                        //const float delta = 1.0f / 61.0f;
-                        //s_gc.terrainTextureOffset.y += delta;
+                         s_gc.tvNudge = {};
                     }
                     else
                     {
@@ -5177,21 +5175,16 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     }
                     break;
                 case SDLK_a:
+                    s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), -PI_F / 2.0f);
                     MoveDirection.x -= 10.0f;
-                    {
-                        //const float delta = 1.0f / 61.0f;
-                        //s_gc.terrainTextureOffset.x -= delta;
-                    }
                     break;
                 case SDLK_d:
+                    s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI_F / 2.0f);
                     MoveDirection.x += 10.0f;
-                    {
-                        //const float delta = 1.0f / 61.0f;
-                        //s_gc.terrainTextureOffset.x += delta;
-                    }
                     break;
                 case SDLK_c:
                     {
+                        #if 0
                         s_gc.terrainMovement = { 388.0f * GraphicsContext::TileSize.x, -40.0f, 245.0f * GraphicsContext::TileSize.y };
                         s_gc.terrainFPVRotation = float4x4::Identity();
                         s_gc.FPVyawAngle = 0.0f;
@@ -5199,10 +5192,12 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                         s_gc.mouseState = {};
                         currentCameraIndex = (currentCameraIndex + 1) % cameras.size();
                         s_gc.terrain.camera = cameras[currentCameraIndex];
+                        #endif
                     }
                     break;
                 case SDLK_m:
                     {
+                        #if 0
                         int64_t materialCount = s_gc.terrain.model->GetMaterials().size();
                         int64_t materialIndex = s_gc.terrainMaterialIndex;
                         materialIndex += shiftDown ? -1 : 1;
@@ -5225,6 +5220,7 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                                 }
                             }
                         }
+                        #endif
                     }
                     break;
                 case SDLK_t:
@@ -5414,7 +5410,9 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
     s_gc.terrainMovement += s_gc.terrainDelta/ 15.0f;
-    s_gc.tvLocation += s_gc.tvDelta;
+    //s_gc.tvLocation += s_gc.tvDelta;
+
+    s_gc.tvLocation = float2{ s_gc.terrainMovement.x / GraphicsContext::TileSize.x, s_gc.terrainMovement.z / GraphicsContext::TileSize.y };
 
     // Smoothly interpolate tvRotation towards tvNudge using a low-pass filter
     const float rotationLerpFactor = 0.1f;
