@@ -7656,9 +7656,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.ssao->Execute(SSAORenderAttribs);
     }
 
+    const bool enableEpipolarLightScattering = true;
+
     const float ClearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    //if (s_gc.currentScene == Scene::SCENE_TERRAIN) {
-    if(false) {
+    if(enableEpipolarLightScattering && s_gc.currentScene == Scene::SCENE_TERRAIN) {
         s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // Clear the back buffer
         s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -7685,8 +7686,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
 
-    //if(s_gc.currentScene == Scene::SCENE_TERRAIN)
-    if(false)
+    if(enableEpipolarLightScattering && s_gc.currentScene == Scene::SCENE_TERRAIN)
     {
         //s_gc.m_pImmediateContext->BeginDebugGroup("EpipolarLightScattering");
 
