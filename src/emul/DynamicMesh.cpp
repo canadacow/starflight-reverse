@@ -622,6 +622,48 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
 {
     ClearTerrainItems();
 
+    // Add the Sphere node first (always present)
+    auto sphereIt = std::find_if(m_Model->Nodes.begin(), m_Model->Nodes.end(), [](const auto& node) {
+        return std::equal(node.Name.begin(), node.Name.end(), "Planet", "Planet" + strlen("Planet"),
+                        [](char a, char b) { return tolower(a) == tolower(b); });
+    });
+
+    if (sphereIt != m_Model->Nodes.end())
+    {
+        constexpr float TERRAIN_MAX_X = 2318.0f;
+        constexpr float TERRAIN_MAX_Y = 909.0f;
+
+        Node sphereNode{static_cast<int>(Nodes.size())};
+        sphereNode.Name = sphereIt->Name;
+        sphereNode.pMesh = sphereIt->pMesh;
+        sphereNode.Translation = float3{0.0f, 0.0f, 0.0f};
+        sphereNode.Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
+
+        // Scale the sphere to match the world size
+        float worldScaleX = TERRAIN_MAX_X * m_TileSize.x;
+        float worldScaleY = TERRAIN_MAX_Y * m_TileSize.y;
+        float sphereScale = std::max(worldScaleX, worldScaleY) * 1.1f; // Make it slightly larger than the world
+
+        NodeInstance sphereInstance;
+        // Position the sphere at the center of the world
+        float3 worldCenter = float3{worldScaleX / 2.0f, 0.0f, worldScaleY / 2.0f};
+        float4x4 translationMatrix = float4x4::Translation(worldCenter);
+        float4x4 scaleMatrix = float4x4::Scale(sphereScale, sphereScale, sphereScale);
+        
+        sphereInstance.NodeMatrix = scaleMatrix * translationMatrix;
+        sphereInstance.ScaleX = 1.0f;
+        sphereInstance.ScaleY = 1.0f;
+        sphereInstance.OffsetX = 0.0f;
+        sphereInstance.OffsetY = 0.0f;
+        
+        sphereNode.Instances.push_back(sphereInstance);
+        
+        Nodes.emplace_back(sphereNode);
+        Scenes[0].LinearNodes.push_back(&Nodes.back());
+        Scenes[0].RootNodes.push_back(&Nodes.back());
+    }
+
+    // Continue with the rest of the terrain items
     for (const auto& item : terrainItems)
     {
         auto it = std::find_if(m_Model->Nodes.begin(), m_Model->Nodes.end(), [&item](const auto& node) {
