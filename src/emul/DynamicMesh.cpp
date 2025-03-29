@@ -3,6 +3,8 @@
 
 #include <Windows.h>
 
+#include <assert.h>
+
 extern float bicubicOffset;
 
 namespace Diligent
@@ -10,6 +12,9 @@ namespace Diligent
 
 namespace SF_GLTF
 {
+
+static constexpr float TERRAIN_MAX_X = 2318.0f;
+static constexpr float TERRAIN_MAX_Y = 909.0f;
 
 DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model) :
     m_Model(model), m_pDevice(pDevice), m_pContext(pContext)
@@ -422,6 +427,12 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
     float yValues[] = { -2.0f, 10.0f };
 
+    minBB.x = 0.0f;
+    minBB.z = 0.0f;
+
+    maxBB.x = TERRAIN_MAX_X * m_TileSize.x;
+    maxBB.z = TERRAIN_MAX_Y * m_TileSize.y;
+
     for (float y : yValues)
     {
         float3 minTranslatedPos = minBB * float4x4::Translation(0.0f, y, 0.0f);
@@ -628,11 +639,30 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
                         [](char a, char b) { return tolower(a) == tolower(b); });
     });
 
+    auto planeIt = std::find_if(m_Model->Nodes.begin(), m_Model->Nodes.end(), [](const auto& node) {
+        return std::equal(node.Name.begin(), node.Name.end(), "Plane-2", "Plane-2" + strlen("Plane-2"),
+                        [](char a, char b) { return tolower(a) == tolower(b); });
+    });
+
+    // Find the Rover in terrainItems
+    auto roverIt = std::find_if(terrainItems.begin(), terrainItems.end(), [](const auto& item) {
+        return std::equal(item.name.begin(), item.name.end(), "Rover", "Rover" + strlen("Rover"),
+                        [](char a, char b) { return tolower(a) == tolower(b); });
+    });
+    
+    // Store the rover position if found
+    float3 roverPosition;
+    bool roverFound = false;
+    
+    if (roverIt != terrainItems.end()) {
+        roverPosition = float3(roverIt->tilePosition.x * m_TileSize.x, 0.0f, roverIt->tilePosition.y * m_TileSize.y);
+        roverFound = true;
+    }
+
+    assert(roverFound);
+
     if (sphereIt != m_Model->Nodes.end())
     {
-        constexpr float TERRAIN_MAX_X = 2318.0f;
-        constexpr float TERRAIN_MAX_Y = 909.0f;
-
         Node sphereNode{static_cast<int>(Nodes.size())};
         sphereNode.Name = sphereIt->Name;
         sphereNode.pMesh = sphereIt->pMesh;
@@ -640,25 +670,37 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
         sphereNode.Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
 
         // Scale the sphere to match the world size
-        float worldScaleX = TERRAIN_MAX_X * m_TileSize.x;
-        float worldScaleY = TERRAIN_MAX_Y * m_TileSize.y;
-        float sphereScale = std::max(worldScaleX, worldScaleY) * 1.1f; // Make it slightly larger than the world
+        float worldScale = TERRAIN_MAX_X * m_TileSize.x;
+        float sphereScale = worldScale;
 
         NodeInstance sphereInstance;
-        // Position the sphere at the center of the world
-        float3 worldCenter = float3{worldScaleX / 2.0f, 0.0f, worldScaleY / 2.0f};
+        // Position the sphere at the center of the world, but below the Rover
+        float3 worldCenter = float3{roverPosition.x, -2.0f * sphereScale, roverPosition.z};  // Changed Y coordinate
         float4x4 translationMatrix = float4x4::Translation(worldCenter);
         float4x4 scaleMatrix = float4x4::Scale(sphereScale, sphereScale, sphereScale);
-        
-        sphereInstance.NodeMatrix = scaleMatrix * translationMatrix;
-        sphereInstance.ScaleX = 1.0f;
-        sphereInstance.ScaleY = 1.0f;
-        sphereInstance.OffsetX = 0.0f;
-        sphereInstance.OffsetY = 0.0f;
-        
-        sphereNode.Instances.push_back(sphereInstance);
-        
+
+        sphereNode.Matrix = scaleMatrix * translationMatrix;
+
         Nodes.emplace_back(sphereNode);
+        Scenes[0].LinearNodes.push_back(&Nodes.back());
+        Scenes[0].RootNodes.push_back(&Nodes.back());
+    }
+
+    if (planeIt != m_Model->Nodes.end())
+    {
+        Node planeNode{static_cast<int>(Nodes.size())};
+        planeNode.Name = planeIt->Name;
+        planeNode.pMesh = planeIt->pMesh;
+        planeNode.Translation = float3{0.0f, 0.0f, 0.0f};
+        planeNode.Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
+
+        NodeInstance planeInstance;
+        float3 worldCenter = float3{0.0f, 0.0f, 0.0f};
+        float4x4 translationMatrix = float4x4::Translation(worldCenter);
+        float4x4 scaleMatrix = float4x4::Scale(TERRAIN_MAX_X * m_TileSize.x, 1.0f, TERRAIN_MAX_Y * m_TileSize.y);
+        planeNode.Matrix = scaleMatrix * translationMatrix;
+
+        Nodes.emplace_back(planeNode);
         Scenes[0].LinearNodes.push_back(&Nodes.back());
         Scenes[0].RootNodes.push_back(&Nodes.back());
     }
