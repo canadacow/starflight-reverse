@@ -655,7 +655,7 @@ PSOutput main(in VSOutput VSOut,
 #   endif
 
 #if USE_TERRAINING
-    if (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975)
+    if (g_Frame.Renderer.DrawBorder == 1 && (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975))
     {
         BaseColor.rgb = float3(1.0, 1.0, 0.0); // Set to yellow
     }
@@ -789,7 +789,7 @@ PSOutput main(in VSOutput VSOut,
         }
     }
 
-    if (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975)
+    if (g_Frame.Renderer.DrawBorder == 1 && (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975))
     {
         tileColor.rgb = float3(1.0, 1.0, 0.0); // Set to yellow
     }

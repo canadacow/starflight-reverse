@@ -7366,6 +7366,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     Renderer.LightCount = LightCount;
     Renderer.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
+    Renderer.DrawBorder = 1;
+
     auto RenderModel = [&](SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
         const auto OrigAlphaModes = s_gc.renderParams.AlphaModes;
 
