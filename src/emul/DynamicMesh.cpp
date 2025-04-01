@@ -120,151 +120,22 @@ BoundBox DynamicMesh::ComputeBoundingBox(Uint32 SceneIndex, const SF_GLTF::Model
 
 void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, float2 textureSize)
 {
-    const int numTiles = 8;
-    const int numVerticesPerRow = numTiles + 1;
+    const int numQuadsPerTile = 8; // Current high-density mesh is 8x8 quads
+    const int numVerticesPerRow = numQuadsPerTile + 1;
     const int numVertices = numVerticesPerRow * numVerticesPerRow;
     m_TileSize = float2{ width, height };
     m_TextureSize = textureSize;
 
-    m_Vertices.resize(numVertices); // 4 coordinates per vertex (x, y, z, padding)
-    m_Indices.resize(numTiles * numTiles * 6); // 6 indices per tile (2 triangles)
+    VertexIndexCounts counts = {};
 
-    int vertexIndex = 0;
-    int indexIndex = 0;
-
-    // Calculate the bounding box for the mesh
-    float3 minBB = float3{ std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
-    float3 maxBB = float3{ std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest() };
-
-    for (int row = 0; row <= numTiles; ++row)
-    {
-        for (int col = 0; col <= numTiles; ++col)
-        {
-            float x = (col / static_cast<float>(numTiles)) * width;
-            float z = (row / static_cast<float>(numTiles)) * height;
-            float y = tileHeight;
-
-            auto& vert = m_Vertices[vertexIndex++];
-            vert.posX = x;
-            vert.posY = y;
-            vert.posZ = z;
-
-            minBB.x = std::min(minBB.x, vert.posX);
-            minBB.y = std::min(minBB.y, vert.posY);
-            minBB.z = std::min(minBB.z, vert.posZ);
-
-            maxBB.x = std::max(maxBB.x, vert.posX);
-            maxBB.y = std::max(maxBB.y, vert.posY);
-            maxBB.z = std::max(maxBB.z, vert.posZ);            
-
-            // Compute normals
-            vert.normalX = 0.0f;
-            vert.normalY = 1.0f;
-            vert.normalZ = 0.0f;
-
-            // Compute UV coordinates
-            vert.texU0 = col / static_cast<float>(numTiles);
-            vert.texV0 = row / static_cast<float>(numTiles);
-
-            if (row < numTiles && col < numTiles)
-            {
-                int topLeft = row * numVerticesPerRow + col;
-                int topRight = topLeft + 1;
-                int bottomLeft = topLeft + numVerticesPerRow;
-                int bottomRight = bottomLeft + 1;
-
-                // First triangle
-                m_Indices[indexIndex++] = topLeft;
-                m_Indices[indexIndex++] = bottomLeft;
-                m_Indices[indexIndex++] = topRight;
-
-                // Second triangle
-                m_Indices[indexIndex++] = topRight;
-                m_Indices[indexIndex++] = bottomLeft;
-                m_Indices[indexIndex++] = bottomRight;
-            }
-        }
-    }
+    // Generate high LOD mesh (current implementation)
+    generateHighLODMesh(counts, numQuadsPerTile, tileHeight);
     
-    Uint32 materialId = 0;
-    #if 0
-    for (size_t i = 0; i < m_Model->Materials.size(); ++i)
-    {
-        if (m_Model->Materials[i].Name == "TestPlane")
-        {
-            materialId = static_cast<Uint32>(i);
-            break;
-        }
-    }
-    #endif
-
-    m_Mesh = std::make_shared<SF_GLTF::Mesh>();
-    m_Mesh->Primitives.emplace_back(0, m_Indices.size(), m_Vertices.size() / 4, materialId, float3{}, float3{});
-
-    float offsetX = (numBigTiles * width) / 2.0f;
-    float offsetY = (numBigTiles * height) / 2.0f;
-
-    auto& node = Nodes[0];
-    node.pMesh = m_Mesh.get();
-
-    m_TileBB.Min = minBB;
-    m_TileBB.Max = maxBB;
-
-    float3 baseMinBB = minBB;
-    float3 baseMaxBB = maxBB;
-
-    for (int i = 0; i < numBigTiles; ++i)
-    {
-        for (int j = 0; j < numBigTiles; ++j)
-        {
-            NodeInstance ni;
-            ni.NodeMatrix = float4x4::Translation(i * width - offsetX, 0.0f, j * height - offsetY);
-            ni.ScaleX = 1.0f / (float)textureSize.x;
-            ni.ScaleY = 1.0f / (float)textureSize.y;
-            ni.OffsetX = i / (float)textureSize.x;
-            ni.OffsetY = j / (float)textureSize.y;
-            node.Instances.push_back(ni);
-
-            float3 minTranslatedPos = baseMinBB * ni.NodeMatrix;
-            float3 maxTranslatedPos = baseMaxBB * ni.NodeMatrix;
-
-            minBB = float3{
-                std::min(minBB.x, minTranslatedPos.x),
-                std::min(minBB.y, minTranslatedPos.y),
-                std::min(minBB.z, minTranslatedPos.z)
-            };
-
-            maxBB = float3{
-                std::max(maxBB.x, maxTranslatedPos.x),
-                std::max(maxBB.y, maxTranslatedPos.y),
-                std::max(maxBB.z, maxTranslatedPos.z)
-            };
-
-        }
-    }
-
-    float yValues[] = {-2.0f, 10.0f};
-
-    for (float y : yValues)
-    {
-        float3 minTranslatedPos = baseMinBB * float4x4::Translation(0.0f, y, 0.0f);
-        float3 maxTranslatedPos = baseMaxBB * float4x4::Translation(0.0f, y, 0.0f);
-
-        minBB = float3{
-            std::min(minBB.x, minTranslatedPos.x),
-            std::min(minBB.y, minTranslatedPos.y),
-            std::min(minBB.z, minTranslatedPos.z)
-        };
-
-        maxBB = float3{
-            std::max(maxBB.x, maxTranslatedPos.x),
-            std::max(maxBB.y, maxTranslatedPos.y),
-            std::max(maxBB.z, maxTranslatedPos.z)
-        };
-    }
-
-    m_Mesh->BB.Min = minBB;
-    m_Mesh->BB.Max = maxBB;
+    // Generate medium LOD mesh (single quad per tile)
+    generateMediumLODMesh(counts, tileHeight);
+    
+    // Generate low LOD mesh (large quads covering 61x61 tile areas)
+    generateLowLODMesh(counts, tileHeight);
 
     CreateBuffers();
     m_GPUDataInitialized = false;
@@ -272,15 +143,216 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, fl
     InitializeVertexAndIndexData();
 }
 
+void DynamicMesh::generateHighLODMesh(VertexIndexCounts& counts, int numQuadsPerTile, float tileHeight)
+{
+    const int numVerticesPerRow = numQuadsPerTile + 1;
+    const int numVertices = numVerticesPerRow * numVerticesPerRow;
+    
+    m_HighLODVertices.resize(numVertices);
+    m_HighLODIndices.resize(numQuadsPerTile * numQuadsPerTile * 6); // 6 indices per quad (2 triangles)
+
+    int vertexIndex = 0;
+    int indexIndex = 0;
+
+    m_HighLODOffsets.vertexCount = vertexIndex;
+    m_HighLODOffsets.indexCount = indexIndex;
+
+    for (int row = 0; row <= numQuadsPerTile; ++row)
+    {
+        for (int col = 0; col <= numQuadsPerTile; ++col)
+        {
+            float x = (col / static_cast<float>(numQuadsPerTile)) * m_TileSize.x;
+            float z = (row / static_cast<float>(numQuadsPerTile)) * m_TileSize.y;
+            float y = tileHeight;
+
+            auto& vert = m_HighLODVertices[vertexIndex++];
+            vert.posX = x;
+            vert.posY = y;
+            vert.posZ = z;
+
+            // Compute normals
+            vert.normalX = 0.0f;
+            vert.normalY = 1.0f;
+            vert.normalZ = 0.0f;
+
+            // Compute UV coordinates
+            vert.texU0 = col / static_cast<float>(numQuadsPerTile);
+            vert.texV0 = row / static_cast<float>(numQuadsPerTile);
+
+            if (row < numQuadsPerTile && col < numQuadsPerTile)
+            {
+                int topLeft = row * numVerticesPerRow + col;
+                int topRight = topLeft + 1;
+                int bottomLeft = topLeft + numVerticesPerRow;
+                int bottomRight = bottomLeft + 1;
+
+                // First triangle
+                m_HighLODIndices[indexIndex++] = topLeft;
+                m_HighLODIndices[indexIndex++] = bottomLeft;
+                m_HighLODIndices[indexIndex++] = topRight;
+
+                // Second triangle
+                m_HighLODIndices[indexIndex++] = topRight;
+                m_HighLODIndices[indexIndex++] = bottomLeft;
+                m_HighLODIndices[indexIndex++] = bottomRight;
+            }
+        }
+    }
+
+    counts.vertexCount = vertexIndex;
+    counts.indexCount = indexIndex;
+}
+
+void DynamicMesh::generateMediumLODMesh(VertexIndexCounts& counts, float tileHeight)
+{
+    // Medium LOD - single quad per tile
+    const int numVerticesPerQuad = 4;
+    const int numIndicesPerQuad = 6;
+
+    m_MediumLODOffsets.vertexCount = counts.vertexCount;
+    m_MediumLODOffsets.indexCount = counts.indexCount;
+    
+    m_MediumLODVertices.resize(numVerticesPerQuad);
+    m_MediumLODIndices.resize(numIndicesPerQuad);
+
+    // Create a single quad covering the entire tile
+    // Top-left vertex
+    m_MediumLODVertices[0].posX = 0.0f;
+    m_MediumLODVertices[0].posY = tileHeight;
+    m_MediumLODVertices[0].posZ = 0.0f;
+    m_MediumLODVertices[0].normalX = 0.0f;
+    m_MediumLODVertices[0].normalY = 1.0f;
+    m_MediumLODVertices[0].normalZ = 0.0f;
+    m_MediumLODVertices[0].texU0 = 0.0f;
+    m_MediumLODVertices[0].texV0 = 0.0f;
+
+    // Top-right vertex
+    m_MediumLODVertices[1].posX = m_TileSize.x;
+    m_MediumLODVertices[1].posY = tileHeight;
+    m_MediumLODVertices[1].posZ = 0.0f;
+    m_MediumLODVertices[1].normalX = 0.0f;
+    m_MediumLODVertices[1].normalY = 1.0f;
+    m_MediumLODVertices[1].normalZ = 0.0f;
+    m_MediumLODVertices[1].texU0 = 1.0f;
+    m_MediumLODVertices[1].texV0 = 0.0f;
+
+    // Bottom-left vertex
+    m_MediumLODVertices[2].posX = 0.0f;
+    m_MediumLODVertices[2].posY = tileHeight;
+    m_MediumLODVertices[2].posZ = m_TileSize.y;
+    m_MediumLODVertices[2].normalX = 0.0f;
+    m_MediumLODVertices[2].normalY = 1.0f;
+    m_MediumLODVertices[2].normalZ = 0.0f;
+    m_MediumLODVertices[2].texU0 = 0.0f;
+    m_MediumLODVertices[2].texV0 = 1.0f;
+
+    // Bottom-right vertex
+    m_MediumLODVertices[3].posX = m_TileSize.x;
+    m_MediumLODVertices[3].posY = tileHeight;
+    m_MediumLODVertices[3].posZ = m_TileSize.y;
+    m_MediumLODVertices[3].normalX = 0.0f;
+    m_MediumLODVertices[3].normalY = 1.0f;
+    m_MediumLODVertices[3].normalZ = 0.0f;
+    m_MediumLODVertices[3].texU0 = 1.0f;
+    m_MediumLODVertices[3].texV0 = 1.0f;
+
+    // First triangle
+    m_MediumLODIndices[0] = counts.vertexCount + 0; // top-left
+    m_MediumLODIndices[1] = counts.vertexCount + 2; // bottom-left
+    m_MediumLODIndices[2] = counts.vertexCount + 1; // top-right
+
+    // Second triangle
+    m_MediumLODIndices[3] = counts.vertexCount + 1; // top-right
+    m_MediumLODIndices[4] = counts.vertexCount + 2; // bottom-left
+    m_MediumLODIndices[5] = counts.vertexCount + 3; // bottom-right
+
+    counts.indexCount += 6;
+    counts.vertexCount += 4;
+}
+
+void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight)
+{
+    // Low LOD - single quad covering a 61x61 tile area
+    const int numVerticesPerQuad = 4;
+    const int numIndicesPerQuad = 6;
+
+    m_LowLODOffsets.vertexCount = counts.vertexCount;
+    m_LowLODOffsets.indexCount = counts.indexCount;
+    
+    m_LowLODVertices.resize(numVerticesPerQuad);
+    m_LowLODIndices.resize(numIndicesPerQuad);
+
+    // Size of a low LOD quad (covers numBigTiles x numBigTiles area)
+    float2 lowLODSize = m_TileSize * float2{ (float)numBigTiles.x, (float)numBigTiles.y };
+
+    // Create a single quad covering a 61x61 tile area
+    // Top-left vertex
+    m_LowLODVertices[0].posX = 0.0f;
+    m_LowLODVertices[0].posY = tileHeight;
+    m_LowLODVertices[0].posZ = 0.0f;
+    m_LowLODVertices[0].normalX = 0.0f;
+    m_LowLODVertices[0].normalY = 1.0f;
+    m_LowLODVertices[0].normalZ = 0.0f;
+    m_LowLODVertices[0].texU0 = 0.0f; // * (float)numBigTiles.x;
+    m_LowLODVertices[0].texV0 = 0.0f; // * (float)numBigTiles.y;
+
+    // Top-right vertex
+    m_LowLODVertices[1].posX = lowLODSize.x;
+    m_LowLODVertices[1].posY = tileHeight;
+    m_LowLODVertices[1].posZ = 0.0f;
+    m_LowLODVertices[1].normalX = 0.0f;
+    m_LowLODVertices[1].normalY = 1.0f;
+    m_LowLODVertices[1].normalZ = 0.0f;
+    m_LowLODVertices[1].texU0 = 1.0f; // * (float)numBigTiles.x;
+    m_LowLODVertices[1].texV0 = 0.0f; // * (float)numBigTiles.y;
+
+    // Bottom-left vertex
+    m_LowLODVertices[2].posX = 0.0f;
+    m_LowLODVertices[2].posY = tileHeight;
+    m_LowLODVertices[2].posZ = lowLODSize.y;
+    m_LowLODVertices[2].normalX = 0.0f;
+    m_LowLODVertices[2].normalY = 1.0f;
+    m_LowLODVertices[2].normalZ = 0.0f;
+    m_LowLODVertices[2].texU0 = 0.0f; // * (float)numBigTiles.x;
+    m_LowLODVertices[2].texV0 = 1.0f; // * (float)numBigTiles.y;
+
+    // Bottom-right vertex
+    m_LowLODVertices[3].posX = lowLODSize.x;
+    m_LowLODVertices[3].posY = tileHeight;
+    m_LowLODVertices[3].posZ = lowLODSize.y;
+    m_LowLODVertices[3].normalX = 0.0f;
+    m_LowLODVertices[3].normalY = 1.0f;
+    m_LowLODVertices[3].normalZ = 0.0f;
+    m_LowLODVertices[3].texU0 = 1.0f; // * (float)numBigTiles.x;
+    m_LowLODVertices[3].texV0 = 1.0f; // * (float)numBigTiles.y;
+
+    // First triangle
+    m_LowLODIndices[0] = counts.vertexCount + 0; // top-left
+    m_LowLODIndices[1] = counts.vertexCount + 2; // bottom-left
+    m_LowLODIndices[2] = counts.vertexCount + 1; // top-right
+
+    // Second triangle
+    m_LowLODIndices[3] = counts.vertexCount + 1; // top-right
+    m_LowLODIndices[4] = counts.vertexCount + 2; // bottom-left
+    m_LowLODIndices[5] = counts.vertexCount + 3; // bottom-right
+
+    counts.indexCount += 6;
+    counts.vertexCount += 4;
+}
+
 void DynamicMesh::CreateBuffers()
 {
+    // Calculate total buffer sizes needed for all LOD levels
+    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size();
+    size_t totalIndices = m_HighLODIndices.size() + m_MediumLODIndices.size() + m_LowLODIndices.size();
+
     // Initialize vertex buffer
     BufferDesc VertBuffDesc;
     VertBuffDesc.Name = "Dynamic vertex buffer";
     VertBuffDesc.Usage = USAGE_DYNAMIC;
     VertBuffDesc.BindFlags = BIND_VERTEX_BUFFER;
     VertBuffDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
-    VertBuffDesc.Size = sizeof(VertexBuff) * m_Vertices.size();
+    VertBuffDesc.Size = sizeof(VertexBuff) * totalVertices;
     m_pDevice->CreateBuffer(VertBuffDesc, nullptr, &m_VertexBuffer);
 
     // Initialize second vertex buffer
@@ -289,7 +361,7 @@ void DynamicMesh::CreateBuffers()
     VertBuffDesc2.Usage = USAGE_DYNAMIC;
     VertBuffDesc2.BindFlags = BIND_VERTEX_BUFFER;
     VertBuffDesc2.CPUAccessFlags = CPU_ACCESS_WRITE;
-    VertBuffDesc2.Size = sizeof(VertexBuff2) * m_Vertices.size();
+    VertBuffDesc2.Size = sizeof(VertexBuff2) * totalVertices;
     m_pDevice->CreateBuffer(VertBuffDesc2, nullptr, &m_VertexBuffer2);
 
     // Initialize third vertex buffer
@@ -298,7 +370,7 @@ void DynamicMesh::CreateBuffers()
     VertBuffDesc3.Usage = USAGE_DYNAMIC;
     VertBuffDesc3.BindFlags = BIND_VERTEX_BUFFER;
     VertBuffDesc3.CPUAccessFlags = CPU_ACCESS_WRITE;
-    VertBuffDesc3.Size = sizeof(VertexBuff3) * m_Vertices.size();
+    VertBuffDesc3.Size = sizeof(VertexBuff3) * totalVertices;
     m_pDevice->CreateBuffer(VertBuffDesc3, nullptr, &m_VertexBuffer3);
 
     // Initialize index buffer
@@ -307,7 +379,7 @@ void DynamicMesh::CreateBuffers()
     IndBuffDesc.Usage = USAGE_DYNAMIC;
     IndBuffDesc.BindFlags = BIND_INDEX_BUFFER;
     IndBuffDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
-    IndBuffDesc.Size = sizeof(Uint32) * m_Indices.size();
+    IndBuffDesc.Size = sizeof(Uint32) * totalIndices;
     m_pDevice->CreateBuffer(IndBuffDesc, nullptr, &m_IndexBuffer);
 }
 
@@ -316,21 +388,44 @@ void DynamicMesh::PrepareResources()
     //if (m_GPUDataInitialized)
     //    return;
 
-    // Update vertex buffer
-    MapHelper<float> Vertices(m_pContext, m_VertexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
-    memcpy(Vertices, m_Vertices.data(), sizeof(VertexBuff) * m_Vertices.size());
+    // Update vertex buffer with all LOD levels
+    MapHelper<VertexBuff> Vertices(m_pContext, m_VertexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
+    
+    // Copy high LOD vertices
+    size_t vertexOffset = 0;
+    memcpy(Vertices + vertexOffset, m_HighLODVertices.data(), sizeof(VertexBuff) * m_HighLODVertices.size());
+    vertexOffset += m_HighLODVertices.size();
+    
+    // Copy medium LOD vertices
+    memcpy(Vertices + vertexOffset, m_MediumLODVertices.data(), sizeof(VertexBuff) * m_MediumLODVertices.size());
+    vertexOffset += m_MediumLODVertices.size();
+    
+    // Copy low LOD vertices
+    memcpy(Vertices + vertexOffset, m_LowLODVertices.data(), sizeof(VertexBuff) * m_LowLODVertices.size());
 
-    // Update second vertex buffer
-    MapHelper<float> Vertices2(m_pContext, m_VertexBuffer2, MAP_WRITE, MAP_FLAG_DISCARD);
-    memset(Vertices2, 0, sizeof(VertexBuff2) * m_Vertices.size());
+    // Update second vertex buffer (initialize with zeros)
+    MapHelper<VertexBuff2> Vertices2(m_pContext, m_VertexBuffer2, MAP_WRITE, MAP_FLAG_DISCARD);
+    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size();
+    memset(Vertices2, 0, sizeof(VertexBuff2) * totalVertices);
 
-    // Update third vertex buffer
-    MapHelper<float> Vertices3(m_pContext, m_VertexBuffer3, MAP_WRITE, MAP_FLAG_DISCARD);
-    memset(Vertices3, 0, sizeof(VertexBuff3) * m_Vertices.size());
+    // Update third vertex buffer (initialize with zeros)
+    MapHelper<VertexBuff3> Vertices3(m_pContext, m_VertexBuffer3, MAP_WRITE, MAP_FLAG_DISCARD);
+    memset(Vertices3, 0, sizeof(VertexBuff3) * totalVertices);
 
-    // Update index buffer
+    // Update index buffer with all LOD levels
     MapHelper<Uint32> Indices(m_pContext, m_IndexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
-    memcpy(Indices, m_Indices.data(), sizeof(Uint32) * m_Indices.size());
+    
+    // Copy high LOD indices
+    size_t indexOffset = 0;
+    memcpy(Indices + indexOffset, m_HighLODIndices.data(), sizeof(Uint32) * m_HighLODIndices.size());
+    indexOffset += m_HighLODIndices.size();
+    
+    // Copy medium LOD indices
+    memcpy(Indices + indexOffset, m_MediumLODIndices.data(), sizeof(Uint32) * m_MediumLODIndices.size());
+    indexOffset += m_MediumLODIndices.size();
+    
+    // Copy low LOD indices
+    memcpy(Indices + indexOffset, m_LowLODIndices.data(), sizeof(Uint32) * m_LowLODIndices.size());
 
     m_GPUDataInitialized = true;
 }
@@ -357,6 +452,7 @@ void DynamicMesh::InitializeVertexAndIndexData()
     TextureAttributes = m_Model->TextureAttributes;
 }
 
+#if 0
 // Takes world space coordinates and generates an amalgamation of terrain tiles underneath the coordinates
 // with UVs that map to the terrain heightmap
 void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
@@ -375,85 +471,167 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
     int2 ulTile = centerTile - int2{numBigTiles / 2, numBigTiles / 2};
 
-    float3 baseMinBB = m_TileBB.Min;
-    float3 baseMaxBB = m_TileBB.Max;
-
     float3 minBB = float3{ std::numeric_limits<float>::max() };
     float3 maxBB = float3{ std::numeric_limits<float>::lowest() };    
 
-    size_t instanceIdx = 0;
-    for (int i = 0; i < numBigTiles; ++i)
-    {
-        for (int j = 0; j < numBigTiles; ++j)
-        {
-            int2 tile = ulTile + int2{i, j};
+    // Clear existing instances to prepare for new LOD assignments
+    node.Instances.clear();
+    
+    // Add high LOD tiles around the camera
+    const float highLODDistance = m_TileSize.x * 10; // Adjust this value for high LOD coverage
+    const float mediumLODDistance = m_TileSize.x * 30; // Adjust this value for medium LOD coverage
+    
+    // First, create low LOD tiles for the entire terrain
+    for (int x = 0; x < TERRAIN_MAX_X; x += numBigTiles) {
+        for (int y = 0; y < TERRAIN_MAX_Y; y += numBigTiles) {
+            int2 tile = int2{x, y};
+            float distSq = length(float2(tile.x - centerTile.x, tile.y - centerTile.y) * m_TileSize);
             
-            // Update the instance matrix while preserving UV mappings
-            auto& instance = node.Instances[instanceIdx];
-
-            float3 translation = float3{
+            // Skip if this area will be covered by higher LOD
+            if (distSq < mediumLODDistance) {
+                continue;
+            }
+            
+            NodeInstance instance;
+            instance.NodeMatrix = float4x4::Translation(float3{
                 (float)tile.x * m_TileSize.x,
                 0.0f,
                 (float)tile.y * m_TileSize.y
-            };
-
-            instance.NodeMatrix = float4x4::Translation(translation);
+            });
             
-            // Update UV scale/offset to match the new world position
+            instance.ScaleX = numBigTiles / m_TextureSize.x;
+            instance.ScaleY = numBigTiles / m_TextureSize.y;
+            instance.OffsetX = (float)tile.x / m_TextureSize.x;
+            instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            instance.PlanetLocation = tile;
+            instance.LODLevel = 2; // Low LOD
+            
+            node.Instances.push_back(instance);           
+        }
+    }
+    
+    // Then, add medium LOD tiles for middle distances
+    for (int x = 0; x < TERRAIN_MAX_X; ++x) {
+        for (int y = 0; y < TERRAIN_MAX_Y; ++y) {
+            int2 tile = int2{x, y};
+            float distSq = length(float2(tile.x - centerTile.x, tile.y - centerTile.y) * m_TileSize);
+            
+            // Skip if this tile will be covered by high LOD or is too far for medium LOD
+            if (distSq < highLODDistance || distSq > mediumLODDistance) {
+                continue;
+            }
+            
+            NodeInstance instance;
+            instance.NodeMatrix = float4x4::Translation(float3{
+                (float)tile.x * m_TileSize.x,
+                0.0f,
+                (float)tile.y * m_TileSize.y
+            });
+            
             instance.ScaleX = 1.0f / m_TextureSize.x;
             instance.ScaleY = 1.0f / m_TextureSize.y;
             instance.OffsetX = (float)tile.x / m_TextureSize.x;
             instance.OffsetY = (float)tile.y / m_TextureSize.y;
             instance.PlanetLocation = tile;
-
-            float3 minTranslatedPos = baseMinBB * instance.NodeMatrix;
-            float3 maxTranslatedPos = baseMaxBB * instance.NodeMatrix;
-
-            minBB = float3{
-                std::min(minBB.x, minTranslatedPos.x),
-                std::min(minBB.y, minTranslatedPos.y),
-                std::min(minBB.z, minTranslatedPos.z)
-            };
-
-            maxBB = float3{
-                std::max(maxBB.x, maxTranslatedPos.x),
-                std::max(maxBB.y, maxTranslatedPos.y),
-                std::max(maxBB.z, maxTranslatedPos.z)
-            };            
+            instance.LODLevel = 1; // Medium LOD
             
-            instanceIdx++;
+            node.Instances.push_back(instance);           
+        }
+    }
+    
+    // Finally, add high LOD tiles close to the camera
+    for (int i = 0; i < numBigTiles; ++i) {
+        for (int j = 0; j < numBigTiles; ++j) {
+            int2 tile = ulTile + int2{i, j};
+            
+            // Skip tiles outside terrain bounds
+            if (tile.x < 0 || tile.x >= TERRAIN_MAX_X || 
+                tile.y < 0 || tile.y >= TERRAIN_MAX_Y) {
+                continue;
+            }
+            
+            float distSq = length(float2(tile.x - centerTile.x, tile.y - centerTile.y) * m_TileSize);
+            
+            // Skip if tile is too far for high LOD
+            if (distSq > highLODDistance) {
+                continue;
+            }
+            
+            NodeInstance instance;
+            instance.NodeMatrix = float4x4::Translation(float3{
+                (float)tile.x * m_TileSize.x,
+                0.0f,
+                (float)tile.y * m_TileSize.y
+            });
+            
+            instance.ScaleX = 1.0f / m_TextureSize.x;
+            instance.ScaleY = 1.0f / m_TextureSize.y;
+            instance.OffsetX = (float)tile.x / m_TextureSize.x;
+            instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            instance.PlanetLocation = tile;
+            instance.LODLevel = 0; // High LOD
+            
+            node.Instances.push_back(instance);
         }
     }
 
-    float yValues[] = { -2.0f, 10.0f };
+    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };;
+    m_Mesh->BB.Max = float3{ TERRAIN_MAX_X * m_TileSize.x, 10.0f, TERRAIN_MAX_Y * m_TileSize.y };    
+}
+#else
+void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
+{
+    auto& node = Nodes[0];
 
-    minBB.x = 0.0f;
-    minBB.z = 0.0f;
+    // Calculate the size of the entire grid of tiles
+    float totalWidth = TERRAIN_MAX_X * m_TileSize.x;
+    float totalHeight = TERRAIN_MAX_Y * m_TileSize.y;
+    
+    // Clear existing instances
+    node.Instances.clear();
+    
+    // Calculate how many low LOD tiles we need to cover the entire terrain
+    // Each low LOD tile covers numBigTiles x numBigTiles area
+    int lowLODTilesX = (TERRAIN_MAX_X + numBigTiles.x - 1) / numBigTiles.x;
+    int lowLODTilesY = (TERRAIN_MAX_Y + numBigTiles.y - 1) / numBigTiles.y;
+    
+    // Create low LOD tiles to cover the entire terrain
+    for (int x = 0; x < lowLODTilesX; ++x) {
+        for (int y = 0; y < lowLODTilesY; ++y) {
+            // Calculate the actual tile position
+            int2 tile = int2{x * numBigTiles.x, y * numBigTiles.y};
+            
+            // Create instance for this low LOD tile
+            NodeInstance instance;
+            auto translation = float4x4::Translation(float3{
+                (float)tile.x * m_TileSize.x,
+                0.0f,
+                (float)tile.y * m_TileSize.y
+            });
+            
+            // Calculate texture scale and offset
+            instance.ScaleX = numBigTiles.x / m_TextureSize.x;
+            instance.ScaleY = numBigTiles.y / m_TextureSize.y;
+            instance.OffsetX = (float)tile.x / m_TextureSize.x;
+            instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            instance.PlanetLocation = tile;
 
-    maxBB.x = TERRAIN_MAX_X * m_TileSize.x;
-    maxBB.z = TERRAIN_MAX_Y * m_TileSize.y;
-
-    for (float y : yValues)
-    {
-        float3 minTranslatedPos = minBB * float4x4::Translation(0.0f, y, 0.0f);
-        float3 maxTranslatedPos = maxBB * float4x4::Translation(0.0f, y, 0.0f);
-
-        minBB = float3{
-            std::min(minBB.x, minTranslatedPos.x),
-            std::min(minBB.y, minTranslatedPos.y),
-            std::min(minBB.z, minTranslatedPos.z)
-        };
-
-        maxBB = float3{
-            std::max(maxBB.x, maxTranslatedPos.x),
-            std::max(maxBB.y, maxTranslatedPos.y),
-            std::max(maxBB.z, maxTranslatedPos.z)
-        };
+            instance.NodeMatrix = translation;
+            
+            node.Instances.push_back(instance);
+        }
     }
 
-    m_Mesh->BB.Min = minBB;
-    m_Mesh->BB.Max = maxBB;    
+    m_Mesh = std::make_shared<SF_GLTF::Mesh>();
+    m_Mesh->Primitives.emplace_back(m_LowLODOffsets.indexCount, m_LowLODIndices.size(), m_LowLODVertices.size() / 4, 0, float3{}, float3{});
+
+    // Set the bounding box to encompass the entire terrain
+    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };
+    m_Mesh->BB.Max = float3{ totalWidth, 10.0f, totalHeight };
+
+    node.pMesh = m_Mesh.get();
 }
+#endif
 
 float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition)
 {
@@ -661,6 +839,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
 
     assert(roverFound);
 
+#if 0
     if (sphereIt != m_Model->Nodes.end())
     {
         Node sphereNode{static_cast<int>(Nodes.size())};
@@ -685,7 +864,9 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
         Scenes[0].LinearNodes.push_back(&Nodes.back());
         Scenes[0].RootNodes.push_back(&Nodes.back());
     }
+#endif
 
+#if 0
     if (planeIt != m_Model->Nodes.end())
     {
         Node planeNode{static_cast<int>(Nodes.size())};
@@ -704,6 +885,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
         Scenes[0].LinearNodes.push_back(&Nodes.back());
         Scenes[0].RootNodes.push_back(&Nodes.back());
     }
+#endif
 
     // Continue with the rest of the terrain items
     for (const auto& item : terrainItems)

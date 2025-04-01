@@ -74,7 +74,7 @@ public:
 
 private:
 
-    const int numBigTiles = 61;
+    const int2 numBigTiles = { 61, 101 };
     float2 m_TileSize = { 8.0f, 4.0f };
     float2 m_TextureSize = { 1024.0f, 1024.0f };
     
@@ -85,6 +85,20 @@ private:
     float sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv);
     float sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition);
     float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope);
+
+    struct VertexIndexCounts
+    {
+        int vertexCount;
+        int indexCount;
+    };
+
+    VertexIndexCounts m_HighLODOffsets;
+    VertexIndexCounts m_MediumLODOffsets;
+    VertexIndexCounts m_LowLODOffsets;
+
+    void generateHighLODMesh(VertexIndexCounts& counts, int numQuadsPerTile, float tileHeight);
+    void generateMediumLODMesh(VertexIndexCounts& counts, float tileHeight);
+    void generateLowLODMesh(VertexIndexCounts& counts, float tileHeight);
 
     struct VertexBuff
     {
@@ -122,6 +136,13 @@ private:
         float padding5;
     };
 
+    std::vector<VertexBuff> m_HighLODVertices;
+    std::vector<Uint32> m_HighLODIndices;
+    std::vector<VertexBuff> m_MediumLODVertices;
+    std::vector<Uint32> m_MediumLODIndices;
+    std::vector<VertexBuff> m_LowLODVertices;
+    std::vector<Uint32> m_LowLODIndices;
+
     RefCntAutoPtr<IBuffer> m_VertexBuffer;
     RefCntAutoPtr<IBuffer> m_VertexBuffer2;
     RefCntAutoPtr<IBuffer> m_VertexBuffer3;
@@ -130,8 +151,6 @@ private:
     IRenderDevice* m_pDevice;
     IDeviceContext* m_pContext; 
 
-    std::vector<VertexBuff> m_Vertices;
-    std::vector<Uint32> m_Indices;
     std::shared_ptr<SF_GLTF::Mesh> m_Mesh;
     BoundBox m_TileBB;
 

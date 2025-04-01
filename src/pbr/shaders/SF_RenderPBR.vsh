@@ -208,18 +208,15 @@ void main(in  VSInput  VSIn,
 #if !defined(USE_HEIGHTMAP) || !defined(USE_INSTANCING) && !defined(USE_TEXCOORD1)
     #error "Height map, instancing and texcoord1 must be enabled"
 #endif
-    int instanceX = VSIn.InstanceID % 61;
-    int instanceY = VSIn.InstanceID / 61;
     float2 megaUV = VSIn.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
 
     #if USE_TERRAINING
         megaUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
     #endif
 
+    VSOut.UV0 = VSIn.UV0;
+    VSOut.UV1 = VSIn.UV0; //float2(megaUV.x * 1.0 * 38.0, megaUV.y * 1.0 * 14.9);
     VSOut.UV2 = VSIn.UV0;
-    //VSOut.UV0 = float2(frac(megaUV.x * 9.0 * 38.0), frac(megaUV.y * 9.0 * 14.9));
-    VSOut.UV0 = float2(frac(megaUV.x * 1.0 * 38.0), frac(megaUV.y * 1.0 * 14.9));
-    VSOut.UV1 = megaUV;
 
     VSOut.UV3 = float2(instance.PlanetLocation);
 
