@@ -293,8 +293,8 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
     m_LowLODVertices[0].normalX = 0.0f;
     m_LowLODVertices[0].normalY = 1.0f;
     m_LowLODVertices[0].normalZ = 0.0f;
-    m_LowLODVertices[0].texU0 = 0.0f; // * (float)numBigTiles.x;
-    m_LowLODVertices[0].texV0 = 0.0f; // * (float)numBigTiles.y;
+    m_LowLODVertices[0].texU0 = 0.0f;
+    m_LowLODVertices[0].texV0 = 0.0f;
 
     // Top-right vertex
     m_LowLODVertices[1].posX = lowLODSize.x;
@@ -303,8 +303,8 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
     m_LowLODVertices[1].normalX = 0.0f;
     m_LowLODVertices[1].normalY = 1.0f;
     m_LowLODVertices[1].normalZ = 0.0f;
-    m_LowLODVertices[1].texU0 = 1.0f; // * (float)numBigTiles.x;
-    m_LowLODVertices[1].texV0 = 0.0f; // * (float)numBigTiles.y;
+    m_LowLODVertices[1].texU0 = 1.0f;
+    m_LowLODVertices[1].texV0 = 0.0f;
 
     // Bottom-left vertex
     m_LowLODVertices[2].posX = 0.0f;
@@ -313,8 +313,8 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
     m_LowLODVertices[2].normalX = 0.0f;
     m_LowLODVertices[2].normalY = 1.0f;
     m_LowLODVertices[2].normalZ = 0.0f;
-    m_LowLODVertices[2].texU0 = 0.0f; // * (float)numBigTiles.x;
-    m_LowLODVertices[2].texV0 = 1.0f; // * (float)numBigTiles.y;
+    m_LowLODVertices[2].texU0 = 0.0f;
+    m_LowLODVertices[2].texV0 = 1.0f;
 
     // Bottom-right vertex
     m_LowLODVertices[3].posX = lowLODSize.x;
@@ -323,8 +323,8 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
     m_LowLODVertices[3].normalX = 0.0f;
     m_LowLODVertices[3].normalY = 1.0f;
     m_LowLODVertices[3].normalZ = 0.0f;
-    m_LowLODVertices[3].texU0 = 1.0f; // * (float)numBigTiles.x;
-    m_LowLODVertices[3].texV0 = 1.0f; // * (float)numBigTiles.y;
+    m_LowLODVertices[3].texU0 = 1.0f;
+    m_LowLODVertices[3].texV0 = 1.0f;
 
     // First triangle
     m_LowLODIndices[0] = counts.vertexCount + 0; // top-left
@@ -578,7 +578,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };;
     m_Mesh->BB.Max = float3{ TERRAIN_MAX_X * m_TileSize.x, 10.0f, TERRAIN_MAX_Y * m_TileSize.y };    
 }
-#else
+#elif defined(TEST_LOW_LOD_TERRAIN)
 void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 {
     auto& node = Nodes[0];
@@ -631,6 +631,125 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
     node.pMesh = m_Mesh.get();
 }
+#elif defined(TEST_MID_TERRAIN)
+void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
+{
+    auto& node = Nodes[0];
+    
+    // Define the 61x101 layout for mid LOD terrain
+    const int2 midLODLayout = int2{61, 101};
+   
+    // Find the center tile coordinate by rounding camera position to the nearest tile grid
+    int2 centerTile = int2{
+        static_cast<int>(std::round(terrainMovement.x / m_TileSize.x)),
+        static_cast<int>(std::round(terrainMovement.z / m_TileSize.y))
+    };
+
+    int2 ulTile = centerTile - (midLODLayout / 2);
+
+    // Calculate the size of the entire terrain
+    float2 totalSize = float2{(float)midLODLayout.x, (float)midLODLayout.y} * m_TileSize;
+    
+    // Clear existing instances
+    node.Instances.clear();
+   
+    // Create mid LOD tiles to cover the terrain
+    for (int x = 0; x < midLODLayout.x; ++x) {
+        for (int y = 0; y < midLODLayout.y; ++y) {
+            // Calculate the actual tile position
+            int2 tile = ulTile + int2{x, y};
+            
+            // Create instance for this mid LOD tile
+            NodeInstance instance;
+            auto translation = float4x4::Translation(float3{
+                (float)tile.x * m_TileSize.x,
+                0.0f,
+                (float)tile.y * m_TileSize.y
+            });
+            
+            // Calculate texture scale and offset
+            instance.ScaleX = 1.0f / m_TextureSize.x;
+            instance.ScaleY = 1.0f / m_TextureSize.y;
+            instance.OffsetX = (float)tile.x / m_TextureSize.x;
+            instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            instance.PlanetLocation = tile;
+            
+            instance.NodeMatrix = translation;
+            
+            node.Instances.push_back(instance);
+        }
+    }
+    
+    m_Mesh = std::make_shared<SF_GLTF::Mesh>();
+    m_Mesh->Primitives.emplace_back(m_MediumLODOffsets.indexCount, m_MediumLODIndices.size(), m_MediumLODIndices.size() / 4, 0, float3{}, float3{});
+    
+    // Set the bounding box to encompass the entire terrain
+    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };
+    m_Mesh->BB.Max = float3{ totalSize.x, 10.0f, totalSize.y };
+    
+    node.pMesh = m_Mesh.get();
+}
+#else
+void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
+{
+    // Get the node for the high LOD terrain
+    auto& node = Nodes[0];
+
+    // Define the 61x101 layout for high LOD terrain
+    const int2 highLODLayout = int2{61, 101};
+
+    // Calculate the center tile based on terrain movement
+    int2 centerTile = int2{
+        static_cast<int>(std::round(terrainMovement.x / m_TileSize.x)),
+        static_cast<int>(std::round(terrainMovement.z / m_TileSize.y))
+    };
+
+    // Calculate the upper-left tile based on the high LOD layout
+    int2 ulTile = centerTile - (highLODLayout / 2);
+
+    // Calculate the size of the entire terrain
+    float2 totalSize = float2{(float)highLODLayout.x, (float)highLODLayout.y} * m_TileSize;
+    
+    // Clear existing instances
+    node.Instances.clear();
+   
+    // Create high LOD tiles to cover the terrain
+    for (int x = 0; x < highLODLayout.x; ++x) {
+        for (int y = 0; y < highLODLayout.y; ++y) {
+            // Calculate the actual tile position
+            int2 tile = ulTile + int2{x, y};
+            
+            // Create instance for this high LOD tile
+            NodeInstance instance;
+            auto translation = float4x4::Translation(float3{
+                (float)tile.x * m_TileSize.x,
+                0.0f,
+                (float)tile.y * m_TileSize.y
+            });
+            
+            // Calculate texture scale and offset
+            instance.ScaleX = 1.0f / m_TextureSize.x;
+            instance.ScaleY = 1.0f / m_TextureSize.y;
+            instance.OffsetX = (float)tile.x / m_TextureSize.x;
+            instance.OffsetY = (float)tile.y / m_TextureSize.y;
+            instance.PlanetLocation = tile;
+            
+            instance.NodeMatrix = translation;
+            
+            node.Instances.push_back(instance);
+        }
+    }
+    
+    m_Mesh = std::make_shared<SF_GLTF::Mesh>();
+    m_Mesh->Primitives.emplace_back(m_HighLODOffsets.indexCount, m_HighLODIndices.size(), m_HighLODIndices.size() / 4, 0, float3{}, float3{});
+    
+    // Set the bounding box to encompass the entire terrain
+    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };
+    m_Mesh->BB.Max = float3{ totalSize.x, 10.0f, totalSize.y };
+    
+    node.pMesh = m_Mesh.get();
+}
+
 #endif
 
 float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition)

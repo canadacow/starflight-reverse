@@ -963,6 +963,8 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
                 if(pNode->Instances.size() > 0)
                 {
+                    assert(pNode->Instances.size() <= SF_PBR_Renderer::MaxInstanceCount);
+
                     MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, s_gc.instanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
                     for(int i = 0; i < pNode->Instances.size(); ++i)
                     {
