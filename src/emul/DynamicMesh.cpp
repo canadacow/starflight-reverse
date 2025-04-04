@@ -452,131 +452,14 @@ void DynamicMesh::InitializeVertexAndIndexData()
     TextureAttributes = m_Model->TextureAttributes;
 }
 
+#define TEST_LOW_LOD_TERRAIN 1
+
 #if 0
 // Takes world space coordinates and generates an amalgamation of terrain tiles underneath the coordinates
 // with UVs that map to the terrain heightmap
 void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 {
-    auto& node = Nodes[0];
-
-    // Calculate the size of the entire grid of tiles
-    float totalWidth = numBigTiles * m_TileSize.x;
-    float totalHeight = numBigTiles * m_TileSize.y;
-    
-    // Find the center tile coordinate by rounding camera position to the nearest tile grid
-    int2 centerTile = int2{
-        static_cast<int>(std::round(terrainMovement.x / m_TileSize.x)),
-        static_cast<int>(std::round(terrainMovement.z / m_TileSize.y))
-    };
-
-    int2 ulTile = centerTile - int2{numBigTiles / 2, numBigTiles / 2};
-
-    float3 minBB = float3{ std::numeric_limits<float>::max() };
-    float3 maxBB = float3{ std::numeric_limits<float>::lowest() };    
-
-    // Clear existing instances to prepare for new LOD assignments
-    node.Instances.clear();
-    
-    // Add high LOD tiles around the camera
-    const float highLODDistance = m_TileSize.x * 10; // Adjust this value for high LOD coverage
-    const float mediumLODDistance = m_TileSize.x * 30; // Adjust this value for medium LOD coverage
-    
-    // First, create low LOD tiles for the entire terrain
-    for (int x = 0; x < TERRAIN_MAX_X; x += numBigTiles) {
-        for (int y = 0; y < TERRAIN_MAX_Y; y += numBigTiles) {
-            int2 tile = int2{x, y};
-            float distSq = length(float2(tile.x - centerTile.x, tile.y - centerTile.y) * m_TileSize);
-            
-            // Skip if this area will be covered by higher LOD
-            if (distSq < mediumLODDistance) {
-                continue;
-            }
-            
-            NodeInstance instance;
-            instance.NodeMatrix = float4x4::Translation(float3{
-                (float)tile.x * m_TileSize.x,
-                0.0f,
-                (float)tile.y * m_TileSize.y
-            });
-            
-            instance.ScaleX = numBigTiles / m_TextureSize.x;
-            instance.ScaleY = numBigTiles / m_TextureSize.y;
-            instance.OffsetX = (float)tile.x / m_TextureSize.x;
-            instance.OffsetY = (float)tile.y / m_TextureSize.y;
-            instance.PlanetLocation = tile;
-            instance.LODLevel = 2; // Low LOD
-            
-            node.Instances.push_back(instance);           
-        }
-    }
-    
-    // Then, add medium LOD tiles for middle distances
-    for (int x = 0; x < TERRAIN_MAX_X; ++x) {
-        for (int y = 0; y < TERRAIN_MAX_Y; ++y) {
-            int2 tile = int2{x, y};
-            float distSq = length(float2(tile.x - centerTile.x, tile.y - centerTile.y) * m_TileSize);
-            
-            // Skip if this tile will be covered by high LOD or is too far for medium LOD
-            if (distSq < highLODDistance || distSq > mediumLODDistance) {
-                continue;
-            }
-            
-            NodeInstance instance;
-            instance.NodeMatrix = float4x4::Translation(float3{
-                (float)tile.x * m_TileSize.x,
-                0.0f,
-                (float)tile.y * m_TileSize.y
-            });
-            
-            instance.ScaleX = 1.0f / m_TextureSize.x;
-            instance.ScaleY = 1.0f / m_TextureSize.y;
-            instance.OffsetX = (float)tile.x / m_TextureSize.x;
-            instance.OffsetY = (float)tile.y / m_TextureSize.y;
-            instance.PlanetLocation = tile;
-            instance.LODLevel = 1; // Medium LOD
-            
-            node.Instances.push_back(instance);           
-        }
-    }
-    
-    // Finally, add high LOD tiles close to the camera
-    for (int i = 0; i < numBigTiles; ++i) {
-        for (int j = 0; j < numBigTiles; ++j) {
-            int2 tile = ulTile + int2{i, j};
-            
-            // Skip tiles outside terrain bounds
-            if (tile.x < 0 || tile.x >= TERRAIN_MAX_X || 
-                tile.y < 0 || tile.y >= TERRAIN_MAX_Y) {
-                continue;
-            }
-            
-            float distSq = length(float2(tile.x - centerTile.x, tile.y - centerTile.y) * m_TileSize);
-            
-            // Skip if tile is too far for high LOD
-            if (distSq > highLODDistance) {
-                continue;
-            }
-            
-            NodeInstance instance;
-            instance.NodeMatrix = float4x4::Translation(float3{
-                (float)tile.x * m_TileSize.x,
-                0.0f,
-                (float)tile.y * m_TileSize.y
-            });
-            
-            instance.ScaleX = 1.0f / m_TextureSize.x;
-            instance.ScaleY = 1.0f / m_TextureSize.y;
-            instance.OffsetX = (float)tile.x / m_TextureSize.x;
-            instance.OffsetY = (float)tile.y / m_TextureSize.y;
-            instance.PlanetLocation = tile;
-            instance.LODLevel = 0; // High LOD
-            
-            node.Instances.push_back(instance);
-        }
-    }
-
-    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };;
-    m_Mesh->BB.Max = float3{ TERRAIN_MAX_X * m_TileSize.x, 10.0f, TERRAIN_MAX_Y * m_TileSize.y };    
+    // TODO: Integrate low, mid, and high LOD terrain
 }
 #elif defined(TEST_LOW_LOD_TERRAIN)
 void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
@@ -647,9 +530,6 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
     int2 ulTile = centerTile - (midLODLayout / 2);
 
-    // Calculate the size of the entire terrain
-    float2 totalSize = float2{(float)midLODLayout.x, (float)midLODLayout.y} * m_TileSize;
-    
     // Clear existing instances
     node.Instances.clear();
    
@@ -683,9 +563,11 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     m_Mesh = std::make_shared<SF_GLTF::Mesh>();
     m_Mesh->Primitives.emplace_back(m_MediumLODOffsets.indexCount, m_MediumLODIndices.size(), m_MediumLODIndices.size() / 4, 0, float3{}, float3{});
     
-    // Set the bounding box to encompass the entire terrain
-    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };
-    m_Mesh->BB.Max = float3{ totalSize.x, 10.0f, totalSize.y };
+    float2 upperLeft = float2{(float)ulTile.x * m_TileSize.x, (float)ulTile.y * m_TileSize.y};
+    float2 lowerRight = float2{(float)(ulTile.x + highLODLayout.x) * m_TileSize.x, (float)(ulTile.y + highLODLayout.y) * m_TileSize.y};
+
+    m_Mesh->BB.Min = float3{ upperLeft.x, -2.0f, upperLeft.y };
+    m_Mesh->BB.Max = float3{ lowerRight.x, 10.0f, lowerRight.y };
     
     node.pMesh = m_Mesh.get();
 }
@@ -743,7 +625,6 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     float2 upperLeft = float2{(float)ulTile.x * m_TileSize.x, (float)ulTile.y * m_TileSize.y};
     float2 lowerRight = float2{(float)(ulTile.x + highLODLayout.x) * m_TileSize.x, (float)(ulTile.y + highLODLayout.y) * m_TileSize.y};
 
-    // Set the bounding box to encompass the entire terrain
     m_Mesh->BB.Min = float3{ upperLeft.x, -2.0f, upperLeft.y };
     m_Mesh->BB.Max = float3{ lowerRight.x, 10.0f, lowerRight.y };
     
