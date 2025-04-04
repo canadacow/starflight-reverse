@@ -473,44 +473,63 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     // Clear existing instances
     node.Instances.clear();
     
-    // Calculate how many low LOD tiles we need to cover the entire terrain
+    // Calculate how many low LOD tiles we need to cover one terrain section
     // Each low LOD tile covers numBigTiles x numBigTiles area
     int lowLODTilesX = (TERRAIN_MAX_X + numBigTiles.x - 1) / numBigTiles.x;
     int lowLODTilesY = (TERRAIN_MAX_Y + numBigTiles.y - 1) / numBigTiles.y;
     
-    // Create low LOD tiles to cover the entire terrain
-    for (int x = 0; x < lowLODTilesX; ++x) {
-        for (int y = 0; y < lowLODTilesY; ++y) {
-            // Calculate the actual tile position
-            int2 tile = int2{x * numBigTiles.x, y * numBigTiles.y};
+    // Create 3x5 repeating pattern of the terrain (3 columns, 5 rows)
+    for (int repeatX = -1; repeatX <= 1; ++repeatX) {
+        for (int repeatY = -3; repeatY <= 3; ++repeatY) {
+            // Calculate the offset for this terrain section
+            float xOffset = repeatX * totalWidth;
+            float zOffset = repeatY * totalHeight;
             
-            // Create instance for this low LOD tile
-            NodeInstance instance;
-            auto translation = float4x4::Translation(float3{
-                (float)tile.x * m_TileSize.x,
-                0.0f,
-                (float)tile.y * m_TileSize.y
-            });
-            
-            // Calculate texture scale and offset
-            instance.ScaleX = numBigTiles.x / m_TextureSize.x;
-            instance.ScaleY = numBigTiles.y / m_TextureSize.y;
-            instance.OffsetX = (float)tile.x / m_TextureSize.x;
-            instance.OffsetY = (float)tile.y / m_TextureSize.y;
-            instance.PlanetLocation = tile;
-
-            instance.NodeMatrix = translation;
-            
-            node.Instances.push_back(instance);
+            // Create low LOD tiles to cover this terrain section
+            for (int x = 0; x < lowLODTilesX; ++x) {
+                for (int y = 0; y < lowLODTilesY; ++y) {
+                    // Calculate the actual tile position
+                    int2 tile = int2{x * numBigTiles.x, y * numBigTiles.y};
+                    
+                    // Create instance for this low LOD tile
+                    NodeInstance instance;
+                    auto translation = float4x4::Translation(float3{
+                        xOffset + (float)tile.x * m_TileSize.x,
+                        0.0f,
+                        zOffset + (float)tile.y * m_TileSize.y
+                    });
+                    
+                    // Calculate texture scale and offset
+                    instance.ScaleX = numBigTiles.x / m_TextureSize.x;
+                    instance.ScaleY = numBigTiles.y / m_TextureSize.y;
+                    
+                    // Calculate texture offsets with mirroring in the vertical direction (Y)
+                    instance.OffsetX = (float)tile.x / m_TextureSize.x;
+                    
+                    // Apply mirroring in vertical direction if repeatY is odd
+                    if (repeatY % 2 == 0) {
+                        instance.OffsetY = (float)tile.y / m_TextureSize.y;
+                    } else {
+                        // Mirror the Y coordinate by calculating offset from the opposite end
+                        instance.OffsetY = ((float)TERRAIN_MAX_Y - (float)tile.y - (float)numBigTiles.y) / m_TextureSize.y;
+                        instance.ScaleY = -instance.ScaleY; // Flip the scale for mirroring
+                    }
+                    
+                    instance.PlanetLocation = tile;
+                    instance.NodeMatrix = translation;
+                    
+                    node.Instances.push_back(instance);
+                }
+            }
         }
     }
 
     m_Mesh = std::make_shared<SF_GLTF::Mesh>();
     m_Mesh->Primitives.emplace_back(m_LowLODOffsets.indexCount, m_LowLODIndices.size(), m_LowLODVertices.size() / 4, 0, float3{}, float3{});
 
-    // Set the bounding box to encompass the entire terrain
-    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };
-    m_Mesh->BB.Max = float3{ totalWidth, 10.0f, totalHeight };
+    // Set the bounding box to encompass the entire 3x5 terrain pattern
+    m_Mesh->BB.Min = float3{ -totalWidth, -2.0f, -totalHeight * 3.0f };
+    m_Mesh->BB.Max = float3{ totalWidth * 2.0f, 10.0f, totalHeight * 4.0f };
 
     node.pMesh = m_Mesh.get();
 }
