@@ -145,9 +145,12 @@ void main(in  VSInput  VSIn,
     float3 Normal = float3(0.0, 0.0, 1.0);
 #endif
 
+    float3 adjustedPos = VSIn.Pos;
 #if USE_INSTANCING
     PBRInstanceAttribs instance = instanceBuffer[VSIn.InstanceID];
-    Transform = mul(instance.NodeMatrix, Transform);
+    // Apply the node matrix transformation to the position
+    // This ensures the vertex position is correctly transformed by the instance's matrix
+    adjustedPos = mul(float4(adjustedPos, 1.0), instance.NodeMatrix).xyz;
 #endif
 
 #if USE_HEIGHTMAP
@@ -163,7 +166,6 @@ void main(in  VSInput  VSIn,
 
     float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
 
-    float3 adjustedPos = VSIn.Pos;
     if(height < g_Terrain.waterHeight)
     {
         // Water is always flush with land
@@ -179,9 +181,21 @@ void main(in  VSInput  VSIn,
         adjustedPos += float3(0.0, height, 0.0);
     }
 
+    #if USE_TERRAINING
+        // Apply global terrain curvature based on distance from camera
+        float3 cameraPos = g_Frame.Camera.f4Position.xyz;
+        float2 horizontalDelta = float2(adjustedPos.x - cameraPos.x, adjustedPos.z - cameraPos.z);
+        float distanceSquared = dot(horizontalDelta, horizontalDelta);
+        
+        // Calculate curvature factor - reduces height as distance increases
+        // The 0.00001 factor controls how strong the curvature effect is
+        float curvatureFactor = distanceSquared * 0.000005;
+        
+        // Apply the curvature by reducing the y-coordinate based on distance
+        adjustedPos.y -= curvatureFactor;
+    #endif
+
     VSOut.Height = height;
-#else
-    float3 adjustedPos = VSIn.Pos;
 #endif // USE_HEIGHTMAP
 
     GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    
