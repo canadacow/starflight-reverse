@@ -706,10 +706,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
     // Calculate the upper-left tile based on the high LOD layout
     int2 ulTile = centerTile - (highLODLayout / 2);
-
-    // Calculate the size of the entire terrain
-    float2 totalSize = float2{(float)highLODLayout.x, (float)highLODLayout.y} * m_TileSize;
-    
+   
     // Clear existing instances
     node.Instances.clear();
    
@@ -742,10 +739,13 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     
     m_Mesh = std::make_shared<SF_GLTF::Mesh>();
     m_Mesh->Primitives.emplace_back(m_HighLODOffsets.indexCount, m_HighLODIndices.size(), m_HighLODIndices.size() / 4, 0, float3{}, float3{});
-    
+  
+    float2 upperLeft = float2{(float)ulTile.x * m_TileSize.x, (float)ulTile.y * m_TileSize.y};
+    float2 lowerRight = float2{(float)(ulTile.x + highLODLayout.x) * m_TileSize.x, (float)(ulTile.y + highLODLayout.y) * m_TileSize.y};
+
     // Set the bounding box to encompass the entire terrain
-    m_Mesh->BB.Min = float3{ 0.0f, -2.0f, 0.0f };
-    m_Mesh->BB.Max = float3{ totalSize.x, 10.0f, totalSize.y };
+    m_Mesh->BB.Min = float3{ upperLeft.x, -2.0f, upperLeft.y };
+    m_Mesh->BB.Max = float3{ lowerRight.x, 10.0f, lowerRight.y };
     
     node.pMesh = m_Mesh.get();
 }

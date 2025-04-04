@@ -585,10 +585,13 @@ PSOutput main(in VSOutput VSOut,
 
     PBRInstanceAttribs ti = instanceBuffer[VSOut.InstanceID];
 
-    float2 tileScale = float2(61.0, 101.0);
+    // For the lowest LOD, which covers 61x101 tiles
+    //float2 tileScale = float2(61.0, 101.0);
+
+    // For mid and highest LOD, which are a single tile
+    float2 tileScale = float2(1.0, 1.0);
     
     float2 megaUV = VSOut.UV0 * float2(ti.HeightmapAttribs.ScaleX, ti.HeightmapAttribs.ScaleY) + float2(ti.HeightmapAttribs.OffsetX, ti.HeightmapAttribs.OffsetY);
-    
 
     VSOut.UV2 = frac(VSOut.UV0 * tileScale);
     VSOut.UV0 = float2(frac(megaUV.x * 1.0 * 38.0), frac(megaUV.y * 1.0 * 14.9));
