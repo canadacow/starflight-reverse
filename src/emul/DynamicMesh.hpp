@@ -95,10 +95,12 @@ private:
     VertexIndexCounts m_HighLODOffsets;
     VertexIndexCounts m_MediumLODOffsets;
     VertexIndexCounts m_LowLODOffsets;
+    VertexIndexCounts m_NonInstancedOffsets;
 
     void generateHighLODMesh(VertexIndexCounts& counts, int numQuadsPerTile, float tileHeight);
     void generateMediumLODMesh(VertexIndexCounts& counts, float tileHeight);
     void generateLowLODMesh(VertexIndexCounts& counts, float tileHeight);
+    void generateNonInstancedMesh(VertexIndexCounts& counts, float tileHeight);
 
     struct VertexBuff
     {
@@ -142,6 +144,9 @@ private:
     std::vector<Uint32> m_MediumLODIndices;
     std::vector<VertexBuff> m_LowLODVertices;
     std::vector<Uint32> m_LowLODIndices;
+
+    std::vector<VertexBuff> m_NonInstancedVertices;
+    std::vector<Uint32> m_NonInstancedIndices;
 
     RefCntAutoPtr<IBuffer> m_VertexBuffer;
     RefCntAutoPtr<IBuffer> m_VertexBuffer2;

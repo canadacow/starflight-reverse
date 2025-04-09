@@ -137,6 +137,8 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, fl
     // Generate low LOD mesh (large quads covering 61x61 tile areas)
     generateLowLODMesh(counts, tileHeight);
 
+    generateNonInstancedMesh(counts, tileHeight);
+
     CreateBuffers();
     m_GPUDataInitialized = false;
 
@@ -340,11 +342,95 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
     counts.vertexCount += 4;
 }
 
+void DynamicMesh::generateNonInstancedMesh(VertexIndexCounts& counts, float tileHeight)
+{
+    // Clear existing vertices and indices
+    m_NonInstancedVertices.clear();
+    m_NonInstancedIndices.clear();
+
+    m_NonInstancedOffsets.vertexCount = counts.vertexCount;
+    m_NonInstancedOffsets.indexCount = counts.indexCount;
+    
+    // Calculate the size of the entire grid of tiles
+    float totalWidth = TERRAIN_MAX_X * m_TileSize.x;
+    float totalHeight = TERRAIN_MAX_Y * m_TileSize.y;
+    
+    // Calculate how many low LOD tiles we need to cover one terrain section
+    // Each low LOD tile covers numBigTiles x numBigTiles area
+    int lowLODTilesX = (TERRAIN_MAX_X + numBigTiles.x - 1) / numBigTiles.x;
+    int lowLODTilesY = (TERRAIN_MAX_Y + numBigTiles.y - 1) / numBigTiles.y;
+    
+    // Create 3x5 repeating pattern of the terrain (3 columns, 5 rows)
+    for (int repeatX = -1; repeatX <= 1; ++repeatX) {
+        for (int repeatY = -3; repeatY <= 3; ++repeatY) {
+            // Calculate the offset for this terrain section
+            float xOffset = repeatX * totalWidth;
+            float zOffset = repeatY * totalHeight;
+            
+            // Create low LOD tiles to cover this terrain section
+            for (int x = 0; x < lowLODTilesX; ++x) {
+                for (int y = 0; y < lowLODTilesY; ++y) {
+                    // Calculate the actual tile position
+                    int2 tile = int2{x * numBigTiles.x, y * numBigTiles.y};
+                    
+                    // Calculate position for this low LOD tile
+                    float posX = xOffset + (float)tile.x * m_TileSize.x;
+                    float posZ = zOffset + (float)tile.y * m_TileSize.y;
+                   
+                    // Generate vertices for this tile
+                    Uint32 baseIndex = static_cast<Uint32>(m_NonInstancedVertices.size()) + m_NonInstancedOffsets.vertexCount;
+                    
+                    // Add four vertices for this tile (quad)
+                    // Bottom-left
+                    m_NonInstancedVertices.push_back({
+                        posX, tileHeight, posZ,                      // Position
+                        0.0f, 1.0f, 0.0f,                            // Normal
+                        0.0f, 0.0f                             // UV
+                    });
+                    
+                    // Bottom-right
+                    m_NonInstancedVertices.push_back({
+                        posX + numBigTiles.x * m_TileSize.x, tileHeight, posZ,
+                        0.0f, 1.0f, 0.0f,
+                        1.0f, 0.0f, // UV
+                    });
+                    
+                    // Top-right
+                    m_NonInstancedVertices.push_back({
+                        posX + numBigTiles.x * m_TileSize.x, tileHeight, posZ + numBigTiles.y * m_TileSize.y,
+                        0.0f, 1.0f, 0.0f,
+                        1.0f, 1.0f // UV
+                    });
+                    
+                    // Top-left
+                    m_NonInstancedVertices.push_back({
+                        posX, tileHeight, posZ + numBigTiles.y * m_TileSize.y,
+                        0.0f, 1.0f, 0.0f,
+                        0.0f, 1.0f // UV
+                    });
+                    
+                    // Add indices for two triangles (forming a quad)
+                    m_NonInstancedIndices.push_back(baseIndex);
+                    m_NonInstancedIndices.push_back(baseIndex + 1);
+                    m_NonInstancedIndices.push_back(baseIndex + 2);
+                    
+                    m_NonInstancedIndices.push_back(baseIndex);
+                    m_NonInstancedIndices.push_back(baseIndex + 2);
+                    m_NonInstancedIndices.push_back(baseIndex + 3);
+                }
+            }
+        }
+    }
+    
+    counts.vertexCount += static_cast<int>(m_NonInstancedVertices.size());
+    counts.indexCount += static_cast<int>(m_NonInstancedIndices.size());
+}
+
 void DynamicMesh::CreateBuffers()
 {
     // Calculate total buffer sizes needed for all LOD levels
-    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size();
-    size_t totalIndices = m_HighLODIndices.size() + m_MediumLODIndices.size() + m_LowLODIndices.size();
+    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size() + m_NonInstancedVertices.size();
+    size_t totalIndices = m_HighLODIndices.size() + m_MediumLODIndices.size() + m_LowLODIndices.size() + m_NonInstancedIndices.size();
 
     // Initialize vertex buffer
     BufferDesc VertBuffDesc;
@@ -402,10 +488,15 @@ void DynamicMesh::PrepareResources()
     
     // Copy low LOD vertices
     memcpy(Vertices + vertexOffset, m_LowLODVertices.data(), sizeof(VertexBuff) * m_LowLODVertices.size());
+    vertexOffset += m_LowLODVertices.size();
+
+    // Copy non-instanced vertices
+    memcpy(Vertices + vertexOffset, m_NonInstancedVertices.data(), sizeof(VertexBuff) * m_NonInstancedVertices.size());
+    vertexOffset += m_NonInstancedVertices.size();
 
     // Update second vertex buffer (initialize with zeros)
     MapHelper<VertexBuff2> Vertices2(m_pContext, m_VertexBuffer2, MAP_WRITE, MAP_FLAG_DISCARD);
-    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size();
+    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size() + m_NonInstancedVertices.size();
     memset(Vertices2, 0, sizeof(VertexBuff2) * totalVertices);
 
     // Update third vertex buffer (initialize with zeros)
@@ -426,6 +517,11 @@ void DynamicMesh::PrepareResources()
     
     // Copy low LOD indices
     memcpy(Indices + indexOffset, m_LowLODIndices.data(), sizeof(Uint32) * m_LowLODIndices.size());
+    indexOffset += m_LowLODIndices.size();
+
+    // Copy non-instanced indices
+    memcpy(Indices + indexOffset, m_NonInstancedIndices.data(), sizeof(Uint32) * m_NonInstancedIndices.size());
+    indexOffset += m_NonInstancedIndices.size();
 
     m_GPUDataInitialized = true;
 }
@@ -452,6 +548,7 @@ void DynamicMesh::InitializeVertexAndIndexData()
     TextureAttributes = m_Model->TextureAttributes;
 }
 
+//#define TEST_LOW_LOD_NON_INSTANCED_TERRAIN 1
 #define TEST_LOW_LOD_TERRAIN 1
 
 #if 0
@@ -460,6 +557,42 @@ void DynamicMesh::InitializeVertexAndIndexData()
 void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 {
     // TODO: Integrate low, mid, and high LOD terrain
+}
+#elif defined(TEST_LOW_LOD_NON_INSTANCED_TERRAIN)
+void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
+{
+    auto& node = Nodes[0];
+    
+    // Clear existing instances
+    node.Instances.clear();
+    
+    // Create a single instance for the non-instanced terrain
+    NodeInstance instance;
+    
+    // Set the transformation matrix to position the terrain
+    // Apply the provided terrain movement to position the terrain in world space
+    instance.NodeMatrix = float4x4::Translation(terrainMovement);
+    
+    // Set texture scaling and offset parameters
+    // These will be used in the shader to properly map textures to the terrain
+    instance.ScaleX = 1.0f / m_TextureSize.x;
+    instance.ScaleY = 1.0f / m_TextureSize.y;
+    instance.OffsetX = 0.0f;
+    instance.OffsetY = 0.0f;
+    
+    // Add the instance to the node
+    node.Instances.push_back(instance);
+    
+    m_Mesh = std::make_shared<SF_GLTF::Mesh>();
+    m_Mesh->Primitives.emplace_back(m_NonInstancedOffsets.indexCount, m_NonInstancedIndices.size(), m_NonInstancedVertices.size() / 4, 0, float3{}, float3{});
+    
+    float totalWidth = TERRAIN_MAX_X * m_TileSize.x;
+    float totalHeight = TERRAIN_MAX_Y * m_TileSize.y;
+    
+    node.pMesh = m_Mesh.get();
+
+    m_Mesh->BB.Min = float3{ -totalWidth, -2.0f, -totalHeight * 3.0f };
+    m_Mesh->BB.Max = float3{ totalWidth * 2.0f, 10.0f, totalHeight * 4.0f };
 }
 #elif defined(TEST_LOW_LOD_TERRAIN)
 void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
