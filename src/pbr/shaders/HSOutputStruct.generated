@@ -1,0 +1,50 @@
+// Hull Shader constant output for patch constants
+struct HSConstantOutput
+{
+    float EdgeTessFactor[3] : SV_TessFactor;
+    float InsideTessFactor  : SV_InsideTessFactor;
+};
+
+// Hull Shader per-control point output
+struct HSOutput
+{
+    float3 WorldPos    : WORLD_POS;
+    float3 Normal      : NORMAL;
+    
+#if USE_VERTEX_COLORS
+    float4 Color       : COLOR;
+#endif
+    
+#if USE_TEXCOORD0
+    float2 UV0         : UV0;
+#endif
+
+#if USE_TEXCOORD1
+    float2 UV1         : UV1;
+#endif
+
+#if USE_VERTEX_TANGENTS
+    float3 Tangent     : TANGENT;
+#endif
+
+#if COMPUTE_MOTION_VECTORS
+    float4 PrevClipPos : PREV_CLIP_POS;
+#endif
+
+#ifdef USE_HEIGHTMAP
+    float Height       : HEIGHT;
+#endif
+
+#if USE_TERRAINING
+    float2 UV2         : UV2;
+    float2 UV3         : UV3;
+#endif
+
+#if PRIMITIVE_ARRAY_SIZE > 0
+    uint PrimitiveID   : PRIMITIVE_ID;
+#endif
+
+#if USE_INSTANCING
+    uint InstanceID    : SV_InstanceID;
+#endif
+}; 

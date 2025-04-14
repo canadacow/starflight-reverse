@@ -1,0 +1,113 @@
+#include "BasicStructures.fxh"
+#include "VertexProcessing.fxh"
+#include "SF_PBR_Structures.fxh"
+#include "SF_RenderPBR_Structures.fxh"
+#include "SF_PBR_Shading.fxh"
+
+#include "VSOutputStruct.generated"
+#include "HSOutputStruct.generated"
+
+// Tessellation parameters
+cbuffer cbTessellationParams : register(b5)
+{
+    float4 TessParams; // x = max tessellation factor, y = min distance, z = max distance, w = tessellation falloff exponent
+}
+
+// Hull shader patch constant function
+HSConstantOutput ConstantHS(InputPatch<VSOutput, 3> patch, uint patchID : SV_PrimitiveID)
+{
+    HSConstantOutput output;
+    
+    // Calculate center of the patch
+    float3 center = (patch[0].WorldPos + patch[1].WorldPos + patch[2].WorldPos) / 3.0;
+    
+    // Calculate distance from camera to patch
+    float3 viewVec = g_Frame.Camera.f4Position.xyz - center;
+    float distanceToCamera = length(viewVec);
+    
+    // Calculate tessellation factor based on distance
+    float tessellationFactor = 1.0;
+    
+    if (distanceToCamera <= TessParams.y)
+    {
+        // Maximum tessellation at close range
+        tessellationFactor = TessParams.x;
+    }
+    else if (distanceToCamera >= TessParams.z)
+    {
+        // Minimum tessellation (1.0) at far range
+        tessellationFactor = 1.0;
+    }
+    else
+    {
+        // Smoothly interpolate between max and min based on distance
+        float t = (distanceToCamera - TessParams.y) / (TessParams.z - TessParams.y);
+        // Apply non-linear falloff using exponent
+        t = pow(t, TessParams.w);
+        tessellationFactor = lerp(TessParams.x, 1.0, t);
+    }
+    
+    // Assign tessellation factors for each edge and inside
+    output.EdgeTessFactor[0] = tessellationFactor;
+    output.EdgeTessFactor[1] = tessellationFactor;
+    output.EdgeTessFactor[2] = tessellationFactor;
+    output.InsideTessFactor = tessellationFactor;
+    
+    return output;
+}
+
+// Hull shader main function
+[domain("tri")]
+[partitioning("fractional_odd")]
+[outputtopology("triangle_cw")]
+[outputcontrolpoints(3)]
+[patchconstantfunc("ConstantHS")]
+HSOutput main(InputPatch<VSOutput, 3> patch, 
+              uint pointID : SV_OutputControlPointID,
+              uint patchID : SV_PrimitiveID)
+{
+    HSOutput output;
+    
+    // Simply pass the vertex data through to domain shader
+    output.WorldPos = patch[pointID].WorldPos;
+    output.Normal = patch[pointID].Normal;
+    
+#if USE_TEXCOORD0
+    output.UV0 = patch[pointID].UV0;
+#endif
+
+#if USE_TEXCOORD1
+    output.UV1 = patch[pointID].UV1;
+#endif
+
+#if USE_VERTEX_TANGENTS
+    output.Tangent = patch[pointID].Tangent;
+#endif
+
+#if USE_VERTEX_COLORS
+    output.Color = patch[pointID].Color;
+#endif
+
+#if COMPUTE_MOTION_VECTORS
+    output.PrevClipPos = patch[pointID].PrevClipPos;
+#endif
+
+#ifdef USE_HEIGHTMAP
+    output.Height = patch[pointID].Height;
+#endif
+
+#if USE_TERRAINING
+    output.UV2 = patch[pointID].UV2;
+    output.UV3 = patch[pointID].UV3;
+#endif
+
+#if PRIMITIVE_ARRAY_SIZE > 0
+    output.PrimitiveID = patch[pointID].PrimitiveID;
+#endif
+
+#if USE_INSTANCING
+    output.InstanceID = patch[pointID].InstanceID;
+#endif
+    
+    return output;
+} 

@@ -1,0 +1,177 @@
+#include "BasicStructures.fxh"
+#include "VertexProcessing.fxh"
+#include "SF_PBR_Structures.fxh"
+#include "SF_RenderPBR_Structures.fxh"
+#include "SF_PBR_Shading.fxh"
+
+#include "VSOutputStruct.generated"
+#include "HSOutputStruct.generated"
+
+#ifdef USE_HEIGHTMAP
+cbuffer cbHeightmapAttribs
+{
+    PBRHeightmapAttribs g_HeightmapAttribs;
+}
+Texture2D g_Heightmap;
+SamplerState g_Heightmap_sampler;
+#endif
+
+#if USE_TERRAINING
+cbuffer cbTerrainAttribs
+{
+    PBRTerrainAttribs g_Terrain;
+}
+Texture2D g_WaterHeightMap;
+SamplerState g_WaterHeightMap_sampler;
+#endif
+
+#if USE_INSTANCING
+StructuredBuffer<PBRInstanceAttribs> instanceBuffer : register(t1);
+#endif
+
+cbuffer cbFrameAttribs 
+{
+    PBRFrameAttribs g_Frame;
+}
+
+cbuffer cbPrimitiveAttribs
+{
+#if PRIMITIVE_ARRAY_SIZE > 0
+    PBRPrimitiveAttribs g_Primitive[PRIMITIVE_ARRAY_SIZE];
+#else
+    PBRPrimitiveAttribs g_Primitive;
+#endif
+}
+
+#if PRIMITIVE_ARRAY_SIZE > 0
+#   define PRIMITIVE g_Primitive[output.PrimitiveID]
+#else
+#   define PRIMITIVE g_Primitive
+#endif
+
+// Domain shader
+[domain("tri")]
+VSOutput main(HSConstantOutput input, 
+              float3 barycentricCoords : SV_DomainLocation,
+              const OutputPatch<HSOutput, 3> patch)
+{
+    VSOutput output;
+    
+    // Interpolate using barycentric coordinates
+    float3 position = patch[0].WorldPos * barycentricCoords.x + 
+                      patch[1].WorldPos * barycentricCoords.y + 
+                      patch[2].WorldPos * barycentricCoords.z;
+                      
+    float3 normal = patch[0].Normal * barycentricCoords.x + 
+                    patch[1].Normal * barycentricCoords.y + 
+                    patch[2].Normal * barycentricCoords.z;
+    normal = normalize(normal);
+    
+#if USE_TEXCOORD0
+    output.UV0 = patch[0].UV0 * barycentricCoords.x + 
+                 patch[1].UV0 * barycentricCoords.y + 
+                 patch[2].UV0 * barycentricCoords.z;
+#endif
+
+#if USE_TEXCOORD1 
+    output.UV1 = patch[0].UV1 * barycentricCoords.x + 
+                 patch[1].UV1 * barycentricCoords.y + 
+                 patch[2].UV1 * barycentricCoords.z;
+#endif
+
+#if USE_VERTEX_TANGENTS
+    output.Tangent = patch[0].Tangent * barycentricCoords.x + 
+                     patch[1].Tangent * barycentricCoords.y + 
+                     patch[2].Tangent * barycentricCoords.z;
+    output.Tangent = normalize(output.Tangent);
+#endif
+
+#if USE_VERTEX_COLORS
+    output.Color = patch[0].Color * barycentricCoords.x + 
+                   patch[1].Color * barycentricCoords.y + 
+                   patch[2].Color * barycentricCoords.z;
+#endif
+
+#if COMPUTE_MOTION_VECTORS
+    output.PrevClipPos = patch[0].PrevClipPos * barycentricCoords.x + 
+                         patch[1].PrevClipPos * barycentricCoords.y + 
+                         patch[2].PrevClipPos * barycentricCoords.z;
+#endif
+
+#if USE_TERRAINING
+    output.UV2 = patch[0].UV2 * barycentricCoords.x + 
+                patch[1].UV2 * barycentricCoords.y + 
+                patch[2].UV2 * barycentricCoords.z;
+                
+    output.UV3 = patch[0].UV3 * barycentricCoords.x + 
+                patch[1].UV3 * barycentricCoords.y + 
+                patch[2].UV3 * barycentricCoords.z;
+#endif
+
+#if PRIMITIVE_ARRAY_SIZE > 0
+    output.PrimitiveID = patch[0].PrimitiveID;
+#endif
+
+#if USE_INSTANCING
+    output.InstanceID = patch[0].InstanceID;
+#endif
+
+    // Apply height map displacement
+#ifdef USE_HEIGHTMAP
+    #if USE_INSTANCING
+        PBRInstanceAttribs instance = instanceBuffer[output.InstanceID];
+        float2 adjustedUV = output.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + 
+                           float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
+    #else
+        float2 adjustedUV = output.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + 
+                           float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
+    #endif
+    
+    #if USE_TERRAINING
+        adjustedUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
+    #endif
+    
+    float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
+    output.Height = height;
+    
+    if(height < g_Terrain.waterHeight)
+    {
+        // Water is always flush with land
+        position.y = g_Terrain.waterHeight;
+        
+        float2 waterUv = float2(frac(adjustedUV.x * 9.0 * 38.0), frac(adjustedUV.y * 9.0 * 14.9));
+        
+        float waterHeight = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, waterUv, 0).r;
+        position.y += waterHeight;
+    }
+    else
+    {
+        position.y = height;
+    }
+    
+    #if USE_TERRAINING
+        // Apply global terrain curvature based on distance from camera
+        float3 cameraPos = g_Frame.Camera.f4Position.xyz;
+        float2 horizontalDelta = float2(position.x - cameraPos.x, position.z - cameraPos.z);
+        float distanceSquared = dot(horizontalDelta, horizontalDelta);
+        
+        // Calculate curvature factor - reduces height as distance increases
+        // The 0.00001 factor controls how strong the curvature effect is
+        float curvatureFactor = distanceSquared * 0.000005;
+        
+        // Apply the curvature by reducing the y-coordinate based on distance
+        position.y -= curvatureFactor;
+    #endif
+#endif
+
+    // Calculate world position
+    output.WorldPos = position;
+    
+    // Calculate clip space position
+    output.ClipPos = mul(float4(position, 1.0), g_Frame.Camera.mViewProj);
+    
+    // Output normal
+    output.Normal = normal;
+    
+    return output;
+} 

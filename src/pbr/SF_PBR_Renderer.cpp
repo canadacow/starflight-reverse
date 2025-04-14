@@ -276,7 +276,8 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
     m_PBRPrimitiveAttribsCB{CI.pPrimitiveAttribsCB},
     m_JointsBuffer{CI.pJointsBuffer},
     m_HeightmapAttribsCB{CI.pHeightmapAttribsCB},
-    m_TerrainAttribsCB{CI.pTerrainAttribsCB}
+    m_TerrainAttribsCB{CI.pTerrainAttribsCB},
+    m_TessellationParamsCB{CI.pTessellationParamsCB}
 {
     if (m_Settings.EnableIBL)
     {
@@ -457,6 +458,12 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         {
             CreateUniformBuffer(pDevice, sizeof(HLSL::PBRTerrainAttribs), "PBR terrain attribs CB", &m_TerrainAttribsCB);
         }
+        
+        if (!m_TessellationParamsCB)
+        {
+            CreateUniformBuffer(pDevice, sizeof(HLSL::PBRTessellationParams), "PBR tessellation params CB", &m_TessellationParamsCB);
+        }
+
         if (!m_InstanceAttribsSB)
         {
             BufferDesc SBDesc;
@@ -491,6 +498,8 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         Barriers.emplace_back(m_TerrainAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         if (m_JointsBuffer)
             Barriers.emplace_back(m_JointsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
+        if (m_TessellationParamsCB)
+            Barriers.emplace_back(m_TessellationParamsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE);
         pCtx->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());
     }
 
@@ -947,6 +956,12 @@ void SF_PBR_Renderer::InitCommonSRBVars(IShaderResourceBinding* pSRB,
     {
         if (auto* pTerrainAttribsVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs"))
             pTerrainAttribsVar->Set(m_TerrainAttribsCB);
+    }
+
+    if(m_TessellationParamsCB != nullptr)
+    {
+        if (auto* pTessellationParamsVar = pSRB->GetVariableByName(SHADER_TYPE_HULL, "cbTessellationParams"))
+            pTessellationParamsVar->Set(m_TessellationParamsCB);
     }
 
     if(m_pNoiseTextureSRV != nullptr)

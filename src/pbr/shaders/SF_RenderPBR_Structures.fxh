@@ -64,6 +64,17 @@ struct PBRInstanceAttribs
 	CHECK_STRUCT_ALIGNMENT(PBRInstanceAttribs);
 #endif
 
+struct PBRTessellationParams
+{
+    float MaxTessellationFactor;  // Maximum tessellation factor
+    float MinDistance;            // Distance at which maximum tessellation is applied
+    float MaxDistance;            // Distance at which minimum tessellation is applied
+    float FalloffExponent;        // Controls the rate of tessellation falloff with distance
+};
+#ifdef CHECK_STRUCT_ALIGNMENT
+    CHECK_STRUCT_ALIGNMENT(PBRTessellationParams);
+#endif
+
 struct PBRTerrainAttribs
 {
     float startBiomHeight;

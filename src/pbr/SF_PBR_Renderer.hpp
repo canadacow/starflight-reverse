@@ -347,6 +347,10 @@ public:
         /// If null, the renderer will allocate the buffer.
         IBuffer* pTerrainAttribsCB = nullptr;
 
+        /// A pointer to the user-provided tessellation parameters buffer.
+        /// If null, the renderer will allocate the buffer.
+        IBuffer* pTessellationParamsCB = nullptr;
+
         /// Texture attribute index info
         std::array<int, TEXTURE_ATTRIB_ID_COUNT> TextureAttribIndices{};
 
@@ -767,6 +771,18 @@ public:
         return GetTerrainAttribsSizeStatic();
     }
 
+    /// Returns the PBR Tessellation parameters shader data size.
+    static constexpr Uint32 GetTessellationParamsSizeStatic()
+    {
+        return sizeof(HLSL::PBRTessellationParams);
+    }
+
+    /// Returns the PBR Tessellation parameters shader data size.
+    Uint32 GetTessellationParamsSize() const
+    {
+        return GetTessellationParamsSizeStatic();
+    }
+
     const CreateInfo& GetSettings() const { return m_Settings; }
 
     inline static constexpr PSO_FLAGS GetTextureAttribPSOFlag(TEXTURE_ATTRIB_ID AttribId);
@@ -900,6 +916,7 @@ protected:
     RefCntAutoPtr<IBufferView> m_InstanceAttribsSBView;
     RefCntAutoPtr<IBuffer> m_PrecomputeEnvMapAttribsCB;
     RefCntAutoPtr<IBuffer> m_JointsBuffer;
+    RefCntAutoPtr<IBuffer> m_TessellationParamsCB;
 
     std::unordered_set<std::string> m_GeneratedIncludes;
 
