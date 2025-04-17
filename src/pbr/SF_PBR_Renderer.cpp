@@ -1046,11 +1046,12 @@ void SF_PBR_Renderer::CreateSignature()
         SignatureDesc.AddImmutableSampler(SHADER_TYPE_PIXEL, "g_LinearClampSampler", Sam_LinearClamp);
         Samplers.emplace("g_LinearClampSampler");
 
-        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_Heightmap_sampler", Sam_LinearMirror);
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "g_Heightmap_sampler", Sam_LinearMirror);
         //SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_Heightmap_sampler", Sam_PointWrap);
         Samplers.emplace("g_Heightmap_sampler");
 
-        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_WaterHeightMap_sampler", Sam_LinearMirror);
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "g_WaterHeightMap_sampler", Sam_LinearMirror);
+        Samplers.emplace("g_WaterHeightMap_sampler");
     }
 
     auto& MaterialTexturesArraySize = m_Settings.MaterialTexturesArraySize;
