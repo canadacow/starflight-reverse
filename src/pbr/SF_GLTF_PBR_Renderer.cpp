@@ -131,6 +131,7 @@ SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
         m_PbrPSOCache = GetPsoCacheAccessor(GraphicsDesc);
 
         GraphicsPipelineDesc TerrainGraphicsDesc = GraphicsDesc;
+        TerrainGraphicsDesc.PrimitiveTopology = PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
         TerrainGraphicsDesc.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
         for(int i = 0; i < CI.NumRenderTargets; i++)
         {
@@ -769,6 +770,12 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     {
                         TerrainAttribs->convertEgaColors[i] = float4(RenderParams.EgaColors[i], 1.0);
                     }
+
+                    MapHelper<HLSL::PBRTessellationParams> TessParams(pCtx, m_TessellationParamsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+                    TessParams->MaxTessellationFactor = 32.0f;
+                    TessParams->MinDistance = 50.0f;
+                    TessParams->MaxDistance = 500.0f;
+                    TessParams->FalloffExponent = 2.0f;
                 }
 
                 if(Node.Instances.size() > 0)

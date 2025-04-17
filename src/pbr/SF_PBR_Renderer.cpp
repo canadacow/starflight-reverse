@@ -461,7 +461,14 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
         
         if (!m_TessellationParamsCB)
         {
-            CreateUniformBuffer(pDevice, sizeof(HLSL::PBRTessellationParams), "PBR tessellation params CB", &m_TessellationParamsCB);
+            BufferDesc TessParamsBufferDesc;
+            TessParamsBufferDesc.Name = "Tessellation Parameters CB";
+            TessParamsBufferDesc.Size = sizeof(HLSL::PBRTessellationParams);
+            TessParamsBufferDesc.Usage = USAGE_DYNAMIC;
+            TessParamsBufferDesc.BindFlags = BIND_UNIFORM_BUFFER;
+            TessParamsBufferDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
+
+            pDevice->CreateBuffer(TessParamsBufferDesc, nullptr, &m_TessellationParamsCB);
         }
 
         if (!m_InstanceAttribsSB)
@@ -1021,13 +1028,14 @@ void SF_PBR_Renderer::CreateSignature()
     PipelineResourceSignatureDescX SignatureDesc{"PBR Renderer Resource Signature"};
     SignatureDesc
         .SetUseCombinedTextureSamplers(m_Device.GetDeviceInfo().IsGLDevice())
-        .AddResource(SHADER_TYPE_VS_PS, "cbFrameAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddResource(SHADER_TYPE_ALL, "cbFrameAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "cbPrimitiveAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "cbHeightmapAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "g_Heightmap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "instanceBuffer", SHADER_RESOURCE_TYPE_BUFFER_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS, "cbTerrainAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddResource(SHADER_TYPE_VS_PS, "g_WaterHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+        .AddResource(SHADER_TYPE_VS_PS, "g_WaterHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddResource(SHADER_TYPE_HULL, "cbTessellationParams", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
 
     if (m_Settings.MaxJointCount > 0)
         SignatureDesc.AddResource(SHADER_TYPE_VERTEX, "cbJointTransforms", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
@@ -1222,6 +1230,7 @@ void SF_PBR_Renderer::CreateCustomSignature(PipelineResourceSignatureDescX&& Sig
     {
         ResourceSignature->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_SheenAlbedoScalingLUT")->Set(m_pSheenAlbedoScaling_LUT_SRV);
     }
+   
     m_ResourceSignatures = {std::move(ResourceSignature)};
 }
 
@@ -1865,6 +1874,46 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
         pPS = m_Device.CreateShader(ShaderCI);
     }
 
+    RefCntAutoPtr<IShader>& pTessellationShader = m_TessellationShaders[{
+        PSOFlags,
+        Key,
+    }];
+
+    if (!pTessellationShader)
+    {
+        ShaderCreateInfo ShaderCI{
+            "SF_RenderPBR_Terrain.hsh",
+            pShaderSourceFactory,
+            "main",
+            Macros,
+            SHADER_SOURCE_LANGUAGE_HLSL,
+            {"PBR Terrain HS", SHADER_TYPE_HULL, UseCombinedSamplers},
+        };
+        ShaderCI.CompileFlags = ShaderCompileFlags;
+
+        pTessellationShader = m_Device.CreateShader(ShaderCI);
+    }
+
+    RefCntAutoPtr<IShader>& pDomainShader = m_DomainShaders[{
+        PSOFlags,
+        Key,
+    }];
+
+    if (!pDomainShader)
+    {
+        ShaderCreateInfo ShaderCI{
+            "SF_RenderPBR_Terrain.dsh",
+            pShaderSourceFactory,
+            "main",
+            Macros,
+            SHADER_SOURCE_LANGUAGE_HLSL,
+            {"PBR Terrain DS", SHADER_TYPE_DOMAIN, UseCombinedSamplers},
+        };
+        ShaderCI.CompileFlags = ShaderCompileFlags;
+
+        pDomainShader = m_Device.CreateShader(ShaderCI);
+    }
+
     GraphicsPipeline             = GraphicsDesc;
     GraphicsPipeline.InputLayout = InputLayout;
 
@@ -1876,6 +1925,13 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
 
     PSOCreateInfo.pVS = pVS;
     PSOCreateInfo.pPS = pPS;
+
+    // If tessellation is enabled, add the hull and domain shaders to the pipeline
+    if (Key.GetFlags() & PSO_FLAG_USE_TERRAINING)
+    {
+        PSOCreateInfo.pHS = pTessellationShader;
+        PSOCreateInfo.pDS = pDomainShader;
+    }
 
     const ALPHA_MODE AlphaMode = Key.GetAlphaMode();
 
@@ -1930,6 +1986,16 @@ void SF_PBR_Renderer::CreatePSO(PsoHashMapType&             PsoHashMap,
 void SF_PBR_Renderer::CreateResourceBinding(IShaderResourceBinding** ppSRB, Uint32 Idx) const
 {
     m_ResourceSignatures[Idx]->CreateShaderResourceBinding(ppSRB, true);
+    
+    // Bind tessellation parameters buffer if it exists
+    if (m_pTessellationParamsBuffer)
+    {
+        auto* pVar = (*ppSRB)->GetVariableByName(SHADER_TYPE_HULL, "cbTessellationParams");
+        if (pVar)
+        {
+            pVar->Set(m_pTessellationParamsBuffer);
+        }
+    }
 }
 
 SF_PBR_Renderer::PsoCacheAccessor SF_PBR_Renderer::GetPsoCacheAccessor(const GraphicsPipelineDesc& GraphicsDesc)

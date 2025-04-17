@@ -3827,6 +3827,7 @@ static int GraphicsInitThread()
 #endif
 
     EngineVkCreateInfo EngineCI;
+    EngineCI.Features = DeviceFeatures{DEVICE_FEATURE_STATE_OPTIONAL};
     EngineCI.DynamicHeapSize = 8 << 24;
     EngineCI.DeviceExtensionCount = 4;
     const char* deviceExtensions[] = { 

@@ -791,6 +791,9 @@ public:
     template <typename HandlerType>
     inline static void ProcessTexturAttribs(PSO_FLAGS PSOFlags, HandlerType&& Handler);
 
+    // Set tessellation parameters
+    void SetTessellationParams(IDeviceContext* pCtx, float maxFactor, float minDistance, float maxDistance, float falloffExponent);
+
 protected:
     ShaderMacroHelper DefineMacros(const PSOKey& Key) const;
 
@@ -918,12 +921,16 @@ protected:
     RefCntAutoPtr<IBuffer> m_JointsBuffer;
     RefCntAutoPtr<IBuffer> m_TessellationParamsCB;
 
+    RefCntAutoPtr<IBuffer> m_pTessellationParamsBuffer;
+
     std::unordered_set<std::string> m_GeneratedIncludes;
 
     std::vector<RefCntAutoPtr<IPipelineResourceSignature>> m_ResourceSignatures;
 
     std::unordered_map<PSOKey, RefCntAutoPtr<IShader>, PSOKey::Hasher> m_VertexShaders;
     std::unordered_map<PSOKey, RefCntAutoPtr<IShader>, PSOKey::Hasher> m_PixelShaders;
+    std::unordered_map<PSOKey, RefCntAutoPtr<IShader>, PSOKey::Hasher> m_TessellationShaders;
+    std::unordered_map<PSOKey, RefCntAutoPtr<IShader>, PSOKey::Hasher> m_DomainShaders;
 
     std::unordered_map<GraphicsPipelineDesc, PsoHashMapType> m_PSOs;
 

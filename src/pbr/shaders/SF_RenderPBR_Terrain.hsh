@@ -13,6 +13,12 @@ cbuffer cbTessellationParams : register(b5)
     float4 TessParams; // x = max tessellation factor, y = min distance, z = max distance, w = tessellation falloff exponent
 }
 
+// Frame parameters
+cbuffer cbFrameAttribs : register(b0)
+{
+    PBRFrameAttribs g_Frame;
+}
+
 // Hull shader patch constant function
 HSConstantOutput ConstantHS(InputPatch<VSOutput, 3> patch, uint patchID : SV_PrimitiveID)
 {
