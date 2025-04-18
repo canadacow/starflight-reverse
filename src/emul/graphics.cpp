@@ -266,11 +266,11 @@ struct ApplyPosteffects
     operator bool() const { return pPSO != nullptr; }
 };
 
-RefCntAutoPtr<IShaderSourceInputStreamFactory> SFCreateCompoundShaderSourceFactory(IRenderDevice* pDevice)
+RefCntAutoPtr<IShaderSourceInputStreamFactory> SFCreateCompoundShaderSourceFactory(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pMemorySourceFactory)
 {
     RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
     pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("shaders", &pShaderSourceFactory);
-    return CreateCompoundShaderSourceFactory({&GraphicsRendererShaderSourceStreamFactory::GetInstance(), &DiligentFXShaderSourceStreamFactory::GetInstance(), pShaderSourceFactory });
+    return CreateCompoundShaderSourceFactory({&GraphicsRendererShaderSourceStreamFactory::GetInstance(), &DiligentFXShaderSourceStreamFactory::GetInstance(), pShaderSourceFactory, pMemorySourceFactory});
 }
 
 void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVFormat, IBuffer* pFrameAttribsCB)
@@ -278,7 +278,9 @@ void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVForm
     ShaderCreateInfo ShaderCI;
     ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 
-    auto pCompoundSourceFactory         = SFCreateCompoundShaderSourceFactory(pDevice);
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> pMemorySourceFactory = CreateMemoryShaderSourceFactory({});      
+
+    auto pCompoundSourceFactory         = SFCreateCompoundShaderSourceFactory(pDevice, pMemorySourceFactory);
     ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
 
     ShaderMacroHelper Macros;
@@ -557,9 +559,10 @@ struct GraphicsContext
     RefCntAutoPtr<IBuffer> terrainAttribsCB;
     RefCntAutoPtr<IBuffer> jointsBuffer;
     RefCntAutoPtr<IBuffer> instanceAttribsSB;
-    RefCntAutoPtr<IBufferView> instanceAttribsSBView;    
+    RefCntAutoPtr<IBufferView> instanceAttribsSBView;
     RefCntAutoPtr<IBuffer> dummyVertexBuffer;
     RefCntAutoPtr<IBuffer> heightmapAttribsCB;
+    RefCntAutoPtr<IBuffer> tesselationParamsCB;
     RefCntAutoPtr<ITexture> heightmap;
     RefCntAutoPtr<ITextureView> heightmapView;
 
@@ -942,6 +945,13 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 TerrainAttribs->textureOffsetX = s_gc.terrainTextureOffset.x;
                 TerrainAttribs->textureOffsetY = s_gc.terrainTextureOffset.y;
                 TerrainAttribs->waterHeight = s_gc.waterHeight;
+
+
+                MapHelper<HLSL::PBRTessellationParams> TessParams(s_gc.m_pImmediateContext, s_gc.tesselationParamsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+                TessParams->MaxTessellationFactor = 64.0f;
+                TessParams->MinDistance = 50.0f;
+                TessParams->MaxDistance = 1250.0f;
+                TessParams->FalloffExponent = 2.0f;
             }
             
             // Iterate through each primitive in the mesh
@@ -1030,6 +1040,15 @@ void ShadowMap::Initialize()
             ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearMirror);
             //ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_PointWrap);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddImmutableSampler(SHADER_TYPE_DOMAIN, "g_Heightmap", Sam_LinearMirror);
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbTessellationParams", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
         }
         else if (shaderInit == 2)
         {
@@ -1056,7 +1075,19 @@ void ShadowMap::Initialize()
         PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
         // clang-format on
 
-        auto pCompoundSourceFactory = SFCreateCompoundShaderSourceFactory(s_gc.m_pDevice);
+        std::string VSOutputStruct = "struct VSOutput {\n"
+                                     "    float4 PositionPS : SV_Position;\n"
+                                     "    float3 PosInLightViewSpace : LIGHT_SPACE_POS;\n"
+                                     "    float3 NormalWS : NORMALWS;\n"
+                                     "    float2 TexCoord : TEXCOORD;\n"
+                                     "};\n";
+
+        RefCntAutoPtr<IShaderSourceInputStreamFactory> pMemorySourceFactory =
+            CreateMemoryShaderSourceFactory({
+                                            MemoryShaderSourceFileInfo{"VSOutputStruct.generated", VSOutputStruct},
+                                        });        
+
+        auto pCompoundSourceFactory = SFCreateCompoundShaderSourceFactory(s_gc.m_pDevice, pMemorySourceFactory);
 
         ShaderCreateInfo ShaderCI;
         ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
@@ -1088,6 +1119,41 @@ void ShadowMap::Initialize()
             s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowVS);
         }
         PSOCreateInfo.pVS = pShadowVS;
+
+        RefCntAutoPtr<IShader> pShadowHS;
+        RefCntAutoPtr<IShader> pShadowDS;
+
+        if (shaderInit == 1) // Terrain with tessellation
+        {
+            // Create hull shader
+            {
+                ShaderCI.Desc.ShaderType = SHADER_TYPE_HULL;
+                ShaderCI.EntryPoint = "main";
+                ShaderCI.Desc.Name = "Shadow Terrain HS";
+                ShaderCI.FilePath = "SF_RenderPBR_Terrain.hsh";
+                ShaderCI.Macros = Macros;
+                ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
+                s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowHS);
+            }
+            
+            // Create domain shader
+            {
+                ShaderCI.Desc.ShaderType = SHADER_TYPE_DOMAIN;
+                ShaderCI.EntryPoint = "main";
+                ShaderCI.Desc.Name = "Shadow Terrain DS";
+                ShaderCI.FilePath = "SF_RenderPBR_Terrain.dsh";
+                ShaderCI.Macros = Macros;
+                ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
+                s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowDS);
+            }
+            
+            // Set hull and domain shaders for the pipeline
+            PSOCreateInfo.pHS = pShadowHS;
+            PSOCreateInfo.pDS = pShadowDS;
+            
+            // Change primitive topology for tessellation
+            PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        }        
 
         // clang-format off
         // Define vertex shader input layout
@@ -1142,6 +1208,16 @@ void ShadowMap::Initialize()
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
+
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap")->Set(s_gc.heightmapView);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
+            
+            // Set tessellation parameters for hull shader
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams")->Set(s_gc.tesselationParamsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
         }
         else if (shaderInit == 2)
         {
@@ -1160,6 +1236,7 @@ void ShadowMap::Initialize()
             {s_gc.heightmapAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.instanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.terrainAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.tesselationParamsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
@@ -6727,6 +6804,8 @@ void InitializeCommonResources()
     CreateUniformBuffer(s_gc.m_pDevice, SF_GLTF_PBR_Renderer::GetPBRPrimitiveAttribsSizeStatic(RendererCI, SF_PBR_Renderer::PSO_FLAG_ALL, 0), "cbPrimitiveAttribs", &s_gc.PBRPrimitiveAttribsCB);
     const size_t JointsBufferSize = sizeof(float4x4) * /* m_Settings.MaxJointCount */ 64 * 2;
     CreateUniformBuffer(s_gc.m_pDevice, JointsBufferSize, "cbJointTransforms", &s_gc.jointsBuffer);
+
+    CreateUniformBuffer(s_gc.m_pDevice, sizeof(HLSL::PBRTessellationParams), "cbTesselationParams", &s_gc.tesselationParamsCB);
 
     BufferDesc VertBuffDesc;
     VertBuffDesc.Name = "Dummy vertex buffer";
