@@ -144,6 +144,8 @@ SF_GLTF_PBR_Renderer::SF_GLTF_PBR_Renderer(IRenderDevice*     pDevice,
             TerrainGraphicsDesc.BlendDesc.RenderTargets[i].BlendOpAlpha   = BLEND_OPERATION_ADD;
         }
 
+        //TerrainGraphicsDesc.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
+
         m_TerrainPSOCache = GetPsoCacheAccessor(TerrainGraphicsDesc);
 
         GraphicsDesc.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
@@ -772,9 +774,9 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     }
 
                     MapHelper<HLSL::PBRTessellationParams> TessParams(pCtx, m_TessellationParamsCB, MAP_WRITE, MAP_FLAG_DISCARD);
-                    TessParams->MaxTessellationFactor = 32.0f;
+                    TessParams->MaxTessellationFactor = 64.0f;
                     TessParams->MinDistance = 50.0f;
-                    TessParams->MaxDistance = 500.0f;
+                    TessParams->MaxDistance = 1250.0f;
                     TessParams->FalloffExponent = 2.0f;
                 }
 
