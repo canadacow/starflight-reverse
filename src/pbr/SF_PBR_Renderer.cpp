@@ -1034,7 +1034,7 @@ void SF_PBR_Renderer::CreateSignature()
         .AddResource(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "g_Heightmap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "instanceBuffer", SHADER_RESOURCE_TYPE_BUFFER_SRV, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddResource(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddResource(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "g_WaterHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddResource(SHADER_TYPE_VS_PS, "g_WaterHeightMap", SHADER_RESOURCE_TYPE_TEXTURE_SRV, SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddResource(SHADER_TYPE_HULL, "cbTessellationParams", SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
 
     if (m_Settings.MaxJointCount > 0)
@@ -1050,7 +1050,7 @@ void SF_PBR_Renderer::CreateSignature()
         //SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_Heightmap_sampler", Sam_PointWrap);
         Samplers.emplace("g_Heightmap_sampler");
 
-        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS | SHADER_TYPE_DOMAIN, "g_WaterHeightMap_sampler", Sam_LinearMirror);
+        SignatureDesc.AddImmutableSampler(SHADER_TYPE_VS_PS, "g_WaterHeightMap_sampler", Sam_LinearMirror);
         Samplers.emplace("g_WaterHeightMap_sampler");
     }
 

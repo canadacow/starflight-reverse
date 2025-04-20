@@ -17,13 +17,19 @@ cbuffer cbLightAttribs
     LightAttribs g_LightAttribs;
 }
 
-
 struct VSOutput
 {
-    float4 PositionPS 	        : SV_Position;
+    float4 ClipPos              : SV_Position;
     float3 PosInLightViewSpace 	: LIGHT_SPACE_POS;
     float3 NormalWS 	        : NORMALWS;
-    float2 TexCoord 	        : TEXCOORD;
+    float3 WorldPos 	        : WORLDPOS;
+    float3 Normal 	            : NORMAL;
+    float2 UV0                  : TEXCOORD0;
+    float2 UV1                  : TEXCOORD1;
+    float2 UV2                  : TEXCOORD2;
+    float2 UV3                  : TEXCOORD3;
+    uint InstanceID             : SV_InstanceID;
+    float Height                : HEIGHT;
 };
 
 float4 MeshPS(VSOutput VSOut) : SV_TARGET
@@ -31,12 +37,12 @@ float4 MeshPS(VSOutput VSOut) : SV_TARGET
     // Normalize after interpolation
     float3 normalWS = normalize(VSOut.NormalWS);
 
-    float3 diffuseAlbedo = g_tex2DDiffuse.Sample(g_tex2DDiffuse_sampler, VSOut.TexCoord).rgb;
+    float3 diffuseAlbedo = g_tex2DDiffuse.Sample(g_tex2DDiffuse_sampler, VSOut.UV0).rgb;
 
     float nDotL = saturate(dot(normalWS, -g_LightAttribs.f4Direction.xyz));
 
     FilteredShadow Shadow;
-    float CameraSpaceZ = VSOut.PositionPS.w;
+    float CameraSpaceZ = VSOut.ClipPos.w;
 #   if SHADOW_MODE == SHADOW_MODE_PCF
         Shadow = FilterShadowMap(g_LightAttribs.ShadowAttribs, g_tex2DShadowMap, g_tex2DShadowMap_sampler,
                                  VSOut.PosInLightViewSpace, ddx(VSOut.PosInLightViewSpace), ddy(VSOut.PosInLightViewSpace),

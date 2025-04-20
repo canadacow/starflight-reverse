@@ -56,10 +56,17 @@ struct VSInput
 
 struct VSOutput
 {
-    float4 PositionPS 	        : SV_Position;
+    float4 ClipPos              : SV_Position;
     float3 PosInLightViewSpace 	: LIGHT_SPACE_POS;
     float3 NormalWS 	        : NORMALWS;
-    float2 TexCoord 	        : TEXCOORD;
+    float3 WorldPos 	        : WORLDPOS;
+    float3 Normal 	            : NORMAL;
+    float2 UV0                  : TEXCOORD0;
+    float2 UV1                  : TEXCOORD1;
+    float2 UV2                  : TEXCOORD2;
+    float2 UV3                  : TEXCOORD3;
+    uint InstanceID             : SV_InstanceID;
+    float Height                : HEIGHT;
 };
 
 void MeshVS(in  VSInput  VSIn,
@@ -67,7 +74,11 @@ void MeshVS(in  VSInput  VSIn,
 {
     VSOut.PosInLightViewSpace = float3(0.0, 0.0, 0.0);
     VSOut.NormalWS     = VSIn.Normal;
-    VSOut.TexCoord     = VSIn.UV0;
+    VSOut.UV0          = VSIn.UV0;
+    VSOut.UV1          = VSIn.UV0;
+    VSOut.UV2          = VSIn.UV0;
+    VSOut.UV3          = VSIn.UV0;
+    VSOut.InstanceID   = VSIn.InstanceID;
 
     float3 Normal = float3(0.0, 0.0, 1.0);
 
@@ -130,8 +141,12 @@ void MeshVS(in  VSInput  VSIn,
         // Apply the curvature by reducing the y-coordinate based on distance
         adjustedPos.y -= curvatureFactor;
     #endif
+
+    VSOut.Height = height;
 #endif // USE_HEIGHTMAP
 
     GLTF_TransformedVertex TransformedVert = GLTF_TransformVertex(adjustedPos, Normal, Transform);    
-    VSOut.PositionPS = mul(float4(TransformedVert.WorldPos, 1.0), g_CameraAttribs.mViewProj);
+    VSOut.ClipPos = mul(float4(TransformedVert.WorldPos, 1.0), g_CameraAttribs.mViewProj);
+    VSOut.WorldPos = TransformedVert.WorldPos;
+    VSOut.Normal = TransformedVert.Normal;
 };

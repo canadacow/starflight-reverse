@@ -1019,6 +1019,49 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
     s_gc.m_pImmediateContext->Flush();
 }
 
+void PrintStaticVariables(Diligent::IPipelineState* pPipelineState)
+{
+    using namespace Diligent;
+
+    // Define the shader stages you want to check
+    SHADER_TYPE shaderStages[] = {
+        SHADER_TYPE_VERTEX,
+        SHADER_TYPE_PIXEL,
+        SHADER_TYPE_GEOMETRY,
+        SHADER_TYPE_HULL,
+        SHADER_TYPE_DOMAIN,
+        SHADER_TYPE_COMPUTE,
+        SHADER_TYPE_RAY_GEN,
+        SHADER_TYPE_TILE
+    };
+
+    for (auto shaderStage : shaderStages)
+    {
+        // Get the number of static variables for the current shader stage
+        Uint32 varCount = pPipelineState->GetStaticVariableCount(shaderStage);
+        fprintf(stdout, "Shader Stage: %s\n", GetShaderTypeLiteralName(shaderStage));
+        fprintf(stdout, "Static Variable Count: %u\n", varCount);
+
+        for (Uint32 i = 0; i < varCount; ++i)
+        {
+            // Get the static variable by index
+            IShaderResourceVariable* pVar = pPipelineState->GetStaticVariableByIndex(shaderStage, i);
+            if (pVar)
+            {
+                // Retrieve the resource description
+                ShaderResourceDesc varDesc;
+                pVar->GetResourceDesc(varDesc);
+
+                // Print the variable details
+                fprintf(stdout, "  Variable Name: %s\n", varDesc.Name);
+                fprintf(stdout, "  Type: %s\n", GetShaderResourceTypeLiteralName(varDesc.Type));
+                fprintf(stdout, "  Array Size: %u\n", varDesc.ArraySize);
+            }
+        }
+    }
+    fflush(stdout);
+}
+
 void ShadowMap::Initialize()
 {
     for (int shaderInit = 0; shaderInit < 3; ++shaderInit)
@@ -1041,14 +1084,14 @@ void ShadowMap::Initialize()
             //ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_PointWrap);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
 
-            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
-            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbPrimitiveAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "g_Heightmap", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddImmutableSampler(SHADER_TYPE_DOMAIN, "g_Heightmap", Sam_LinearMirror);
-            ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+
             ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbTessellationParams", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
-            ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbCameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
         }
         else if (shaderInit == 2)
         {
@@ -1076,10 +1119,17 @@ void ShadowMap::Initialize()
         // clang-format on
 
         std::string VSOutputStruct = "struct VSOutput {\n"
-                                     "    float4 PositionPS : SV_Position;\n"
+                                     "    float4 ClipPos : SV_Position;\n"
                                      "    float3 PosInLightViewSpace : LIGHT_SPACE_POS;\n"
                                      "    float3 NormalWS : NORMALWS;\n"
-                                     "    float2 TexCoord : TEXCOORD;\n"
+                                     "    float3 WorldPos : WORLDPOS;\n"
+                                     "    float3 Normal : NORMAL;\n"
+                                     "    float2 UV0 : TEXCOORD0;\n"
+                                     "    float2 UV1 : TEXCOORD1;\n"
+                                     "    float2 UV2 : TEXCOORD2;\n"
+                                     "    float2 UV3 : TEXCOORD3;\n"
+                                     "    uint InstanceID : SV_InstanceID;\n"
+                                     "    float Height : HEIGHT;\n"
                                      "};\n";
 
         RefCntAutoPtr<IShaderSourceInputStreamFactory> pMemorySourceFactory =
@@ -1152,7 +1202,7 @@ void ShadowMap::Initialize()
             PSOCreateInfo.pDS = pShadowDS;
             
             // Change primitive topology for tessellation
-            PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
         }        
 
         // clang-format off
@@ -1205,19 +1255,19 @@ void ShadowMap::Initialize()
         pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbJointTransforms")->Set(s_gc.jointsBuffer);
         if(shaderInit == 1)     
         {
+            PrintStaticVariables(pRenderMeshShadowPSO);
+
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
 
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbPrimitiveAttribs")->Set(s_gc.PBRPrimitiveAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap")->Set(s_gc.heightmapView);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
             
-            // Set tessellation parameters for hull shader
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams")->Set(s_gc.tesselationParamsCB);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbCameraAttribs")->Set(s_gc.cameraAttribsCB);
         }
         else if (shaderInit == 2)
         {
@@ -1237,6 +1287,7 @@ void ShadowMap::Initialize()
             {s_gc.instanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.terrainAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.tesselationParamsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 

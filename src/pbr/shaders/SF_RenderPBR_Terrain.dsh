@@ -21,8 +21,6 @@ cbuffer cbTerrainAttribs
 {
     PBRTerrainAttribs g_Terrain;
 }
-Texture2D g_WaterHeightMap;
-SamplerState g_WaterHeightMap_sampler;
 #endif
 
 #if USE_INSTANCING
@@ -137,12 +135,7 @@ VSOutput main(HSConstantOutput input,
     if(height < g_Terrain.waterHeight)
     {
         // Water is always flush with land
-        position.y = g_Terrain.waterHeight;
-        
-        float2 waterUv = float2(frac(adjustedUV.x * 9.0 * 38.0), frac(adjustedUV.y * 9.0 * 14.9));
-        
-        float waterHeight = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, waterUv, 0).r;
-        position.y += waterHeight;
+        position.y = g_Terrain.waterHeight;    
     }
     else
     {
