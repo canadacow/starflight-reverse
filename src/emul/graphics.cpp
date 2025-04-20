@@ -946,12 +946,18 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 TerrainAttribs->textureOffsetY = s_gc.terrainTextureOffset.y;
                 TerrainAttribs->waterHeight = s_gc.waterHeight;
 
-
                 MapHelper<HLSL::PBRTessellationParams> TessParams(s_gc.m_pImmediateContext, s_gc.tesselationParamsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+                #if 0
                 TessParams->MaxTessellationFactor = 64.0f;
                 TessParams->MinDistance = 50.0f;
                 TessParams->MaxDistance = 1250.0f;
                 TessParams->FalloffExponent = 2.0f;
+                #else
+                TessParams->MaxTessellationFactor = 1.0f;
+                TessParams->MinDistance = 0.0f;
+                TessParams->MaxDistance = 0.0f;
+                TessParams->FalloffExponent = 1.0f;
+                #endif
             }
             
             // Iterate through each primitive in the mesh
@@ -1083,6 +1089,7 @@ void ShadowMap::Initialize()
             ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_LinearMirror);
             //ResourceLayout.AddImmutableSampler(SHADER_TYPE_VERTEX, "g_Heightmap", Sam_PointWrap);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
 
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
@@ -1260,6 +1267,7 @@ void ShadowMap::Initialize()
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);            
 
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);

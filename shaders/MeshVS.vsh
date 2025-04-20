@@ -4,6 +4,11 @@
 #include "VertexProcessing.fxh"
 #include "SF_RenderPBR_Structures.fxh"
 
+cbuffer cbFrameAttribs
+{
+    PBRFrameAttribs g_Frame;
+}
+
 cbuffer cbCameraAttribs
 {
     CameraAttribs g_CameraAttribs;
@@ -130,7 +135,7 @@ void MeshVS(in  VSInput  VSIn,
 
     #if USE_TERRAINING
         // Apply global terrain curvature based on distance from camera
-        float3 cameraPos = g_CameraAttribs.f4Position.xyz;
+        float3 cameraPos = g_Frame.Camera.f4Position.xyz;
         float2 horizontalDelta = float2(adjustedPos.x - cameraPos.x, adjustedPos.z - cameraPos.z);
         float distanceSquared = dot(horizontalDelta, horizontalDelta);
         
