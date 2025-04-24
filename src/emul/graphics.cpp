@@ -555,6 +555,7 @@ struct GraphicsContext
     ApplyPosteffects applyPostFX;
     RefCntAutoPtr<IBuffer> frameAttribsCB;
     RefCntAutoPtr<IBuffer> cameraAttribsCB;
+    RefCntAutoPtr<IBuffer> shadowFrameAttribsCB;
     RefCntAutoPtr<IBuffer> PBRPrimitiveAttribsCB;
     RefCntAutoPtr<IBuffer> terrainAttribsCB;
     RefCntAutoPtr<IBuffer> jointsBuffer;
@@ -706,10 +707,11 @@ struct ShadowMap
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const SF_GLTF::Model& GLTFModel,
                 const SF_GLTF::ModelTransforms& Transforms,
+                const HLSL::PBRFrameAttribs& frameAttribs,
                 const HLSL::CameraAttribs& cameraAttribs,
                 const SF_GLTF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model);
+    void RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model);
 
     ITextureView* GetShadowMap()
     {
@@ -878,6 +880,7 @@ void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>
 void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                          const SF_GLTF::Model& GLTFModel,
                          const SF_GLTF::ModelTransforms& Transforms,
+                         const HLSL::PBRFrameAttribs& frameAttribs,
                          const HLSL::CameraAttribs& cameraAttribs,
                          const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams)
 {
@@ -914,6 +917,12 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
             MapHelper<HLSL::CameraAttribs> CameraAttribs{ pCtx, s_gc.cameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
             *CameraAttribs = cameraAttribs;
 
+            MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ pCtx, s_gc.shadowFrameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+            *FrameAttribs = frameAttribs;
+            FrameAttribs->Camera.mProj = cameraAttribs.mProj;
+            FrameAttribs->Camera.mView = cameraAttribs.mView;
+            FrameAttribs->Camera.mViewProj = cameraAttribs.mViewProj;
+
             MapHelper<float4x4> pJoints{ pCtx, s_gc.jointsBuffer, MAP_WRITE, MAP_FLAG_DISCARD };
 
             size_t JointCount = 0;
@@ -947,17 +956,10 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                 TerrainAttribs->waterHeight = s_gc.waterHeight;
 
                 MapHelper<HLSL::PBRTessellationParams> TessParams(s_gc.m_pImmediateContext, s_gc.tesselationParamsCB, MAP_WRITE, MAP_FLAG_DISCARD);
-                #if 0
                 TessParams->MaxTessellationFactor = 64.0f;
                 TessParams->MinDistance = 50.0f;
                 TessParams->MaxDistance = 1250.0f;
                 TessParams->FalloffExponent = 2.0f;
-                #else
-                TessParams->MaxTessellationFactor = 1.0f;
-                TessParams->MinDistance = 0.0f;
-                TessParams->MaxDistance = 0.0f;
-                TessParams->FalloffExponent = 1.0f;
-                #endif
             }
             
             // Iterate through each primitive in the mesh
@@ -1074,6 +1076,8 @@ void ShadowMap::Initialize()
     {
         GraphicsPipelineStateCreateInfo PSOCreateInfo{};
 
+        #define TESSELATION_ENABLED 1
+
         PipelineResourceLayoutDescX ResourceLayout;
         ResourceLayout
             .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
@@ -1091,6 +1095,7 @@ void ShadowMap::Initialize()
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
 
+            #if defined(TESSELATION_ENABLED)
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
@@ -1099,6 +1104,7 @@ void ShadowMap::Initialize()
 
             ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbTessellationParams", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
+            #endif
         }
         else if (shaderInit == 2)
         {
@@ -1163,6 +1169,9 @@ void ShadowMap::Initialize()
         Macros.AddShaderMacro("USE_INSTANCING", shaderInit >= 1);
         Macros.AddShaderMacro("USE_HEIGHTMAP", shaderInit == 1);
         Macros.AddShaderMacro("USE_TERRAINING", shaderInit == 1);
+        #if !defined(TESSELATION_ENABLED)
+        Macros.AddShaderMacro("DISABLE_TESSELLATION", true);
+        #endif
 
         // Create shadow vertex shader
         RefCntAutoPtr<IShader> pShadowVS;
@@ -1204,12 +1213,14 @@ void ShadowMap::Initialize()
                 s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowDS);
             }
             
+            #if defined(TESSELATION_ENABLED)
             // Set hull and domain shaders for the pipeline
             PSOCreateInfo.pHS = pShadowHS;
             PSOCreateInfo.pDS = pShadowDS;
             
             // Change primitive topology for tessellation
             PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
+            #endif
         }        
 
         // clang-format off
@@ -1267,15 +1278,31 @@ void ShadowMap::Initialize()
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_Heightmap")->Set(s_gc.heightmapView);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);            
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);            
 
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap")->Set(s_gc.heightmapView);
-            
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs")->Set(s_gc.frameAttribsCB);
-            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams")->Set(s_gc.tesselationParamsCB);
+            #if defined(TESSELATION_ENABLED)
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);
+            if (pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs"))
+            {
+                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
+            }
+            if(pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer"))
+            {
+                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
+            }
+            if (pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap"))
+            {
+                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap")->Set(s_gc.heightmapView);
+            }
+            if(pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs"))
+            {
+                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);
+            }
+            if (pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams"))
+            {
+                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams")->Set(s_gc.tesselationParamsCB);
+            }
+            #endif
         }
         else if (shaderInit == 2)
         {
@@ -1295,7 +1322,7 @@ void ShadowMap::Initialize()
             {s_gc.instanceAttribsSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.terrainAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
             {s_gc.tesselationParamsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
-            {s_gc.frameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+            {s_gc.shadowFrameAttribsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
     };
     s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
@@ -1565,7 +1592,7 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     return res;
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
+void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
     auto camWorld = CurrCamAttribs.f4Position;
@@ -1710,11 +1737,11 @@ void ShadowMap::RenderShadowMap(const HLSL::CameraAttribs& CurrCamAttribs, float
             ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TERRAINING;
             ri.Flags |= SF_GLTF_PBR_Renderer::PSO_FLAG_USE_TEXCOORD1;
 
-            DrawMesh(s_gc.m_pImmediateContext, *model.dynamicMesh, model.dynamicMeshTransforms[inFlightIndex & 0x01], ShadowCameraAttribs, ri);
+            DrawMesh(s_gc.m_pImmediateContext, *model.dynamicMesh, model.dynamicMeshTransforms[inFlightIndex & 0x01], frameAttribs, ShadowCameraAttribs, ri);
         }
         else
         {
-            DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], ShadowCameraAttribs, RenderParams);
+            DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], frameAttribs,  ShadowCameraAttribs, RenderParams);
         }
 
         shadowInfo[iCascade].WorldToLightProjSpace = cascadeViewProj.ViewProj.Transpose();
@@ -6880,6 +6907,7 @@ void InitializeCommonResources()
     s_gc.m_pDevice->CreateBuffer(VertBuffDesc, &VBData, &s_gc.dummyVertexBuffer);
 
     CreateUniformBuffer(s_gc.m_pDevice, SF_GLTF_PBR_Renderer::GetPRBFrameAttribsSizeStatic(RendererCI.MaxLightCount, RendererCI.MaxShadowCastingLightCount), "PBR frame attribs buffer", &s_gc.frameAttribsCB);
+    CreateUniformBuffer(s_gc.m_pDevice, SF_GLTF_PBR_Renderer::GetPRBFrameAttribsSizeStatic(RendererCI.MaxLightCount, RendererCI.MaxShadowCastingLightCount), "Shadow PBR frame attribs buffer", &s_gc.shadowFrameAttribsCB);
 
     CreateUniformBuffer(s_gc.m_pDevice, SF_PBR_Renderer::GetHeightmapAttribsSizeStatic(), "Heightmap attribs buffer", &s_gc.heightmapAttribsCB);
 
@@ -7338,23 +7366,25 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     const auto& DynamicCurrTransforms = model.dynamicMeshTransforms[inFlightIndex & 0x01];
     const auto& DynamicPrevTransforms = model.dynamicMeshTransforms[(inFlightIndex + 1) & 0x01];
 
-
-    MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+    HLSL::PBRFrameAttribs FrameAttribsLocal{};
 
     if (model.dynamicMesh)
     {
         model.dynamicMesh->PrepareResources();
     }
 
-    FrameAttribs->Camera = CurrCamAttribs;
-    FrameAttribs->PrevCamera = PrevCamAttribs;
+    FrameAttribsLocal.Camera = CurrCamAttribs;
+    FrameAttribsLocal.PrevCamera = PrevCamAttribs;
 
-    FrameAttribs->PrevCamera.f4ExtraData[0] = float4{
+    FrameAttribsLocal.PrevCamera.f4ExtraData[0] = float4{
         m_ShaderAttribs.SSRScale,
         static_cast<float>(m_ShaderAttribs.PostFXDebugMode),
         0,
         0,
     };
+
+    MapHelper<HLSL::PBRFrameAttribs> FrameAttribs{ s_gc.m_pImmediateContext, s_gc.frameAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+    *FrameAttribs = FrameAttribsLocal;
 
     {
         StateTransitionDesc Barriers[] = {
@@ -7416,7 +7446,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
             if (LightNode.Name == "Sun")
             {
-                s_gc.shadowMap->RenderShadowMap(CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model);
+                s_gc.shadowMap->RenderShadowMap(FrameAttribsLocal, CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model);
                 AttribsData.ShadowMapIndex = 0;
                 AttribsData.NumCascades = 2;
 

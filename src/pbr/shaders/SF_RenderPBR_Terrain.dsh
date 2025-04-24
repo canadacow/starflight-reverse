@@ -115,7 +115,7 @@ VSOutput main(HSConstantOutput input,
 #endif
 
     // Apply height map displacement
-#ifdef USE_HEIGHTMAP
+#if USE_HEIGHTMAP && !defined(DISABLE_TESSELLATION)
     #if USE_INSTANCING
         PBRInstanceAttribs instance = instanceBuffer[output.InstanceID];
         float2 adjustedUV = output.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + 
@@ -161,7 +161,13 @@ VSOutput main(HSConstantOutput input,
     output.WorldPos = position;
     
     // Calculate clip space position
+#ifdef DISABLE_TESSELLATION
+    // Pass original clip position from the hull shader (bypassing tessellation)
     output.ClipPos = mul(float4(position, 1.0), g_Frame.Camera.mViewProj);
+#else
+    // Normal tessellated clip position calculation
+    output.ClipPos = mul(float4(position, 1.0), g_Frame.Camera.mViewProj);
+#endif
     
     // Output normal
     output.Normal = normal;
