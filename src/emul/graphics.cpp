@@ -991,6 +991,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                         InstanceAttribs[i].HeightmapAttribs.ScaleY = pNode->Instances[i].ScaleY;
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = pNode->Instances[i].OffsetX;
                         InstanceAttribs[i].HeightmapAttribs.OffsetY = pNode->Instances[i].OffsetY;
+                        InstanceAttribs[i].PlanetLocation = pNode->Instances[i].PlanetLocation;
                     }
 
                     StateTransitionDesc Barriers[] = {
@@ -1076,8 +1077,6 @@ void ShadowMap::Initialize()
     {
         GraphicsPipelineStateCreateInfo PSOCreateInfo{};
 
-        #define TESSELATION_ENABLED 1
-
         PipelineResourceLayoutDescX ResourceLayout;
         ResourceLayout
             .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
@@ -1095,7 +1094,6 @@ void ShadowMap::Initialize()
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_VERTEX, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
 
-            #if defined(TESSELATION_ENABLED)
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbTerrainAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_DOMAIN, "instanceBuffer", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
@@ -1104,7 +1102,6 @@ void ShadowMap::Initialize()
 
             ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbTessellationParams", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
             ResourceLayout.AddVariable(SHADER_TYPE_HULL, "cbFrameAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC);
-            #endif
         }
         else if (shaderInit == 2)
         {
@@ -1169,9 +1166,8 @@ void ShadowMap::Initialize()
         Macros.AddShaderMacro("USE_INSTANCING", shaderInit >= 1);
         Macros.AddShaderMacro("USE_HEIGHTMAP", shaderInit == 1);
         Macros.AddShaderMacro("USE_TERRAINING", shaderInit == 1);
-        #if !defined(TESSELATION_ENABLED)
-        Macros.AddShaderMacro("DISABLE_TESSELLATION", true);
-        #endif
+        
+        Macros.AddShaderMacro("SHADOW_MESH", true);
 
         // Create shadow vertex shader
         RefCntAutoPtr<IShader> pShadowVS;
@@ -1213,14 +1209,12 @@ void ShadowMap::Initialize()
                 s_gc.m_pDevice->CreateShader(ShaderCI, &pShadowDS);
             }
             
-            #if defined(TESSELATION_ENABLED)
             // Set hull and domain shaders for the pipeline
             PSOCreateInfo.pHS = pShadowHS;
             PSOCreateInfo.pDS = pShadowDS;
             
             // Change primitive topology for tessellation
             PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
-            #endif
         }        
 
         // clang-format off
@@ -1280,29 +1274,13 @@ void ShadowMap::Initialize()
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);            
 
-            #if defined(TESSELATION_ENABLED)
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap")->Set(s_gc.heightmapView);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
             pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);
-            if (pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs"))
-            {
-                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "cbTerrainAttribs")->Set(s_gc.terrainAttribsCB);
-            }
-            if(pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer"))
-            {
-                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "instanceBuffer")->Set(s_gc.instanceAttribsSBView);
-            }
-            if (pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap"))
-            {
-                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_DOMAIN, "g_Heightmap")->Set(s_gc.heightmapView);
-            }
-            if(pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs"))
-            {
-                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);
-            }
-            if (pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams"))
-            {
-                pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams")->Set(s_gc.tesselationParamsCB);
-            }
-            #endif
+            
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbFrameAttribs")->Set(s_gc.shadowFrameAttribsCB);
+            pRenderMeshShadowPSO->GetStaticVariableByName(SHADER_TYPE_HULL, "cbTessellationParams")->Set(s_gc.tesselationParamsCB);
         }
         else if (shaderInit == 2)
         {

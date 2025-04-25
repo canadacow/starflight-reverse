@@ -115,16 +115,19 @@ VSOutput main(HSConstantOutput input,
 #endif
 
     // Apply height map displacement
-#if USE_HEIGHTMAP && !defined(DISABLE_TESSELLATION)
+#if USE_HEIGHTMAP
+
+    float2 adjustedUV = float2(0.0f, 0.0f);
+
     #if USE_INSTANCING
         PBRInstanceAttribs instance = instanceBuffer[output.InstanceID];
-        float2 adjustedUV = output.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + 
+        adjustedUV = output.UV0 * float2(instance.HeightmapAttribs.ScaleX, instance.HeightmapAttribs.ScaleY) + 
                            float2(instance.HeightmapAttribs.OffsetX, instance.HeightmapAttribs.OffsetY);
     #else
-        float2 adjustedUV = output.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + 
+        adjustedUV = output.UV0 * float2(g_HeightmapAttribs.ScaleX, g_HeightmapAttribs.ScaleY) + 
                            float2(g_HeightmapAttribs.OffsetX, g_HeightmapAttribs.OffsetY);
     #endif
-    
+
     #if USE_TERRAINING
         adjustedUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
     #endif
@@ -142,6 +145,8 @@ VSOutput main(HSConstantOutput input,
         position.y = height;
     }
     
+#endif
+
     #if USE_TERRAINING
         // Apply global terrain curvature based on distance from camera
         float3 cameraPos = g_Frame.Camera.f4Position.xyz;
@@ -155,19 +160,13 @@ VSOutput main(HSConstantOutput input,
         // Apply the curvature by reducing the y-coordinate based on distance
         position.y -= curvatureFactor;
     #endif
-#endif
 
     // Calculate world position
     output.WorldPos = position;
     
     // Calculate clip space position
-#ifdef DISABLE_TESSELLATION
-    // Pass original clip position from the hull shader (bypassing tessellation)
-    output.ClipPos = mul(float4(position, 1.0), g_Frame.Camera.mViewProj);
-#else
     // Normal tessellated clip position calculation
     output.ClipPos = mul(float4(position, 1.0), g_Frame.Camera.mViewProj);
-#endif
     
     // Output normal
     output.Normal = normal;

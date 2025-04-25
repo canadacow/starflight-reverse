@@ -34,7 +34,6 @@ HSConstantOutput ConstantHS(InputPatch<VSOutput, 3> patch, uint patchID : SV_Pri
     // Calculate tessellation factor based on distance
     float tessellationFactor = 1.0;
     
-#ifndef DISABLE_TESSELLATION
     if (distanceToCamera <= TessParams.y)
     {
         // Maximum tessellation at close range
@@ -53,7 +52,6 @@ HSConstantOutput ConstantHS(InputPatch<VSOutput, 3> patch, uint patchID : SV_Pri
         t = pow(t, TessParams.w);
         tessellationFactor = lerp(TessParams.x, 1.0, t);
     }
-#endif
     
     // Assign tessellation factors for each edge and inside
     output.EdgeTessFactor[0] = tessellationFactor;
