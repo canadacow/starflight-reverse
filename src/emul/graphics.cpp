@@ -1166,6 +1166,10 @@ void ShadowMap::Initialize()
         Macros.AddShaderMacro("USE_INSTANCING", shaderInit >= 1);
         Macros.AddShaderMacro("USE_HEIGHTMAP", shaderInit == 1);
         Macros.AddShaderMacro("USE_TERRAINING", shaderInit == 1);
+        Macros.AddShaderMacro("USE_TEXCOORD0", true);
+        Macros.AddShaderMacro("USE_TEXCOORD1", true);
+        Macros.AddShaderMacro("USE_TEXCOORD2", true);
+        Macros.AddShaderMacro("USE_TEXCOORD3", true);
         
         Macros.AddShaderMacro("SHADOW_MESH", true);
 

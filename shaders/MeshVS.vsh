@@ -4,6 +4,8 @@
 #include "VertexProcessing.fxh"
 #include "SF_RenderPBR_Structures.fxh"
 
+#include "VSOutputStruct.generated"
+
 cbuffer cbFrameAttribs
 {
     PBRFrameAttribs g_Frame;
@@ -57,21 +59,6 @@ struct VSInput
     float4 Joint0    : ATTRIB3;
     float4 Weight0   : ATTRIB4;
     uint InstanceID  : SV_InstanceID;
-};
-
-struct VSOutput
-{
-    float4 ClipPos              : SV_Position;
-    float3 PosInLightViewSpace 	: LIGHT_SPACE_POS;
-    float3 NormalWS 	        : NORMALWS;
-    float3 WorldPos 	        : WORLDPOS;
-    float3 Normal 	            : NORMAL;
-    float2 UV0                  : TEXCOORD0;
-    float2 UV1                  : TEXCOORD1;
-    float2 UV2                  : TEXCOORD2;
-    float2 UV3                  : TEXCOORD3;
-    uint InstanceID             : SV_InstanceID;
-    float Height                : HEIGHT;
 };
 
 void MeshVS(in  VSInput  VSIn,

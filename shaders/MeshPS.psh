@@ -1,6 +1,8 @@
 #include "BasicStructures.fxh"
 #include "Shadows.fxh"
 
+#include "VSOutputStruct.generated"
+
 Texture2D    g_tex2DDiffuse;
 SamplerState g_tex2DDiffuse_sampler;
 
@@ -16,21 +18,6 @@ cbuffer cbLightAttribs
 {
     LightAttribs g_LightAttribs;
 }
-
-struct VSOutput
-{
-    float4 ClipPos              : SV_Position;
-    float3 PosInLightViewSpace 	: LIGHT_SPACE_POS;
-    float3 NormalWS 	        : NORMALWS;
-    float3 WorldPos 	        : WORLDPOS;
-    float3 Normal 	            : NORMAL;
-    float2 UV0                  : TEXCOORD0;
-    float2 UV1                  : TEXCOORD1;
-    float2 UV2                  : TEXCOORD2;
-    float2 UV3                  : TEXCOORD3;
-    uint InstanceID             : SV_InstanceID;
-    float Height                : HEIGHT;
-};
 
 float4 MeshPS(VSOutput VSOut) : SV_TARGET
 {
