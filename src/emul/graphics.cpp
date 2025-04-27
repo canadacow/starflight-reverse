@@ -1509,20 +1509,64 @@ CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs,
     float fixedMargin = 0.5f; // Matches DistributeCascades fixed margin
     float marginScale = shadowMapSize / (shadowMapSize - 2.0f * fixedMargin);
     
-    largestDimension *= marginScale;
+    // Scale up largestDimension for low sun angles - adjust based on Y component of light direction
+    // This ensures we have enough shadow coverage when sun is near horizon
+    float lowSunFactor = 1.0f;
+    float absLightY = std::abs(lightDirection.y);
+    if (absLightY < 0.4f) {
+        // As the sun gets closer to the horizon, we need a larger shadow volume
+        // Apply increasing scale as the Y component approaches zero
+        lowSunFactor = std::max(1.0f, 3.0f * (0.4f - absLightY) / 0.4f + 1.0f);
+        
+        // For extremely low sun angles, apply an even larger factor
+        if (absLightY < 0.1f) {
+            lowSunFactor = 8.0f;
+        }
+    }
+    
+    largestDimension *= marginScale * lowSunFactor;
     
     minCorner.x = centerX - largestDimension * 0.5f;
     maxCorner.x = centerX + largestDimension * 0.5f;
     minCorner.y = centerY - largestDimension * 0.5f;
     maxCorner.y = centerY + largestDimension * 0.5f;
 
+    // Calculate primary light direction to extend the Z range asymmetrically
+    // This is especially important for low sun angles
+    float3 absLight = float3(std::abs(lightDirection.x), std::abs(lightDirection.y), std::abs(lightDirection.z));
+    float dominantComponent = std::max(std::max(absLight.x, absLight.y), absLight.z);
+    float3 normalizedLight = lightDirection / dominantComponent;
+    
     // Extend Z range proportionally and add bias
-    float zExtension = 0.1f; // Similar to DistributeCascades z extension
+    float zExtension = std::max(0.2f, 0.5f * (1.0f - absLightY)); // More extension for lower sun
     float zRange = maxCorner.z - minCorner.z;
-    zRange *= (1.0f / (1.0f - zExtension * 2.0f));
+    
+    // Make zRange larger for low sun angles by factoring in the light direction
+    zRange *= (1.0f / (1.0f - zExtension * 2.0f)) * lowSunFactor;
+    
     float zCenter = (maxCorner.z + minCorner.z) * 0.5f;
-    minCorner.z = zCenter - zRange;
-    maxCorner.z = zCenter + zRange;
+    
+    // Asymmetric Z extension in the primary light direction
+    if (absLight.x > absLight.z) {
+        // Light is primarily along X axis
+        float xBias = (lightDirection.x > 0) ? 0.3f : -0.3f;
+        minCorner.z = zCenter - zRange * (1.0f + xBias * (1.0f - absLightY));
+        maxCorner.z = zCenter + zRange * (1.0f - xBias * (1.0f - absLightY));
+    } else {
+        // Light is primarily along Z axis
+        float zBias = (lightDirection.z > 0) ? 0.3f : -0.3f;
+        minCorner.z = zCenter - zRange * (1.0f + zBias * (1.0f - absLightY));
+        maxCorner.z = zCenter + zRange * (1.0f - zBias * (1.0f - absLightY));
+    }
+    
+    // Apply a minimum Z range to avoid numerical precision issues
+    float minZRange = 10.0f; // Minimum Z range in world units
+    if (maxCorner.z - minCorner.z < minZRange) {
+        float currentZRange = maxCorner.z - minCorner.z;
+        float extraZRange = minZRange - currentZRange;
+        minCorner.z -= extraZRange * 0.5f;
+        maxCorner.z += extraZRange * 0.5f;
+    }
 
     // Compute the projection matrix for the light
     // Note: Using negative Z range to match DistributeCascades convention
@@ -1561,10 +1605,10 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     //BoundBox box = aabb.Transform(float4x4::Translation(cameraPos));
 
     BoundBox box = aabb;
-    box.Min.x = -18.0f;
-    box.Max.x = 18.0f;
-    box.Min.z = -18.0f;
-    box.Max.z = 18.0f;
+    box.Min.x = -18.0f * 2.0f;
+    box.Max.x = 18.0f * 2.0f;
+    box.Min.z = -18.0f * 2.0f;
+    box.Max.z = 18.0f * 2.0f;
 
     box = box.Transform(modelTransform);
     box = box.Transform(float4x4::Translation(cameraPos));
