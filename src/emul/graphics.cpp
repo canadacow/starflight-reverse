@@ -750,11 +750,12 @@ void InitTerrain();
 void InitializeCommonResources();
 void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex);
 
-using SunBehaviorFn = std::function<float3(const float4x4& lightGlobalTransform, double currentTimeInSeconds)>;
+using SunBehaviorFn = std::function<float3(const float4x4& lightGlobalTransform, double currentTimeInSeconds, float* outSunlightIntensity)>;
 
-static SunBehaviorFn DefaultSunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
+static SunBehaviorFn DefaultSunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds, float* outSunlightIntensity) {
     float3 lightDir = float3{ lightGlobalTransform._31, lightGlobalTransform._32, lightGlobalTransform._33 };
     float3 Direction = normalize(lightDir);
+    *outSunlightIntensity = 1.0f;
     return Direction;
 };
 
@@ -5984,7 +5985,7 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
         s_gc.currentScene = SCENE_TERRAIN;
     }
 
-    auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
+    auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds, float* outSunlightIntensity) {
 
         // 1,0,0, points towards the horizon
         float3 lightDir = float3{ 1.0f, 0.1f, 0.0f };
@@ -6013,8 +6014,14 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
 
         float3 Direction = normalize(lightDir);
 
-        //float3 Direction = float3(-0.554699242f, -0.0599640049f, -0.829887390f);
-        //float3 Direction = float3(-0.5f, -0.5f, 0.0f);
+        // Calculate sun intensity based on height above horizon (y component)
+        // When y is negative, the sun is below the horizon
+        if (Direction.y > 0.0f) {
+            *outSunlightIntensity = 0.0f;
+        } else {
+            // Full intensity when sun is above horizon
+            *outSunlightIntensity = 1.0f;
+        }
 
         return Direction;
     };
@@ -7295,7 +7302,7 @@ void RenderStation(VulkanContext::frame_id_t inFlightIndex)
         s_gc.currentScene = SCENE_STATION;
     }
 
-    auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds) {
+    auto sunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds, float* outSunlightIntensity) {
         float3 lightDir = float3{ 0.0f, -0.07f, -0.07f };
         float3 Direction = -normalize(lightDir);
 
@@ -7303,6 +7310,8 @@ void RenderStation(VulkanContext::frame_id_t inFlightIndex)
         float4x4 rotationMatrix = float4x4::RotationY(rotationAngle);
         float4 rotatedDirection = rotationMatrix * float4(Direction, 0.0f);
         Direction = float3(rotatedDirection);
+
+        *outSunlightIntensity = 1.0f;
         return Direction;
     };
 
@@ -7456,7 +7465,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 LightGlobalTransform *= s_gc.renderParams.ModelTransform;
                 double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
-                Direction = sunBehavior(LightGlobalTransform, currentTimeInSeconds);
+                Direction = sunBehavior(LightGlobalTransform, currentTimeInSeconds, &l.Intensity);
             }
             else
             {
