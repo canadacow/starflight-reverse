@@ -7360,6 +7360,7 @@ std::string GetEGAColorName(const float3& color) {
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
 {
     ITextureView*        pRTVOffscreen   = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+    ITextureView*        pDSVOffscreen   = s_gc.buffers[inFlightIndex].offscreenDepthBuffer->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
 
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
     ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
@@ -7466,6 +7467,19 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
                 Direction = sunBehavior(LightGlobalTransform, currentTimeInSeconds, &l.Intensity);
+
+                // Calculate the projected position of the sun on screen
+                float4 sunWorldPos = float4(Direction * 1000.0f, 1.0f); // Far point in the sun direction
+                float4 sunClipPos = CurrCamAttribs.mViewProj * sunWorldPos;
+                
+                // Homogeneous divide to get normalized device coordinates (NDC)
+                float2 sunNDC = float2(sunClipPos.x / sunClipPos.w, sunClipPos.y / sunClipPos.w);
+                
+                // Render the sun if it's in front of the camera (positive w-component means it's in front)
+                if (sunClipPos.w > 0.0f)
+                {
+                    // We will render the sun ourselves
+                }
             }
             else
             {
@@ -7490,7 +7504,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                     CamAttribs = CurrCamAttribs;
 
                     LightAttrs = s_gc.shadowMap->GetLightAttribs();
-                    LightAttrs.f4Direction = float4(Direction, 1.0f);
+                    LightAttrs.f4Direction = float4(Direction, 1.0f);                    
                 }                
             }
             else
@@ -7868,9 +7882,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     const float ClearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
     if(enableEpipolarLightScattering && s_gc.currentScene == Scene::SCENE_TERRAIN) {
-        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, pDSVOffscreen, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // Clear the back buffer
         s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->ClearDepthStencil(pDSVOffscreen, CLEAR_DEPTH_FLAG, 1.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     } else {
         s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // Clear the back buffer
@@ -7896,42 +7911,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     if(enableEpipolarLightScattering && s_gc.currentScene == Scene::SCENE_TERRAIN)
     {
-        //s_gc.m_pImmediateContext->BeginDebugGroup("EpipolarLightScattering");
-
         HLSL::EpipolarLightScatteringAttribs m_PPAttribs{};
 
         EpipolarLightScattering::FrameAttribs FrameAttribs;
-
-        //float scale = (69933.0f - 47984.07031f) / (400.0f - 1.0f);
-        //float offset = 47984.07031f;
-        
-        //float scale = (70000.0f - 48000.0f) / (0.96f - 0.982f);
-        //float offset = 48000.0f - (0.982 * scale);
-
-        /*
-        mProj {1.93137, 0.00, 0.00, 0.00}
-                {0.00, 2.41421, 0.00, 0.00}
-                {0.00, 0.00, 1.00252, -1515.24634}
-                {0.00, 0.00, 1.00, 0.00} 144 float4x4 (column_major)
-        */
-
-       /*
-           CameraAttribs CamAttribs;
-            WriteShaderMatrix(&CamAttribs.mView, m_mCameraView, !m_PackMatrixRowMajor);
-            WriteShaderMatrix(&CamAttribs.mProj, m_mCameraProj, !m_PackMatrixRowMajor);
-            WriteShaderMatrix(&CamAttribs.mViewProj, mViewProj, !m_PackMatrixRowMajor);
-            WriteShaderMatrix(&CamAttribs.mViewProjInv, mViewProj.Inverse(), !m_PackMatrixRowMajor);
-            float fNearPlane = 0.f, fFarPlane = 0.f;
-            m_mCameraProj.GetNearFarClipPlanes(fNearPlane, fFarPlane, m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
-            CamAttribs.fNearPlaneZ      = fNearPlane;
-            CamAttribs.fFarPlaneZ       = fFarPlane * 0.999999f;
-            CamAttribs.f4Position       = m_f3CameraPos;
-            CamAttribs.f4ViewportSize.x = static_cast<float>(m_pSwapChain->GetDesc().Width);
-            CamAttribs.f4ViewportSize.y = static_cast<float>(m_pSwapChain->GetDesc().Height);
-            CamAttribs.f4ViewportSize.z = 1.f / CamAttribs.f4ViewportSize.x;
-            CamAttribs.f4ViewportSize.w = 1.f / CamAttribs.f4ViewportSize.y;
-       
-       */
 
         //const float WORLD_TO_EARTH_SCALE = 1511.4625f;
         const float WORLD_TO_EARTH_SCALE = 80.0f;
@@ -7976,24 +7958,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
         adjustedCamAttribs.mView = adjustedCamAttribs.mView.Transpose();
 
-#if 0
-        adjustedCamAttribs.mView = float4x4{
-            0.973666370f, 0.0408147201f, 0.224294260f, 0.00000000f,
-            0.00000000f, 0.983843684f, -0.179029569f, 0.00000000f,
-            -0.227977529f, 0.174315080f, 0.957935572f, 0.00000000f,
-            0.00000000f, -7870.74951f, 1432.23657f, 1.00000000f
-        };
-#endif
-
-#if 0
-        adjustedCamAttribs.mProj = float4x4{
-            1.93137074f, 0.00000000f, 0.00000000f, 0.00000000f,
-            0.00000000f, 2.41421342f, 0.00000000f, 0.00000000f,
-            0.00000000f, 0.00000000f, 1.00252461f, 1.00000000f,
-            0.00000000f, 0.00000000f, -1515.24634f, 0.00000000f
-        };
-#endif
-
         float3 negCamPos = float3(-adjustedCamAttribs.f4Position.x, 
                                 -adjustedCamAttribs.f4Position.y,
                                 -adjustedCamAttribs.f4Position.z);
@@ -8009,17 +7973,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         adjustedCamAttribs.mView._43 = negCamPos.x * adjustedCamAttribs.mView._13 + 
                                     negCamPos.y * adjustedCamAttribs.mView._23 + 
                                     negCamPos.z * adjustedCamAttribs.mView._33;
-
-        //adjustedCamAttribs.mView._41 = 0.0f;
-        //adjustedCamAttribs.mView._42 = 7870.74951f;
-        //adjustedCamAttribs.mView._43 = 1432.23657f;
-
-        ////adjustedCamAttribs.mProj.m[2][2] = scale;
-        //adjustedCamAttribs.mProj.m[3][2] = -1515.24634f;
-        //adjustedCamAttribs.mProj.m[2][3] = 1.0f;
-        
-        // FIXME FIXME FIXME
-        //adjustedCamAttribs.f4Position.y = 8000.0f;
 
         float fNearPlane = 0.f, fFarPlane = 0.f;
         adjustedCamAttribs.mProj.GetNearFarClipPlanes(fNearPlane, fFarPlane, s_gc.m_pDevice->GetDeviceInfo().NDC.MinZ == -1);
@@ -8071,16 +8024,19 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
         // Begin new frame
-        //s_gc.epipolarLightScattering->PrepareForNewFrame(FrameAttribs, m_PPAttribs);
         PrepareForNewFrame(s_gc.epipolarLightScattering.get(), FrameAttribs, &m_PPAttribs);
 
         // Render the sun
-        s_gc.epipolarLightScattering->RenderSun(pRTV->GetDesc().Format, pDSV->GetDesc().Format, 1);
+        //s_gc.m_pImmediateContext->BeginDebugGroup("RenderSun");
+        // Switch to offscreen render targets for sun rendering
+        //s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, pDSVOffscreen, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        //s_gc.epipolarLightScattering->RenderSun(pRTVOffscreen->GetDesc().Format, pDSVOffscreen->GetDesc().Format, 1);
+        // Switch back to main render targets
+        //s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        //s_gc.m_pImmediateContext->EndDebugGroup();
 
         // Perform the post processing
         s_gc.epipolarLightScattering->PerformPostProcessing();
-
-        //s_gc.m_pImmediateContext->EndDebugGroup();
     }
 
     s_gc.m_pImmediateContext->Flush();
