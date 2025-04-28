@@ -7365,8 +7365,7 @@ std::string GetEGAColorName(const float3& color) {
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
 {
     ITextureView*        pRTVOffscreen   = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-    ITextureView*        pDSVOffscreen   = s_gc.buffers[inFlightIndex].offscreenDepthBuffer->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
-
+    
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
     ITextureView*        pDSV   = s_gc.buffers[inFlightIndex].diligentDepthBuffer;
     ITextureView*        pPrevDSV = s_gc.buffers[(inFlightIndex + 1) & 0x01].diligentDepthBuffer;
@@ -7472,33 +7471,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
                 Direction = sunBehavior(LightGlobalTransform, currentTimeInSeconds, &l.Intensity);
-
-                // Calculate the projected position of the sun on screen
-                float4 sunWorldPos = float4(Direction * 1000.0f, 1.0f); // Far point in the sun direction
-                float4 sunClipPos = CurrCamAttribs.mViewProj * sunWorldPos;
-                
-                // Homogeneous divide to get normalized device coordinates (NDC)
-                float2 sunNDC = float2(sunClipPos.x / sunClipPos.w, sunClipPos.y / sunClipPos.w);
-                
-                // Render the sun if it's in front of the camera (positive w-component means it's in front)
-                if (sunClipPos.w > 0.0f)
-                {
-                    // We will render the sun ourselves
-                    if (s_gc.sunRenderer)
-                    {
-                        // Calculate sun color based on intensity
-                        float3 sunColor = float3(1.0f, 0.9f, 0.7f); // Slightly yellowish sun color
-                        s_gc.sunRenderer->Render(s_gc.m_pImmediateContext, 
-                                               Direction, 
-                                               sunColor, 
-                                               CurrCamAttribs.mViewProj,
-                                               CurrCamAttribs.f4Position,
-                                               0.02f,  // Size
-                                               l.Intensity,
-                                               pRTV->GetTexture()->GetDesc().Format,
-                                               pDSV->GetTexture()->GetDesc().Format);
-                    }
-                }
             }
             else
             {
@@ -7773,6 +7745,21 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     RenderModel(SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
 
+    if (s_gc.currentScene == SCENE_TERRAIN && s_gc.sunRenderer)
+    {
+        // Calculate sun color based on intensity
+        float3 sunColor = float3(1.0f, 0.9f, 0.7f); // Slightly yellowish sun color
+        s_gc.sunRenderer->Render(s_gc.m_pImmediateContext, 
+                                LightAttrs.f4Direction, 
+                                sunColor, 
+                                CurrCamAttribs.mViewProj,
+                                CurrCamAttribs.f4Position,
+                                0.02f,  // Size
+                                1.0f,
+                                pRTV->GetTexture()->GetDesc().Format,
+                                pDSV->GetTexture()->GetDesc().Format);
+    }
+
     {
         s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
@@ -7901,10 +7888,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     const float ClearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
     if(enableEpipolarLightScattering && s_gc.currentScene == Scene::SCENE_TERRAIN) {
-        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, pDSVOffscreen, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTVOffscreen, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // Clear the back buffer
         s_gc.m_pImmediateContext->ClearRenderTarget(pRTVOffscreen, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        s_gc.m_pImmediateContext->ClearDepthStencil(pDSVOffscreen, CLEAR_DEPTH_FLAG, 1.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     } else {
         s_gc.m_pImmediateContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // Clear the back buffer

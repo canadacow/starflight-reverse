@@ -24,7 +24,7 @@ public:
     SunRenderer(IRenderDevice* pDevice, IDeviceContext* pContext);
     
     void Render(IDeviceContext* pContext, 
-                const float3& sunDirection, 
+                const float4& sunDirection, 
                 const float3& sunColor,
                 const float4x4& viewProj,
                 const float3& cameraPos,

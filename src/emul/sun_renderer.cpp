@@ -4,6 +4,7 @@
 #include "Graphics/GraphicsEngine/interface/Texture.h"
 #include "Graphics/GraphicsTools/interface/ShaderMacroHelper.hpp"
 #include "Graphics/GraphicsTools/interface/MapHelper.hpp"
+#include "Graphics/GraphicsTools/interface/ScopedDebugGroup.hpp"
 #include "Common/interface/RefCntAutoPtr.hpp"
 #include "Common/interface/BasicMath.hpp"
 #include "../pbr/SF_GLTF_PBR_Renderer.hpp"
@@ -185,7 +186,7 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
 }
 
 void SunRenderer::Render(IDeviceContext* pContext, 
-                         const float3& sunDirection, 
+                         const float4& sunDirection, 
                          const float3& sunColor,
                          const float4x4& viewProj,
                          const float3& cameraPos,
@@ -194,9 +195,26 @@ void SunRenderer::Render(IDeviceContext* pContext,
                          TEXTURE_FORMAT renderTargetFormat,
                          TEXTURE_FORMAT depthFormat)
 {
-    // Skip rendering if behind camera
-    if (sunDirection.z <= 0)
+    ScopedDebugGroup DebugGroupGlobal{pContext, "SunRenderer::Render"};
+
+    float4 f4LightPosPS = -sunDirection * viewProj.Transpose();
+
+    if(f4LightPosPS.w <= 0.0f)
+    {
+        // Sun is behind the camera, skip rendering
         return;
+    }
+
+   f4LightPosPS.x /= f4LightPosPS.w;
+   f4LightPosPS.y /= f4LightPosPS.w;
+   f4LightPosPS.z /= f4LightPosPS.w;
+   float fDistToLightOnScreen = length((float2&)f4LightPosPS);
+   float fMaxDist             = 100;
+   if (fDistToLightOnScreen > fMaxDist)
+   {
+        f4LightPosPS.x *= fMaxDist / fDistToLightOnScreen;
+        f4LightPosPS.y *= fMaxDist / fDistToLightOnScreen;
+   }
         
     // Initialize or recreate pipeline if needed
     if (m_pPSO == nullptr || 
@@ -205,15 +223,10 @@ void SunRenderer::Render(IDeviceContext* pContext,
     {
         InitializePipeline(renderTargetFormat, depthFormat);
     }
-
-    // Project sun position to NDC space
-    // The sun is at "infinity", so we use just the direction vector to compute its position on screen
-    float2 sunScreenPos = float2(sunDirection.x / sunDirection.z, sunDirection.y / sunDirection.z);
-    
     // Update the sun attributes
     {
         MapHelper<SunAttribs> SunAttribs(pContext, m_pSunAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
-        SunAttribs->Position = float4(sunScreenPos.x, sunScreenPos.y, 0.0f, sunSize);
+        SunAttribs->Position = float4(f4LightPosPS.x, f4LightPosPS.y, 0.0f, sunSize);
         SunAttribs->Color = float4(sunColor.x, sunColor.y, sunColor.z, sunIntensity);
     }
     
