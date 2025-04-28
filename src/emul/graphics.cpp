@@ -80,6 +80,7 @@
 #include "EnvMapRenderer.hpp"
 #include "DiligentShadowMapManager.hpp"
 #include "DiligentEpipolarLightScattering.hpp"
+#include "sun_renderer.h"
 
 namespace Diligent
 {
@@ -681,6 +682,8 @@ struct GraphicsContext
     SpaceManState spaceManState;
 
     std::unique_ptr<ShadowMap> shadowMap;
+
+    std::unique_ptr<SunRenderer> sunRenderer;
 };
 
 static GraphicsContext s_gc{};
@@ -3870,6 +3873,8 @@ static void InitPBRRenderer(ITextureView* shadowMap)
         LoadEnvironmentMap("starfield.ktx", s_gc.terrain, false);
     }
 
+    // Initialize the sun renderer
+    s_gc.sunRenderer = std::make_unique<SunRenderer>(s_gc.m_pDevice, s_gc.m_pImmediateContext);
 }
 
 static int GraphicsInitThread()
@@ -7479,6 +7484,20 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 if (sunClipPos.w > 0.0f)
                 {
                     // We will render the sun ourselves
+                    if (s_gc.sunRenderer)
+                    {
+                        // Calculate sun color based on intensity
+                        float3 sunColor = float3(1.0f, 0.9f, 0.7f); // Slightly yellowish sun color
+                        s_gc.sunRenderer->Render(s_gc.m_pImmediateContext, 
+                                               Direction, 
+                                               sunColor, 
+                                               CurrCamAttribs.mViewProj,
+                                               CurrCamAttribs.f4Position,
+                                               0.02f,  // Size
+                                               l.Intensity,
+                                               pRTV->GetTexture()->GetDesc().Format,
+                                               pDSV->GetTexture()->GetDesc().Format);
+                    }
                 }
             }
             else

@@ -157,6 +157,7 @@ set(HEADER_FILES
     ${CURL_INCLUDE_DIRS}
     ${nlohmann_json_INCLUDE_DIRS}/nlohmann
     src/shaders
+    src/emul/sun_renderer.h
 )
 
 add_executable(emulatesdl WIN32
@@ -184,6 +185,7 @@ add_executable(emulatesdl WIN32
     src/emul/DynamicMesh.cpp
     src/emul/importfix.cpp
     src/emul/vstrace.cpp
+    src/emul/sun_renderer.cpp
 )
 
 include(DiligentUtils.cmake)
