@@ -76,11 +76,18 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
         {
             PSInput psIn;
             
-            // Create a quad from vertex ID
-            float2 pos = float2(
-                (vsIn.VertexID == 1) ? 1.0 : -1.0, 
-                (vsIn.VertexID == 2) ? -1.0 : 1.0
-            );
+            // Create a quad from vertex ID (using triangle strip with 4 vertices)
+            // Vertices will form a quad in this order: (0,1,2,3) = (TL,TR,BL,BR)
+            float2 pos;
+            
+            // First vertex: Top-left (-1,1)
+            if (vsIn.VertexID == 0) pos = float2(-1.0, 1.0);
+            // Second vertex: Top-right (1,1)
+            else if (vsIn.VertexID == 1) pos = float2(1.0, 1.0);
+            // Third vertex: Bottom-left (-1,-1)
+            else if (vsIn.VertexID == 2) pos = float2(-1.0, -1.0);
+            // Fourth vertex: Bottom-right (1,-1)
+            else pos = float2(1.0, -1.0);
             
             // Half size of the quad in screen space
             float sunSize = g_SunPosition.w;
@@ -90,7 +97,7 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
             
             // Calculate vertex position and texture coordinates
             psIn.Position = float4(sunPos + pos * sunSize, 1.0, 1.0);
-            psIn.TexCoord = pos * 0.5 + 0.5;
+            psIn.TexCoord = pos * 0.5 + 0.5; // Map from [-1,1] to [0,1]
             
             return psIn;
         }
