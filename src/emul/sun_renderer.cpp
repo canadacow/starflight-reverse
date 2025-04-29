@@ -89,7 +89,7 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
             float2 sunPos = g_SunPosition.xy;
             
             // Calculate vertex position and texture coordinates
-            psIn.Position = float4(sunPos + pos * sunSize, 0.0, 1.0);
+            psIn.Position = float4(sunPos + pos * sunSize, 1.0, 1.0);
             psIn.TexCoord = pos * 0.5 + 0.5;
             
             return psIn;
@@ -183,7 +183,9 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
     PSOCreateInfo.GraphicsPipeline.DSVFormat = depthFormat;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = TRUE;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = FALSE;
-    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_EQUAL;
+    // Set reference value to 1.0 (maximum depth)
+    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.StencilEnable = FALSE;
 
     // Enable alpha blending for all render targets
     for (Uint32 i = 0; i < PSOCreateInfo.GraphicsPipeline.NumRenderTargets; ++i)
