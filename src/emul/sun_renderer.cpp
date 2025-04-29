@@ -37,6 +37,9 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
 
     PSODesc.Name = "Sun PSO";
     PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+    
+    // Define shader resource layout
+    PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
 
     // Shader creation
     ShaderCreateInfo ShaderCI;
@@ -96,7 +99,7 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
     RefCntAutoPtr<IShader> pVS;
     m_pDevice->CreateShader(ShaderCI, &pVS);
 
-    // Pixel shader
+    // Pixel shader with multiple render targets
     ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
     ShaderCI.EntryPoint = "main";
     ShaderCI.Desc.Name = "Sun PS";
@@ -106,6 +109,17 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
             float4 Position : SV_POSITION;
             float2 TexCoord : TEXCOORD0;
         };
+        
+        // Match the PBR renderer's output structure
+        struct PSOutput
+        {
+            float4 Color        : SV_Target0;
+            float4 Normal       : SV_Target1;
+            float4 BaseColor    : SV_Target2;
+            float4 MaterialData : SV_Target3;
+            float4 MotionVec    : SV_Target4;
+            float4 SpecularIBL  : SV_Target5;
+        };
 
         cbuffer cbSunAttribs
         {
@@ -113,8 +127,10 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
             float4 g_SunColor;     // xyz = color, w = intensity
         };
 
-        float4 main(PSInput psIn) : SV_TARGET
+        PSOutput main(PSInput psIn)
         {
+            PSOutput output;
+            
             // Calculate vector from center (0.5, 0.5) to current pixel
             float2 dir = psIn.TexCoord - float2(0.5, 0.5);
             
@@ -131,7 +147,17 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
             float glow = smoothstep(0.0, 0.5, alpha);
             color *= glow * 2.0;
             
-            return float4(color, alpha);
+            // Output to main color target
+            output.Color = float4(color, alpha);
+            
+            // Fill other render targets with appropriate values
+            output.Normal = float4(0.0, 0.0, 1.0, 1.0);           // Default normal pointing up
+            output.BaseColor = float4(g_SunColor.rgb, alpha);      // Use sun color as base color
+            output.MaterialData = float4(0.0, 0.0, 0.0, alpha);    // No roughness or metallic
+            output.MotionVec = float4(0.0, 0.0, 0.0, 1.0);         // No motion
+            output.SpecularIBL = float4(0.0, 0.0, 0.0, alpha);     // No IBL contribution
+            
+            return output;
         }
     )";
 
@@ -142,23 +168,34 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
     PSOCreateInfo.pVS = pVS;
     PSOCreateInfo.pPS = pPS;
 
-    // Use provided render target and depth formats
+    // Set up multi-render target configuration to match PBR renderer
     PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
-    PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = renderTargetFormat;
+    PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 6;
+    
+    // Based on the error message, configure the render target formats to match PBR renderer:
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA16_FLOAT;   // Color
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[1] = TEX_FORMAT_RGBA16_FLOAT;   // Normal
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[2] = TEX_FORMAT_RGBA8_UNORM;    // BaseColor
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[3] = TEX_FORMAT_RG8_UNORM;      // MaterialData
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[4] = TEX_FORMAT_RG16_FLOAT;     // MotionVec
+    PSOCreateInfo.GraphicsPipeline.RTVFormats[5] = TEX_FORMAT_RGBA16_FLOAT;   // SpecularIBL
+    
     PSOCreateInfo.GraphicsPipeline.DSVFormat = depthFormat;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = TRUE;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = FALSE;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-    // Enable alpha blending
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendEnable = true;
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].SrcBlend = BLEND_FACTOR_SRC_ALPHA;
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].DestBlend = BLEND_FACTOR_ONE;
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendOp = BLEND_OPERATION_ADD;
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].SrcBlendAlpha = BLEND_FACTOR_ONE;
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].DestBlendAlpha = BLEND_FACTOR_ZERO;
-    PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendOpAlpha = BLEND_OPERATION_ADD;
+    // Enable alpha blending for all render targets
+    for (Uint32 i = 0; i < PSOCreateInfo.GraphicsPipeline.NumRenderTargets; ++i)
+    {
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].BlendEnable = true;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].SrcBlend = BLEND_FACTOR_SRC_ALPHA;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].DestBlend = BLEND_FACTOR_ONE;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].BlendOp = BLEND_OPERATION_ADD;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].SrcBlendAlpha = BLEND_FACTOR_ONE;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].DestBlendAlpha = BLEND_FACTOR_ZERO;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].BlendOpAlpha = BLEND_OPERATION_ADD;
+    }
 
     // Create the pipeline state
     m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pPSO);
@@ -166,20 +203,19 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
     // Create shader resource binding
     m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 
-    // Set the sun attributes constant buffer
-    auto* pSunAttribsVar = m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbSunAttribs");
-    if (pSunAttribsVar)
-        pSunAttribsVar->Set(m_pSunAttribsCB);
+    // Now bind the resources to the SRB directly
+    auto* pSunAttribsVSVar = m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbSunAttribs");
+    if (pSunAttribsVSVar)
+        pSunAttribsVSVar->Set(m_pSunAttribsCB);
 
-    pSunAttribsVar = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "cbSunAttribs");
-    if (pSunAttribsVar)
-        pSunAttribsVar->Set(m_pSunAttribsCB);
+    auto* pSunAttribsPSVar = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "cbSunAttribs");
+    if (pSunAttribsPSVar)
+        pSunAttribsPSVar->Set(m_pSunAttribsCB);
         
-    // Set the camera attributes constant buffer
     auto* pCameraAttribsVar = m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "cbCameraAttribs");
     if (pCameraAttribsVar)
         pCameraAttribsVar->Set(m_pCameraAttribsCB);
-        
+
     // Store current formats
     m_LastRTFormat = renderTargetFormat;
     m_LastDSFormat = depthFormat;
@@ -197,13 +233,13 @@ void SunRenderer::Render(IDeviceContext* pContext,
 {
     ScopedDebugGroup DebugGroupGlobal{pContext, "SunRenderer::Render"};
 
-    float4 f4LightPosPS = -sunDirection * viewProj.Transpose();
+   float4 f4LightPosPS = float4(-sunDirection.x, -sunDirection.y, -sunDirection.z, 0.0f) * viewProj.Transpose();
 
-    if(f4LightPosPS.w <= 0.0f)
-    {
-        // Sun is behind the camera, skip rendering
-        return;
-    }
+   if (f4LightPosPS.w <= 0.0f)
+   {
+       // Sun is behind the camera, skip rendering
+       return;
+   }
 
    f4LightPosPS.x /= f4LightPosPS.w;
    f4LightPosPS.y /= f4LightPosPS.w;
