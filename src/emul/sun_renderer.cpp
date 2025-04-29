@@ -96,7 +96,7 @@ void SunRenderer::InitializePipeline(TEXTURE_FORMAT renderTargetFormat, TEXTURE_
             float2 sunPos = g_SunPosition.xy;
             
             // Calculate vertex position and texture coordinates
-            psIn.Position = float4(sunPos + pos * sunSize, 1.0, 1.0);
+            psIn.Position = float4(sunPos + pos * float2(sunSize, sunSize * g_CameraPos.w), 1.0, 1.0);
             psIn.TexCoord = pos * 0.5 + 0.5; // Map from [-1,1] to [0,1]
             
             return psIn;
@@ -237,6 +237,8 @@ void SunRenderer::Render(IDeviceContext* pContext,
                          const float3& cameraPos,
                          float sunSize, 
                          float sunIntensity,
+                         int renderTargetWidth,
+                         int renderTargetHeight,
                          TEXTURE_FORMAT renderTargetFormat,
                          TEXTURE_FORMAT depthFormat)
 {
@@ -279,7 +281,10 @@ void SunRenderer::Render(IDeviceContext* pContext,
     {
         MapHelper<CameraAttribs> CamAttribs(pContext, m_pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
         CamAttribs->ViewProj = viewProj;
-        CamAttribs->CameraPos = float4(cameraPos.x, cameraPos.y, cameraPos.z, 1.0f);
+        // Store aspect ratio in the w component (height/width for proper circle scaling)
+        float aspectRatio = static_cast<float>(renderTargetWidth) / 
+                           static_cast<float>(renderTargetHeight);
+        CamAttribs->CameraPos = float4(cameraPos.x, cameraPos.y, cameraPos.z, aspectRatio);
     }
 
     // Set pipeline state and shader resource binding

@@ -7756,6 +7756,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                                 CurrCamAttribs.f4Position,
                                 0.02f,  // Size
                                 1.0f,
+                                WINDOW_WIDTH,
+                                WINDOW_HEIGHT,
                                 pRTV->GetTexture()->GetDesc().Format,
                                 pDSV->GetTexture()->GetDesc().Format);
     }

@@ -30,6 +30,8 @@ public:
                 const float3& cameraPos,
                 float sunSize = 0.025f, 
                 float sunIntensity = 1.0f,
+                int renderTargetWidth = 1024,
+                int renderTargetHeight = 1024,
                 TEXTURE_FORMAT renderTargetFormat = TEX_FORMAT_RGBA8_UNORM,
                 TEXTURE_FORMAT depthFormat = TEX_FORMAT_D32_FLOAT);
 
