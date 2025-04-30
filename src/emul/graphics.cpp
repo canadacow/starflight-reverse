@@ -81,6 +81,7 @@
 #include "DiligentShadowMapManager.hpp"
 #include "DiligentEpipolarLightScattering.hpp"
 #include "sun_renderer.h"
+#include "CloudVolumeRenderer.hpp"
 
 namespace Diligent
 {
@@ -684,6 +685,8 @@ struct GraphicsContext
     std::unique_ptr<ShadowMap> shadowMap;
 
     std::unique_ptr<SunRenderer> sunRenderer;
+
+    std::unique_ptr<CloudVolumeRenderer> cloudVolumeRenderer;
 };
 
 static GraphicsContext s_gc{};
@@ -4110,6 +4113,9 @@ static int GraphicsInitThread()
     s_gc.shadowMap = std::make_unique<ShadowMap>();
     s_gc.shadowMap->Initialize();
     s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
+
+    s_gc.cloudVolumeRenderer = std::make_unique<CloudVolumeRenderer>();
+    s_gc.cloudVolumeRenderer->Initialize(s_gc.m_pDevice, s_gc.m_pImmediateContext);
 
     s_gc.epipolarLightScattering = std::make_unique<EpipolarLightScattering>(EpipolarLightScattering::CreateInfo{
     s_gc.m_pDevice,

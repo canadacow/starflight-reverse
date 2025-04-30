@@ -6,6 +6,12 @@
 
 namespace Diligent
 {
+
+namespace HLSL
+{
+#include "Shaders/Common/public/BasicStructures.fxh"
+}
+
 // Vertex structure used for the full-screen quad
 struct FullScreenQuadVertex
 {
@@ -648,13 +654,12 @@ void CloudVolumeRenderer::CreateWeatherMap(IRenderDevice* pDevice, IDeviceContex
 }
 
 void CloudVolumeRenderer::Render(IDeviceContext* pContext,
-                               const float4x4&  ViewProj,
-                               const float3&    CameraPos,
-                               const float3&    LightDir,
-                               const float3&    LightColor,
-                               ITextureView*    pDepthBufferSRV,
-                               TEXTURE_FORMAT   RTVFormat,
-                               TEXTURE_FORMAT   DSVFormat)
+                                const HLSL::CameraAttribs& CamAttribs,
+                                const HLSL::LightAttribs& LightAttrs,
+                                const float4& LightColor,
+                                ITextureView* pDepthBufferSRV,
+                                TEXTURE_FORMAT RTVFormat,
+                                TEXTURE_FORMAT DSVFormat)
 {
     // Skip rendering if not initialized
     if (!m_pRenderCloudsPSO)
@@ -697,13 +702,13 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     CBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
     m_pDevice->CreateBuffer(CBDesc, nullptr, &pCameraAttribsCB);
     
-    // Fill the camera data
+    // Fill the camera data from the HLSL structures
     {
-        MapHelper<CameraAttribsData> CamAttribs(pContext, pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
-        CamAttribs->ViewProj = ViewProj;
-        CamAttribs->CameraPosition = float4(CameraPos, 1.0f);
-        CamAttribs->LightDirection = float4(LightDir, 0.0f);
-        CamAttribs->LightColor = float4(LightColor, 1.0f);
+        MapHelper<CameraAttribsData> CamAttribsData(pContext, pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+        CamAttribsData->ViewProj = CamAttribs.mViewProj;
+        CamAttribsData->CameraPosition = float4(CamAttribs.f4Position.x, CamAttribs.f4Position.y, CamAttribs.f4Position.z, 1.0f);
+        CamAttribsData->LightDirection = float4(LightAttrs.f4Direction.x, LightAttrs.f4Direction.y, LightAttrs.f4Direction.z, 0.0f);
+        CamAttribsData->LightColor = LightColor;
     }
     
     // Create samplers
@@ -791,25 +796,6 @@ void CloudVolumeRenderer::SetupTerrainParameters(float terrainMaxX, float terrai
     m_CloudParams.NoiseOctaves = 4;
     m_CloudParams.DetailStrength = 0.7f;
     m_CloudParams.DetailScale = 5.0f;
-}
-
-void CloudVolumeRenderer::Render(IDeviceContext* pContext,
-                                const HLSL::CameraAttribs& CamAttribs,
-                                const HLSL::LightAttribs& LightAttrs,
-                                ITextureView* pDepthBufferSRV,
-                                TEXTURE_FORMAT RTVFormat,
-                                TEXTURE_FORMAT DSVFormat)
-{
-    // Call the main render function directly with the provided parameters
-    // This avoids using incomplete HLSL types
-    Render(pContext, 
-           *(reinterpret_cast<const float4x4*>(&CamAttribs)), // ViewProj 
-           *(reinterpret_cast<const float3*>(&CamAttribs) + 4), // CameraPos (offset in the struct)
-           *(reinterpret_cast<const float3*>(&LightAttrs)), // LightDir
-           *(reinterpret_cast<const float3*>(&LightAttrs) + 2), // LightColor (offset in the struct)
-           pDepthBufferSRV, 
-           RTVFormat, 
-           DSVFormat);
 }
 
 void CloudVolumeRenderer::UpdateTime(float time)
