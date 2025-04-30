@@ -137,6 +137,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         cbuffer CameraAttribs
         {
             float4x4 g_ViewProj;
+            float4x4 g_InvViewProj;
             float4   g_CameraPosition;
             float4   g_LightDirection;
             float4   g_LightColor;
@@ -152,8 +153,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float4 rayStart = float4(input.pos, -1.0, 1.0);
             float4 rayEnd = float4(input.pos, 1.0, 1.0);
             
-            float4 rayStartWorld = mul(inverse(g_ViewProj), rayStart);
-            float4 rayEndWorld = mul(inverse(g_ViewProj), rayEnd);
+            float4 rayStartWorld = mul(g_InvViewProj, rayStart);
+            float4 rayEndWorld = mul(g_InvViewProj, rayEnd);
             
             rayStartWorld /= rayStartWorld.w;
             rayEndWorld /= rayEndWorld.w;
@@ -182,6 +183,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         cbuffer CameraAttribs
         {
             float4x4 g_ViewProj;
+            float4x4 g_InvViewProj;
             float4   g_CameraPosition;
             float4   g_LightDirection;
             float4   g_LightColor;
@@ -322,7 +324,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float4 clipPos = float4(input.uv * 2.0 - 1.0, depth, 1.0);
             clipPos.y = -clipPos.y; // Adjust for DirectX coordinate system
             
-            float4 worldPos = mul(inverse(g_ViewProj), clipPos);
+            float4 worldPos = mul(g_InvViewProj, clipPos);
             worldPos /= worldPos.w;
             
             float3 rayOrigin = g_CameraPosition.xyz;
@@ -688,6 +690,7 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     struct CameraAttribsData
     {
         float4x4 ViewProj;
+        float4x4 InvViewProj;
         float4   CameraPosition;
         float4   LightDirection;
         float4   LightColor;
@@ -706,6 +709,10 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     {
         MapHelper<CameraAttribsData> CamAttribsData(pContext, pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
         CamAttribsData->ViewProj = CamAttribs.mViewProj;
+        
+        // Calculate inverse view-projection matrix
+        CamAttribsData->InvViewProj = CamAttribs.mViewProjInv;
+        
         CamAttribsData->CameraPosition = float4(CamAttribs.f4Position.x, CamAttribs.f4Position.y, CamAttribs.f4Position.z, 1.0f);
         CamAttribsData->LightDirection = float4(LightAttrs.f4Direction.x, LightAttrs.f4Direction.y, LightAttrs.f4Direction.z, 0.0f);
         CamAttribsData->LightColor = LightColor;
