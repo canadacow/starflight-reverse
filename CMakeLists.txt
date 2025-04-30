@@ -158,6 +158,7 @@ set(HEADER_FILES
     ${nlohmann_json_INCLUDE_DIRS}/nlohmann
     src/shaders
     src/emul/sun_renderer.h
+    src/emul/CloudVolumeRenderer.h
 )
 
 add_executable(emulatesdl WIN32
@@ -186,6 +187,7 @@ add_executable(emulatesdl WIN32
     src/emul/importfix.cpp
     src/emul/vstrace.cpp
     src/emul/sun_renderer.cpp
+    src/emul/CloudVolumeRenderer.cpp
 )
 
 include(DiligentUtils.cmake)
