@@ -1,6 +1,7 @@
 #include "CloudVolumeRenderer.hpp"
 #include "Graphics/GraphicsTools/interface/MapHelper.hpp"
 #include "Graphics/GraphicsTools/interface/GraphicsUtilities.h"
+#include "Graphics/GraphicsEngine/interface/GraphicsTypesX.hpp"
 #include <random>
 #include <cmath>
 
@@ -112,6 +113,43 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     PSODesc.Name = "Cloud volume renderer PSO";
     PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
+    // Define shader resource variable types
+    PipelineResourceLayoutDescX ResourceLayout;
+    ResourceLayout
+        .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_DetailNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_WeatherMapTexture", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_VERTEX, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+        
+    // Create sampler descriptions for immutable samplers
+    SamplerDesc VolumeSamplerDesc;
+    VolumeSamplerDesc.MinFilter = FILTER_TYPE_LINEAR;
+    VolumeSamplerDesc.MagFilter = FILTER_TYPE_LINEAR;
+    VolumeSamplerDesc.MipFilter = FILTER_TYPE_LINEAR;
+    VolumeSamplerDesc.AddressU = TEXTURE_ADDRESS_WRAP;
+    VolumeSamplerDesc.AddressV = TEXTURE_ADDRESS_WRAP;
+    VolumeSamplerDesc.AddressW = TEXTURE_ADDRESS_WRAP;
+    
+    SamplerDesc DepthSamplerDesc;
+    DepthSamplerDesc.MinFilter = FILTER_TYPE_LINEAR;
+    DepthSamplerDesc.MagFilter = FILTER_TYPE_LINEAR;
+    DepthSamplerDesc.MipFilter = FILTER_TYPE_LINEAR;
+    DepthSamplerDesc.AddressU = TEXTURE_ADDRESS_CLAMP;
+    DepthSamplerDesc.AddressV = TEXTURE_ADDRESS_CLAMP;
+    DepthSamplerDesc.AddressW = TEXTURE_ADDRESS_CLAMP;
+    
+    ResourceLayout
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_VolumeNoiseSampler", VolumeSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DetailNoiseSampler", VolumeSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_WeatherMapSampler", VolumeSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc);
+
+    PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
+
     // Shader creation
     ShaderCreateInfo ShaderCI;
     ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -193,17 +231,17 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         {
             float4 g_CloudBoxMin;       // Bottom of cloud box
             float4 g_CloudBoxMax;       // Top of cloud box
+            float3 g_WindDirection;     // Direction clouds move
+            float  g_Time;              // For cloud animation
             float  g_CloudDensity;      // Overall density
             float  g_CloudCoverage;     // How much of the sky is covered
             float  g_CloudSpeed;        // Movement speed
             float  g_CloudShadowIntensity;
             float  g_CloudLightAbsorption;
-            float3 g_WindDirection;     // Direction clouds move
-            float  g_Time;              // For cloud animation
             uint   g_NoiseOctaves;      // Number of noise octaves
             float  g_DetailStrength;    // Strength of detail noise
             float  g_DetailScale;       // Scale of detail noise
-            float  g_Padding[1];        // Padding to 16-byte alignment
+            float  g_Padding[2];        // Padding to ensure 16-byte alignment
         };
 
         Texture3D g_VolumeNoiseTexture;
@@ -455,7 +493,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Create shader resource binding
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
-    // Bind resources
+    // Bind static resources manually
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture")->Set(m_pVolumeNoiseTextureSRV);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DetailNoiseTexture")->Set(m_pDetailNoiseTextureSRV);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture")->Set(m_pWeatherMapTextureSRV);
@@ -678,14 +716,8 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
 
     // Create a temporary SRB to bind camera and depth texture
     RefCntAutoPtr<IShaderResourceBinding> pSRB;
-    m_pRenderCloudsPSO->CreateShaderResourceBinding(&pSRB, false);
+    m_pRenderCloudsPSO->CreateShaderResourceBinding(&pSRB, true);
     
-    // Copy static resources manually
-    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture")->Set(m_pVolumeNoiseTextureSRV);
-    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DetailNoiseTexture")->Set(m_pDetailNoiseTextureSRV);
-    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture")->Set(m_pWeatherMapTextureSRV);
-    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_CloudParams")->Set(m_pCloudParamsCB);
-
     // Create and bind camera attributes buffer
     struct CameraAttribsData
     {
@@ -718,57 +750,10 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
         CamAttribsData->LightColor = LightColor;
     }
     
-    // Create samplers
-    RefCntAutoPtr<ISampler> pSampler;
-    Diligent::SamplerDesc SamplerDesc;
-    SamplerDesc.MinFilter = FILTER_TYPE_LINEAR;
-    SamplerDesc.MagFilter = FILTER_TYPE_LINEAR;
-    SamplerDesc.MipFilter = FILTER_TYPE_LINEAR;
-    SamplerDesc.AddressU = TEXTURE_ADDRESS_WRAP;
-    SamplerDesc.AddressV = TEXTURE_ADDRESS_WRAP;
-    SamplerDesc.AddressW = TEXTURE_ADDRESS_WRAP;
-    m_pDevice->CreateSampler(SamplerDesc, &pSampler);
-    
-    // Create depth sampler
-    RefCntAutoPtr<ISampler> pDepthSampler;
-    Diligent::SamplerDesc DepthSamplerDesc;
-    DepthSamplerDesc.MinFilter = FILTER_TYPE_LINEAR;
-    DepthSamplerDesc.MagFilter = FILTER_TYPE_LINEAR;
-    DepthSamplerDesc.MipFilter = FILTER_TYPE_LINEAR;
-    DepthSamplerDesc.AddressU = TEXTURE_ADDRESS_CLAMP;
-    DepthSamplerDesc.AddressV = TEXTURE_ADDRESS_CLAMP;
-    DepthSamplerDesc.AddressW = TEXTURE_ADDRESS_CLAMP;
-    m_pDevice->CreateSampler(DepthSamplerDesc, &pDepthSampler);
-    
     // Bind the camera attributes and depth texture
-    IShaderResourceVariable* pCameraCBVar = pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs");
-    if (pCameraCBVar)
-        pCameraCBVar->Set(pCameraAttribsCB);
-    
-    pCameraCBVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs");
-    if (pCameraCBVar)
-        pCameraCBVar->Set(pCameraAttribsCB);
-    
-    IShaderResourceVariable* pDepthTexVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
-    if (pDepthTexVar)
-        pDepthTexVar->Set(pDepthBufferSRV);
-    
-    // Bind samplers
-    IShaderResourceVariable* pSamplerVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseSampler");
-    if (pSamplerVar)
-        pSamplerVar->Set(pSampler);
-    
-    pSamplerVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DetailNoiseSampler");
-    if (pSamplerVar)
-        pSamplerVar->Set(pSampler);
-    
-    pSamplerVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapSampler");
-    if (pSamplerVar)
-        pSamplerVar->Set(pSampler);
-    
-    pSamplerVar = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthSampler");
-    if (pSamplerVar)
-        pSamplerVar->Set(pDepthSampler);
+    pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(pCameraAttribsCB);
+    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(pCameraAttribsCB);
+    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture")->Set(pDepthBufferSRV);
     
     // Commit shader resources
     pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);

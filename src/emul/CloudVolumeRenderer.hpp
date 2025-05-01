@@ -25,17 +25,17 @@ public:
     {
         float4 CloudBoxMin;       // Bottom of cloud box
         float4 CloudBoxMax;       // Top of cloud box
+        float3 WindDirection;     // Direction clouds move - moved to be aligned at 32-byte boundary
+        float  Time;              // For cloud animation
         float  CloudDensity;      // Overall density
         float  CloudCoverage;     // How much of the sky is covered
         float  CloudSpeed;        // Movement speed
         float  CloudShadowIntensity;
         float  CloudLightAbsorption;
-        float3 WindDirection;     // Direction clouds move
-        float  Time;              // For cloud animation
         uint   NoiseOctaves;      // Number of noise octaves
         float  DetailStrength;    // Strength of detail noise
         float  DetailScale;       // Scale of detail noise
-        float  Padding[1];        // Padding to 16-byte alignment
+        float  Padding[2];        // Padding to ensure 16-byte alignment
     };
 
     CloudVolumeRenderer();
