@@ -494,10 +494,14 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
     // Bind static resources manually
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture")->Set(m_pVolumeNoiseTextureSRV);
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DetailNoiseTexture")->Set(m_pDetailNoiseTextureSRV);
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture")->Set(m_pWeatherMapTextureSRV);
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_CloudParams")->Set(m_pCloudParamsCB);
+    if(m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture") != nullptr)
+        m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture")->Set(m_pVolumeNoiseTextureSRV);
+    if(m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DetailNoiseTexture") != nullptr)
+        m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DetailNoiseTexture")->Set(m_pDetailNoiseTextureSRV);
+    if(m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture") != nullptr)
+        m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture")->Set(m_pWeatherMapTextureSRV);
+    if(m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_CloudParams") != nullptr)
+        m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_CloudParams")->Set(m_pCloudParamsCB);
 }
 
 void CloudVolumeRenderer::CreateVolumeNoiseTexture(IRenderDevice* pDevice, IDeviceContext* pContext)
