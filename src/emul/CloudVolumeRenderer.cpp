@@ -301,7 +301,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     PSOCreateInfo.GraphicsPipeline.RTVFormats[3] = TEX_FORMAT_RG8_UNORM;      // MaterialData
     PSOCreateInfo.GraphicsPipeline.RTVFormats[4] = TEX_FORMAT_RG16_FLOAT;     // MotionVec
     PSOCreateInfo.GraphicsPipeline.RTVFormats[5] = TEX_FORMAT_RGBA16_FLOAT;   // SpecularIBL;
-    PSOCreateInfo.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT;       // Will be overridden in Render()
+    PSOCreateInfo.GraphicsPipeline.DSVFormat = TEX_FORMAT_UNKNOWN;       // Will be overridden in Render()
 
     // Set blend state
     for (Uint32 i = 0; i < PSOCreateInfo.GraphicsPipeline.NumRenderTargets; ++i)
@@ -317,7 +317,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     }
 
     // Set depth-stencil state (no depth testing for clouds)
-    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = True;
+    PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = False;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = False;
     PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
@@ -359,10 +359,6 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
 
     // Set pipeline state
     pContext->SetPipelineState(m_pRenderCloudsPSO);
-
-    // Create a temporary SRB to bind camera and depth texture
-    RefCntAutoPtr<IShaderResourceBinding> pSRB;
-    m_pRenderCloudsPSO->CreateShaderResourceBinding(&pSRB, true);
     
     // Create and bind camera attributes buffer
     RefCntAutoPtr<IBuffer> pCameraAttribsCB;
@@ -380,13 +376,13 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
         *MappedCamAttribs = CamAttribs;
     }
     
-    // Bind the camera attributes and depth texture
-    pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(pCameraAttribsCB);
-    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(pCameraAttribsCB);
-    pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture")->Set(pDepthBufferSRV);
+    // Bind the camera attributes and depth texture to the existing SRB
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture")->Set(pDepthBufferSRV);
     
     // Commit shader resources
-    pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    pContext->CommitShaderResources(m_pRenderCloudsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
     // Set vertex and index buffers
     const Uint64 Offsets = 0;

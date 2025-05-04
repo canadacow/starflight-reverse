@@ -7753,8 +7753,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     RenderModel(SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
 
-    ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-
     if (s_gc.currentScene == SCENE_TERRAIN && s_gc.sunRenderer)
     {
         // Calculate sun color based on intensity
@@ -7774,6 +7772,16 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         // Render cloud volume if we're in terrain scene
         if (s_gc.cloudVolumeRenderer)
         {
+            ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+            Uint32 BuffersMaskNoDepth = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS;
+            s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMaskNoDepth, nullptr, 0);
+
+            StateTransitionDesc Barriers[] = {
+                {pCurrDepthSRV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE}
+            };
+            s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
+
             s_gc.cloudVolumeRenderer->Render(s_gc.m_pImmediateContext,
                                         CurrCamAttribs,
                                         LightAttrs,
@@ -7793,6 +7801,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.m_pImmediateContext->TransitionResourceStates(GBUFFER_RT_COUNT, Barriers);
     }
 
+    ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
     ITextureView* pPrevDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH0 : GBUFFER_RT_DEPTH1)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
     {
         PostFXContext::RenderAttributes PostFXAttibs;
