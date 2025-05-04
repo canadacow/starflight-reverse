@@ -5810,6 +5810,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     CurrCamAttribs.f4ExtraData[0].x = pCamera->Perspective.YFov;
 
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
+
+    s_gc.cloudVolumeRenderer->SetupTerrainParameters(s_gc.terrain.aabb, s_gc.waterHeight);
 }
 
 void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
@@ -7751,6 +7753,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     RenderModel(SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAG_BLEND);
 
+    ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
     if (s_gc.currentScene == SCENE_TERRAIN && s_gc.sunRenderer)
     {
         // Calculate sun color based on intensity
@@ -7766,6 +7770,18 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                                 WINDOW_HEIGHT,
                                 pRTV->GetTexture()->GetDesc().Format,
                                 pDSV->GetTexture()->GetDesc().Format);
+                                
+        // Render cloud volume if we're in terrain scene
+        if (s_gc.cloudVolumeRenderer)
+        {
+            s_gc.cloudVolumeRenderer->Render(s_gc.m_pImmediateContext,
+                                        CurrCamAttribs,
+                                        LightAttrs,
+                                        float4(sunColor, 1.0f),
+                                        pCurrDepthSRV,
+                                        pRTV->GetTexture()->GetDesc().Format,
+                                        pDSV->GetTexture()->GetDesc().Format);
+        }
     }
 
     {
@@ -7777,7 +7793,6 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.m_pImmediateContext->TransitionResourceStates(GBUFFER_RT_COUNT, Barriers);
     }
 
-    ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
     ITextureView* pPrevDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH0 : GBUFFER_RT_DEPTH1)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
     {
         PostFXContext::RenderAttributes PostFXAttibs;

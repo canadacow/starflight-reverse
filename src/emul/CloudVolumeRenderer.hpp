@@ -6,6 +6,7 @@
 #include "Graphics/GraphicsEngine/interface/TextureView.h"
 #include "Graphics/GraphicsEngine/interface/Buffer.h"
 #include "Graphics/GraphicsEngine/interface/InputLayout.h"
+#include "Common/interface/AdvancedMath.hpp"
 #include "Common/interface/RefCntAutoPtr.hpp"
 #include "Common/interface/BasicMath.hpp"
 
@@ -25,17 +26,8 @@ public:
     {
         float4 CloudBoxMin;       // Bottom of cloud box
         float4 CloudBoxMax;       // Top of cloud box
-        float3 WindDirection;     // Direction clouds move - moved to be aligned at 32-byte boundary
-        float  Time;              // For cloud animation
-        float  CloudDensity;      // Overall density
-        float  CloudCoverage;     // How much of the sky is covered
-        float  CloudSpeed;        // Movement speed
-        float  CloudShadowIntensity;
-        float  CloudLightAbsorption;
-        uint   NoiseOctaves;      // Number of noise octaves
-        float  DetailStrength;    // Strength of detail noise
-        float  DetailScale;       // Scale of detail noise
-        float  Padding[2];        // Padding to ensure 16-byte alignment
+        float4 CloudColor;        // Color of the cloud box
+        float  CloudOpacity;      // Opacity of the cloud box
     };
 
     CloudVolumeRenderer();
@@ -55,33 +47,15 @@ public:
     const CloudParams& GetCloudParams() const { return m_CloudParams; }
 
     // Setup cloud parameters using terrain data
-    void SetupTerrainParameters(float terrainMaxX, float terrainMaxZ, float waterHeight);
-
-    // Update time parameter for cloud animation
-    void UpdateTime(float time);
+    void SetupTerrainParameters(const BoundBox& terrainBounds, float waterHeight);
 
 private:
-    void CreateVolumeNoiseTexture(IRenderDevice* pDevice, IDeviceContext* pContext);
-    void CreateDetailNoiseTexture(IRenderDevice* pDevice, IDeviceContext* pContext);
-    void CreateWeatherMap(IRenderDevice* pDevice, IDeviceContext* pContext);
-
-private:
-    RefCntAutoPtr<IPipelineState>         m_pRenderCloudsPSO;
-    RefCntAutoPtr<IShaderResourceBinding> m_pRenderCloudsSRB;
-    RefCntAutoPtr<IBuffer>                m_pCloudParamsCB;
-    
-    RefCntAutoPtr<ITexture>               m_pVolumeNoiseTexture;
-    RefCntAutoPtr<ITextureView>           m_pVolumeNoiseTextureSRV;
-    
-    RefCntAutoPtr<ITexture>               m_pDetailNoiseTexture;
-    RefCntAutoPtr<ITextureView>           m_pDetailNoiseTextureSRV;
-    
-    RefCntAutoPtr<ITexture>               m_pWeatherMapTexture;
-    RefCntAutoPtr<ITextureView>           m_pWeatherMapTextureSRV;
-    
     // Full-screen quad resources
     RefCntAutoPtr<IBuffer>                m_pVertexBuffer;
     RefCntAutoPtr<IBuffer>                m_pIndexBuffer;
+    RefCntAutoPtr<IPipelineState>         m_pRenderCloudsPSO;
+    RefCntAutoPtr<IShaderResourceBinding> m_pRenderCloudsSRB;
+    RefCntAutoPtr<IBuffer>                m_pCloudParamsCB;
     
     CloudParams m_CloudParams;
     RefCntAutoPtr<IRenderDevice>          m_pDevice;
