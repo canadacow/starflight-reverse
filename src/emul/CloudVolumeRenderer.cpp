@@ -493,6 +493,41 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Create shader resource binding
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
+    // Get the number of variables in the SRB for each shader stage
+    Uint32 vsVarCount = m_pRenderCloudsSRB->GetVariableCount(SHADER_TYPE_VERTEX);
+    Uint32 psVarCount = m_pRenderCloudsSRB->GetVariableCount(SHADER_TYPE_PIXEL);
+    
+    // Log the variable counts
+    LOG_INFO_MESSAGE("Shader Resource Binding variable counts:");
+    LOG_INFO_MESSAGE("  Vertex Shader: ", vsVarCount, " variables");
+    LOG_INFO_MESSAGE("  Pixel Shader: ", psVarCount, " variables");
+    
+    // List all variables in the vertex shader
+    LOG_INFO_MESSAGE("Vertex Shader variables:");
+    for (Uint32 i = 0; i < vsVarCount; ++i)
+    {
+        auto* pVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, i);
+        if (pVar != nullptr)
+        {
+            ShaderResourceDesc desc;
+            pVar->GetResourceDesc(desc);
+            LOG_INFO_MESSAGE("  [", i, "] ", desc.Name);
+        }
+    }
+    
+    // List all variables in the pixel shader
+    LOG_INFO_MESSAGE("Pixel Shader variables:");
+    for (Uint32 i = 0; i < psVarCount; ++i)
+    {
+        auto* pVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, i);
+        if (pVar != nullptr)
+        {
+            ShaderResourceDesc desc;
+            pVar->GetResourceDesc(desc);
+            LOG_INFO_MESSAGE("  [", i, "] ", desc.Name);
+        }
+    }
+
     // Bind static resources manually
     if(m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture") != nullptr)
         m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_VolumeNoiseTexture")->Set(m_pVolumeNoiseTextureSRV);
