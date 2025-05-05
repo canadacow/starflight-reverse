@@ -47,7 +47,7 @@ public:
     const CloudParams& GetCloudParams() const { return m_CloudParams; }
 
     // Setup cloud parameters using terrain data
-    void SetupTerrainParameters(const BoundBox& terrainBounds, float waterHeight);
+    void SetupTerrainParameters(const BoundBox& terrainBounds);
 
 private:
     // Full-screen quad resources

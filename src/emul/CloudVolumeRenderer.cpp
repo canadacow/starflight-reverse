@@ -131,6 +131,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Shader creation
     ShaderCreateInfo ShaderCI;
     ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
     ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
     // Vertex shader
     ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
@@ -184,6 +185,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
     // Pixel shader with simple box rendering
     ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
     ShaderCI.EntryPoint = "main";
     ShaderCI.Desc.Name = "Cloud Volume PS";
     ShaderCI.Source = R"(
@@ -245,7 +247,6 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             // Get world-space position of the current pixel from depth buffer
             float depth = g_DepthTexture.Sample(g_DepthSampler, input.uv).r;
             float4 clipPos = float4(input.uv * 2.0 - 1.0, depth, 1.0);
-            clipPos.y = -clipPos.y; // Adjust for DirectX coordinate system
             
             float4 worldPos = mul(g_Camera.mViewProjInv, clipPos);
             worldPos /= worldPos.w;
@@ -379,7 +380,156 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(pCameraAttribsCB);
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture")->Set(pDepthBufferSRV);
+
+    auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
+    if (srv)
+    {
+        srv->Set(pDepthBufferSRV);
+    }
+
+
+#if 1
+    // Output structure similar to PSInput in the shader
+    struct PSInputTest {
+        float4 pos;
+        float2 uv;
+        float3 rayDir;
+    };
+
+    // Create a lambda to test/debug the ray direction computation
+    auto TestRayDirectionComputation = [&](const float2& pos, const float2& uv) {
+        // Input structure similar to VSInput in the shader
+        struct VSInputTest {
+            float2 pos;
+            float2 uv;
+        };
+        
+        // Create test input
+        VSInputTest input;
+        input.pos = pos;
+        input.uv = uv;
+        
+        // Compute output similar to vertex shader
+        PSInputTest output;
+        output.pos = float4(input.pos.x, input.pos.y, 0.0f, 1.0f);
+        output.uv = input.uv;
+        
+        // Calculate ray direction in world space
+        float4 rayStart = float4(input.pos.x, input.pos.y, 0.0f, 1.0f);
+        float4 rayEnd = float4(input.pos.x, input.pos.y, 1.0f, 1.0f);
+        
+        float4 rayStartWorld = rayStart * CamAttribs.mViewProjInv.Transpose();
+        float4 rayEndWorld = rayEnd * CamAttribs.mViewProjInv.Transpose();
+        
+        rayStartWorld /= rayStartWorld.w;
+        rayEndWorld /= rayEndWorld.w;
+        
+        output.rayDir = normalize(float3(
+            rayEndWorld.x - rayStartWorld.x,
+            rayEndWorld.y - rayStartWorld.y,
+            rayEndWorld.z - rayStartWorld.z
+        ));
+        
+        return output;
+    };
+
+    // Create a lambda to test/debug the pixel shader computation
+    auto TestPixelShaderComputation = [&](PSInputTest input) {
+        // Input structure similar to PSInput in the shader
+        struct PSInputTest {
+            float4 pos;
+            float2 uv;
+            float3 rayDir;
+        };
+        
+        // Output structure similar to PSOutput in the shader
+        struct PSOutputTest {
+            float4 Color;
+            float4 Normal;
+            float4 BaseColor;
+            float4 MaterialData;
+            float4 MotionVec;
+            float4 SpecularIBL;
+        };
+
+        float depth = 0.33f;
+        // Get world-space position from depth buffer
+        float4 clipPos = float4(input.uv * float2(2.0f) - float2(1.0f), depth, 1.0f);
+        float4 worldPos = clipPos * CamAttribs.mViewProjInv.Transpose();
+        worldPos /= worldPos.w;
+        
+        float3 rayOrigin = float3(CamAttribs.f4Position.x, CamAttribs.f4Position.y, CamAttribs.f4Position.z);
+        float3 rayDir = normalize(input.rayDir);
+        
+        // Find intersection with cloud box
+        float tNear, tFar;
+        bool intersect = false;
+        
+        // Ray-box intersection calculation
+        float3 boxMin = float3(m_CloudParams.CloudBoxMin.x, m_CloudParams.CloudBoxMin.y, m_CloudParams.CloudBoxMin.z);
+        float3 boxMax = float3(m_CloudParams.CloudBoxMax.x, m_CloudParams.CloudBoxMax.y, m_CloudParams.CloudBoxMax.z);
+        
+        // Create a lambda for ray-box intersection
+        auto Intersect = [](float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax, float& outTNear, float& outTFar) -> bool {
+            // Calculate inverse direction
+            float3 invDir = float3(
+                rayDir.x != 0.0f ? 1.0f / rayDir.x : FLT_MAX,
+                rayDir.y != 0.0f ? 1.0f / rayDir.y : FLT_MAX,
+                rayDir.z != 0.0f ? 1.0f / rayDir.z : FLT_MAX
+            );
+            
+            // Calculate intersection distances
+            float3 tMin = (boxMin - rayOrigin) * invDir;
+            float3 tMax = (boxMax - rayOrigin) * invDir;
+            
+            float3 t1 = min(tMin, tMax);
+            float3 t2 = max(tMin, tMax);
+            
+            outTNear = std::max(std::max(t1.x, t1.y), t1.z);
+            outTFar = std::min(std::min(t2.x, t2.y), t2.z);
+            
+            return outTFar > outTNear && outTFar > 0.0f;
+        };
+        
+        // Use the lambda to perform the intersection test
+        intersect = Intersect(rayOrigin, rayDir, boxMin, boxMax, tNear, tFar);
+        
+        // Early exit if no intersection
+        auto length = [](const float3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); };
+        float3 worldToRay = float3(worldPos.x - rayOrigin.x, worldPos.y - rayOrigin.y, worldPos.z - rayOrigin.z);
+        if (!intersect || tFar <= 0.0f || tNear >= length(worldToRay))
+        {
+            // Return empty output (equivalent to discard in shader)
+            return PSOutputTest{};
+        }
+        
+        tNear = std::max(0.0f, tNear);
+        
+        // Simple semi-transparent box
+        float3 color = float3(
+            m_CloudParams.CloudColor.x,
+            m_CloudParams.CloudColor.y,
+            m_CloudParams.CloudColor.z
+        );
+        float opacity = m_CloudParams.CloudOpacity;
+        
+        // Create output similar to pixel shader
+        PSOutputTest output;
+        output.Color = float4(color.x, color.y, color.z, opacity);
+        output.Normal = float4(0.0f, 1.0f, 0.0f, 1.0f); // Upward normal
+        output.BaseColor = float4(color.x, color.y, color.z, opacity);
+        output.MaterialData = float4(0.0f, 0.0f, 0.0f, opacity); // No roughness/metallic
+        output.MotionVec = float4(0.0f, 0.0f, 0.0f, 1.0f); // No motion
+        output.SpecularIBL = float4(0.0f, 0.0f, 0.0f, opacity); // No IBL
+        
+        return output;
+    };
+    
+    // Test the ray direction computation with corner positions
+    auto center = TestRayDirectionComputation(float2(0.0f, 0.0f), float2(0.5f, 0.5f));
+    auto centerPS = TestPixelShaderComputation(center);
+
+#endif
     
     // Commit shader resources
     pContext->CommitShaderResources(m_pRenderCloudsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -398,11 +548,11 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     pContext->DrawIndexed(DrawAttrs);
 }
 
-void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds, float waterHeight)
+void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
 {
     // Set the cloud box boundaries
-    m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, waterHeight + 25.0f, terrainBounds.Min.z, 1.0f);
-    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, waterHeight + 60.0f, terrainBounds.Max.z, 1.0f);
+    m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 35.0f, terrainBounds.Min.z, 1.0f);
+    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 50.0f, terrainBounds.Max.z, 1.0f);
     
     // Set default cloud parameters
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
