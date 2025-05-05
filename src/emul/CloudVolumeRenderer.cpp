@@ -388,7 +388,7 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     }
 
 
-#if 1
+#if 0
     // Output structure similar to PSInput in the shader
     struct PSInputTest {
         float4 pos;
@@ -552,7 +552,7 @@ void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
 {
     // Set the cloud box boundaries
     m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 35.0f, terrainBounds.Min.z, 1.0f);
-    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 50.0f, terrainBounds.Max.z, 1.0f);
+    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 65.0f, terrainBounds.Max.z, 1.0f);
     
     // Set default cloud parameters
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
