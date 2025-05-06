@@ -5812,6 +5812,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 
     s_gc.cloudVolumeRenderer->SetupTerrainParameters(s_gc.terrain.aabb);
+    s_gc.cloudVolumeRenderer->Update(currentTimeInSeconds);
 }
 
 void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)

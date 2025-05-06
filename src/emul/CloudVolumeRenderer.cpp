@@ -31,10 +31,25 @@ CloudVolumeRenderer::CloudVolumeRenderer()
     m_CloudParams.CloudBoxMax = float4(100.0f, 50.0f, 100.0f, 1.0f);
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
     m_CloudParams.CloudOpacity = 0.3f;
+    
+    // New volumetric cloud parameters
+    m_CloudParams.ScatteringParams = float4(0.04f, 0.02f, 0.2f, 1.0f);  // Scattering, absorption, phase g, density multiplier
+    m_CloudParams.NoiseParams = float4(0.0003f, 0.001f, 0.3f, 0.2f);    // Base scale, detail scale, detail strength, curl strength
+    m_CloudParams.ShapeParams = float4(0.65f, 0.15f, 0.1f, 0.8f);       // Coverage, base density, anvil bias, height gradient scale
+    m_CloudParams.AnimationParams = float4(1.0f, 0.0f, 0.2f, 0.0f);     // Wind direction x,y,z and time
 }
 
 CloudVolumeRenderer::~CloudVolumeRenderer()
 {
+}
+
+void CloudVolumeRenderer::Update(double elapsedTime)
+{
+    // Update time for cloud animation
+    m_Time = elapsedTime;
+    
+    // Update animation parameters
+    m_CloudParams.AnimationParams.w = m_Time * 0.05f; // Control animation speed
 }
 
 void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pImmediateContext)
@@ -42,8 +57,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Store device reference
     m_pDevice = pDevice;
 
+    // Create noise textures needed for cloud rendering
+    CreateNoiseTextures(pDevice);
+
     RefCntAutoPtr<IShaderSourceInputStreamFactory> pMemorySourceFactory = CreateMemoryShaderSourceFactory({});      
-    auto pCompoundSourceFactory         = SFCreateCompoundShaderSourceFactory(pDevice, pMemorySourceFactory);
+    auto pCompoundSourceFactory = SFCreateCompoundShaderSourceFactory(pDevice, pMemorySourceFactory);
 
     // Create a full-screen quad for rendering
     {
@@ -112,7 +130,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_VERTEX, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        .AddVariable(SHADER_TYPE_PIXEL, "LightAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_PerlinWorleyNoise", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_WorleyNoise", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_WeatherMap", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
         
     // Create sampler descriptions for immutable samplers
     SamplerDesc DepthSamplerDesc;
@@ -123,8 +145,18 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     DepthSamplerDesc.AddressV = TEXTURE_ADDRESS_CLAMP;
     DepthSamplerDesc.AddressW = TEXTURE_ADDRESS_CLAMP;
     
+    SamplerDesc NoiseTextureSamplerDesc;
+    NoiseTextureSamplerDesc.MinFilter = FILTER_TYPE_LINEAR;
+    NoiseTextureSamplerDesc.MagFilter = FILTER_TYPE_LINEAR;
+    NoiseTextureSamplerDesc.MipFilter = FILTER_TYPE_LINEAR;
+    NoiseTextureSamplerDesc.AddressU = TEXTURE_ADDRESS_MIRROR;
+    NoiseTextureSamplerDesc.AddressV = TEXTURE_ADDRESS_MIRROR;
+    NoiseTextureSamplerDesc.AddressW = TEXTURE_ADDRESS_MIRROR;
+    
     ResourceLayout
-        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc);
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseTextureSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_WeatherSampler", NoiseTextureSamplerDesc);
 
     PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
 
@@ -183,11 +215,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     RefCntAutoPtr<IShader> pVS;
     pDevice->CreateShader(ShaderCI, &pVS);
 
-    // Pixel shader with simple box rendering
+    // Pixel shader with volumetric cloud rendering
     ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
     ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
     ShaderCI.EntryPoint = "main";
-    ShaderCI.Desc.Name = "Cloud Volume PS";
+    ShaderCI.Desc.Name = "Volumetric Cloud PS";
     ShaderCI.Source = R"(
         struct PSInput
         {
@@ -213,17 +245,44 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         {
             CameraAttribs g_Camera;
         };
+        
+        cbuffer LightAttribs
+        {
+            LightAttribs g_Light;
+        };
 
+        struct CloudParamsType
+        {
+            float4 CloudBoxMin;            // Bottom of cloud box
+            float4 CloudBoxMax;            // Top of cloud box
+            float4 CloudColor;             // Base color of clouds
+            float4 ScatteringParams;       // x: scattering, y: absorption, z: phase parameter g, w: density multiplier
+            float4 NoiseParams;            // x: base scale, y: detail scale, z: detail strength, w: curl strength
+            float4 ShapeParams;            // x: coverage, y: base density, z: anvil bias, w: height gradient scale
+            float4 AnimationParams;        // x,y,z: wind direction and speed, w: time
+            float  CloudOpacity;           // Master opacity control
+        };
+        
         cbuffer CloudParams
         {
-            float4 g_CloudBoxMin;       // Bottom of cloud box
-            float4 g_CloudBoxMax;       // Top of cloud box
-            float4 g_CloudColor;        // Color of the cloud box
-            float  g_CloudOpacity;      // Opacity of the cloud box
+            CloudParamsType g_CloudParams;
         };
 
         Texture2D g_DepthTexture;
         SamplerState g_DepthSampler;
+        
+        Texture3D g_PerlinWorleyNoise;
+        Texture3D g_WorleyNoise;
+        Texture2D g_WeatherMap;
+        SamplerState g_NoiseSampler;
+        SamplerState g_WeatherSampler;
+
+        // Helper function to remap values from one range to another - using lerp
+        float remap(float value, float oldMin, float oldMax, float newMin, float newMax)
+        {
+            float t = saturate((value - oldMin) / (oldMax - oldMin));
+            return lerp(newMin, newMax, t);
+        }
 
         // Ray-box intersection function
         bool IntersectBox(float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax, out float tNear, out float tFar)
@@ -240,40 +299,208 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             
             return tFar > tNear && tFar > 0.0;
         }
+        
+        // Henyey-Greenstein phase function
+        float HenyeyGreenstein(float cosAngle, float g)
+        {
+            float g2 = g * g;
+            return (1.0 - g2) / (4.0 * 3.14159265 * pow(1.0 + g2 - 2.0 * g * cosAngle, 1.5));
+        }
+        
+        // Sample weather map for cloud coverage and type information
+        float4 SampleWeatherMap(float3 worldPos)
+        {
+            // Project world position onto xz plane for weather map
+            float2 weatherCoord = (worldPos.xz - g_CloudParams.CloudBoxMin.xz) / (g_CloudParams.CloudBoxMax.xz - g_CloudParams.CloudBoxMin.xz);
+            
+            // Ensure coordinates are properly clamped to avoid sampling outside the texture
+            weatherCoord = saturate(weatherCoord);
+            
+            return g_WeatherMap.Sample(g_WeatherSampler, weatherCoord);
+        }
+        
+        // Compute cloud shape from noise
+        float SampleCloudDensity(float3 pos, float heightPercent)
+        {
+            // Apply animation
+            float3 animatedPos = pos + g_CloudParams.AnimationParams.xyz * g_CloudParams.AnimationParams.w;
+            
+            // Compute base shape noise
+            float3 baseNoiseUV = animatedPos * g_CloudParams.NoiseParams.x;
+            float4 baseNoise = g_PerlinWorleyNoise.Sample(g_NoiseSampler, baseNoiseUV);
+            
+            // Compute detail noise
+            float3 detailNoiseUV = animatedPos * g_CloudParams.NoiseParams.y;
+            float4 detailNoise = g_WorleyNoise.Sample(g_NoiseSampler, detailNoiseUV);
+            
+            // Sample weather map
+            float4 weatherData = SampleWeatherMap(pos);
+            float coverage = weatherData.r * g_CloudParams.ShapeParams.x;
+            float cloudType = weatherData.g;
+            
+            // Compute height gradient
+            float heightGradient = saturate((heightPercent - 0.07) / 0.45);
+            float densityHeightGradient = exp(-heightPercent * g_CloudParams.ShapeParams.w);
+            
+            // Compute anvil shape (more clouds at top)
+            float anvilStrength = saturate(pow(heightPercent, 4.0) * g_CloudParams.ShapeParams.z * cloudType);
+            
+            // Combine base shape
+            float baseShape = baseNoise.r;
+            float baseShapeFBM = baseNoise.g * 0.625 + baseNoise.b * 0.25 + baseNoise.a * 0.125;
+            
+            // Compute density
+            float baseCloudDensity = saturate(remap(baseShape, baseShapeFBM - 1.0, 1.0, 0.0, 1.0));
+            baseCloudDensity = densityHeightGradient * saturate(remap(baseCloudDensity, 1.0 - coverage, 1.0, 0.0, 1.0));
+            
+            // Apply erosion from detail noise
+            float detailFBM = detailNoise.r * 0.625 + detailNoise.g * 0.25 + detailNoise.b * 0.125;
+            float detailErodeNoise = saturate(remap(detailFBM, 0.0, 1.0, 0.0, 1.0));
+            
+            // Erode the base density with detail noise
+            float finalDensity = saturate(remap(baseCloudDensity, detailErodeNoise * g_CloudParams.NoiseParams.z, 1.0, 0.0, 1.0));
+            
+            // Apply anvil effect
+            finalDensity = max(finalDensity, anvilStrength);
+            
+            // Apply global density multiplier
+            return finalDensity * g_CloudParams.ScatteringParams.w * g_CloudParams.CloudOpacity;
+        }
+        
+        // Sample along the ray with ray marching to compute cloud color and transparency
+        float4 SampleClouds(float3 rayOrigin, float3 rayDir, float tNear, float tFar, float sceneDepthT)
+        {
+            // Limit ray length to scene depth or box distance
+            tFar = min(tFar, sceneDepthT);
+            if (tNear >= tFar) return float4(0.0, 0.0, 0.0, 0.0);
+            
+            // Ray marching parameters
+            const int sampleCount = 64;
+            float stepSize = (tFar - tNear) / float(sampleCount);
+            
+            // Initialize for ray marching
+            float3 lightDir = normalize(g_Light.f4Direction.xyz);
+            
+            // Start ray marching
+            float transmittance = 1.0;
+            float3 totalLight = float3(0.0, 0.0, 0.0);
+            float t = tNear;
+            
+            for (int i = 0; i < sampleCount; i++)
+            {
+                // Skip if ray has passed scene depth or we've accumulated enough opacity
+                if (t > sceneDepthT || transmittance < 0.01)
+                    break;
+                
+                // Position along ray
+                float3 pos = rayOrigin + rayDir * t;
+                
+                // Compute height fraction within cloud layer
+                float heightFraction = (pos.y - g_CloudParams.CloudBoxMin.y) / (g_CloudParams.CloudBoxMax.y - g_CloudParams.CloudBoxMin.y);
+                
+                // Sample cloud density at this position
+                float density = SampleCloudDensity(pos, heightFraction);
+                
+                // Skip empty space
+                if (density > 0.0)
+                {
+                    // Light attenuation (simplified)
+                    float lightDist = 0.0;
+                    const int lightSampleCount = 6;
+                    float lightStepSize = 40.0 / float(lightSampleCount);
+                    float3 lightSamplePos = pos;
+                    float lightTransmittance = 1.0;
+                    
+                    // Sample light
+                    for (int j = 0; j < lightSampleCount; j++)
+                    {
+                        lightSamplePos += lightDir * lightStepSize;
+                        float heightFrac = (lightSamplePos.y - g_CloudParams.CloudBoxMin.y) / (g_CloudParams.CloudBoxMax.y - g_CloudParams.CloudBoxMin.y);
+                        if (heightFrac < 0.0 || heightFrac > 1.0) break;
+                        
+                        float lightDensity = SampleCloudDensity(lightSamplePos, heightFrac) * 0.5;
+                        float extinction = g_CloudParams.ScatteringParams.x + g_CloudParams.ScatteringParams.y;
+                        lightTransmittance *= exp(-extinction * lightDensity * lightStepSize);
+                        
+                        if (lightTransmittance < 0.01) break;
+                    }
+                    
+                    // Calculate in-scattering
+                    float cosAngle = dot(rayDir, lightDir);
+                    float phase = HenyeyGreenstein(cosAngle, g_CloudParams.ScatteringParams.z);
+                    
+                    // Ambient term for multi-scattering approximation
+                    float ambient = 0.5 + 0.5 * heightFraction;
+                    
+                    // Calculate total light contribution
+                    float scatteredLight = lightTransmittance * phase + ambient * 0.2;
+                    float extinction = g_CloudParams.ScatteringParams.x + g_CloudParams.ScatteringParams.y;
+                    float dTrans = exp(-extinction * density * stepSize);
+                    
+                    // Beer's law
+                    float3 cloudColor = lerp(g_CloudParams.CloudColor.rgb * 0.15, g_CloudParams.CloudColor.rgb, heightFraction);
+                    float3 S = cloudColor * scatteredLight * (1.0 - dTrans) * transmittance;
+                    
+                    // Accumulate light and update transmittance
+                    totalLight += S;
+                    transmittance *= dTrans;
+                }
+                
+                // Step along ray
+                t += stepSize;
+            }
+            
+            // Final color with transmittance
+            return float4(totalLight, 1.0 - transmittance);
+        }
 
         PSOutput main(PSInput input)
         {
             PSOutput output;
-            // Get world-space position of the current pixel from depth buffer
-            float depth = g_DepthTexture.Sample(g_DepthSampler, input.uv).r;
-            float4 clipPos = float4(input.uv * 2.0 - 1.0, depth, 1.0);
             
-            float4 worldPos = mul(g_Camera.mViewProjInv, clipPos);
-            worldPos /= worldPos.w;
-            
+            // Get world-space ray origin
             float3 rayOrigin = g_Camera.f4Position.xyz;
             float3 rayDir = normalize(input.rayDir);
             
+            // Get the scene depth from depth buffer
+            float depth = g_DepthTexture.Sample(g_DepthSampler, input.uv).r;
+            float4 clipPos = float4(input.uv * 2.0 - 1.0, depth, 1.0);
+            float4 worldPos = mul(g_Camera.mViewProjInv, clipPos);
+            worldPos /= worldPos.w;
+            
+            // Calculate distance to scene geometry
+            float sceneDepthT = length(worldPos.xyz - rayOrigin);
+            
             // Find intersection with cloud box
             float tNear, tFar;
-            bool intersect = IntersectBox(rayOrigin, rayDir, g_CloudBoxMin.xyz, g_CloudBoxMax.xyz, tNear, tFar);
+            bool intersect = IntersectBox(rayOrigin, rayDir, g_CloudParams.CloudBoxMin.xyz, g_CloudParams.CloudBoxMax.xyz, tNear, tFar);
             
             // Early exit if no intersection
-            if (!intersect || tFar <= 0 || tNear >= length(worldPos.xyz - rayOrigin))
+            if (!intersect || tFar <= 0.0)
             {
-                discard; // Early exit with discard instead of returning empty output
+                discard;
             }
-            tNear = max(0, tNear);
-            // Simple semi-transparent box
-            float3 color = g_CloudColor.rgb;
-            float opacity = g_CloudOpacity;
+            
+            // Start ray just in front of camera if we're inside the volume
+            tNear = max(0.0, tNear);
+            
+            // Sample clouds with ray marching
+            float4 cloudColor = SampleClouds(rayOrigin, rayDir, tNear, tFar, sceneDepthT);
+            
+            // Early exit if totally transparent
+            if (cloudColor.a < 0.001)
+            {
+                discard;
+            }
+            
             // Output to all PBR G-buffer targets
-            output.Color        = float4(color, opacity);
-            output.Normal       = float4(0.0, 1.0, 0.0, 1.0); // Upward normal
-            output.BaseColor    = float4(color, opacity);
-            output.MaterialData = float4(0.0, 0.0, 0.0, opacity); // No roughness/metallic
-            output.MotionVec    = float4(0.0, 0.0, 0.0, 1.0); // No motion
-            output.SpecularIBL  = float4(0.0, 0.0, 0.0, opacity); // No IBL
+            output.Color        = float4(cloudColor.rgb, cloudColor.a);
+            output.Normal       = float4(0.0, 1.0, 0.0, cloudColor.a); // Simplified normal
+            output.BaseColor    = float4(cloudColor.rgb, cloudColor.a);
+            output.MaterialData = float4(0.0, 0.0, 0.0, cloudColor.a); // No roughness/metallic
+            output.MotionVec    = float4(0.0, 0.0, 0.0, cloudColor.a); // No motion
+            output.SpecularIBL  = float4(0.0, 0.0, 0.0, cloudColor.a); // No IBL
+            
             return output;
         }
     )";
@@ -371,165 +598,54 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     CBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
     m_pDevice->CreateBuffer(CBDesc, nullptr, &pCameraAttribsCB);
     
+    // Create and bind light attributes buffer
+    RefCntAutoPtr<IBuffer> pLightAttribsCB;
+    CBDesc.Name = "Light Attributes buffer";
+    CBDesc.Size = sizeof(HLSL::LightAttribs);
+    m_pDevice->CreateBuffer(CBDesc, nullptr, &pLightAttribsCB);
+    
     // Fill the camera data from the HLSL::CameraAttribs structure
     {
         MapHelper<HLSL::CameraAttribs> MappedCamAttribs(pContext, pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
         *MappedCamAttribs = CamAttribs;
     }
     
+    // Fill the light data from the HLSL::LightAttribs structure
+    {
+        MapHelper<HLSL::LightAttribs> MappedLightAttribs(pContext, pLightAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+        *MappedLightAttribs = LightAttrs;
+    }
+    
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "LightAttribs")->Set(pLightAttribsCB);
 
-    auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
-    if (srv)
+    // Bind the depth texture
+    auto depthSrv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
+    if (depthSrv)
     {
-        srv->Set(pDepthBufferSRV);
+        depthSrv->Set(pDepthBufferSRV);
     }
-
-
-#if 0
-    // Output structure similar to PSInput in the shader
-    struct PSInputTest {
-        float4 pos;
-        float2 uv;
-        float3 rayDir;
-    };
-
-    // Create a lambda to test/debug the ray direction computation
-    auto TestRayDirectionComputation = [&](const float2& pos, const float2& uv) {
-        // Input structure similar to VSInput in the shader
-        struct VSInputTest {
-            float2 pos;
-            float2 uv;
-        };
-        
-        // Create test input
-        VSInputTest input;
-        input.pos = pos;
-        input.uv = uv;
-        
-        // Compute output similar to vertex shader
-        PSInputTest output;
-        output.pos = float4(input.pos.x, input.pos.y, 0.0f, 1.0f);
-        output.uv = input.uv;
-        
-        // Calculate ray direction in world space
-        float4 rayStart = float4(input.pos.x, input.pos.y, 0.0f, 1.0f);
-        float4 rayEnd = float4(input.pos.x, input.pos.y, 1.0f, 1.0f);
-        
-        float4 rayStartWorld = rayStart * CamAttribs.mViewProjInv.Transpose();
-        float4 rayEndWorld = rayEnd * CamAttribs.mViewProjInv.Transpose();
-        
-        rayStartWorld /= rayStartWorld.w;
-        rayEndWorld /= rayEndWorld.w;
-        
-        output.rayDir = normalize(float3(
-            rayEndWorld.x - rayStartWorld.x,
-            rayEndWorld.y - rayStartWorld.y,
-            rayEndWorld.z - rayStartWorld.z
-        ));
-        
-        return output;
-    };
-
-    // Create a lambda to test/debug the pixel shader computation
-    auto TestPixelShaderComputation = [&](PSInputTest input) {
-        // Input structure similar to PSInput in the shader
-        struct PSInputTest {
-            float4 pos;
-            float2 uv;
-            float3 rayDir;
-        };
-        
-        // Output structure similar to PSOutput in the shader
-        struct PSOutputTest {
-            float4 Color;
-            float4 Normal;
-            float4 BaseColor;
-            float4 MaterialData;
-            float4 MotionVec;
-            float4 SpecularIBL;
-        };
-
-        float depth = 0.33f;
-        // Get world-space position from depth buffer
-        float4 clipPos = float4(input.uv * float2(2.0f) - float2(1.0f), depth, 1.0f);
-        float4 worldPos = clipPos * CamAttribs.mViewProjInv.Transpose();
-        worldPos /= worldPos.w;
-        
-        float3 rayOrigin = float3(CamAttribs.f4Position.x, CamAttribs.f4Position.y, CamAttribs.f4Position.z);
-        float3 rayDir = normalize(input.rayDir);
-        
-        // Find intersection with cloud box
-        float tNear, tFar;
-        bool intersect = false;
-        
-        // Ray-box intersection calculation
-        float3 boxMin = float3(m_CloudParams.CloudBoxMin.x, m_CloudParams.CloudBoxMin.y, m_CloudParams.CloudBoxMin.z);
-        float3 boxMax = float3(m_CloudParams.CloudBoxMax.x, m_CloudParams.CloudBoxMax.y, m_CloudParams.CloudBoxMax.z);
-        
-        // Create a lambda for ray-box intersection
-        auto Intersect = [](float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax, float& outTNear, float& outTFar) -> bool {
-            // Calculate inverse direction
-            float3 invDir = float3(
-                rayDir.x != 0.0f ? 1.0f / rayDir.x : FLT_MAX,
-                rayDir.y != 0.0f ? 1.0f / rayDir.y : FLT_MAX,
-                rayDir.z != 0.0f ? 1.0f / rayDir.z : FLT_MAX
-            );
-            
-            // Calculate intersection distances
-            float3 tMin = (boxMin - rayOrigin) * invDir;
-            float3 tMax = (boxMax - rayOrigin) * invDir;
-            
-            float3 t1 = min(tMin, tMax);
-            float3 t2 = max(tMin, tMax);
-            
-            outTNear = std::max(std::max(t1.x, t1.y), t1.z);
-            outTFar = std::min(std::min(t2.x, t2.y), t2.z);
-            
-            return outTFar > outTNear && outTFar > 0.0f;
-        };
-        
-        // Use the lambda to perform the intersection test
-        intersect = Intersect(rayOrigin, rayDir, boxMin, boxMax, tNear, tFar);
-        
-        // Early exit if no intersection
-        auto length = [](const float3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); };
-        float3 worldToRay = float3(worldPos.x - rayOrigin.x, worldPos.y - rayOrigin.y, worldPos.z - rayOrigin.z);
-        if (!intersect || tFar <= 0.0f || tNear >= length(worldToRay))
-        {
-            // Return empty output (equivalent to discard in shader)
-            return PSOutputTest{};
-        }
-        
-        tNear = std::max(0.0f, tNear);
-        
-        // Simple semi-transparent box
-        float3 color = float3(
-            m_CloudParams.CloudColor.x,
-            m_CloudParams.CloudColor.y,
-            m_CloudParams.CloudColor.z
-        );
-        float opacity = m_CloudParams.CloudOpacity;
-        
-        // Create output similar to pixel shader
-        PSOutputTest output;
-        output.Color = float4(color.x, color.y, color.z, opacity);
-        output.Normal = float4(0.0f, 1.0f, 0.0f, 1.0f); // Upward normal
-        output.BaseColor = float4(color.x, color.y, color.z, opacity);
-        output.MaterialData = float4(0.0f, 0.0f, 0.0f, opacity); // No roughness/metallic
-        output.MotionVec = float4(0.0f, 0.0f, 0.0f, 1.0f); // No motion
-        output.SpecularIBL = float4(0.0f, 0.0f, 0.0f, opacity); // No IBL
-        
-        return output;
-    };
     
-    // Test the ray direction computation with corner positions
-    auto center = TestRayDirectionComputation(float2(0.0f, 0.0f), float2(0.5f, 0.5f));
-    auto centerPS = TestPixelShaderComputation(center);
-
-#endif
+    // Bind the noise textures
+    auto perlinWorleySrv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_PerlinWorleyNoise");
+    if (perlinWorleySrv)
+    {
+        perlinWorleySrv->Set(m_pPerlinWorleyNoiseSRV);
+    }
+    
+    auto worleySrv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WorleyNoise");
+    if (worleySrv)
+    {
+        worleySrv->Set(m_pWorleyNoiseSRV);
+    }
+    
+    auto weatherSrv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMap");
+    if (weatherSrv)
+    {
+        weatherSrv->Set(m_pWeatherMapSRV);
+    }
     
     // Commit shader resources
     pContext->CommitShaderResources(m_pRenderCloudsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -550,13 +666,184 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
 
 void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
 {
-    // Set the cloud box boundaries
-    m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 35.0f, terrainBounds.Min.z, 1.0f);
-    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 65.0f, terrainBounds.Max.z, 1.0f);
+    // Set the cloud box boundaries - extend clouds beyond terrain with some buffer
+    float cloudsMinHeight = 35.0f;  // Lower bound of clouds
+    float cloudsMaxHeight = 75.0f;  // Upper bound of clouds
+    float horizontalExtension = 50.0f; // Extend clouds beyond terrain boundaries
     
-    // Set default cloud parameters
+    m_CloudParams.CloudBoxMin = float4(
+        terrainBounds.Min.x - horizontalExtension, 
+        cloudsMinHeight, 
+        terrainBounds.Min.z - horizontalExtension, 
+        1.0f
+    );
+    
+    m_CloudParams.CloudBoxMax = float4(
+        terrainBounds.Max.x + horizontalExtension, 
+        cloudsMaxHeight, 
+        terrainBounds.Max.z + horizontalExtension, 
+        1.0f
+    );
+    
+    // Set default cloud parameters for a realistic look
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
-    m_CloudParams.CloudOpacity = 0.3f;
+    m_CloudParams.ScatteringParams = float4(0.04f, 0.02f, 0.2f, 1.0f);  // Scattering, absorption, phase g, density multiplier
+    m_CloudParams.NoiseParams = float4(0.0003f, 0.001f, 0.3f, 0.2f);    // Base scale, detail scale, detail strength, curl strength
+    m_CloudParams.ShapeParams = float4(0.65f, 0.15f, 0.1f, 0.8f);       // Coverage, base density, anvil bias, height gradient scale
+    m_CloudParams.AnimationParams = float4(1.0f, 0.0f, 0.2f, m_Time);   // Wind direction and current time
+    m_CloudParams.CloudOpacity = 0.7f;
+}
+
+void CloudVolumeRenderer::CreateNoiseTextures(IRenderDevice* pDevice)
+{
+    // For now, we'll create simple procedural noise textures
+    // In a real implementation, you would likely load pre-baked noise textures
+    
+    // Create the 3D Perlin-Worley noise texture (128x128x128)
+    {
+        TextureDesc TexDesc;
+        TexDesc.Name = "3D Perlin-Worley Noise";
+        TexDesc.Type = RESOURCE_DIM_TEX_3D;
+        TexDesc.Width = 128;
+        TexDesc.Height = 128;
+        TexDesc.Depth = 128;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+        TexDesc.Usage = USAGE_IMMUTABLE;
+        
+        // Generate simple procedural 3D noise
+        // In a real implementation, you would load a pre-computed noise texture
+        std::vector<Uint8> NoiseData(TexDesc.Width * TexDesc.Height * TexDesc.Depth * 4);
+        
+        // Simple noise generation for demonstration
+        srand(42); // Fixed seed for reproducibility
+        for (Uint32 z = 0; z < TexDesc.Depth; ++z)
+        {
+            for (Uint32 y = 0; y < TexDesc.Height; ++y)
+            {
+                for (Uint32 x = 0; x < TexDesc.Width; ++x)
+                {
+                    Uint32 idx = (z * TexDesc.Height * TexDesc.Width + y * TexDesc.Width + x) * 4;
+                    
+                    // Pseudo-random noise values
+                    NoiseData[idx + 0] = rand() % 256;     // Perlin noise (R)
+                    NoiseData[idx + 1] = rand() % 256;     // Worley noise 1 (G)
+                    NoiseData[idx + 2] = rand() % 256;     // Worley noise 2 (B)
+                    NoiseData[idx + 3] = rand() % 256;     // Worley noise 3 (A)
+                }
+            }
+        }
+        
+        TextureData InitData;
+        InitData.pSubResources = new TextureSubResData[1];
+        InitData.NumSubresources = 1;
+        InitData.pSubResources[0].pData = NoiseData.data();
+        InitData.pSubResources[0].Stride = TexDesc.Width * 4;
+        InitData.pSubResources[0].DepthStride = TexDesc.Width * TexDesc.Height * 4;
+        
+        pDevice->CreateTexture(TexDesc, &InitData, &m_pPerlinWorleyNoise);
+        m_pPerlinWorleyNoiseSRV = m_pPerlinWorleyNoise->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        
+        delete[] InitData.pSubResources;
+    }
+    
+    // Create the 3D Worley noise texture (32x32x32)
+    {
+        TextureDesc TexDesc;
+        TexDesc.Name = "3D Worley Noise";
+        TexDesc.Type = RESOURCE_DIM_TEX_3D;
+        TexDesc.Width = 32;
+        TexDesc.Height = 32;
+        TexDesc.Depth = 32;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+        TexDesc.Usage = USAGE_IMMUTABLE;
+        
+        // Generate simple procedural 3D noise
+        std::vector<Uint8> NoiseData(TexDesc.Width * TexDesc.Height * TexDesc.Depth * 4);
+        
+        srand(24); // Different seed from the first texture
+        for (Uint32 z = 0; z < TexDesc.Depth; ++z)
+        {
+            for (Uint32 y = 0; y < TexDesc.Height; ++y)
+            {
+                for (Uint32 x = 0; x < TexDesc.Width; ++x)
+                {
+                    Uint32 idx = (z * TexDesc.Height * TexDesc.Width + y * TexDesc.Width + x) * 4;
+                    
+                    // More detail noise
+                    NoiseData[idx + 0] = rand() % 256;     // Worley noise 1 (R)
+                    NoiseData[idx + 1] = rand() % 256;     // Worley noise 2 (G)
+                    NoiseData[idx + 2] = rand() % 256;     // Worley noise 3 (B)
+                    NoiseData[idx + 3] = rand() % 256;     // Curl noise (A)
+                }
+            }
+        }
+        
+        TextureData InitData;
+        InitData.pSubResources = new TextureSubResData[1];
+        InitData.NumSubresources = 1;
+        InitData.pSubResources[0].pData = NoiseData.data();
+        InitData.pSubResources[0].Stride = TexDesc.Width * 4;
+        InitData.pSubResources[0].DepthStride = TexDesc.Width * TexDesc.Height * 4;
+        
+        pDevice->CreateTexture(TexDesc, &InitData, &m_pWorleyNoise);
+        m_pWorleyNoiseSRV = m_pWorleyNoise->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        
+        delete[] InitData.pSubResources;
+    }
+    
+    // Create the 2D weather map (512x512)
+    {
+        TextureDesc TexDesc;
+        TexDesc.Name = "2D Weather Map";
+        TexDesc.Type = RESOURCE_DIM_TEX_2D;
+        TexDesc.Width = 512;
+        TexDesc.Height = 512;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+        TexDesc.Usage = USAGE_IMMUTABLE;
+        
+        // Generate simple 2D weather map
+        std::vector<Uint8> MapData(TexDesc.Width * TexDesc.Height * 4);
+        
+        srand(36); // Different seed
+        for (Uint32 y = 0; y < TexDesc.Height; ++y)
+        {
+            for (Uint32 x = 0; x < TexDesc.Width; ++x)
+            {
+                Uint32 idx = (y * TexDesc.Width + x) * 4;
+                
+                // Create a simple pattern for the weather map
+                float fx = static_cast<float>(x) / TexDesc.Width;
+                float fy = static_cast<float>(y) / TexDesc.Height;
+                
+                // Create some cloud formations with perlin-like patterns
+                float coverage = (sin(fx * 5.0f) * 0.5f + 0.5f) * (cos(fy * 6.0f) * 0.5f + 0.5f);
+                coverage = coverage * 0.5f + 0.3f; // Range 0.3 to 0.8
+                
+                float type = (cos(fx * 3.0f + fy * 2.0f) * 0.5f + 0.5f);
+                float height = (sin(fx * 4.0f + fy * 3.0f) * 0.3f + 0.7f);
+                float density = (cos(fx * 7.0f + fy * 8.0f) * 0.5f + 0.5f);
+                
+                MapData[idx + 0] = static_cast<Uint8>(coverage * 255);  // Cloud coverage (R)
+                MapData[idx + 1] = static_cast<Uint8>(type * 255);      // Cloud type (G)
+                MapData[idx + 2] = static_cast<Uint8>(height * 255);    // Cloud height (B)
+                MapData[idx + 3] = static_cast<Uint8>(density * 255);   // Cloud density (A)
+            }
+        }
+        
+        TextureData InitData;
+        InitData.pSubResources = new TextureSubResData[1];
+        InitData.NumSubresources = 1;
+        InitData.pSubResources[0].pData = MapData.data();
+        InitData.pSubResources[0].Stride = TexDesc.Width * 4;
+        
+        pDevice->CreateTexture(TexDesc, &InitData, &m_pWeatherMap);
+        m_pWeatherMapSRV = m_pWeatherMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        
+        delete[] InitData.pSubResources;
+    }
 }
 
 } // namespace Diligent
