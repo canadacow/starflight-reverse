@@ -1,9 +1,13 @@
+#include <vector>
+
 #include "CloudVolumeRenderer.hpp"
 #include "Graphics/GraphicsTools/interface/MapHelper.hpp"
 #include "Graphics/GraphicsTools/interface/GraphicsUtilities.h"
 #include "Graphics/GraphicsEngine/interface/GraphicsTypesX.hpp"
 #include "Graphics/GraphicsTools/interface/ShaderSourceFactoryUtils.hpp"
 #include "Utilities/interface/DiligentFXShaderSourceStreamFactory.hpp"
+
+#include "../util/lodepng.h"
 
 // No need to re-declare this function - it's already in graphics.cpp
 // Just declare it as extern so we can use it
@@ -277,8 +281,32 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         SamplerState g_NoiseSampler;
         SamplerState g_WeatherSampler;
 
-        // Helper function to remap values from one range to another - using lerp
-        float remap(float value, float oldMin, float oldMax, float newMin, float newMax)
+        // Sample the 3D Perlin-Worley noise texture
+        float4 SamplePerlinWorleyNoise(float3 position)
+        {
+            return g_PerlinWorleyNoise.Sample(g_NoiseSampler, position);
+        }
+
+        // Sample the 3D detail Worley noise texture
+        float3 SampleWorleyNoise(float3 position)
+        {
+            return g_WorleyNoise.Sample(g_NoiseSampler, position).xyz;
+        }
+
+        // Sample the 2D weather texture for cloud coverage and type
+        float3 SampleWeatherTexture(float2 position)
+        {
+            return g_WeatherMap.Sample(g_WeatherSampler, position).xyz;
+        }
+
+        // Sample the curl noise texture for cloud detail
+        float3 SampleCurlNoise(float2 position)
+        {
+            return g_WeatherMap.Sample(g_WeatherSampler, position).xyz;
+        }
+
+        // Helper function to remap values from one range to another
+        float Remap(float value, float oldMin, float oldMax, float newMin, float newMax)
         {
             float t = saturate((value - oldMin) / (oldMax - oldMin));
             return lerp(newMin, newMax, t);
@@ -300,71 +328,79 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             return tFar > tNear && tFar > 0.0;
         }
         
-        // Henyey-Greenstein phase function
+        // Henyey-Greenstein phase function for light scattering
         float HenyeyGreenstein(float cosAngle, float g)
         {
             float g2 = g * g;
             return (1.0 - g2) / (4.0 * 3.14159265 * pow(1.0 + g2 - 2.0 * g * cosAngle, 1.5));
         }
         
-        // Sample weather map for cloud coverage and type information
-        float4 SampleWeatherMap(float3 worldPos)
+        // Compute the cloud density at a given sample point
+        float SampleCloudDensity(float3 samplePoint, float heightPercent, bool isCheap)
         {
-            // Project world position onto xz plane for weather map
-            float2 weatherCoord = (worldPos.xz - g_CloudParams.CloudBoxMin.xz) / (g_CloudParams.CloudBoxMax.xz - g_CloudParams.CloudBoxMin.xz);
+            // Apply wind animation
+            float3 animatedPos = samplePoint + g_CloudParams.AnimationParams.xyz * g_CloudParams.AnimationParams.w;
             
-            // Ensure coordinates are properly clamped to avoid sampling outside the texture
-            weatherCoord = saturate(weatherCoord);
-            
-            return g_WeatherMap.Sample(g_WeatherSampler, weatherCoord);
-        }
-        
-        // Compute cloud shape from noise
-        float SampleCloudDensity(float3 pos, float heightPercent)
-        {
-            // Apply animation
-            float3 animatedPos = pos + g_CloudParams.AnimationParams.xyz * g_CloudParams.AnimationParams.w;
-            
-            // Compute base shape noise
+            // Sample base shape noise (low frequency Perlin-Worley)
             float3 baseNoiseUV = animatedPos * g_CloudParams.NoiseParams.x;
-            float4 baseNoise = g_PerlinWorleyNoise.Sample(g_NoiseSampler, baseNoiseUV);
+            float4 lowFreqNoise = SamplePerlinWorleyNoise(baseNoiseUV);
             
-            // Compute detail noise
-            float3 detailNoiseUV = animatedPos * g_CloudParams.NoiseParams.y;
-            float4 detailNoise = g_WorleyNoise.Sample(g_NoiseSampler, detailNoiseUV);
+            // Calculate FBM (Fractal Brownian Motion) from the noise channels
+            // Using weights similar to the GLSL shader (G: 0.625, B: 0.25, A: 0.125)
+            float lowFreqFBM = lowFreqNoise.g * 0.625 + lowFreqNoise.b * 0.25 + lowFreqNoise.a * 0.125;
             
-            // Sample weather map
-            float4 weatherData = SampleWeatherMap(pos);
-            float coverage = weatherData.r * g_CloudParams.ShapeParams.x;
-            float cloudType = weatherData.g;
+            // Remap base cloud density with Worley noise (similar to the provided GLSL)
+            float baseCloud = Remap(lowFreqNoise.r, -(1.0 - lowFreqFBM), 1.0, 0.0, 1.0);
+            baseCloud = saturate(baseCloud);
             
-            // Compute height gradient
-            float heightGradient = saturate((heightPercent - 0.07) / 0.45);
+            // Sample weather data to control cloud coverage
+            float2 weatherMapCoord = (samplePoint.xz - g_CloudParams.CloudBoxMin.xz) / (g_CloudParams.CloudBoxMax.xz - g_CloudParams.CloudBoxMin.xz);
+            weatherMapCoord = saturate(weatherMapCoord);
+            float3 weatherData = SampleWeatherTexture(weatherMapCoord);
+            
+            // Apply height gradient - denser at bottom, less dense at top
             float densityHeightGradient = exp(-heightPercent * g_CloudParams.ShapeParams.w);
             
-            // Compute anvil shape (more clouds at top)
-            float anvilStrength = saturate(pow(heightPercent, 4.0) * g_CloudParams.ShapeParams.z * cloudType);
+            // Combine base shape with height gradient
+            baseCloud = baseCloud * densityHeightGradient;
             
-            // Combine base shape
-            float baseShape = baseNoise.r;
-            float baseShapeFBM = baseNoise.g * 0.625 + baseNoise.b * 0.25 + baseNoise.a * 0.125;
+            // Apply coverage from weather map (controlls where clouds appear)
+            float cloudCoverage = weatherData.r * g_CloudParams.ShapeParams.x;
+            baseCloud = saturate(Remap(baseCloud, 1.0 - cloudCoverage, 1.0, 0.0, 1.0));
             
-            // Compute density
-            float baseCloudDensity = saturate(remap(baseShape, baseShapeFBM - 1.0, 1.0, 0.0, 1.0));
-            baseCloudDensity = densityHeightGradient * saturate(remap(baseCloudDensity, 1.0 - coverage, 1.0, 0.0, 1.0));
+            float finalCloud = baseCloud;
             
-            // Apply erosion from detail noise
-            float detailFBM = detailNoise.r * 0.625 + detailNoise.g * 0.25 + detailNoise.b * 0.125;
-            float detailErodeNoise = saturate(remap(detailFBM, 0.0, 1.0, 0.0, 1.0));
+            // Add detail erosion with high-frequency noise if not using cheap sampling
+            if (!isCheap)
+            {
+                // Add curl noise to the sample position for more natural variation
+                float3 curlNoise = SampleCurlNoise(samplePoint.xy);
+                float3 detailSamplePos = animatedPos;
+                detailSamplePos.xy += curlNoise.xy * g_CloudParams.NoiseParams.w;
+                
+                // Sample high frequency detail noise
+                float3 highFreqNoise = SampleWorleyNoise(detailSamplePos * g_CloudParams.NoiseParams.y);
+                
+                // Compute detail FBM
+                float highFreqFBM = highFreqNoise.r * 0.625 + highFreqNoise.g * 0.25 + highFreqNoise.b * 0.125;
+                highFreqFBM = saturate(highFreqFBM);
+                
+                // Adjust based on height (less detail erosion at tops of clouds)
+                float detailStrength = g_CloudParams.NoiseParams.z;
+                float detailModifier = lerp(detailStrength, detailStrength * 0.2, saturate(heightPercent * 2.0));
+                
+                // Erode base cloud with detail noise
+                finalCloud = Remap(finalCloud, highFreqFBM * detailModifier, 1.0, 0.0, 1.0);
+                finalCloud = saturate(finalCloud);
+            }
             
-            // Erode the base density with detail noise
-            float finalDensity = saturate(remap(baseCloudDensity, detailErodeNoise * g_CloudParams.NoiseParams.z, 1.0, 0.0, 1.0));
+            // Apply anvil bias for cumulonimbus-like shapes (more volume at the top)
+            float anvilBias = g_CloudParams.ShapeParams.z;
+            float anvilStrength = saturate(pow(heightPercent, 4.0) * anvilBias * weatherData.g);
+            finalCloud = max(finalCloud, anvilStrength);
             
-            // Apply anvil effect
-            finalDensity = max(finalDensity, anvilStrength);
-            
-            // Apply global density multiplier
-            return finalDensity * g_CloudParams.ScatteringParams.w * g_CloudParams.CloudOpacity;
+            // Apply global density multiplier and opacity
+            return finalCloud * g_CloudParams.ScatteringParams.w * g_CloudParams.CloudOpacity;
         }
         
         // Sample along the ray with ray marching to compute cloud color and transparency
@@ -386,6 +422,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float3 totalLight = float3(0.0, 0.0, 0.0);
             float t = tNear;
             
+            // Earth shadow approximation (optional - for atmospheric effects)
+            float earthShadow = 1.0;
+            
             for (int i = 0; i < sampleCount; i++)
             {
                 // Skip if ray has passed scene depth or we've accumulated enough opacity
@@ -398,52 +437,68 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
                 // Compute height fraction within cloud layer
                 float heightFraction = (pos.y - g_CloudParams.CloudBoxMin.y) / (g_CloudParams.CloudBoxMax.y - g_CloudParams.CloudBoxMin.y);
                 
-                // Sample cloud density at this position
-                float density = SampleCloudDensity(pos, heightFraction);
-                
-                // Skip empty space
-                if (density > 0.0)
+                // Skip if outside the valid height range
+                if (heightFraction < 0.0 || heightFraction > 1.0)
                 {
-                    // Light attenuation (simplified)
-                    float lightDist = 0.0;
-                    const int lightSampleCount = 6;
-                    float lightStepSize = 40.0 / float(lightSampleCount);
-                    float3 lightSamplePos = pos;
-                    float lightTransmittance = 1.0;
+                    t += stepSize;
+                    continue;
+                }
+                
+                // First do a cheap density sample to check if there are clouds
+                float cheapDensity = SampleCloudDensity(pos, heightFraction, true);
+                
+                // If there's some density, do a more detailed sample
+                if (cheapDensity > 0.0)
+                {
+                    // Sample cloud density at this position
+                    float density = SampleCloudDensity(pos, heightFraction, false);
                     
-                    // Sample light
-                    for (int j = 0; j < lightSampleCount; j++)
+                    if (density > 0.0)
                     {
-                        lightSamplePos += lightDir * lightStepSize;
-                        float heightFrac = (lightSamplePos.y - g_CloudParams.CloudBoxMin.y) / (g_CloudParams.CloudBoxMax.y - g_CloudParams.CloudBoxMin.y);
-                        if (heightFrac < 0.0 || heightFrac > 1.0) break;
+                        // Light attenuation through clouds
+                        float lightDist = 0.0;
+                        const int lightSampleCount = 6;
+                        float lightStepSize = 40.0 / float(lightSampleCount);
+                        float3 lightSamplePos = pos;
+                        float lightTransmittance = 1.0;
                         
-                        float lightDensity = SampleCloudDensity(lightSamplePos, heightFrac) * 0.5;
+                        // Sample along light direction
+                        for (int j = 0; j < lightSampleCount; j++)
+                        {
+                            lightSamplePos += lightDir * lightStepSize;
+                            float lightHeightFrac = (lightSamplePos.y - g_CloudParams.CloudBoxMin.y) / (g_CloudParams.CloudBoxMax.y - g_CloudParams.CloudBoxMin.y);
+                            if (lightHeightFrac < 0.0 || lightHeightFrac > 1.0) break;
+                            
+                            float lightDensity = SampleCloudDensity(lightSamplePos, lightHeightFrac, true) * 0.5;
+                            float extinction = g_CloudParams.ScatteringParams.x + g_CloudParams.ScatteringParams.y;
+                            lightTransmittance *= exp(-extinction * lightDensity * lightStepSize);
+                            
+                            if (lightTransmittance < 0.01) break;
+                        }
+                        
+                        // Combine with earth shadow
+                        lightTransmittance *= earthShadow;
+                        
+                        // Phase function for directional scattering
+                        float cosAngle = dot(rayDir, lightDir);
+                        float phase = HenyeyGreenstein(cosAngle, g_CloudParams.ScatteringParams.z);
+                        
+                        // Ambient term (multi-scattering approximation)
+                        float ambient = 0.5 + 0.5 * heightFraction;
+                        
+                        // Calculate total light contribution
+                        float scatteredLight = lightTransmittance * phase + ambient * 0.2;
                         float extinction = g_CloudParams.ScatteringParams.x + g_CloudParams.ScatteringParams.y;
-                        lightTransmittance *= exp(-extinction * lightDensity * lightStepSize);
+                        float dTrans = exp(-extinction * density * stepSize);
                         
-                        if (lightTransmittance < 0.01) break;
+                        // Beer's law for light absorption
+                        float3 cloudColor = lerp(g_CloudParams.CloudColor.rgb * 0.15, g_CloudParams.CloudColor.rgb, heightFraction);
+                        float3 S = cloudColor * scatteredLight * (1.0 - dTrans) * transmittance;
+                        
+                        // Accumulate light and update transmittance
+                        totalLight += S;
+                        transmittance *= dTrans;
                     }
-                    
-                    // Calculate in-scattering
-                    float cosAngle = dot(rayDir, lightDir);
-                    float phase = HenyeyGreenstein(cosAngle, g_CloudParams.ScatteringParams.z);
-                    
-                    // Ambient term for multi-scattering approximation
-                    float ambient = 0.5 + 0.5 * heightFraction;
-                    
-                    // Calculate total light contribution
-                    float scatteredLight = lightTransmittance * phase + ambient * 0.2;
-                    float extinction = g_CloudParams.ScatteringParams.x + g_CloudParams.ScatteringParams.y;
-                    float dTrans = exp(-extinction * density * stepSize);
-                    
-                    // Beer's law
-                    float3 cloudColor = lerp(g_CloudParams.CloudColor.rgb * 0.15, g_CloudParams.CloudColor.rgb, heightFraction);
-                    float3 S = cloudColor * scatteredLight * (1.0 - dTrans) * transmittance;
-                    
-                    // Accumulate light and update transmittance
-                    totalLight += S;
-                    transmittance *= dTrans;
                 }
                 
                 // Step along ray
@@ -669,19 +724,18 @@ void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
     // Set the cloud box boundaries - extend clouds beyond terrain with some buffer
     float cloudsMinHeight = 35.0f;  // Lower bound of clouds
     float cloudsMaxHeight = 75.0f;  // Upper bound of clouds
-    float horizontalExtension = 50.0f; // Extend clouds beyond terrain boundaries
     
     m_CloudParams.CloudBoxMin = float4(
-        terrainBounds.Min.x - horizontalExtension, 
+        terrainBounds.Min.x,
         cloudsMinHeight, 
-        terrainBounds.Min.z - horizontalExtension, 
+        terrainBounds.Min.z, 
         1.0f
     );
     
     m_CloudParams.CloudBoxMax = float4(
-        terrainBounds.Max.x + horizontalExtension, 
+        terrainBounds.Max.x, 
         cloudsMaxHeight, 
-        terrainBounds.Max.z + horizontalExtension, 
+        terrainBounds.Max.z, 
         1.0f
     );
     
@@ -696,9 +750,6 @@ void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
 
 void CloudVolumeRenderer::CreateNoiseTextures(IRenderDevice* pDevice)
 {
-    // For now, we'll create simple procedural noise textures
-    // In a real implementation, you would likely load pre-baked noise textures
-    
     // Create the 3D Perlin-Worley noise texture (128x128x128)
     {
         TextureDesc TexDesc;
@@ -711,40 +762,31 @@ void CloudVolumeRenderer::CreateNoiseTextures(IRenderDevice* pDevice)
         TexDesc.BindFlags = BIND_SHADER_RESOURCE;
         TexDesc.Usage = USAGE_IMMUTABLE;
         
-        // Generate simple procedural 3D noise
-        // In a real implementation, you would load a pre-computed noise texture
-        std::vector<Uint8> NoiseData(TexDesc.Width * TexDesc.Height * TexDesc.Depth * 4);
+        // Load the 3D noise texture from a 2D image file
+        // The image is 128x16384, which represents 128x128x128 3D texture (128 slices of 128x128)
+        std::vector<unsigned char> image;
+        unsigned width, height;
         
-        // Simple noise generation for demonstration
-        srand(42); // Fixed seed for reproducibility
-        for (Uint32 z = 0; z < TexDesc.Depth; ++z)
-        {
-            for (Uint32 y = 0; y < TexDesc.Height; ++y)
-            {
-                for (Uint32 x = 0; x < TexDesc.Width; ++x)
-                {
-                    Uint32 idx = (z * TexDesc.Height * TexDesc.Width + y * TexDesc.Width + x) * 4;
-                    
-                    // Pseudo-random noise values
-                    NoiseData[idx + 0] = rand() % 256;     // Perlin noise (R)
-                    NoiseData[idx + 1] = rand() % 256;     // Worley noise 1 (G)
-                    NoiseData[idx + 2] = rand() % 256;     // Worley noise 2 (B)
-                    NoiseData[idx + 3] = rand() % 256;     // Worley noise 3 (A)
-                }
-            }
+        // Decode the PNG
+        unsigned error = lodepng::decode(image, width, height, "LowFrequency3DTexture.png");
+        if (error || width != 128 || height != 16384) {
+            LOG_ERROR_MESSAGE("Failed to decode LowFrequency3DTexture.png or incorrect dimensions: ", 
+                              lodepng_error_text(error), " (", width, "x", height, ")");
+            // Fallback to procedural noise if decoding fails
+            return;
         }
         
+        // Prepare texture data
         TextureData InitData;
-        InitData.pSubResources = new TextureSubResData[1];
+        std::vector<TextureSubResData> SubResData(1);
+        InitData.pSubResources = SubResData.data();
         InitData.NumSubresources = 1;
-        InitData.pSubResources[0].pData = NoiseData.data();
-        InitData.pSubResources[0].Stride = TexDesc.Width * 4;
-        InitData.pSubResources[0].DepthStride = TexDesc.Width * TexDesc.Height * 4;
+        InitData.pSubResources[0].pData = image.data();
+        InitData.pSubResources[0].Stride = width * 4; // 4 bytes per pixel (RGBA)
+        InitData.pSubResources[0].DepthStride = width * 128 * 4; // Each depth slice is 128 rows
         
         pDevice->CreateTexture(TexDesc, &InitData, &m_pPerlinWorleyNoise);
         m_pPerlinWorleyNoiseSRV = m_pPerlinWorleyNoise->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-        
-        delete[] InitData.pSubResources;
     }
     
     // Create the 3D Worley noise texture (32x32x32)
@@ -759,38 +801,31 @@ void CloudVolumeRenderer::CreateNoiseTextures(IRenderDevice* pDevice)
         TexDesc.BindFlags = BIND_SHADER_RESOURCE;
         TexDesc.Usage = USAGE_IMMUTABLE;
         
-        // Generate simple procedural 3D noise
-        std::vector<Uint8> NoiseData(TexDesc.Width * TexDesc.Height * TexDesc.Depth * 4);
+        // Load the 3D noise texture from a 2D image file
+        // The image is 32x1024, which represents 32x32x32 3D texture (32 slices of 32x32)
+        std::vector<unsigned char> image;
+        unsigned width, height;
         
-        srand(24); // Different seed from the first texture
-        for (Uint32 z = 0; z < TexDesc.Depth; ++z)
-        {
-            for (Uint32 y = 0; y < TexDesc.Height; ++y)
-            {
-                for (Uint32 x = 0; x < TexDesc.Width; ++x)
-                {
-                    Uint32 idx = (z * TexDesc.Height * TexDesc.Width + y * TexDesc.Width + x) * 4;
-                    
-                    // More detail noise
-                    NoiseData[idx + 0] = rand() % 256;     // Worley noise 1 (R)
-                    NoiseData[idx + 1] = rand() % 256;     // Worley noise 2 (G)
-                    NoiseData[idx + 2] = rand() % 256;     // Worley noise 3 (B)
-                    NoiseData[idx + 3] = rand() % 256;     // Curl noise (A)
-                }
-            }
+        // Decode the PNG
+        unsigned error = lodepng::decode(image, width, height, "HighFrequency3DTexture.png");
+        if (error || width != 32 || height != 1024) {
+            LOG_ERROR_MESSAGE("Failed to decode HighFrequency3DTexture.png or incorrect dimensions: ", 
+                              lodepng_error_text(error), " (", width, "x", height, ")");
+            // Fallback to procedural noise if decoding fails
+            return;
         }
         
+        // Prepare texture data
         TextureData InitData;
-        InitData.pSubResources = new TextureSubResData[1];
+        std::vector<TextureSubResData> SubResData(1);
+        InitData.pSubResources = SubResData.data();
         InitData.NumSubresources = 1;
-        InitData.pSubResources[0].pData = NoiseData.data();
-        InitData.pSubResources[0].Stride = TexDesc.Width * 4;
-        InitData.pSubResources[0].DepthStride = TexDesc.Width * TexDesc.Height * 4;
+        InitData.pSubResources[0].pData = image.data();
+        InitData.pSubResources[0].Stride = width * 4; // 4 bytes per pixel (RGBA)
+        InitData.pSubResources[0].DepthStride = width * 32 * 4; // Each depth slice is 32 rows
         
         pDevice->CreateTexture(TexDesc, &InitData, &m_pWorleyNoise);
         m_pWorleyNoiseSRV = m_pWorleyNoise->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-        
-        delete[] InitData.pSubResources;
     }
     
     // Create the 2D weather map (512x512)
@@ -798,51 +833,34 @@ void CloudVolumeRenderer::CreateNoiseTextures(IRenderDevice* pDevice)
         TextureDesc TexDesc;
         TexDesc.Name = "2D Weather Map";
         TexDesc.Type = RESOURCE_DIM_TEX_2D;
-        TexDesc.Width = 512;
-        TexDesc.Height = 512;
-        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
         TexDesc.BindFlags = BIND_SHADER_RESOURCE;
         TexDesc.Usage = USAGE_IMMUTABLE;
         
-        // Generate simple 2D weather map
-        std::vector<Uint8> MapData(TexDesc.Width * TexDesc.Height * 4);
+        // Load the weather map from a PNG file
+        std::vector<unsigned char> pngData;
+        unsigned int width, height;
         
-        srand(36); // Different seed
-        for (Uint32 y = 0; y < TexDesc.Height; ++y)
-        {
-            for (Uint32 x = 0; x < TexDesc.Width; ++x)
-            {
-                Uint32 idx = (y * TexDesc.Width + x) * 4;
-                
-                // Create a simple pattern for the weather map
-                float fx = static_cast<float>(x) / TexDesc.Width;
-                float fy = static_cast<float>(y) / TexDesc.Height;
-                
-                // Create some cloud formations with perlin-like patterns
-                float coverage = (sin(fx * 5.0f) * 0.5f + 0.5f) * (cos(fy * 6.0f) * 0.5f + 0.5f);
-                coverage = coverage * 0.5f + 0.3f; // Range 0.3 to 0.8
-                
-                float type = (cos(fx * 3.0f + fy * 2.0f) * 0.5f + 0.5f);
-                float height = (sin(fx * 4.0f + fy * 3.0f) * 0.3f + 0.7f);
-                float density = (cos(fx * 7.0f + fy * 8.0f) * 0.5f + 0.5f);
-                
-                MapData[idx + 0] = static_cast<Uint8>(coverage * 255);  // Cloud coverage (R)
-                MapData[idx + 1] = static_cast<Uint8>(type * 255);      // Cloud type (G)
-                MapData[idx + 2] = static_cast<Uint8>(height * 255);    // Cloud height (B)
-                MapData[idx + 3] = static_cast<Uint8>(density * 255);   // Cloud density (A)
-            }
+        // Use lodepng to load the weather map texture
+        unsigned error = lodepng::decode(pngData, width, height, "weathermap.png");
+        if (error) {
+            // If loading fails, log error and continue with empty texture
+            LOG_ERROR("Failed to load weathermap.png: ", lodepng_error_text(error));
         }
         
+        // Set texture dimensions based on the loaded data
+        TexDesc.Width = width;
+        TexDesc.Height = height;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        
         TextureData InitData;
-        InitData.pSubResources = new TextureSubResData[1];
+        std::vector<TextureSubResData> SubResData(1);
+        InitData.pSubResources = SubResData.data();
         InitData.NumSubresources = 1;
-        InitData.pSubResources[0].pData = MapData.data();
+        InitData.pSubResources[0].pData = pngData.data();
         InitData.pSubResources[0].Stride = TexDesc.Width * 4;
         
         pDevice->CreateTexture(TexDesc, &InitData, &m_pWeatherMap);
         m_pWeatherMapSRV = m_pWeatherMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-        
-        delete[] InitData.pSubResources;
     }
 }
 

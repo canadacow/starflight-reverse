@@ -32,6 +32,7 @@ public:
         float4 ShapeParams;            // x: coverage, y: base density, z: anvil bias, w: height gradient scale
         float4 AnimationParams;        // x,y,z: wind direction and speed, w: time
         float  CloudOpacity;           // Master opacity control
+        float  Padding[3];             // Padding to ensure 16-byte alignment
     };
 
     CloudVolumeRenderer();
