@@ -50,12 +50,21 @@ public:
     void SetupTerrainParameters(const BoundBox& terrainBounds);
 
 private:
+
+    void LoadNoiseTextures();
+
     // Full-screen quad resources
     RefCntAutoPtr<IBuffer>                m_pVertexBuffer;
     RefCntAutoPtr<IBuffer>                m_pIndexBuffer;
     RefCntAutoPtr<IPipelineState>         m_pRenderCloudsPSO;
     RefCntAutoPtr<IShaderResourceBinding> m_pRenderCloudsSRB;
     RefCntAutoPtr<IBuffer>                m_pCloudParamsCB;
+
+    RefCntAutoPtr<ITexture>               m_pHighFreqNoiseTexture;
+    RefCntAutoPtr<ITexture>               m_pLowFreqNoiseTexture;
+    RefCntAutoPtr<ISampler>               m_pNoiseSampler;
+    RefCntAutoPtr<ITextureView>           m_pHighFreqNoiseSRV;
+    RefCntAutoPtr<ITextureView>           m_pLowFreqNoiseSRV;
     
     CloudParams m_CloudParams;
     RefCntAutoPtr<IRenderDevice>          m_pDevice;

@@ -4,6 +4,8 @@
 #include "Graphics/GraphicsEngine/interface/GraphicsTypesX.hpp"
 #include "Graphics/GraphicsTools/interface/ShaderSourceFactoryUtils.hpp"
 #include "Utilities/interface/DiligentFXShaderSourceStreamFactory.hpp"
+#include "../util/lodepng.h"
+#include <vector>
 
 // No need to re-declare this function - it's already in graphics.cpp
 // Just declare it as extern so we can use it
@@ -112,7 +114,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_VERTEX, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
         
     // Create sampler descriptions for immutable samplers
     SamplerDesc DepthSamplerDesc;
@@ -123,8 +127,18 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     DepthSamplerDesc.AddressV = TEXTURE_ADDRESS_CLAMP;
     DepthSamplerDesc.AddressW = TEXTURE_ADDRESS_CLAMP;
     
+    // Add sampler descriptions for the noise textures
+    SamplerDesc NoiseSamplerDesc;
+    NoiseSamplerDesc.MinFilter = FILTER_TYPE_LINEAR;
+    NoiseSamplerDesc.MagFilter = FILTER_TYPE_LINEAR;
+    NoiseSamplerDesc.MipFilter = FILTER_TYPE_LINEAR;
+    NoiseSamplerDesc.AddressU = TEXTURE_ADDRESS_WRAP;
+    NoiseSamplerDesc.AddressV = TEXTURE_ADDRESS_WRAP;
+    NoiseSamplerDesc.AddressW = TEXTURE_ADDRESS_WRAP;
+    
     ResourceLayout
-        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc);
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseSamplerDesc);
 
     PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
 
@@ -224,6 +238,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
         Texture2D g_DepthTexture;
         SamplerState g_DepthSampler;
+        
+        // 3D noise textures for cloud detail
+        Texture3D g_HighFreqNoiseTexture;
+        Texture3D g_LowFreqNoiseTexture;
+        SamplerState g_NoiseSampler;
 
         // Ray-box intersection function
         bool IntersectBox(float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax, out float tNear, out float tFar)
@@ -239,6 +258,34 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             tFar = min(min(t2.x, t2.y), t2.z);
             
             return tFar > tNear && tFar > 0.0;
+        }
+        
+        // Sample cloud density using the 3D noise textures
+        float SampleCloudDensity(float3 pos)
+        {
+            // Normalize position within cloud box
+            float3 normalizedPos = (pos - g_CloudBoxMin.xyz) / (g_CloudBoxMax.xyz - g_CloudBoxMin.xyz);
+            
+            // Sample low-frequency base shape
+            float baseDensity = g_LowFreqNoiseTexture.Sample(g_NoiseSampler, normalizedPos).r;
+            
+            // Apply height falloff (more density in the middle, less at top/bottom)
+            float heightGradient = 1.0 - 2.0 * abs(normalizedPos.y - 0.5);
+            heightGradient = saturate(heightGradient * 3.0); // Sharpen the gradient
+            
+            // Early exit if no base density
+            if (baseDensity < 0.05)
+                return 0;
+                
+            // Sample high-frequency detail
+            float3 highFreqUV = normalizedPos * 4.0; // Scale for more variation
+            float detailNoise = g_HighFreqNoiseTexture.Sample(g_NoiseSampler, highFreqUV).r;
+            
+            // Combine for final density
+            float density = saturate(baseDensity * heightGradient);
+            density = saturate(density - (1.0 - detailNoise) * 0.3); // Apply detail noise as erosion
+            
+            return density * g_CloudOpacity * 2.0; // Scale by opacity param
         }
 
         PSOutput main(PSInput input)
@@ -263,17 +310,63 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             {
                 discard; // Early exit with discard instead of returning empty output
             }
+            
+            // Ensure tNear is at least 0 (camera inside cloud)
             tNear = max(0, tNear);
-            // Simple semi-transparent box
-            float3 color = g_CloudColor.rgb;
-            float opacity = g_CloudOpacity;
+            
+            // Cloud raymarching parameters
+            const int numSteps = 16;
+            float stepSize = (tFar - tNear) / float(numSteps);
+            float totalDensity = 0.0;
+            float transmittance = 1.0;
+            float3 lightAccumulation = float3(0, 0, 0);
+            
+            // Simple directional light from above
+            float3 lightDir = normalize(float3(0.5, 1.0, 0.3));
+            
+            // Raymarch through cloud volume
+            for (int i = 0; i < numSteps; i++)
+            {
+                // Current sample position
+                float t = tNear + stepSize * (float(i) + 0.5); // Sample at center of step
+                float3 samplePos = rayOrigin + rayDir * t;
+                
+                // Sample cloud density at this position
+                float density = SampleCloudDensity(samplePos);
+                
+                if (density > 0.0)
+                {
+                    // Apply Beer's law for light absorption
+                    float absorption = exp(-density * stepSize);
+                    transmittance *= absorption;
+                    
+                    // Add light contribution (simple ambient + directional)
+                    float3 ambientLight = g_CloudColor.rgb * 0.2;
+                    
+                    // Simple light scattering approximation
+                    float scattering = pow(max(0.0, dot(rayDir, lightDir) * 0.5 + 0.5), 8.0) * 0.5 + 0.5;
+                    float3 directLight = g_CloudColor.rgb * scattering;
+                    
+                    float3 lightContrib = (ambientLight + directLight) * density * stepSize;
+                    lightAccumulation += lightContrib * transmittance;
+                    
+                    // Early exit if cloud becomes opaque
+                    if (transmittance < 0.01)
+                        break;
+                }
+            }
+            
+            // Final cloud color and opacity
+            float3 cloudColor = lightAccumulation;
+            float cloudAlpha = 1.0 - transmittance;
+            
             // Output to all PBR G-buffer targets
-            output.Color        = float4(color, opacity);
+            output.Color        = float4(cloudColor, cloudAlpha);
             output.Normal       = float4(0.0, 1.0, 0.0, 1.0); // Upward normal
-            output.BaseColor    = float4(color, opacity);
-            output.MaterialData = float4(0.0, 0.0, 0.0, opacity); // No roughness/metallic
+            output.BaseColor    = float4(g_CloudColor.rgb, cloudAlpha);
+            output.MaterialData = float4(0.0, 0.0, 0.0, cloudAlpha); // No roughness/metallic
             output.MotionVec    = float4(0.0, 0.0, 0.0, 1.0); // No motion
-            output.SpecularIBL  = float4(0.0, 0.0, 0.0, opacity); // No IBL
+            output.SpecularIBL  = float4(0.0, 0.0, 0.0, cloudAlpha); // No IBL
             return output;
         }
     )";
@@ -383,154 +476,16 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
 
     auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
     if (srv)
-    {
         srv->Set(pDepthBufferSRV);
-    }
 
+    auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
+    if (highFreqVar)
+        highFreqVar->Set(m_pHighFreqNoiseSRV);
+        
+    auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture");
+    if (lowFreqVar)
+        lowFreqVar->Set(m_pLowFreqNoiseSRV);
 
-#if 0
-    // Output structure similar to PSInput in the shader
-    struct PSInputTest {
-        float4 pos;
-        float2 uv;
-        float3 rayDir;
-    };
-
-    // Create a lambda to test/debug the ray direction computation
-    auto TestRayDirectionComputation = [&](const float2& pos, const float2& uv) {
-        // Input structure similar to VSInput in the shader
-        struct VSInputTest {
-            float2 pos;
-            float2 uv;
-        };
-        
-        // Create test input
-        VSInputTest input;
-        input.pos = pos;
-        input.uv = uv;
-        
-        // Compute output similar to vertex shader
-        PSInputTest output;
-        output.pos = float4(input.pos.x, input.pos.y, 0.0f, 1.0f);
-        output.uv = input.uv;
-        
-        // Calculate ray direction in world space
-        float4 rayStart = float4(input.pos.x, input.pos.y, 0.0f, 1.0f);
-        float4 rayEnd = float4(input.pos.x, input.pos.y, 1.0f, 1.0f);
-        
-        float4 rayStartWorld = rayStart * CamAttribs.mViewProjInv.Transpose();
-        float4 rayEndWorld = rayEnd * CamAttribs.mViewProjInv.Transpose();
-        
-        rayStartWorld /= rayStartWorld.w;
-        rayEndWorld /= rayEndWorld.w;
-        
-        output.rayDir = normalize(float3(
-            rayEndWorld.x - rayStartWorld.x,
-            rayEndWorld.y - rayStartWorld.y,
-            rayEndWorld.z - rayStartWorld.z
-        ));
-        
-        return output;
-    };
-
-    // Create a lambda to test/debug the pixel shader computation
-    auto TestPixelShaderComputation = [&](PSInputTest input) {
-        // Input structure similar to PSInput in the shader
-        struct PSInputTest {
-            float4 pos;
-            float2 uv;
-            float3 rayDir;
-        };
-        
-        // Output structure similar to PSOutput in the shader
-        struct PSOutputTest {
-            float4 Color;
-            float4 Normal;
-            float4 BaseColor;
-            float4 MaterialData;
-            float4 MotionVec;
-            float4 SpecularIBL;
-        };
-
-        float depth = 0.33f;
-        // Get world-space position from depth buffer
-        float4 clipPos = float4(input.uv * float2(2.0f) - float2(1.0f), depth, 1.0f);
-        float4 worldPos = clipPos * CamAttribs.mViewProjInv.Transpose();
-        worldPos /= worldPos.w;
-        
-        float3 rayOrigin = float3(CamAttribs.f4Position.x, CamAttribs.f4Position.y, CamAttribs.f4Position.z);
-        float3 rayDir = normalize(input.rayDir);
-        
-        // Find intersection with cloud box
-        float tNear, tFar;
-        bool intersect = false;
-        
-        // Ray-box intersection calculation
-        float3 boxMin = float3(m_CloudParams.CloudBoxMin.x, m_CloudParams.CloudBoxMin.y, m_CloudParams.CloudBoxMin.z);
-        float3 boxMax = float3(m_CloudParams.CloudBoxMax.x, m_CloudParams.CloudBoxMax.y, m_CloudParams.CloudBoxMax.z);
-        
-        // Create a lambda for ray-box intersection
-        auto Intersect = [](float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax, float& outTNear, float& outTFar) -> bool {
-            // Calculate inverse direction
-            float3 invDir = float3(
-                rayDir.x != 0.0f ? 1.0f / rayDir.x : FLT_MAX,
-                rayDir.y != 0.0f ? 1.0f / rayDir.y : FLT_MAX,
-                rayDir.z != 0.0f ? 1.0f / rayDir.z : FLT_MAX
-            );
-            
-            // Calculate intersection distances
-            float3 tMin = (boxMin - rayOrigin) * invDir;
-            float3 tMax = (boxMax - rayOrigin) * invDir;
-            
-            float3 t1 = min(tMin, tMax);
-            float3 t2 = max(tMin, tMax);
-            
-            outTNear = std::max(std::max(t1.x, t1.y), t1.z);
-            outTFar = std::min(std::min(t2.x, t2.y), t2.z);
-            
-            return outTFar > outTNear && outTFar > 0.0f;
-        };
-        
-        // Use the lambda to perform the intersection test
-        intersect = Intersect(rayOrigin, rayDir, boxMin, boxMax, tNear, tFar);
-        
-        // Early exit if no intersection
-        auto length = [](const float3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); };
-        float3 worldToRay = float3(worldPos.x - rayOrigin.x, worldPos.y - rayOrigin.y, worldPos.z - rayOrigin.z);
-        if (!intersect || tFar <= 0.0f || tNear >= length(worldToRay))
-        {
-            // Return empty output (equivalent to discard in shader)
-            return PSOutputTest{};
-        }
-        
-        tNear = std::max(0.0f, tNear);
-        
-        // Simple semi-transparent box
-        float3 color = float3(
-            m_CloudParams.CloudColor.x,
-            m_CloudParams.CloudColor.y,
-            m_CloudParams.CloudColor.z
-        );
-        float opacity = m_CloudParams.CloudOpacity;
-        
-        // Create output similar to pixel shader
-        PSOutputTest output;
-        output.Color = float4(color.x, color.y, color.z, opacity);
-        output.Normal = float4(0.0f, 1.0f, 0.0f, 1.0f); // Upward normal
-        output.BaseColor = float4(color.x, color.y, color.z, opacity);
-        output.MaterialData = float4(0.0f, 0.0f, 0.0f, opacity); // No roughness/metallic
-        output.MotionVec = float4(0.0f, 0.0f, 0.0f, 1.0f); // No motion
-        output.SpecularIBL = float4(0.0f, 0.0f, 0.0f, opacity); // No IBL
-        
-        return output;
-    };
-    
-    // Test the ray direction computation with corner positions
-    auto center = TestRayDirectionComputation(float2(0.0f, 0.0f), float2(0.5f, 0.5f));
-    auto centerPS = TestPixelShaderComputation(center);
-
-#endif
-    
     // Commit shader resources
     pContext->CommitShaderResources(m_pRenderCloudsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
@@ -552,11 +507,122 @@ void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
 {
     // Set the cloud box boundaries
     m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 35.0f, terrainBounds.Min.z, 1.0f);
-    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 65.0f, terrainBounds.Max.z, 1.0f);
+    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 100.0f, terrainBounds.Max.z, 1.0f);
     
     // Set default cloud parameters
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
     m_CloudParams.CloudOpacity = 0.3f;
+}
+
+void CloudVolumeRenderer::LoadNoiseTextures()
+{
+    std::string highFreqTexturePath = "HighFrequency3DTexture.png";
+    std::string lowFreqTexturePath = "LowFrequency3DTexture.png";
+
+    if (!m_pDevice)
+        return;
+    
+    // Load high frequency noise texture (32x1024 = 32x32x32)
+    {
+        // Load PNG using lodepng
+        std::vector<unsigned char> imageData;
+        unsigned width, height;
+        unsigned error = lodepng::decode(imageData, width, height, highFreqTexturePath.c_str());
+        
+        if (error)
+        {
+            // Handle loading error
+            return;
+        }
+        
+        if (width != 32 || height != 1024) 
+        {
+            // Wrong dimensions
+            return;
+        }
+        
+        // Create 3D texture
+        TextureDesc TexDesc;
+        TexDesc.Name = "High frequency 3D noise texture";
+        TexDesc.Type = RESOURCE_DIM_TEX_3D;
+        TexDesc.Width = 32;
+        TexDesc.Height = 32;
+        TexDesc.Depth = 32;
+        TexDesc.MipLevels = 1;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        TexDesc.Usage = USAGE_IMMUTABLE;
+        TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+        
+        // Prepare texture data
+        TextureSubResData Level0Data;
+        Level0Data.pData = imageData.data();
+        Level0Data.Stride = 32 * 4; // 4 bytes per pixel (RGBA)
+        Level0Data.DepthStride = 32 * 32 * 4; // Stride for each depth slice
+        
+        TextureData InitData;
+        InitData.NumSubresources = 1;
+        InitData.pSubResources = &Level0Data;
+        
+        m_pDevice->CreateTexture(TexDesc, &InitData, &m_pHighFreqNoiseTexture);
+        m_pHighFreqNoiseSRV = m_pHighFreqNoiseTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    }
+    
+    // Load low frequency noise texture (128x15384 = 128x128x128)
+    {
+        // Load PNG using lodepng
+        std::vector<unsigned char> imageData;
+        unsigned width, height;
+        unsigned error = lodepng::decode(imageData, width, height, lowFreqTexturePath.c_str());
+        
+        if (error)
+        {
+            // Handle loading error
+            return;
+        }
+        
+        if (width != 128 || height != 16384) 
+        {
+            // Wrong dimensions
+            return;
+        }
+        
+        // Create 3D texture
+        TextureDesc TexDesc;
+        TexDesc.Name = "Low frequency 3D noise texture";
+        TexDesc.Type = RESOURCE_DIM_TEX_3D;
+        TexDesc.Width = 128;
+        TexDesc.Height = 128;
+        TexDesc.Depth = 128;
+        TexDesc.MipLevels = 1;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        TexDesc.Usage = USAGE_IMMUTABLE;
+        TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+        
+        // Prepare texture data
+        TextureSubResData Level0Data;
+        Level0Data.pData = imageData.data();
+        Level0Data.Stride = 128 * 4; // 4 bytes per pixel (RGBA)
+        Level0Data.DepthStride = 128 * 128 * 4; // Stride for each depth slice
+        
+        TextureData InitData;
+        InitData.NumSubresources = 1;
+        InitData.pSubResources = &Level0Data;
+        
+        m_pDevice->CreateTexture(TexDesc, &InitData, &m_pLowFreqNoiseTexture);
+        m_pLowFreqNoiseSRV = m_pLowFreqNoiseTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    }
+    
+    // If we already have a shader resource binding, update it with the new textures
+    if (m_pRenderCloudsSRB)
+    {
+        auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
+        if (highFreqVar)
+            highFreqVar->Set(m_pHighFreqNoiseSRV);
+            
+        auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture");
+        if (lowFreqVar)
+            lowFreqVar->Set(m_pLowFreqNoiseSRV);
+    }
 }
 
 } // namespace Diligent
