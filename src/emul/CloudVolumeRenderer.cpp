@@ -431,6 +431,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
     // Bind static resources
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CloudParams")->Set(m_pCloudParamsCB);
+
+    LoadNoiseTextures();
 }
 
 void CloudVolumeRenderer::Render(IDeviceContext* pContext,
