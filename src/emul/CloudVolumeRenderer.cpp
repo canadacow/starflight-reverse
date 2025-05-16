@@ -242,7 +242,116 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         // 3D noise textures for cloud detail
         Texture3D g_HighFreqNoiseTexture;
         Texture3D g_LowFreqNoiseTexture;
-        SamplerState g_NoiseSampler;
+        SamplerState g_NoiseSampler;        
+
+        // hash function              
+        float hash(float n)
+        {
+            return frac(cos(n) * 114514.1919);
+        }
+
+        // 3d noise function
+        float noise(in float3 x)
+        {
+            float3 p = floor(x);
+            float3 f = smoothstep(0.0, 1.0, frac(x));
+                
+            float n = p.x + p.y * 10.0 + p.z * 100.0;
+            
+            return lerp(
+                lerp(lerp(hash(n + 0.0), hash(n + 1.0), f.x),
+                     lerp(hash(n + 10.0), hash(n + 11.0), f.x), f.y),
+                lerp(lerp(hash(n + 100.0), hash(n + 101.0), f.x),
+                     lerp(hash(n + 110.0), hash(n + 111.0), f.x), f.y), f.z);
+        }
+
+        // Define rotation matrix for fbm
+        static const float3x3 m = float3x3(
+            0.8, 0.6, 0.0,
+            -0.6, 0.8, 0.0,
+            0.0, 0.0, 1.0
+        );
+
+        // Fractional Brownian motion
+        float fbm(float3 p)
+        {
+            float f = 0.5000 * noise(p);
+            p = mul(m, p);
+            f += 0.2500 * noise(p);
+            p = mul(m, p);
+            f += 0.1666 * noise(p);
+            p = mul(m, p);
+            f += 0.0834 * noise(p);
+            return f;
+        }       
+
+        // Cloud animation parameters
+        struct CloudAnimation
+        {
+            float3 baseWind;              // Base wind at low altitude
+            float3 highWind;              // Base wind at high altitude
+            float largeScaleMovement;     // Large-scale oscillation
+            float time;                   // Current time
+        };
+
+        // Get base wind vector based on height and time
+        float3 getBaseWindVector(float height, float time)
+        {
+            // Create a height-dependent wind vector
+            float3 windVec = float3(
+                sin(time * 0.1 + height * 0.01) * 5.0,
+                cos(time * 0.05) * 0.5,
+                sin(time * 0.07 + height * 0.02) * 3.0
+            );
+            return windVec;
+        }
+
+        // Pre-compute cloud animation parameters
+        CloudAnimation computeCloudAnimation(float time)
+        {
+            CloudAnimation anim;
+            
+            anim.time = time;
+            anim.baseWind = getBaseWindVector(g_CloudBoxMin.y, time);
+            anim.highWind = getBaseWindVector(g_CloudBoxMax.y, time);
+            anim.largeScaleMovement = sin(time * 0.05) * 2000.0;
+            
+            return anim;
+        }
+
+        // Get animated cloud position
+        float3 getAnimatedCloudPos(float3 pos, CloudAnimation anim)
+        {
+            // Interpolate between base and high altitude wind based on height
+            float heightRatio = saturate((pos.y - g_CloudBoxMin.y) / (g_CloudBoxMax.y - g_CloudBoxMin.y));
+            float3 wind = lerp(anim.baseWind, anim.highWind, heightRatio);
+            
+            // Apply local turbulence based on position
+            float3 turbulencePos = pos * 0.0001 + anim.time * 0.1;
+            float3 turbulence = float3(
+                noise(turbulencePos + float3(0.0, 13.7, 31.1)) - 0.5,
+                (noise(turbulencePos + float3(43.5, 0.0, 7.2)) - 0.5) * 0.2, // Less vertical turbulence
+                noise(turbulencePos + float3(8.3, 53.1, 0.0)) - 0.5
+            );
+            
+            // Wind turbulence and speed constants
+            const float windTurbulence = 1.0;
+            const float windSpeed = 10.0;
+            
+            // Combine all displacement effects
+            float3 animatedPos = pos;
+            
+            // Wind displacement
+            animatedPos -= (wind + turbulence * windTurbulence * windSpeed) * anim.time;
+            
+            // Large scale movement
+            animatedPos.x += anim.largeScaleMovement;
+            
+            // Height-based differential movement (lower clouds move differently)
+            animatedPos.x += sin(heightRatio * 3.14159 + anim.time * 0.2) * 1000.0;
+            
+            return animatedPos;
+        }
 
         // Ray-box intersection function
         bool IntersectBox(float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax, out float tNear, out float tFar)
@@ -258,34 +367,6 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             tFar = min(min(t2.x, t2.y), t2.z);
             
             return tFar > tNear && tFar > 0.0;
-        }
-        
-        // Sample cloud density using the 3D noise textures
-        float SampleCloudDensity(float3 pos)
-        {
-            // Normalize position within cloud box
-            float3 normalizedPos = (pos - g_CloudBoxMin.xyz) / (g_CloudBoxMax.xyz - g_CloudBoxMin.xyz);
-            
-            // Sample low-frequency base shape
-            float baseDensity = g_LowFreqNoiseTexture.Sample(g_NoiseSampler, normalizedPos).r;
-            
-            // Apply height falloff (more density in the middle, less at top/bottom)
-            float heightGradient = 1.0 - 2.0 * abs(normalizedPos.y - 0.5);
-            heightGradient = saturate(heightGradient * 3.0); // Sharpen the gradient
-            
-            // Early exit if no base density
-            if (baseDensity < 0.05)
-                return 0;
-                
-            // Sample high-frequency detail
-            float3 highFreqUV = normalizedPos * 4.0; // Scale for more variation
-            float detailNoise = g_HighFreqNoiseTexture.Sample(g_NoiseSampler, highFreqUV).r;
-            
-            // Combine for final density
-            float density = saturate(baseDensity * heightGradient);
-            density = saturate(density - (1.0 - detailNoise) * 0.3); // Apply detail noise as erosion
-            
-            return density * g_CloudOpacity * 2.0; // Scale by opacity param
         }
 
         PSOutput main(PSInput input)
@@ -313,52 +394,59 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             
             // Ensure tNear is at least 0 (camera inside cloud)
             tNear = max(0, tNear);
+
+            #if 1
+            float time = 0.0;
+            CloudAnimation cloudAnim = computeCloudAnimation(time * 10.0);
+            //float densityFactor = lerp(0.66, 1.8, mo.x);
+            float densityFactor = lerp(0.66, 1.8, 0.5);
+            float3 cloudrange = float3(g_CloudBoxMin.y, g_CloudBoxMax.y, 0.0);
+            float3 light = normalize(float3(0.1, 0.25, 0.9));
+
+            float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+            float t_min = tNear;
+            float t_max = tFar;
+            float3 campos = g_Camera.f4Position.xyz;
             
-            // Cloud raymarching parameters
-            const int numSteps = 16;
-            float stepSize = (tFar - tNear) / float(numSteps);
-            float totalDensity = 0.0;
-            float transmittance = 1.0;
-            float3 lightAccumulation = float3(0, 0, 0);
-            
-            // Simple directional light from above
-            float3 lightDir = normalize(float3(0.5, 1.0, 0.3));
-            
-            // Raymarch through cloud volume
-            for (int i = 0; i < numSteps; i++)
-            {
-                // Current sample position
-                float t = tNear + stepSize * (float(i) + 0.5); // Sample at center of step
-                float3 samplePos = rayOrigin + rayDir * t;
+            int stepCount = 16;
+            float stepSize = (t_max - t_min) / float(stepCount);
+
+            for (float t = t_min; t < t_max; t += stepSize) {
+                float3 pos = campos + rayDir * t;            
+
+                // Get animated cloud position using precomputed animation parameters
+                float3 animatedPos = getAnimatedCloudPos(pos, cloudAnim);
                 
-                // Sample cloud density at this position
-                float density = SampleCloudDensity(samplePos);
+                // Apply density factor here - controlled by mouse X
+                float density = smoothstep(0.5, 1.0, fbm(animatedPos * 0.00025) * densityFactor);
+                float3 cloudColor = lerp(float3(1.1, 1.05, 1.0), float3(0.3, 0.3, 0.2), density);
                 
-                if (density > 0.0)
-                {
-                    // Apply Beer's law for light absorption
-                    float absorption = exp(-density * stepSize);
-                    transmittance *= absorption;
-                    
-                    // Add light contribution (simple ambient + directional)
-                    float3 ambientLight = g_CloudColor.rgb * 0.2;
-                    
-                    // Simple light scattering approximation
-                    float scattering = pow(max(0.0, dot(rayDir, lightDir) * 0.5 + 0.5), 8.0) * 0.5 + 0.5;
-                    float3 directLight = g_CloudColor.rgb * scattering;
-                    
-                    float3 lightContrib = (ambientLight + directLight) * density * stepSize;
-                    lightAccumulation += lightContrib * transmittance;
-                    
-                    // Early exit if cloud becomes opaque
-                    if (transmittance < 0.01)
-                        break;
+                // Lighting - brighten top of clouds, darken bottom
+                float heightGradient = smoothstep(cloudrange.x, cloudrange.y, pos.y);
+                cloudColor = lerp(cloudColor * 0.7, cloudColor * 1.3, heightGradient);
+                
+                // Sun effects
+                float sundot = saturate(dot(rayDir, light));
+                cloudColor += 0.4 * float3(1.0, 0.7, 0.4) * pow(sundot, 10.0) * density;
+                
+                // Accumulate color with transmission
+                float alpha = density * 0.1; // Lower alpha for better translucency
+                alpha *= (1.0 - sum.a); // Multiply by remaining transparency
+                sum += float4(cloudColor * alpha, alpha);
+                
+                // Early exit if nearly opaque
+                if (sum.a > 0.99) {
+                    break;
                 }
             }
-            
+            float3 cloudColor = sum.rgb;
+            float cloudAlpha = sum.a;
+
+            #else
             // Final cloud color and opacity
-            float3 cloudColor = lightAccumulation;
-            float cloudAlpha = 1.0 - transmittance;
+            float3 cloudColor = g_CloudColor.rgb;
+            float cloudAlpha = g_CloudOpacity;
+            #endif
             
             // Output to all PBR G-buffer targets
             output.Color        = float4(cloudColor, cloudAlpha);
