@@ -59,6 +59,7 @@ private:
     RefCntAutoPtr<IPipelineState>         m_pRenderCloudsPSO;
     RefCntAutoPtr<IShaderResourceBinding> m_pRenderCloudsSRB;
     RefCntAutoPtr<IBuffer>                m_pCloudParamsCB;
+    RefCntAutoPtr<IBuffer>                m_pCameraAttribsCB; // Camera attributes buffer
 
     RefCntAutoPtr<ITexture>               m_pHighFreqNoiseTexture;
     RefCntAutoPtr<ITexture>               m_pLowFreqNoiseTexture;

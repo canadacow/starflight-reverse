@@ -30,6 +30,13 @@ set(DILIGENT_NO_METAL ON CACHE BOOL "Disable Metal support")
 set(DILIGENT_BUILD_SAMPLES OFF CACHE BOOL "Disable samples building")
 set(DILIGENT_MSVC_COMPILE_OPTIONS "" CACHE STRING "Remove warnings as errors")
 
+foreach(CONFIG_TYPE ${CMAKE_CONFIGURATION_TYPES})
+    string(TOUPPER ${CONFIG_TYPE} CONFIG_TYPE_UPPER)
+    if(CONFIG_TYPE_UPPER STREQUAL "DEBUG")
+        set(DILIGENT_DEBUG ON CACHE BOOL "Enable debug mode for Diligent Engine")
+    endif()
+endforeach()
+
 FetchContent_Declare(
     DiligentCore
     GIT_REPOSITORY https://github.com/canadacow/DiligentCore.git

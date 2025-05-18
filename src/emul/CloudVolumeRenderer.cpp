@@ -100,6 +100,17 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         pDevice->CreateBuffer(CBDesc, nullptr, &m_pCloudParamsCB);
     }
 
+    // Create camera attributes buffer
+    {
+        BufferDesc CBDesc;
+        CBDesc.Name = "Camera Attributes buffer";
+        CBDesc.Size = sizeof(HLSL::CameraAttribs);
+        CBDesc.Usage = USAGE_DYNAMIC;
+        CBDesc.BindFlags = BIND_UNIFORM_BUFFER;
+        CBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
+        pDevice->CreateBuffer(CBDesc, nullptr, &m_pCameraAttribsCB);
+    }
+
     // Create PSO and shaders
     GraphicsPipelineStateCreateInfo PSOCreateInfo;
     PipelineStateDesc&              PSODesc = PSOCreateInfo.PSODesc;
@@ -111,10 +122,10 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     PipelineResourceLayoutDescX ResourceLayout;
     ResourceLayout
         .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_VERTEX, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_VERTEX, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
         .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
         .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
         
@@ -145,10 +156,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Shader creation
     ShaderCreateInfo ShaderCI;
     ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
     ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
     // Vertex shader
     ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+    ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
     ShaderCI.EntryPoint = "main";
     ShaderCI.Desc.Name = "Cloud Volume VS";
     ShaderCI.Source = R"(
@@ -167,7 +179,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
         #include "BasicStructures.fxh"
 
-        cbuffer CameraAttribs
+        cbuffer CameraAttribs : register(b0)
         {
             CameraAttribs g_Camera;
         };
@@ -199,7 +211,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
     // Pixel shader with simple box rendering
     ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+    ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
     ShaderCI.EntryPoint = "main";
     ShaderCI.Desc.Name = "Cloud Volume PS";
     ShaderCI.Source = R"(
@@ -223,12 +236,12 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
         #include "BasicStructures.fxh"
 
-        cbuffer CameraAttribs
+        cbuffer CameraAttribs : register(b0)
         {
             CameraAttribs g_Camera;
         };
 
-        cbuffer CloudParams
+        cbuffer CloudParams : register(b1)
         {
             float4 g_CloudBoxMin;       // Bottom of cloud box
             float4 g_CloudBoxMax;       // Top of cloud box
@@ -236,13 +249,13 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float  g_CloudOpacity;      // Opacity of the cloud box
         };
 
-        Texture2D g_DepthTexture;
-        SamplerState g_DepthSampler;
+        Texture2D g_DepthTexture : register(t0);
+        SamplerState g_DepthSampler : register(s0);
         
         // 3D noise textures for cloud detail
-        Texture3D g_HighFreqNoiseTexture;
-        Texture3D g_LowFreqNoiseTexture;
-        SamplerState g_NoiseSampler;        
+        Texture3D g_HighFreqNoiseTexture : register(t1);
+        Texture3D g_LowFreqNoiseTexture : register(t2);
+        SamplerState g_NoiseSampler : register(s1);        
 
         // hash function              
         float hash(float n)
@@ -511,6 +524,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     PSOCreateInfo.pVS = pVS;
     PSOCreateInfo.pPS = pPS;
 
+    PSOCreateInfo.Flags = PSO_CREATE_FLAG_DONT_REMAP_SHADER_RESOURCES | PSO_CREATE_FLAG_DONT_VERIFY_SHADER_RESOURCES;
+
     // Create the pipeline state
     pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pRenderCloudsPSO);
 
@@ -518,7 +533,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
     // Bind static resources
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CloudParams")->Set(m_pCloudParamsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pCloudParamsCB);
 
     LoadNoiseTextures();
 }
@@ -544,35 +561,25 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     // Set pipeline state
     pContext->SetPipelineState(m_pRenderCloudsPSO);
     
-    // Create and bind camera attributes buffer
-    RefCntAutoPtr<IBuffer> pCameraAttribsCB;
-    BufferDesc CBDesc;
-    CBDesc.Name = "Camera Attributes buffer";
-    CBDesc.Size = sizeof(HLSL::CameraAttribs);
-    CBDesc.Usage = USAGE_DYNAMIC;
-    CBDesc.BindFlags = BIND_UNIFORM_BUFFER;
-    CBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
-    m_pDevice->CreateBuffer(CBDesc, nullptr, &pCameraAttribsCB);
-    
-    // Fill the camera data from the HLSL::CameraAttribs structure
+    // Update camera attributes buffer
     {
-        MapHelper<HLSL::CameraAttribs> MappedCamAttribs(pContext, pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+        MapHelper<HLSL::CameraAttribs> MappedCamAttribs(pContext, m_pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
         *MappedCamAttribs = CamAttribs;
     }
     
     // Bind the camera attributes and depth texture to the existing SRB
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(pCameraAttribsCB);
-    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
 
-    auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
+    auto srv = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2);
     if (srv)
         srv->Set(pDepthBufferSRV);
 
-    auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
+    auto highFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
     if (highFreqVar)
         highFreqVar->Set(m_pHighFreqNoiseSRV);
         
-    auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture");
+    auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
     if (lowFreqVar)
         lowFreqVar->Set(m_pLowFreqNoiseSRV);
 
@@ -705,11 +712,11 @@ void CloudVolumeRenderer::LoadNoiseTextures()
     // If we already have a shader resource binding, update it with the new textures
     if (m_pRenderCloudsSRB)
     {
-        auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
+        auto highFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
         if (highFreqVar)
-            highFreqVar->Set(m_pHighFreqNoiseSRV);
+            highFreqVar->Set(m_pHighFreqNoiseSRV);  
             
-        auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture");
+        auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
         if (lowFreqVar)
             lowFreqVar->Set(m_pLowFreqNoiseSRV);
     }
