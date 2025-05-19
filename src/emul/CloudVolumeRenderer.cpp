@@ -121,13 +121,12 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Define shader resource variable types
     PipelineResourceLayoutDescX ResourceLayout;
     ResourceLayout
-        .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddVariable(SHADER_TYPE_VERTEX, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_STATIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
+        .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_VERTEX | SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE)
-        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE);
+        .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
         
     // Create sampler descriptions for immutable samplers
     SamplerDesc DepthSamplerDesc;
@@ -236,12 +235,12 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
         #include "BasicStructures.fxh"
 
-        cbuffer CameraAttribs : register(b0)
+        cbuffer CameraAttribs : register(b1)
         {
             CameraAttribs g_Camera;
         };
 
-        cbuffer CloudParams : register(b1)
+        cbuffer CloudParams : register(b2)
         {
             float4 g_CloudBoxMin;       // Bottom of cloud box
             float4 g_CloudBoxMax;       // Top of cloud box
@@ -249,13 +248,13 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float  g_CloudOpacity;      // Opacity of the cloud box
         };
 
-        Texture2D g_DepthTexture : register(t0);
-        SamplerState g_DepthSampler : register(s0);
+        SamplerState g_DepthSampler : register(s3);
+        Texture2D g_DepthTexture : register(t4);
         
         // 3D noise textures for cloud detail
-        Texture3D g_HighFreqNoiseTexture : register(t1);
-        Texture3D g_LowFreqNoiseTexture : register(t2);
-        SamplerState g_NoiseSampler : register(s1);        
+        Texture3D g_HighFreqNoiseTexture : register(t5);
+        Texture3D g_LowFreqNoiseTexture : register(t6);
+        SamplerState g_NoiseSampler : register(s7);    
 
         // hash function              
         float hash(float n)
@@ -280,9 +279,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
         // Define rotation matrix for fbm
         static const float3x3 m = float3x3(
-            0.8, 0.6, 0.0,
-            -0.6, 0.8, 0.0,
-            0.0, 0.0, 1.0
+            0.00, 1.60, 1.20,
+            -1.60, 0.72, -0.96,
+            -1.20, -0.96, 1.28
         );
 
         // Fractional Brownian motion
@@ -431,7 +430,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
                 float3 animatedPos = getAnimatedCloudPos(pos, cloudAnim);
                 
                 // Apply density factor here - controlled by mouse X
-                float density = smoothstep(0.5, 1.0, fbm(animatedPos * 0.00025) * densityFactor);
+                float noiseTimesDensity = fbm(animatedPos * 0.00025) * densityFactor;
+                float density = smoothstep(0.5, 1.0, noiseTimesDensity);
                 float3 cloudColor = lerp(float3(1.1, 1.05, 1.0), float3(0.3, 0.3, 0.2), density);
                 
                 // Lighting - brighten top of clouds, darken bottom
@@ -532,11 +532,6 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Create shader resource binding
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
-    // Bind static resources
-    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
-    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
-    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pCloudParamsCB);
-
     LoadNoiseTextures();
 }
 
@@ -570,6 +565,7 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pCloudParamsCB);
 
     auto srv = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2);
     if (srv)
