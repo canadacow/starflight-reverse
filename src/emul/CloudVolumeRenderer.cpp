@@ -420,18 +420,21 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float t_max = tFar;
             float3 campos = g_Camera.f4Position.xyz;
             
-            int stepCount = 16;
+            int stepCount = 64;
             float stepSize = (t_max - t_min) / float(stepCount);
 
             for (float t = t_min; t < t_max; t += stepSize) {
-                float3 pos = campos + rayDir * t;            
+                float3 pos = campos + rayDir * t;
+                float3 adjPos = pos * float3(0.05, 0.05, 0.05);    
 
                 // Get animated cloud position using precomputed animation parameters
-                float3 animatedPos = getAnimatedCloudPos(pos, cloudAnim);
+                float3 animatedPos = getAnimatedCloudPos(adjPos, cloudAnim);
                 
                 // Apply density factor here - controlled by mouse X
-                float noiseTimesDensity = fbm(animatedPos * 0.00025) * densityFactor;
+                float noiseTimesDensity = fbm(animatedPos) * densityFactor;
                 float density = smoothstep(0.5, 1.0, noiseTimesDensity);
+                //float density = noiseTimesDensity;
+
                 float3 cloudColor = lerp(float3(1.1, 1.05, 1.0), float3(0.3, 0.3, 0.2), density);
                 
                 // Lighting - brighten top of clouds, darken bottom
@@ -599,8 +602,8 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
 void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
 {
     // Set the cloud box boundaries
-    m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 35.0f, terrainBounds.Min.z, 1.0f);
-    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 100.0f, terrainBounds.Max.z, 1.0f);
+    m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 25.0f, terrainBounds.Min.z, 1.0f);
+    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 80.0f, terrainBounds.Max.z, 1.0f);
     
     // Set default cloud parameters
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
