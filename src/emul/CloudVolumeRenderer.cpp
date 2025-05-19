@@ -155,7 +155,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Shader creation
     ShaderCreateInfo ShaderCI;
     ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+    #ifdef _DEBUG
+        ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+    #else
+        ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+    #endif
     ShaderCI.pShaderSourceStreamFactory = pCompoundSourceFactory;
     // Vertex shader
     ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
@@ -210,7 +214,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
     // Pixel shader with simple box rendering
     ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-    ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+    #ifdef _DEBUG
+        ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+    #else
+        ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+    #endif
     ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
     ShaderCI.EntryPoint = "main";
     ShaderCI.Desc.Name = "Cloud Volume PS";
@@ -527,7 +535,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     PSOCreateInfo.pVS = pVS;
     PSOCreateInfo.pPS = pPS;
 
+#ifdef _DEBUG
     PSOCreateInfo.Flags = PSO_CREATE_FLAG_DONT_REMAP_SHADER_RESOURCES | PSO_CREATE_FLAG_DONT_VERIFY_SHADER_RESOURCES;
+#endif
 
     // Create the pipeline state
     pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pRenderCloudsPSO);
@@ -565,6 +575,7 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
         *MappedCamAttribs = CamAttribs;
     }
     
+#ifdef _DEBUG
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
@@ -581,6 +592,24 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
     if (lowFreqVar)
         lowFreqVar->Set(m_pLowFreqNoiseSRV);
+#else
+    // Bind the camera attributes and depth texture to the existing SRB
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CloudParams")->Set(m_pCloudParamsCB);
+
+    auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
+    if (srv)
+        srv->Set(pDepthBufferSRV);
+
+    auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
+    if (highFreqVar)
+        highFreqVar->Set(m_pHighFreqNoiseSRV);
+
+    auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture");
+    if (lowFreqVar)
+        lowFreqVar->Set(m_pLowFreqNoiseSRV);
+#endif
 
     // Commit shader resources
     pContext->CommitShaderResources(m_pRenderCloudsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -711,6 +740,7 @@ void CloudVolumeRenderer::LoadNoiseTextures()
     // If we already have a shader resource binding, update it with the new textures
     if (m_pRenderCloudsSRB)
     {
+#ifdef _DEBUG
         auto highFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
         if (highFreqVar)
             highFreqVar->Set(m_pHighFreqNoiseSRV);  
@@ -718,6 +748,15 @@ void CloudVolumeRenderer::LoadNoiseTextures()
         auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
         if (lowFreqVar)
             lowFreqVar->Set(m_pLowFreqNoiseSRV);
+#else
+        auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
+        if (highFreqVar)
+            highFreqVar->Set(m_pHighFreqNoiseSRV);  
+            
+        auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL,"g_LowFreqNoiseTexture");
+        if (lowFreqVar)
+            lowFreqVar->Set(m_pLowFreqNoiseSRV);
+#endif
     }
 }
 
