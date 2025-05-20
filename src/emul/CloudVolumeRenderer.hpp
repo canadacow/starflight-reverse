@@ -28,6 +28,7 @@ public:
         float4 CloudBoxMax;       // Top of cloud box
         float4 CloudColor;        // Color of the cloud box
         float  CloudOpacity;      // Opacity of the cloud box
+        float  CloudDensity;      // Density of the cloud volume
     };
 
     CloudVolumeRenderer();
@@ -46,9 +47,6 @@ public:
     CloudParams& GetCloudParams() { return m_CloudParams; }
     const CloudParams& GetCloudParams() const { return m_CloudParams; }
 
-    // Setup cloud parameters using terrain data
-    void SetupTerrainParameters(const BoundBox& terrainBounds);
-
 private:
 
     void LoadNoiseTextures();
@@ -59,7 +57,7 @@ private:
     RefCntAutoPtr<IPipelineState>         m_pRenderCloudsPSO;
     RefCntAutoPtr<IShaderResourceBinding> m_pRenderCloudsSRB;
     RefCntAutoPtr<IBuffer>                m_pCloudParamsCB;
-    RefCntAutoPtr<IBuffer>                m_pCameraAttribsCB; // Camera attributes buffer
+    RefCntAutoPtr<IBuffer>                m_pCameraAttribsCB; 
 
     RefCntAutoPtr<ITexture>               m_pHighFreqNoiseTexture;
     RefCntAutoPtr<ITexture>               m_pLowFreqNoiseTexture;

@@ -33,6 +33,7 @@ CloudVolumeRenderer::CloudVolumeRenderer()
     m_CloudParams.CloudBoxMax = float4(100.0f, 50.0f, 100.0f, 1.0f);
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
     m_CloudParams.CloudOpacity = 0.3f;
+    m_CloudParams.CloudDensity = 0.5f;
 }
 
 CloudVolumeRenderer::~CloudVolumeRenderer()
@@ -254,6 +255,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float4 g_CloudBoxMax;       // Top of cloud box
             float4 g_CloudColor;        // Color of the cloud box
             float  g_CloudOpacity;      // Opacity of the cloud box
+            float  g_CloudDensity;      // Density of the cloud volume
         };
 
         SamplerState g_DepthSampler : register(s3);
@@ -419,7 +421,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float time = 0.0;
             CloudAnimation cloudAnim = computeCloudAnimation(time * 10.0);
             //float densityFactor = lerp(0.66, 1.8, mo.x);
-            float densityFactor = lerp(0.66, 1.8, 0.5);
+            float densityFactor = lerp(0.66, 1.8, g_CloudDensity);
             float3 cloudrange = float3(g_CloudBoxMin.y, g_CloudBoxMax.y, 0.0);
             float3 light = normalize(float3(0.1, 0.25, 0.9));
 
@@ -433,7 +435,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
             for (float t = t_min; t < t_max; t += stepSize) {
                 float3 pos = campos + rayDir * t;
-                float3 adjPos = pos * float3(0.05, 0.05, 0.05);    
+                float3 adjPos = pos * float3(0.025, 0.025, 0.025);    
 
                 // Get animated cloud position using precomputed animation parameters
                 float3 animatedPos = getAnimatedCloudPos(adjPos, cloudAnim);
@@ -626,17 +628,6 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     DrawAttrs.NumIndices = 6;
     DrawAttrs.Flags      = DRAW_FLAG_VERIFY_ALL;
     pContext->DrawIndexed(DrawAttrs);
-}
-
-void CloudVolumeRenderer::SetupTerrainParameters(const BoundBox& terrainBounds)
-{
-    // Set the cloud box boundaries
-    m_CloudParams.CloudBoxMin = float4(terrainBounds.Min.x, 25.0f, terrainBounds.Min.z, 1.0f);
-    m_CloudParams.CloudBoxMax = float4(terrainBounds.Max.x, 80.0f, terrainBounds.Max.z, 1.0f);
-    
-    // Set default cloud parameters
-    m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
-    m_CloudParams.CloudOpacity = 0.3f;
 }
 
 void CloudVolumeRenderer::LoadNoiseTextures()
