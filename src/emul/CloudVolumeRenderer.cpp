@@ -34,6 +34,7 @@ CloudVolumeRenderer::CloudVolumeRenderer()
     m_CloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
     m_CloudParams.CloudOpacity = 0.3f;
     m_CloudParams.CloudDensity = 0.5f;
+    m_CloudParams.NoiseScale = 0.025f;
 }
 
 CloudVolumeRenderer::~CloudVolumeRenderer()
@@ -112,6 +113,17 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         pDevice->CreateBuffer(CBDesc, nullptr, &m_pCameraAttribsCB);
     }
 
+    // Create light attributes buffer
+    {
+        BufferDesc CBDesc;
+        CBDesc.Name = "Light Attributes buffer";
+        CBDesc.Size = sizeof(HLSL::LightAttribs);
+        CBDesc.Usage = USAGE_DYNAMIC;
+        CBDesc.BindFlags = BIND_UNIFORM_BUFFER;
+        CBDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
+        pDevice->CreateBuffer(CBDesc, nullptr, &m_pLightAttribsCB);
+    }
+
     // Create PSO and shaders
     GraphicsPipelineStateCreateInfo PSOCreateInfo;
     PipelineStateDesc&              PSODesc = PSOCreateInfo.PSODesc;
@@ -124,6 +136,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     ResourceLayout
         .SetDefaultVariableType(SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_VERTEX | SHADER_TYPE_PIXEL, "CameraAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_VERTEX | SHADER_TYPE_PIXEL, "LightAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
@@ -249,22 +262,28 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             CameraAttribs g_Camera;
         };
 
-        cbuffer CloudParams : register(b2)
+        cbuffer LightAttribs : register(b2)
+        {
+            LightAttribs g_Light;
+        };
+
+        cbuffer CloudParams : register(b3)
         {
             float4 g_CloudBoxMin;       // Bottom of cloud box
             float4 g_CloudBoxMax;       // Top of cloud box
             float4 g_CloudColor;        // Color of the cloud box
             float  g_CloudOpacity;      // Opacity of the cloud box
             float  g_CloudDensity;      // Density of the cloud volume
+            float  g_NoiseScale;        // Scale of the noise texture
         };
 
-        SamplerState g_DepthSampler : register(s3);
-        Texture2D g_DepthTexture : register(t4);
+        SamplerState g_DepthSampler : register(s4);
+        Texture2D g_DepthTexture : register(t5);
         
         // 3D noise textures for cloud detail
-        Texture3D g_HighFreqNoiseTexture : register(t5);
-        Texture3D g_LowFreqNoiseTexture : register(t6);
-        SamplerState g_NoiseSampler : register(s7);    
+        Texture3D g_HighFreqNoiseTexture : register(t6);
+        Texture3D g_LowFreqNoiseTexture : register(t7);
+        SamplerState g_NoiseSampler : register(s8);    
 
         // hash function              
         float hash(float n)
@@ -423,7 +442,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             //float densityFactor = lerp(0.66, 1.8, mo.x);
             float densityFactor = lerp(0.66, 1.8, g_CloudDensity);
             float3 cloudrange = float3(g_CloudBoxMin.y, g_CloudBoxMax.y, 0.0);
-            float3 light = normalize(float3(0.1, 0.25, 0.9));
+            float3 light = normalize(g_Light.f4Direction.xyz);
 
             float4 sum = float4(0.0, 0.0, 0.0, 0.0);
             float t_min = tNear;
@@ -435,7 +454,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
             for (float t = t_min; t < t_max; t += stepSize) {
                 float3 pos = campos + rayDir * t;
-                float3 adjPos = pos * float3(0.025, 0.025, 0.025);    
+                float3 adjPos = pos * float3(g_NoiseScale, g_NoiseScale, g_NoiseScale);    
 
                 // Get animated cloud position using precomputed animation parameters
                 float3 animatedPos = getAnimatedCloudPos(adjPos, cloudAnim);
@@ -465,8 +484,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
                     break;
                 }
             }
-            float3 cloudColor = sum.rgb;
-            float cloudAlpha = sum.a;
+            float3 cloudColor = sum.rgb * g_CloudColor.rgb;
+            float cloudAlpha = sum.a * g_CloudOpacity;
 
             #else
             // Final cloud color and opacity
@@ -576,14 +595,21 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
         MapHelper<HLSL::CameraAttribs> MappedCamAttribs(pContext, m_pCameraAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
         *MappedCamAttribs = CamAttribs;
     }
+
+    // Update light attributes buffer
+    {
+        MapHelper<HLSL::LightAttribs> MappedLightAttribs(pContext, m_pLightAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+        *MappedLightAttribs = LightAttrs;
+    }
     
 #ifdef _DEBUG
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pCloudParamsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2)->Set(m_pLightAttribsCB);
 
-    auto srv = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2);
+    auto srv = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 3);
     if (srv)
         srv->Set(pDepthBufferSRV);
 
@@ -598,6 +624,7 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(m_pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CameraAttribs")->Set(m_pCameraAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "LightAttribs")->Set(m_pLightAttribsCB);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CloudParams")->Set(m_pCloudParamsCB);
 
     auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");

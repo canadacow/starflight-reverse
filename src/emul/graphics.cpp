@@ -5811,7 +5811,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
 
-    s_gc.cloudVolumeRenderer->SetupTerrainParameters(s_gc.terrain.aabb);
+    s_gc.cloudVolumeRenderer->GetCloudParams().CloudBoxMin = float4(s_gc.terrain.aabb.Min.x, 25.0f, s_gc.terrain.aabb.Min.z, 1.0f);
+    s_gc.cloudVolumeRenderer->GetCloudParams().CloudBoxMax = float4(s_gc.terrain.aabb.Max.x, 80.0f, s_gc.terrain.aabb.Max.z, 1.0f);
 }
 
 void RenderWaterHeightMap(VulkanContext::frame_id_t inFlightIndex)
@@ -6566,103 +6567,215 @@ void DrawUI()
     // Planet development mode
     if(frameSync.demoMode == 2)
     {
-        float windowWidth = 600.0f;
-        float windowHeight = 600.0f;
-        float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
-        float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
+        // Planet List/Geography
+        {
+            float windowWidth = 600.0f;
+            float windowHeight = 600.0f;
+            float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
+            float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
 
-        if (nk_begin(&ctx, "Planet List", nk_rect(windowX, windowY, windowWidth, windowHeight),
-            NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
+            if (nk_begin(&ctx, "Planet List", nk_rect(windowX, windowY, windowWidth, windowHeight),
+                NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
 
-            nk_layout_row_dynamic(&ctx, 500, 1);
-            if (nk_group_begin(&ctx, "Planets", NK_WINDOW_BORDER)) {
+                nk_layout_row_dynamic(&ctx, 500, 1);
+                if (nk_group_begin(&ctx, "Planets", NK_WINDOW_BORDER)) {
 
-                static char planetIdInput[9];
-                static bool initialized = false;
-                if (!initialized) {
-                    snprintf(planetIdInput, sizeof(planetIdInput), "%04X", s_gc.planetInstanceIndex);
-                    initialized = true;
-                }
-
-                nk_layout_row_dynamic(&ctx, 25, 1);
-                nk_label(&ctx, "Enter Planet ID (Hex):", NK_TEXT_LEFT);
-                nk_edit_string_zero_terminated(&ctx, NK_EDIT_FIELD, planetIdInput, sizeof(planetIdInput), nk_filter_hex);
-
-                // Check if the Enter key is pressed
-                if (nk_input_is_key_pressed(&ctx.input, NK_KEY_ENTER)) {
-                    // Convert the input hex string to an integer
-                    uint32_t planetId = strtoul(planetIdInput, nullptr, 16);
-
-                    // Check if the planet ID exists in the planets map
-                    auto planetIt = planets.find(planetId);
-                    if (planetIt != planets.end()) {
-                        s_gc.planetInstanceIndex = planetId;
-                        InitHeightmap();
-                    } else {
-                        nk_label(&ctx, "Invalid Planet ID", NK_TEXT_LEFT);
+                    static char planetIdInput[9];
+                    static bool initialized = false;
+                    if (!initialized) {
+                        snprintf(planetIdInput, sizeof(planetIdInput), "%04X", s_gc.planetInstanceIndex);
+                        initialized = true;
                     }
-                }
-                // Create the combo box
-                nk_layout_row_dynamic(&ctx, 25, 1);
-                if (nk_combo_begin_label(&ctx, "Select Planet", nk_vec2(nk_widget_width(&ctx), 200))) {
+
                     nk_layout_row_dynamic(&ctx, 25, 1);
-                    for (const auto& planet : planets) {
-                        char buffer[64];
-                        sprintf(buffer, "0x%04X - System %dx%d Orbit %d Species %d seed %d", planet.first, planet.second.x, planet.second.y, planet.second.orbit, planet.second.species, planet.second.seed);
-                        
-                        if (nk_combo_item_label(&ctx, buffer, NK_TEXT_LEFT)) {
-                            s_gc.planetInstanceIndex = planet.first;
-                            sprintf(planetIdInput, "%04X", planet.first);
+                    nk_label(&ctx, "Enter Planet ID (Hex):", NK_TEXT_LEFT);
+                    nk_edit_string_zero_terminated(&ctx, NK_EDIT_FIELD, planetIdInput, sizeof(planetIdInput), nk_filter_hex);
+
+                    // Check if the Enter key is pressed
+                    if (nk_input_is_key_pressed(&ctx.input, NK_KEY_ENTER)) {
+                        // Convert the input hex string to an integer
+                        uint32_t planetId = strtoul(planetIdInput, nullptr, 16);
+
+                        // Check if the planet ID exists in the planets map
+                        auto planetIt = planets.find(planetId);
+                        if (planetIt != planets.end()) {
+                            s_gc.planetInstanceIndex = planetId;
                             InitHeightmap();
+                        } else {
+                            nk_label(&ctx, "Invalid Planet ID", NK_TEXT_LEFT);
                         }
                     }
+                    // Create the combo box
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    if (nk_combo_begin_label(&ctx, "Select Planet", nk_vec2(nk_widget_width(&ctx), 200))) {
+                        nk_layout_row_dynamic(&ctx, 25, 1);
+                        for (const auto& planet : planets) {
+                            char buffer[64];
+                            sprintf(buffer, "0x%04X - System %dx%d Orbit %d Species %d seed %d", planet.first, planet.second.x, planet.second.y, planet.second.orbit, planet.second.species, planet.second.seed);
+                            
+                            if (nk_combo_item_label(&ctx, buffer, NK_TEXT_LEFT)) {
+                                s_gc.planetInstanceIndex = planet.first;
+                                sprintf(planetIdInput, "%04X", planet.first);
+                                InitHeightmap();
+                            }
+                        }
+                        nk_combo_end(&ctx);
+                    }
+
+                    // Display selected planet details
+                    auto it = planets.find(s_gc.planetInstanceIndex);
+                    if (it != planets.end()) {
+                        const auto& planet = it->second;
+                        
+                        nk_layout_row_dynamic(&ctx, 20, 1);
+                        char buffer[256];
+                        
+                        sprintf(buffer, "Instance: 0x%X", planet.instanceoffset);
+                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                        
+                        sprintf(buffer, "System: 0x%X", planet.starsystemoffset);
+                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                        
+                        sprintf(buffer, "Seed: 0x%X", planet.seed);
+                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                        
+                        sprintf(buffer, "Species: %d", planet.species);
+                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                        
+                        sprintf(buffer, "System: %d x %d Orbit: %d", planet.x, planet.y, planet.orbit);
+                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+
+                        const char* surfaceType;
+                        switch (planettypes[planet.species].surftype) {
+                            case 1: surfaceType = "GAS"; break;
+                            case 2: surfaceType = "LIQUID"; break;
+                            case 3: surfaceType = "FROZEN"; break;
+                            case 4: surfaceType = "MOLTEN"; break;
+                            case 5: surfaceType = "ROCK"; break;
+                            default: surfaceType = "UNKNOWN"; break;
+                        }
+                        sprintf(buffer, "PREDOMINATE SURFACE: %s", surfaceType);
+                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+
+                        UpdatePlanetMap(s_gc.planetInstanceIndex);
+                        nk_layout_row_static(&ctx, 240, 480, 1);
+                        nk_image(&ctx, s_gc.activePlanet.image);
+                    }
+                    
+                    nk_group_end(&ctx);
+                }
+            }
+            nk_end(&ctx);
+        }
+
+        // Weather Control
+        {
+            float windowWidth = 400.0f;
+            float windowHeight = 350.0f;
+            float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
+            float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
+
+            if (nk_begin(&ctx, "Weather Control", nk_rect(windowX, windowY, windowWidth, windowHeight),
+                NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE)) {
+
+                nk_layout_row_dynamic(&ctx, 30, 1);
+                nk_label(&ctx, "Cloud Volume Parameters", NK_TEXT_CENTERED);
+
+                // Cloud Noise Scale control
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_label(&ctx, "Noise Scale:", NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 30, 2);
+                
+                static char noiseScaleBuffer[16];
+                float noiseScale = s_gc.cloudVolumeRenderer->GetCloudParams().NoiseScale;
+                sprintf(noiseScaleBuffer, "%.4f", noiseScale);
+                
+                int stringLength = sizeof(noiseScaleBuffer) - 1;
+                nk_edit_string(&ctx, NK_EDIT_SIMPLE, noiseScaleBuffer, &stringLength, NULL, NULL);
+                if (nk_button_label(&ctx, "Apply")) {
+                    float newScale = (float)atof(noiseScaleBuffer);
+                    // Clamp to reasonable range
+                    newScale = fmax(0.001f, fmin(0.1f, newScale));
+                    s_gc.cloudVolumeRenderer->GetCloudParams().NoiseScale = newScale;
+                }
+
+                // Get reference to cloud parameters
+                auto& cloudParams = s_gc.cloudVolumeRenderer->GetCloudParams();
+
+                // Cloud Density control
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_label(&ctx, "Cloud Density:", NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 30, 1);
+                float density = cloudParams.CloudDensity;
+                if (nk_slider_float(&ctx, 0.0f, &density, 1.0f, 0.01f)) {
+                    cloudParams.CloudDensity = density;
+                }
+
+                // Cloud Color controls
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_label(&ctx, "Cloud Color:", NK_TEXT_LEFT);
+                
+                struct nk_colorf color = {
+                    cloudParams.CloudColor.x,
+                    cloudParams.CloudColor.y,
+                    cloudParams.CloudColor.z,
+                    cloudParams.CloudColor.w
+                };
+                
+                if (nk_combo_begin_color(&ctx, nk_rgb_cf(color), nk_vec2(nk_widget_width(&ctx), 300))) {
+                    nk_layout_row_dynamic(&ctx, 120, 1);
+                    if (nk_color_pick(&ctx, &color, NK_RGBA)) {
+                        cloudParams.CloudColor.x = color.r;
+                        cloudParams.CloudColor.y = color.g;
+                        cloudParams.CloudColor.z = color.b;
+                        cloudParams.CloudColor.w = color.a;
+                    }
+                    
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    nk_label(&ctx, "Red:", NK_TEXT_LEFT);
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    if (nk_slider_float(&ctx, 0, &color.r, 1.0f, 0.01f)) {
+                        cloudParams.CloudColor.x = color.r;
+                    }
+                    
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    nk_label(&ctx, "Green:", NK_TEXT_LEFT);
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    if (nk_slider_float(&ctx, 0, &color.g, 1.0f, 0.01f)) {
+                        cloudParams.CloudColor.y = color.g;
+                    }
+                    
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    nk_label(&ctx, "Blue:", NK_TEXT_LEFT);
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    if (nk_slider_float(&ctx, 0, &color.b, 1.0f, 0.01f)) {
+                        cloudParams.CloudColor.z = color.b;
+                    }
+                    
                     nk_combo_end(&ctx);
                 }
 
-                // Display selected planet details
-                auto it = planets.find(s_gc.planetInstanceIndex);
-                if (it != planets.end()) {
-                    const auto& planet = it->second;
-                    
-                    nk_layout_row_dynamic(&ctx, 20, 1);
-                    char buffer[256];
-                    
-                    sprintf(buffer, "Instance: 0x%X", planet.instanceoffset);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-                    
-                    sprintf(buffer, "System: 0x%X", planet.starsystemoffset);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-                    
-                    sprintf(buffer, "Seed: 0x%X", planet.seed);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-                    
-                    sprintf(buffer, "Species: %d", planet.species);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-                    
-                    sprintf(buffer, "System: %d x %d Orbit: %d", planet.x, planet.y, planet.orbit);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-
-                    const char* surfaceType;
-                    switch (planettypes[planet.species].surftype) {
-                        case 1: surfaceType = "GAS"; break;
-                        case 2: surfaceType = "LIQUID"; break;
-                        case 3: surfaceType = "FROZEN"; break;
-                        case 4: surfaceType = "MOLTEN"; break;
-                        case 5: surfaceType = "ROCK"; break;
-                        default: surfaceType = "UNKNOWN"; break;
-                    }
-                    sprintf(buffer, "PREDOMINATE SURFACE: %s", surfaceType);
-                    nk_label(&ctx, buffer, NK_TEXT_LEFT);
-
-                    UpdatePlanetMap(s_gc.planetInstanceIndex);
-                    nk_layout_row_static(&ctx, 240, 480, 1);
-                    nk_image(&ctx, s_gc.activePlanet.image);
+                // Cloud Opacity control
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_label(&ctx, "Cloud Opacity:", NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 30, 1);
+                float opacity = cloudParams.CloudOpacity;
+                if (nk_slider_float(&ctx, 0.0f, &opacity, 1.0f, 0.01f)) {
+                    cloudParams.CloudOpacity = opacity;
                 }
+
+                // Buttons at the bottom
+                nk_layout_row_dynamic(&ctx, 20, 1);  // Spacer
+                nk_layout_row_dynamic(&ctx, 30, 2);  // Two buttons in a row
                 
-                nk_group_end(&ctx);
+                if (nk_button_label(&ctx, "Reset to Default")) {
+                    // Reset to default values
+                    cloudParams.CloudColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
+                    cloudParams.CloudOpacity = 0.5f;
+                }
             }
+            nk_end(&ctx);
         }
-        nk_end(&ctx);
     }
 
     if(s_showHelp)

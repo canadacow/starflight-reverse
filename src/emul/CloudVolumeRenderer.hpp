@@ -29,6 +29,7 @@ public:
         float4 CloudColor;        // Color of the cloud box
         float  CloudOpacity;      // Opacity of the cloud box
         float  CloudDensity;      // Density of the cloud volume
+        float  NoiseScale;        // Scale of the noise texture
     };
 
     CloudVolumeRenderer();
@@ -58,6 +59,7 @@ private:
     RefCntAutoPtr<IShaderResourceBinding> m_pRenderCloudsSRB;
     RefCntAutoPtr<IBuffer>                m_pCloudParamsCB;
     RefCntAutoPtr<IBuffer>                m_pCameraAttribsCB; 
+    RefCntAutoPtr<IBuffer>                m_pLightAttribsCB;
 
     RefCntAutoPtr<ITexture>               m_pHighFreqNoiseTexture;
     RefCntAutoPtr<ITexture>               m_pLowFreqNoiseTexture;
