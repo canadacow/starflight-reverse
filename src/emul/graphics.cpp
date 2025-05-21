@@ -687,6 +687,8 @@ struct GraphicsContext
     std::unique_ptr<SunRenderer> sunRenderer;
 
     std::unique_ptr<CloudVolumeRenderer> cloudVolumeRenderer;
+
+    bool nuklearHasFocus = false;
 };
 
 static GraphicsContext s_gc{};
@@ -2524,6 +2526,100 @@ void serialize(Archive & ar, Rotoscope & rotoscope) {
 
 }
 
+NK_API void
+nk_sdl_handle_event(struct nk_context* ctx, SDL_Event* evt)
+{
+    int ctrl_down = SDL_GetModState() & (KMOD_LCTRL | KMOD_RCTRL);
+
+    switch (evt->type)
+    {
+    case SDL_KEYUP: /* KEYUP & KEYDOWN share same routine */
+    case SDL_KEYDOWN:
+    {
+        int down = evt->type == SDL_KEYDOWN;
+        switch (evt->key.keysym.sym)
+        {
+        case SDLK_RSHIFT: /* RSHIFT & LSHIFT share same routine */
+        case SDLK_LSHIFT:    nk_input_key(ctx, NK_KEY_SHIFT, down); break;
+        case SDLK_DELETE:    nk_input_key(ctx, NK_KEY_DEL, down); break;
+
+        case SDLK_KP_ENTER:
+        case SDLK_RETURN:    nk_input_key(ctx, NK_KEY_ENTER, down); break;
+
+        case SDLK_TAB:       nk_input_key(ctx, NK_KEY_TAB, down); break;
+        case SDLK_BACKSPACE: nk_input_key(ctx, NK_KEY_BACKSPACE, down); break;
+        case SDLK_HOME:      nk_input_key(ctx, NK_KEY_TEXT_START, down);
+            nk_input_key(ctx, NK_KEY_SCROLL_START, down); break;
+        case SDLK_END:       nk_input_key(ctx, NK_KEY_TEXT_END, down);
+            nk_input_key(ctx, NK_KEY_SCROLL_END, down); break;
+        case SDLK_PAGEDOWN:  nk_input_key(ctx, NK_KEY_SCROLL_DOWN, down); break;
+        case SDLK_PAGEUP:    nk_input_key(ctx, NK_KEY_SCROLL_UP, down); break;
+        case SDLK_z:         nk_input_key(ctx, NK_KEY_TEXT_UNDO, down && ctrl_down); break;
+        case SDLK_r:         nk_input_key(ctx, NK_KEY_TEXT_REDO, down && ctrl_down); break;
+        case SDLK_c:         nk_input_key(ctx, NK_KEY_COPY, down && ctrl_down); break;
+        case SDLK_v:         nk_input_key(ctx, NK_KEY_PASTE, down && ctrl_down); break;
+        case SDLK_x:         nk_input_key(ctx, NK_KEY_CUT, down && ctrl_down); break;
+        case SDLK_b:         nk_input_key(ctx, NK_KEY_TEXT_LINE_START, down && ctrl_down); break;
+        case SDLK_e:         nk_input_key(ctx, NK_KEY_TEXT_LINE_END, down && ctrl_down); break;
+        case SDLK_UP:        nk_input_key(ctx, NK_KEY_UP, down); break;
+        case SDLK_DOWN:      nk_input_key(ctx, NK_KEY_DOWN, down); break;
+        case SDLK_a:
+            if (ctrl_down)
+                nk_input_key(ctx, NK_KEY_TEXT_SELECT_ALL, down);
+            break;
+        case SDLK_LEFT:
+            if (ctrl_down)
+                nk_input_key(ctx, NK_KEY_TEXT_WORD_LEFT, down);
+            else nk_input_key(ctx, NK_KEY_LEFT, down);
+            break;
+        case SDLK_RIGHT:
+            if (ctrl_down)
+                nk_input_key(ctx, NK_KEY_TEXT_WORD_RIGHT, down);
+            else nk_input_key(ctx, NK_KEY_RIGHT, down);
+            break;
+        }
+    }
+    return;
+
+    case SDL_MOUSEBUTTONUP: /* MOUSEBUTTONUP & MOUSEBUTTONDOWN share same routine */
+    case SDL_MOUSEBUTTONDOWN:
+    {
+        int down = evt->type == SDL_MOUSEBUTTONDOWN;
+        const int x = evt->button.x, y = evt->button.y;
+        switch (evt->button.button)
+        {
+        case SDL_BUTTON_LEFT:
+            if (evt->button.clicks > 1)
+                nk_input_button(ctx, NK_BUTTON_DOUBLE, x, y, down);
+            nk_input_button(ctx, NK_BUTTON_LEFT, x, y, down); break;
+        case SDL_BUTTON_MIDDLE: nk_input_button(ctx, NK_BUTTON_MIDDLE, x, y, down); break;
+        case SDL_BUTTON_RIGHT:  nk_input_button(ctx, NK_BUTTON_RIGHT, x, y, down); break;
+        }
+    }
+    return;
+
+    case SDL_MOUSEMOTION:
+        if (ctx->input.mouse.grabbed) {
+            int x = (int)ctx->input.mouse.prev.x, y = (int)ctx->input.mouse.prev.y;
+            nk_input_motion(ctx, x + evt->motion.xrel, y + evt->motion.yrel);
+        }
+        else nk_input_motion(ctx, evt->motion.x, evt->motion.y);
+        return;
+
+    case SDL_TEXTINPUT:
+    {
+        nk_glyph glyph;
+        memcpy(glyph, evt->text.text, NK_UTF_SIZE);
+        nk_input_glyph(ctx, glyph);
+    }
+    return;
+
+    case SDL_MOUSEWHEEL:
+        nk_input_scroll(ctx, nk_vec2(evt->wheel.preciseX, evt->wheel.preciseY));
+        return;
+    }
+}
+
 class SDLKeyboard : public DOSKeyboard {
 private:
     std::mutex eventQueueMutex;
@@ -2681,6 +2777,13 @@ public:
     void update() override {
 
         auto handleEvent = [&](SDL_Event event) -> bool {
+
+            if(s_gc.nuklearHasFocus && event.type != SDL_QUIT)
+            {
+                nk_sdl_handle_event(&(nk_context->ctx), &event);
+                return false;
+            }
+
             switch (event.type) {
                 case SDL_KEYDOWN:
                     if (event.key.keysym.sym == SDLK_F1)
@@ -6687,11 +6790,26 @@ void DrawUI()
                 nk_layout_row_dynamic(&ctx, 30, 2);
                 
                 static char noiseScaleBuffer[16];
-                float noiseScale = s_gc.cloudVolumeRenderer->GetCloudParams().NoiseScale;
-                sprintf(noiseScaleBuffer, "%.4f", noiseScale);
+                static int noiseScaleLen = 0;
                 
-                int stringLength = sizeof(noiseScaleBuffer) - 1;
-                nk_edit_string(&ctx, NK_EDIT_SIMPLE, noiseScaleBuffer, &stringLength, NULL, NULL);
+                // Only initialize the buffer when it's empty
+                if (noiseScaleLen == 0) {
+                    float noiseScale = s_gc.cloudVolumeRenderer->GetCloudParams().NoiseScale;
+                    snprintf(noiseScaleBuffer, sizeof(noiseScaleBuffer), "%.4f", noiseScale);
+                    noiseScaleLen = strlen(noiseScaleBuffer);
+                }
+                
+                nk_layout_row_dynamic(&ctx, 30, 2);
+                nk_label(&ctx, "Value:", NK_TEXT_LEFT);
+                nk_flags active = nk_edit_string(&ctx, NK_EDIT_SIMPLE, noiseScaleBuffer, &noiseScaleLen, 15, nk_filter_float);
+
+                if((active & NK_EDIT_ACTIVE) || (active & NK_EDIT_ACTIVATED)) {
+                    s_gc.nuklearHasFocus = true;
+                }
+                else {
+                    s_gc.nuklearHasFocus = false;
+                }
+                
                 if (nk_button_label(&ctx, "Apply")) {
                     float newScale = (float)atof(noiseScaleBuffer);
                     // Clamp to reasonable range
