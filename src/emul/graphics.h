@@ -1057,9 +1057,10 @@ struct FrameSync {
 
     Magnum::Animation::Track<Magnum::Float, Magnum::Float> scaleTrack{};
 
+    bool nuklearHasFocus = false;
+   
     void SetOrbitState(OrbitState state, std::optional<vec3<float>> optionalCamPos = std::nullopt);
     OrbitStatus GetOrbitStatus();
-
 };
 
 extern FrameSync frameSync;
