@@ -3877,7 +3877,7 @@ static int GraphicsInitThread()
 
     EngineCI.pDeviceExtensionFeatures = &sync2Features;
 
-    EngineCI.EnableValidation = true;
+    //EngineCI.EnableValidation = true;
 
     auto* pFactoryVk = GetEngineFactoryVk();
     pFactoryVk->CreateDeviceAndContextsVk(EngineCI, &s_gc.m_pDevice, &s_gc.m_pImmediateContext);
@@ -6507,7 +6507,7 @@ void DrawUI()
             float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
 
             if (nk_begin(&ctx, "Weather Control", nk_rect(windowX, windowY, windowWidth, windowHeight),
-                NK_WINDOW_BORDER | NK_WINDOW_MOVABLE)) {
+                NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
 
                 nk_layout_row_dynamic(&ctx, 30, 1);
                 nk_label(&ctx, "Cloud Volume Parameters", NK_TEXT_CENTERED);
@@ -6625,34 +6625,39 @@ void DrawUI()
 
         if(s_gc.showPerformanceMetrics)
         {
-            float windowWidth = 400.0f;
+            float windowWidth = 500.0f;
             float windowHeight = 300.0f;
             float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
             float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
 
             if (nk_begin(&ctx, "Performance Metrics", nk_rect(windowX, windowY, windowWidth, windowHeight),
-                NK_WINDOW_BORDER | NK_WINDOW_MOVABLE)) {
+                NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE | NK_WINDOW_CLOSABLE)) {
 
                 nk_layout_row_dynamic(&ctx, 30, 1);
                 nk_label(&ctx, "Performance Metrics", NK_TEXT_CENTERED);
 
-                auto outputLine = [&](const char* label, double value) {
-                    nk_layout_row_dynamic(&ctx, 30, 2);
+                auto outputLine = [&](const char* label, PerformanceMetrics::QueryType type) {
+                    nk_layout_row_dynamic(&ctx, 30, 3);
                     nk_label(&ctx, label, NK_TEXT_LEFT);
-                    char valueStr[32];
-                    snprintf(valueStr, sizeof(valueStr), "%.3f ms", value * 1000.0f);
-                    nk_label(&ctx, valueStr, NK_TEXT_RIGHT);
+                    
+                    char cpuStr[32];
+                    snprintf(cpuStr, sizeof(cpuStr), "CPU: %.3f ms", s_gc.performanceMetrics.GetCPUValue(type) * 1000.0f);
+                    nk_label(&ctx, cpuStr, NK_TEXT_RIGHT);
+                    
+                    char gpuStr[32];
+                    snprintf(gpuStr, sizeof(gpuStr), "GPU: %.3f ms", s_gc.performanceMetrics.GetGPUValue(type) * 1000.0f);
+                    nk_label(&ctx, gpuStr, NK_TEXT_RIGHT);
                 };
 
-                outputLine("Scene Render: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::SceneRender));
-                outputLine("Epipolar Light Scattering: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::EpipolarLightScattering));
-                outputLine("Volumetric Clouds: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::VolumetricClouds));
-                outputLine("Screen Space Reflection: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::ScreenSpaceReflection));
-                outputLine("Screen Space Ambient Occlusion: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::ScreenSpaceAmbientOcclusion));
-                outputLine("Bloom: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::Bloom));
-                outputLine("Post FX: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::PostFX));
-                outputLine("Compositing: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::Compositing));
-                outputLine("Total: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::Total));
+                outputLine("Scene Render: ", PerformanceMetrics::QueryType::SceneRender);
+                outputLine("Epipolar Light Scattering: ", PerformanceMetrics::QueryType::EpipolarLightScattering);
+                outputLine("Volumetric Clouds: ", PerformanceMetrics::QueryType::VolumetricClouds);
+                outputLine("Screen Space Reflection: ", PerformanceMetrics::QueryType::ScreenSpaceReflection);
+                outputLine("Screen Space Ambient Occlusion: ", PerformanceMetrics::QueryType::ScreenSpaceAmbientOcclusion);
+                outputLine("Bloom: ", PerformanceMetrics::QueryType::Bloom);
+                outputLine("Post FX: ", PerformanceMetrics::QueryType::PostFX);
+                outputLine("Compositing: ", PerformanceMetrics::QueryType::Compositing);
+                outputLine("Total: ", PerformanceMetrics::QueryType::Total);
             }
             nk_end(&ctx);
         }
@@ -6778,13 +6783,12 @@ void DrawUI()
                     loadWindowOpen = true;
                     loadWindowIndex = screenshotIndex;
                 }
-
-                nk_layout_row_dynamic(&ctx, 30, 1);
-                if (nk_button_label(&ctx, "Show Performance Metrics")) {
-                    s_gc.showPerformanceMetrics = !s_gc.showPerformanceMetrics;
-                }
-
                 nk_group_end(&ctx);
+            }
+
+            nk_layout_row_dynamic(&ctx, 30, 1);
+            if (nk_button_label(&ctx, "Show Performance Metrics")) {
+                s_gc.showPerformanceMetrics = !s_gc.showPerformanceMetrics;
             }
         }
         nk_end(&ctx);

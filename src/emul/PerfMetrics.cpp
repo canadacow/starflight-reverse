@@ -16,10 +16,12 @@ void PerformanceMetrics::Mark(const RefCntAutoPtr<IDeviceContext>& pContext, Que
 {
     auto& query = queries[queryType];
     query.query->Begin(pContext);
+    query.startTime = std::chrono::steady_clock::now();
 }
 
 void PerformanceMetrics::End(const RefCntAutoPtr<IDeviceContext>& pContext, QueryType queryType)
 {
     auto& query = queries[queryType];
-    query.query->End(pContext, query.time);
+    query.query->End(pContext, query.GPUtime);
+    query.CPUtime = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - query.startTime).count();
 }

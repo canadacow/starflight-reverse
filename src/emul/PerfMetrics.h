@@ -33,7 +33,10 @@ public:
     struct QueryData
     {
         std::unique_ptr<DurationQueryHelper> query;
-        double time;
+        double GPUtime;
+        double CPUtime;
+
+        std::chrono::steady_clock::time_point startTime;
     };
 
     std::unordered_map<QueryType, QueryData> queries;
@@ -43,8 +46,13 @@ public:
     void Mark(const RefCntAutoPtr<IDeviceContext>& pContext, QueryType queryType);
     void End(const RefCntAutoPtr<IDeviceContext>& pContext, QueryType queryType);
 
-    double GetValue(QueryType queryType) const
+    double GetGPUValue(QueryType queryType) const
     {
-        return queries.at(queryType).time;
+        return queries.at(queryType).GPUtime;
+    }
+
+    double GetCPUValue(QueryType queryType) const
+    {
+        return queries.at(queryType).CPUtime;
     }
 };
