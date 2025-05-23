@@ -2,9 +2,13 @@
 
 void PerformanceMetrics::Initialize(IRenderDevice* pDevice)
 {
-    for (auto& query : queries)
+    // Automatically initialize all query types
+    for (int i = static_cast<int>(QueryType::SceneRender); 
+         i <= static_cast<int>(QueryType::Total); 
+         i++)
     {
-        query.second.query = std::make_unique<DurationQueryHelper>(pDevice, 5);
+        auto queryType = static_cast<QueryType>(i);
+        queries[queryType].query = std::make_unique<DurationQueryHelper>(pDevice, 5);
     }
 }
 

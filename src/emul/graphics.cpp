@@ -3946,6 +3946,8 @@ static int GraphicsInitThread()
     s_gc.cloudVolumeRenderer = std::make_unique<CloudVolumeRenderer>();
     s_gc.cloudVolumeRenderer->Initialize(s_gc.m_pDevice, s_gc.m_pImmediateContext);
 
+    s_gc.performanceMetrics.Initialize(s_gc.m_pDevice);
+
     s_gc.epipolarLightScattering = std::make_unique<EpipolarLightScattering>(EpipolarLightScattering::CreateInfo{
     s_gc.m_pDevice,
     nullptr,
@@ -6633,7 +6635,24 @@ void DrawUI()
 
                 nk_layout_row_dynamic(&ctx, 30, 1);
                 nk_label(&ctx, "Performance Metrics", NK_TEXT_CENTERED);
-                
+
+                auto outputLine = [&](const char* label, double value) {
+                    nk_layout_row_dynamic(&ctx, 30, 2);
+                    nk_label(&ctx, label, NK_TEXT_LEFT);
+                    char valueStr[32];
+                    snprintf(valueStr, sizeof(valueStr), "%.3f ms", value * 1000.0f);
+                    nk_label(&ctx, valueStr, NK_TEXT_RIGHT);
+                };
+
+                outputLine("Scene Render: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::SceneRender));
+                outputLine("Epipolar Light Scattering: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::EpipolarLightScattering));
+                outputLine("Volumetric Clouds: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::VolumetricClouds));
+                outputLine("Screen Space Reflection: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::ScreenSpaceReflection));
+                outputLine("Screen Space Ambient Occlusion: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::ScreenSpaceAmbientOcclusion));
+                outputLine("Bloom: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::Bloom));
+                outputLine("Post FX: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::PostFX));
+                outputLine("Compositing: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::Compositing));
+                outputLine("Total: ", s_gc.performanceMetrics.GetValue(PerformanceMetrics::QueryType::Total));
             }
             nk_end(&ctx);
         }
@@ -7351,6 +7370,8 @@ std::string GetEGAColorName(const float3& color) {
 
 void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
 {
+    s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::SceneRender);
+
     ITextureView*        pRTVOffscreen   = s_gc.buffers[inFlightIndex].offscreenColorBuffer->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
     
     ITextureView*        pRTV   = s_gc.buffers[inFlightIndex].diligentColorBuffer;
@@ -7751,6 +7772,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         // Render cloud volume if we're in terrain scene
         if (s_gc.cloudVolumeRenderer)
         {
+            s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
             ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 
             Uint32 BuffersMaskNoDepth = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS;
@@ -7768,6 +7790,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                                         pCurrDepthSRV,
                                         pRTV->GetTexture()->GetDesc().Format,
                                         pDSV->GetTexture()->GetDesc().Format);
+            s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
         }
     }
 
@@ -7795,6 +7818,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
     #if defined(DE_SSR)
     {
+        s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::ScreenSpaceReflection);
         HLSL::ScreenSpaceReflectionAttribs SSRAttribs{};
         SSRAttribs.RoughnessChannel = 0;
         SSRAttribs.IsRoughnessPerceptual = true;
@@ -7810,6 +7834,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         SSRRenderAttribs.pMotionVectorsSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_MOTION_VECTORS)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
         SSRRenderAttribs.pSSRAttribs = &SSRAttribs;
         s_gc.ssr->Execute(SSRRenderAttribs);
+        s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::ScreenSpaceReflection);
     }
     #endif
     #if defined(FX_SSR)
@@ -7873,6 +7898,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     }
     #endif
 
+    s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Bloom);
     Bloom::RenderAttributes BloomRenderAttribs{};
     BloomRenderAttribs.pDevice = s_gc.m_pDevice;
     BloomRenderAttribs.pDeviceContext = s_gc.m_pImmediateContext;
@@ -7880,9 +7906,11 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     BloomRenderAttribs.pColorBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_RADIANCE)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
     BloomRenderAttribs.pBloomAttribs = &s_gc.bloomSettings;
     s_gc.bloom->Execute(BloomRenderAttribs);
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Bloom);
 
     if (s_gc.ssao)
     {
+        s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::ScreenSpaceAmbientOcclusion);
         HLSL::ScreenSpaceAmbientOcclusionAttribs SSAOSettings{};
 
         ScreenSpaceAmbientOcclusion::RenderAttributes SSAORenderAttribs{};
@@ -7893,6 +7921,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         SSAORenderAttribs.pNormalBufferSRV = s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
         SSAORenderAttribs.pSSAOAttribs = &SSAOSettings;
         s_gc.ssao->Execute(SSAORenderAttribs);
+        s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::ScreenSpaceAmbientOcclusion);
     }
 
     const bool enableEpipolarLightScattering = true;
@@ -7908,6 +7937,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         s_gc.m_pImmediateContext->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
 
+    s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::PostFX);
     s_gc.m_pImmediateContext->SetPipelineState(s_gc.applyPostFX.pPSO);
     s_gc.applyPostFX.ptex2DRadianceVar->Set(s_gc.bloom->GetBloomTextureSRV());
     s_gc.applyPostFX.ptex2DNormalVar->Set(s_gc.gBuffer->GetBuffer(GBUFFER_RT_NORMAL)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
@@ -7924,9 +7954,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     s_gc.applyPostFX.ptex2DSSAOVar->Set(s_gc.ssao->GetAmbientOcclusionSRV());
     s_gc.m_pImmediateContext->CommitShaderResources(s_gc.applyPostFX.pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     s_gc.m_pImmediateContext->Draw({3, DRAW_FLAG_VERIFY_ALL});
-
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::PostFX);
     if(enableEpipolarLightScattering && s_gc.currentScene == Scene::SCENE_TERRAIN)
     {
+        s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::EpipolarLightScattering);
         HLSL::EpipolarLightScatteringAttribs m_PPAttribs{};
 
         EpipolarLightScattering::FrameAttribs FrameAttribs;
@@ -8053,7 +8084,10 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
 
         // Perform the post processing
         s_gc.epipolarLightScattering->PerformPostProcessing();
+        s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::EpipolarLightScattering);
     }
+
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::SceneRender);
 
     s_gc.m_pImmediateContext->Flush();
 }
@@ -8491,12 +8525,16 @@ void GraphicsUpdate()
         dataSize = textPixels.size() * sizeof(uint32_t);
     }
 
+    s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::UI);
     if (uniform.menuVisibility > 0.0f)
     {
         DrawUI();
     }
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::UI);
 
     s_gc.vc.sync_before_render();
+
+    s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Total);
 
     auto imageAvailableSemaphore = s_gc.vc.consume_current_image_available_semaphore();
     const auto inFlightIndex = s_gc.vc.in_flight_index_for_frame();
@@ -9006,6 +9044,8 @@ void GraphicsUpdate()
     s_gc.m_pImmediateContext->FinishFrame();
 
     s_gc.vc.render_frame();
+
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Total);
 
     int numkeys = 0;
     auto keys = SDL_GetKeyboardState(&numkeys);

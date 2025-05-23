@@ -18,11 +18,16 @@ public:
 
     enum class QueryType
     {
-        StationRender,
-        PlanetRender,
-        TerrainRender,
+        SceneRender,
+        EpipolarLightScattering,
+        VolumetricClouds,
+        ScreenSpaceReflection,
+        ScreenSpaceAmbientOcclusion,
+        Bloom,
+        UI,
         PostFX,
         Compositing,
+        Total
     };
 
     struct QueryData
