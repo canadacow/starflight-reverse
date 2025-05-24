@@ -6625,8 +6625,8 @@ void DrawUI()
 
         if(s_gc.showPerformanceMetrics)
         {
-            float windowWidth = 500.0f;
-            float windowHeight = 300.0f;
+            float windowWidth = 400.0f;
+            float windowHeight = 450.0f;
             float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
             float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
 
@@ -6649,6 +6649,16 @@ void DrawUI()
                     nk_label(&ctx, gpuStr, NK_TEXT_RIGHT);
                 };
 
+                // Frame Count and Average FPS display
+                nk_layout_row_dynamic(&ctx, 30, 2);
+                char frameCountStr[32];
+                snprintf(frameCountStr, sizeof(frameCountStr), "Frame Count: %zu", s_gc.performanceMetrics.GetFrameCount());
+                nk_label(&ctx, frameCountStr, NK_TEXT_LEFT);
+                
+                char avgFpsStr[32];
+                snprintf(avgFpsStr, sizeof(avgFpsStr), "Average FPS: %.1f", s_gc.performanceMetrics.GetAverageFPS());
+                nk_label(&ctx, avgFpsStr, NK_TEXT_RIGHT);
+                
                 outputLine("Scene Render: ", PerformanceMetrics::QueryType::SceneRender);
                 outputLine("Epipolar Light Scattering: ", PerformanceMetrics::QueryType::EpipolarLightScattering);
                 outputLine("Volumetric Clouds: ", PerformanceMetrics::QueryType::VolumetricClouds);
@@ -9034,7 +9044,9 @@ void GraphicsUpdate()
 #endif
     }
 
+    s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Compositing);
     auto compositorCommands = GPUCompositor(inFlightIndex, uniform, nk_surface->pixels, WINDOW_WIDTH * WINDOW_HEIGHT * 4);
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Compositing);
 
     commands.insert(commands.end(), compositorCommands.begin(), compositorCommands.end());
 
@@ -9044,6 +9056,8 @@ void GraphicsUpdate()
     // Do not start to render before the image has become available:
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
     .submit();
+
+    s_gc.m_pImmediateContext->Flush();
 
     s_gc.m_pImmediateContext->FinishFrame();
 

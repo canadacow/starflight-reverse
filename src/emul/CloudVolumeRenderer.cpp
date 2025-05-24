@@ -436,7 +436,6 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             // Ensure tNear is at least 0 (camera inside cloud)
             tNear = max(0, tNear);
 
-            #if 1
             float time = 0.0;
             CloudAnimation cloudAnim = computeCloudAnimation(time * 10.0);
             //float densityFactor = lerp(0.66, 1.8, mo.x);
@@ -487,11 +486,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float3 cloudColor = sum.rgb * g_CloudColor.rgb;
             float cloudAlpha = sum.a * g_CloudOpacity;
 
-            #else
-            // Final cloud color and opacity
-            float3 cloudColor = g_CloudColor.rgb;
-            float cloudAlpha = g_CloudOpacity;
-            #endif
+            // Apply premultiplied alpha
+            cloudColor *= cloudAlpha;
             
             // Output to all PBR G-buffer targets
             output.Color        = float4(cloudColor, cloudAlpha);
@@ -534,7 +530,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     for (Uint32 i = 0; i < PSOCreateInfo.GraphicsPipeline.NumRenderTargets; ++i)
     {
         PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].BlendEnable = True;
-        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].SrcBlend = BLEND_FACTOR_SRC_ALPHA;
+        PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].SrcBlend = BLEND_FACTOR_ONE;
         PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].DestBlend = BLEND_FACTOR_INV_SRC_ALPHA;
         PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].BlendOp = BLEND_OPERATION_ADD;
         PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[i].SrcBlendAlpha = BLEND_FACTOR_ONE;
