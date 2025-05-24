@@ -140,7 +140,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_WeatherMapTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
         
     // Create sampler descriptions for immutable samplers
     SamplerDesc DepthSamplerDesc;
@@ -162,7 +163,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     
     ResourceLayout
         .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc)
-        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseSamplerDesc);
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_WeatherMapSampler", NoiseSamplerDesc);
 
     PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
 
@@ -284,6 +286,10 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         Texture3D g_HighFreqNoiseTexture : register(t6);
         Texture3D g_LowFreqNoiseTexture : register(t7);
         SamplerState g_NoiseSampler : register(s8);    
+        
+        // Weather map texture for density modulation
+        Texture2D g_WeatherMapTexture : register(t9);
+        SamplerState g_WeatherMapSampler : register(s10);
 
         // hash function              
         float hash(float n)
@@ -439,7 +445,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float time = 0.0;
             CloudAnimation cloudAnim = computeCloudAnimation(time * 10.0);
             //float densityFactor = lerp(0.66, 1.8, mo.x);
-            float densityFactor = lerp(0.66, 1.8, g_CloudDensity);
+            
             float3 cloudrange = float3(g_CloudBoxMin.y, g_CloudBoxMax.y, 0.0);
             float3 light = normalize(g_Light.f4Direction.xyz);
 
@@ -458,7 +464,16 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
                 // Get animated cloud position using precomputed animation parameters
                 float3 animatedPos = getAnimatedCloudPos(adjPos, cloudAnim);
                 
-                // Apply density factor here - controlled by mouse X
+                // Sample weather map for density modification
+                // Map world position to UV coordinates (assuming cloud box maps to 0-1 UV space)
+                float2 weatherUV = (pos.xz - g_CloudBoxMin.xz) / (g_CloudBoxMax.xz - g_CloudBoxMin.xz);
+                float weatherDensity = g_WeatherMapTexture.Sample(g_WeatherMapSampler, weatherUV).g; // Sample green channel
+
+                // Remap weather density from [0,1] to [-1,1] range
+                weatherDensity = weatherDensity * 2.0 - 1.0;
+                float adjustedDensity = g_CloudDensity + weatherDensity;
+                float densityFactor = lerp(0.66, 1.8, adjustedDensity);
+                
                 float noiseTimesDensity = fbm(animatedPos) * densityFactor;
                 float density = smoothstep(0.5, 1.0, noiseTimesDensity);
                 //float density = noiseTimesDensity;
@@ -563,6 +578,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
     LoadNoiseTextures();
+    LoadWeatherMap();
 }
 
 void CloudVolumeRenderer::Render(IDeviceContext* pContext,
@@ -616,6 +632,10 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
     if (lowFreqVar)
         lowFreqVar->Set(m_pLowFreqNoiseSRV);
+        
+    auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 6);
+    if (weatherMapVar)
+        weatherMapVar->Set(m_pWeatherMapSRV);
 #else
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(m_pCameraAttribsCB);
@@ -634,6 +654,10 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture");
     if (lowFreqVar)
         lowFreqVar->Set(m_pLowFreqNoiseSRV);
+        
+    auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture");
+    if (weatherMapVar)
+        weatherMapVar->Set(m_pWeatherMapSRV);
 #endif
 
     // Commit shader resources
@@ -770,6 +794,65 @@ void CloudVolumeRenderer::LoadNoiseTextures()
         auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL,"g_LowFreqNoiseTexture");
         if (lowFreqVar)
             lowFreqVar->Set(m_pLowFreqNoiseSRV);
+#endif
+    }
+}
+
+void CloudVolumeRenderer::LoadWeatherMap()
+{
+    std::string weatherMapPath = "weathermap.png";
+
+    if (!m_pDevice)
+        return;
+    
+    // Load weather map texture
+    {
+        // Load PNG using lodepng
+        std::vector<unsigned char> imageData;
+        unsigned width, height;
+        unsigned error = lodepng::decode(imageData, width, height, weatherMapPath.c_str());
+        
+        if (error)
+        {
+            // Handle loading error - could log or use a default texture
+            return;
+        }
+        
+        // Create 2D texture
+        TextureDesc TexDesc;
+        TexDesc.Name = "Weather map texture";
+        TexDesc.Type = RESOURCE_DIM_TEX_2D;
+        TexDesc.Width = width;
+        TexDesc.Height = height;
+        TexDesc.MipLevels = 1;
+        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+        TexDesc.Usage = USAGE_IMMUTABLE;
+        TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+        
+        // Prepare texture data
+        TextureSubResData Level0Data;
+        Level0Data.pData = imageData.data();
+        Level0Data.Stride = width * 4; // 4 bytes per pixel (RGBA)
+        
+        TextureData InitData;
+        InitData.NumSubresources = 1;
+        InitData.pSubResources = &Level0Data;
+        
+        m_pDevice->CreateTexture(TexDesc, &InitData, &m_pWeatherMapTexture);
+        m_pWeatherMapSRV = m_pWeatherMapTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    }
+    
+    // If we already have a shader resource binding, update it with the new texture
+    if (m_pRenderCloudsSRB)
+    {
+#ifdef _DEBUG
+        auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 6);
+        if (weatherMapVar)
+            weatherMapVar->Set(m_pWeatherMapSRV);
+#else
+        auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_WeatherMapTexture");
+        if (weatherMapVar)
+            weatherMapVar->Set(m_pWeatherMapSRV);
 #endif
     }
 }

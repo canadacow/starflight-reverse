@@ -51,6 +51,7 @@ public:
 private:
 
     void LoadNoiseTextures();
+    void LoadWeatherMap();
 
     // Full-screen quad resources
     RefCntAutoPtr<IBuffer>                m_pVertexBuffer;
@@ -63,9 +64,11 @@ private:
 
     RefCntAutoPtr<ITexture>               m_pHighFreqNoiseTexture;
     RefCntAutoPtr<ITexture>               m_pLowFreqNoiseTexture;
+    RefCntAutoPtr<ITexture>               m_pWeatherMapTexture;
     RefCntAutoPtr<ISampler>               m_pNoiseSampler;
     RefCntAutoPtr<ITextureView>           m_pHighFreqNoiseSRV;
     RefCntAutoPtr<ITextureView>           m_pLowFreqNoiseSRV;
+    RefCntAutoPtr<ITextureView>           m_pWeatherMapSRV;
     
     CloudParams m_CloudParams;
     RefCntAutoPtr<IRenderDevice>          m_pDevice;

@@ -9059,11 +9059,11 @@ void GraphicsUpdate()
 
     s_gc.m_pImmediateContext->Flush();
 
+    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Total);
+
     s_gc.m_pImmediateContext->FinishFrame();
 
     s_gc.vc.render_frame();
-
-    s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Total);
 
     int numkeys = 0;
     auto keys = SDL_GetKeyboardState(&numkeys);
