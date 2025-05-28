@@ -6990,7 +6990,7 @@ void InitializeCommonResources()
 
 void InitStation()
 {
-    InitModel("C:/Users/Dean/Downloads/station29.glb", s_gc.station);
+    InitModel("C:/dev/starflight-reverse/station29.glb", s_gc.station);
 
     for (int i = 0; i < s_gc.station.model->GetAnimations().size(); ++i) {
         auto& anim = s_gc.station.model->GetAnimations()[i];
@@ -7788,6 +7788,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         {
             s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
             ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+            ITextureView* pCurrDepthUAV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS);
 
             Uint32 BuffersMaskNoDepth = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS;
             s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMaskNoDepth, nullptr, 0);

@@ -162,7 +162,6 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     NoiseSamplerDesc.AddressW = TEXTURE_ADDRESS_WRAP;
     
     ResourceLayout
-        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_DepthSampler", DepthSamplerDesc)
         .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseSamplerDesc)
         .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_WeatherMapSampler", NoiseSamplerDesc);
 
@@ -279,8 +278,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float  g_NoiseScale;        // Scale of the noise texture
         };
 
-        SamplerState g_DepthSampler : register(s4);
-        Texture2D g_DepthTexture : register(t5);
+        RWTexture2D<float> g_DepthTexture : register(u5);
         
         // 3D noise textures for cloud detail
         Texture3D g_HighFreqNoiseTexture : register(t6);
@@ -420,7 +418,11 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         {
             PSOutput output;
             // Get world-space position of the current pixel from depth buffer
-            float depth = g_DepthTexture.Sample(g_DepthSampler, input.uv).r;
+            float2 texSize;
+            g_DepthTexture.GetDimensions(texSize.x, texSize.y);
+            float2 cloudPixelCoord = input.uv * texSize;
+            float depth = g_DepthTexture[cloudPixelCoord];
+
             float4 clipPos = float4(input.uv * 2.0 - 1.0, depth, 1.0);
             
             float4 worldPos = mul(g_Camera.mViewProjInv, clipPos);
@@ -511,6 +513,19 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             output.MaterialData = float4(0.0, 0.0, 0.0, cloudAlpha); // No roughness/metallic
             output.MotionVec    = float4(0.0, 0.0, 0.0, 1.0); // No motion
             output.SpecularIBL  = float4(0.0, 0.0, 0.0, cloudAlpha); // No IBL
+
+            if (cloudAlpha > 0.15)
+            {
+                float4 cloudClipPos = mul(g_Camera.mViewProj, float4(campos + rayDir * t_min, 1.0));
+                float cloudDepth = cloudClipPos.z / cloudClipPos.w;
+                
+                // Only write if cloud is closer than current depth
+                if (cloudDepth < depth)
+                {
+                    g_DepthTexture[cloudPixelCoord] = cloudDepth;
+                }
+            }
+
             return output;
         }
     )";
@@ -585,7 +600,7 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
                                 const HLSL::CameraAttribs& CamAttribs,
                                 const HLSL::LightAttribs& LightAttrs,
                                 const float4& LightColor,
-                                ITextureView* pDepthBufferSRV,
+                                ITextureView* pDepthBufferUAV,
                                 TEXTURE_FORMAT RTVFormat,
                                 TEXTURE_FORMAT DSVFormat)
 {
@@ -621,9 +636,9 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pCloudParamsCB);
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2)->Set(m_pLightAttribsCB);
 
-    auto srv = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 3);
-    if (srv)
-        srv->Set(pDepthBufferSRV);
+    auto uav = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 3);
+    if (uav)
+        uav->Set(pDepthBufferUAV);
 
     auto highFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
     if (highFreqVar)
@@ -643,9 +658,9 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "LightAttribs")->Set(m_pLightAttribsCB);
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CloudParams")->Set(m_pCloudParamsCB);
 
-    auto srv = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
-    if (srv)
-        srv->Set(pDepthBufferSRV);
+    auto uav = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
+    if (uav)
+        uav->Set(pDepthBufferUAV);
 
     auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
     if (highFreqVar)
