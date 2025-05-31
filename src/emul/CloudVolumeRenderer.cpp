@@ -139,9 +139,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
         .AddVariable(SHADER_TYPE_VERTEX | SHADER_TYPE_PIXEL, "LightAttribs", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "CloudParams", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_DepthTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+        .AddVariable(SHADER_TYPE_PIXEL, "g_WeatherMapTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
         .AddVariable(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
-        .AddVariable(SHADER_TYPE_PIXEL, "g_WeatherMapTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+        .AddVariable(SHADER_TYPE_PIXEL, "g_LowFreqNoiseTexture", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
         
     // Create sampler descriptions for immutable samplers
     SamplerDesc DepthSamplerDesc;
@@ -162,8 +162,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     NoiseSamplerDesc.AddressW = TEXTURE_ADDRESS_WRAP;
     
     ResourceLayout
-        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseSamplerDesc)
-        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_WeatherMapSampler", NoiseSamplerDesc);
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_WeatherMapSampler", NoiseSamplerDesc)
+        .AddImmutableSampler(SHADER_TYPE_PIXEL, "g_NoiseSampler", NoiseSamplerDesc);
 
     PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
 
@@ -278,17 +278,17 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float  g_NoiseScale;        // Scale of the noise texture
         };
 
-        RWTexture2D<float> g_DepthTexture : register(u5);
+        RWTexture2D<float> g_DepthTexture : register(u4);
+
+        // Weather map texture for density modulation
+        Texture2D g_WeatherMapTexture : register(t5);
+        SamplerState g_WeatherMapSampler : register(s6);
         
         // 3D noise textures for cloud detail
-        Texture3D g_HighFreqNoiseTexture : register(t6);
-        Texture3D g_LowFreqNoiseTexture : register(t7);
-        SamplerState g_NoiseSampler : register(s8);    
+        Texture3D g_HighFreqNoiseTexture : register(t7);
+        Texture3D g_LowFreqNoiseTexture : register(t8);
+        SamplerState g_NoiseSampler : register(s9);    
         
-        // Weather map texture for density modulation
-        Texture2D g_WeatherMapTexture : register(t9);
-        SamplerState g_WeatherMapSampler : register(s10);
-
         // hash function              
         float hash(float n)
         {
@@ -505,16 +505,8 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
 
             // Apply premultiplied alpha
             cloudColor *= cloudAlpha;
-            
-            // Output to all PBR G-buffer targets
-            output.Color        = float4(cloudColor, cloudAlpha);
-            output.Normal       = float4(0.0, 1.0, 0.0, 1.0); // Upward normal
-            output.BaseColor    = float4(g_CloudColor.rgb, cloudAlpha);
-            output.MaterialData = float4(0.0, 0.0, 0.0, cloudAlpha); // No roughness/metallic
-            output.MotionVec    = float4(0.0, 0.0, 0.0, 1.0); // No motion
-            output.SpecularIBL  = float4(0.0, 0.0, 0.0, cloudAlpha); // No IBL
 
-            if (cloudAlpha > 0.15)
+            if (cloudAlpha > 0.01)
             {
                 float4 cloudClipPos = mul(g_Camera.mViewProj, float4(campos + rayDir * t_min, 1.0));
                 float cloudDepth = cloudClipPos.z / cloudClipPos.w;
@@ -525,6 +517,14 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
                     g_DepthTexture[cloudPixelCoord] = cloudDepth;
                 }
             }
+            
+            // Output to all PBR G-buffer targets
+            output.Color        = float4(cloudColor, cloudAlpha);
+            output.Normal       = float4(0.0, 1.0, 0.0, 1.0); // Upward normal
+            output.BaseColor    = float4(g_CloudColor.rgb, cloudAlpha);
+            output.MaterialData = float4(0.0, 0.0, 0.0, cloudAlpha); // No roughness/metallic
+            output.MotionVec    = float4(0.0, 0.0, 0.0, 1.0); // No motion
+            output.SpecularIBL  = float4(0.0, 0.0, 0.0, cloudAlpha); // No IBL
 
             return output;
         }
@@ -592,6 +592,9 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
     // Create shader resource binding
     m_pRenderCloudsPSO->CreateShaderResourceBinding(&m_pRenderCloudsSRB, true);
 
+    // Create depth conversion shaders
+    CreateDepthConversionShaders(pDevice, pCompoundSourceFactory);
+
     LoadNoiseTextures();
     LoadWeatherMap();
 }
@@ -600,13 +603,74 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
                                 const HLSL::CameraAttribs& CamAttribs,
                                 const HLSL::LightAttribs& LightAttrs,
                                 const float4& LightColor,
-                                ITextureView* pDepthBufferUAV,
+                                ITexture* pDepthTexture,
                                 TEXTURE_FORMAT RTVFormat,
                                 TEXTURE_FORMAT DSVFormat)
 {
     // Skip rendering if not initialized
     if (!m_pRenderCloudsPSO)
         return;
+
+    // Create R32_FLOAT copy of the depth texture for UAV access (only when needed)
+    if (pDepthTexture)
+    {
+        const auto& DepthTexDesc = pDepthTexture->GetDesc();
+        
+        // Check if we need to create/recreate the copy texture
+        bool needsRecreate = !m_pDepthCopyTexture || 
+                           m_DepthCopyWidth != DepthTexDesc.Width || 
+                           m_DepthCopyHeight != DepthTexDesc.Height;
+        
+        if (needsRecreate)
+        {
+            // Create R32_FLOAT texture with same dimensions
+            TextureDesc CopyTexDesc = DepthTexDesc;
+            CopyTexDesc.Name = "Cloud depth copy texture";
+            CopyTexDesc.Format = TEX_FORMAT_R32_FLOAT;
+            CopyTexDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+            CopyTexDesc.Usage = USAGE_DEFAULT;
+            
+            m_pDevice->CreateTexture(CopyTexDesc, nullptr, &m_pDepthCopyTexture);
+            
+            // Create UAV for the copy texture
+            TextureViewDesc UAVDesc;
+            UAVDesc.ViewType = TEXTURE_VIEW_UNORDERED_ACCESS;
+            UAVDesc.Format = TEX_FORMAT_R32_FLOAT;
+            m_pDepthCopyTexture->CreateView(UAVDesc, &m_pDepthBufferUAV);
+            
+            // Store dimensions for future comparison
+            m_DepthCopyWidth = DepthTexDesc.Width;
+            m_DepthCopyHeight = DepthTexDesc.Height;
+        }
+        
+        // Copy depth texture to R32_FLOAT texture using compute shader
+        if (m_pDepthCopyComputePSO)
+        {
+            // Get SRV for the original depth texture
+            auto pDepthSRV = pDepthTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+            
+            // Bind resources to compute shader
+            #if defined(_DEBUG)
+                //m_pDepthCopyComputeSRB->GetVariableByIndex(SHADER_TYPE_COMPUTE, 0)->Set(m_pDepthBufferUAV);
+                //m_pDepthCopyComputeSRB->GetVariableByIndex(SHADER_TYPE_COMPUTE, 1)->Set(pDepthSRV);
+                m_pDepthCopyComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DepthTextureSRV")->Set(pDepthSRV);
+                m_pDepthCopyComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DepthTextureUAV")->Set(m_pDepthBufferUAV);
+            #else
+                m_pDepthCopyComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DepthTextureSRV")->Set(pDepthSRV);
+                m_pDepthCopyComputeSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DepthTextureUAV")->Set(m_pDepthBufferUAV);
+            #endif
+            
+            // Set compute pipeline and dispatch
+            pContext->SetPipelineState(m_pDepthCopyComputePSO);
+            pContext->CommitShaderResources(m_pDepthCopyComputeSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            
+            DispatchComputeAttribs DispatchAttrs;
+            DispatchAttrs.ThreadGroupCountX = (m_DepthCopyWidth + 7) / 8;
+            DispatchAttrs.ThreadGroupCountY = (m_DepthCopyHeight + 7) / 8;
+            DispatchAttrs.ThreadGroupCountZ = 1;
+            pContext->DispatchCompute(DispatchAttrs);
+        }
+    }
 
     // Update cloud parameters constant buffer
     {
@@ -633,24 +697,25 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_VERTEX, 0)->Set(m_pCameraAttribsCB);
     m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(m_pCameraAttribsCB);
-    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pCloudParamsCB);
-    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2)->Set(m_pLightAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 1)->Set(m_pLightAttribsCB);
+    m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 2)->Set(m_pCloudParamsCB);
 
     auto uav = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 3);
-    if (uav)
-        uav->Set(pDepthBufferUAV);
+    if (uav && m_pDepthBufferUAV)
+        uav->Set(m_pDepthBufferUAV);
 
-    auto highFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
+    auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
+    if (weatherMapVar)
+        weatherMapVar->Set(m_pWeatherMapSRV);
+
+    auto highFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
     if (highFreqVar)
         highFreqVar->Set(m_pHighFreqNoiseSRV);
         
-    auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 5);
+    auto lowFreqVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 6);
     if (lowFreqVar)
         lowFreqVar->Set(m_pLowFreqNoiseSRV);
-        
-    auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 6);
-    if (weatherMapVar)
-        weatherMapVar->Set(m_pWeatherMapSRV);
+       
 #else
     // Bind the camera attributes and depth texture to the existing SRB
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraAttribs")->Set(m_pCameraAttribsCB);
@@ -659,8 +724,8 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "CloudParams")->Set(m_pCloudParamsCB);
 
     auto uav = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTexture");
-    if (uav)
-        uav->Set(pDepthBufferUAV);
+    if (uav && m_pDepthBufferUAV)
+        uav->Set(m_pDepthBufferUAV);
 
     auto highFreqVar = m_pRenderCloudsSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_HighFreqNoiseTexture");
     if (highFreqVar)
@@ -690,6 +755,208 @@ void CloudVolumeRenderer::Render(IDeviceContext* pContext,
     DrawAttrs.NumIndices = 6;
     DrawAttrs.Flags      = DRAW_FLAG_VERIFY_ALL;
     pContext->DrawIndexed(DrawAttrs);
+    
+    // Write the modified depth data back to the original depth texture using pixel shader
+    if (pDepthTexture && m_pDepthCopyTexture && m_pDepthWriteBackPSO)
+    {
+        // Get SRV for the R32_FLOAT copy texture
+        auto pDepthCopySRV = m_pDepthCopyTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        
+        // Get DSV for the original depth texture
+        auto pDepthDSV = pDepthTexture->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
+        
+        // Bind resources to pixel shader
+        #if defined(_DEBUG)
+            m_pDepthWriteBackSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 0)->Set(pDepthCopySRV);
+        #else
+            m_pDepthWriteBackSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_DepthTextureSRV")->Set(pDepthCopySRV);
+        #endif
+        
+        // Set render targets (no color, only depth)
+        pContext->SetRenderTargets(0, nullptr, pDepthDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        
+        // Set pipeline state and draw
+        pContext->SetPipelineState(m_pDepthWriteBackPSO);
+        pContext->CommitShaderResources(m_pDepthWriteBackSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        
+        // Set vertex and index buffers (reuse the same quad)
+        const Uint64 Offsets = 0;
+        IBuffer* pBuffs[] = {m_pVertexBuffer};
+        pContext->SetVertexBuffers(0, 1, pBuffs, &Offsets, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
+        pContext->SetIndexBuffer(m_pIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        
+        // Draw the full-screen quad to write depth
+        DrawIndexedAttribs DepthDrawAttrs;
+        DepthDrawAttrs.IndexType  = VT_UINT32;
+        DepthDrawAttrs.NumIndices = 6;
+        DepthDrawAttrs.Flags      = DRAW_FLAG_VERIFY_ALL;
+        pContext->DrawIndexed(DepthDrawAttrs);
+    }
+}
+
+void CloudVolumeRenderer::CreateDepthConversionShaders(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory)
+{
+    // Create compute shader for D32 -> R32_FLOAT conversion
+    {
+        ComputePipelineStateCreateInfo PSOCreateInfo;
+        PSOCreateInfo.PSODesc.Name = "Depth Copy Compute PSO";
+        PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+#ifdef _DEBUG
+        PSOCreateInfo.Flags = PSO_CREATE_FLAG_DONT_REMAP_SHADER_RESOURCES | PSO_CREATE_FLAG_DONT_VERIFY_SHADER_RESOURCES;
+#endif
+        PipelineResourceLayoutDescX ResourceLayout;
+        ResourceLayout
+            .AddVariable(SHADER_TYPE_COMPUTE, "g_DepthTextureSRV", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC)
+            .AddVariable(SHADER_TYPE_COMPUTE, "g_DepthTextureUAV", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+
+        PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
+
+        ShaderCreateInfo ShaderCI;
+        ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        ShaderCI.pShaderSourceStreamFactory = pShaderSourceFactory;
+        ShaderCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+        ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
+        ShaderCI.EntryPoint = "main";
+        ShaderCI.Desc.Name = "Depth Copy CS";
+        #ifdef _DEBUG
+            ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+        #else
+            ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+        #endif
+
+        ShaderCI.Source = R"(
+            Texture2D<float> g_DepthTextureSRV : register(t0);
+            RWTexture2D<float> g_DepthTextureUAV : register(u1);
+
+            [numthreads(8, 8, 1)]
+            void main(uint3 id : SV_DispatchThreadID)
+            {
+                uint2 texSize;
+                g_DepthTextureUAV.GetDimensions(texSize.x, texSize.y);
+                
+                if (id.x >= texSize.x || id.y >= texSize.y)
+                    return;
+                    
+                float depth = g_DepthTextureSRV[id.xy];
+                g_DepthTextureUAV[id.xy] = depth;
+            }
+        )";
+
+        RefCntAutoPtr<IShader> pCS;
+        pDevice->CreateShader(ShaderCI, &pCS);
+        PSOCreateInfo.pCS = pCS;
+
+        pDevice->CreateComputePipelineState(PSOCreateInfo, &m_pDepthCopyComputePSO);
+        m_pDepthCopyComputePSO->CreateShaderResourceBinding(&m_pDepthCopyComputeSRB, true);
+    }
+
+    // Create pixel shader for R32_FLOAT -> D32 conversion
+    {
+        GraphicsPipelineStateCreateInfo PSOCreateInfo;
+#ifdef _DEBUG
+        PSOCreateInfo.Flags = PSO_CREATE_FLAG_DONT_REMAP_SHADER_RESOURCES | PSO_CREATE_FLAG_DONT_VERIFY_SHADER_RESOURCES;
+#endif
+        PipelineStateDesc& PSODesc = PSOCreateInfo.PSODesc;
+        PSODesc.Name = "Depth Write Back PSO";
+        PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+        PipelineResourceLayoutDescX ResourceLayout;
+        ResourceLayout.AddVariable(SHADER_TYPE_PIXEL, "g_DepthTextureSRV", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+        PSOCreateInfo.PSODesc.ResourceLayout = ResourceLayout;
+
+        // Vertex shader (simple pass-through)
+        ShaderCreateInfo ShaderCI;
+        ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        ShaderCI.pShaderSourceStreamFactory = pShaderSourceFactory;
+        ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+        ShaderCI.ShaderCompiler = SHADER_COMPILER_DXC;
+        ShaderCI.EntryPoint = "main";
+        ShaderCI.Desc.Name = "Depth Write Back VS";
+        #ifdef _DEBUG
+            ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FULL_DEBUG;
+        #else
+            ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+        #endif
+
+        ShaderCI.Source = R"(
+            struct VSInput
+            {
+                float2 pos : ATTRIB0;
+                float2 uv  : ATTRIB1;
+            };
+
+            struct PSInput
+            {
+                float4 pos : SV_POSITION;
+                float2 uv  : TEX_COORD;
+            };
+
+            PSInput main(VSInput input)
+            {
+                PSInput output;
+                output.pos = float4(input.pos, 0.0, 1.0);
+                output.uv = input.uv;
+                return output;
+            }
+        )";
+
+        RefCntAutoPtr<IShader> pVS;
+        pDevice->CreateShader(ShaderCI, &pVS);
+
+        // Pixel shader
+        ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+        ShaderCI.Desc.Name = "Depth Write Back PS";
+        ShaderCI.Source = R"(
+            struct PSInput
+            {
+                float4 pos : SV_POSITION;
+                float2 uv  : TEX_COORD;
+            };
+
+            struct PSOutput
+            {
+                float depth : SV_Depth;
+            };
+
+            Texture2D<float> g_DepthTextureSRV : register(t0);
+
+            PSOutput main(PSInput input)
+            {
+                PSOutput output;
+                uint2 texSize;
+                g_DepthTextureSRV.GetDimensions(texSize.x, texSize.y);
+                uint2 pixelCoord = uint2(input.uv * texSize);
+                output.depth = g_DepthTextureSRV[pixelCoord];
+                return output;
+            }
+        )";
+
+        RefCntAutoPtr<IShader> pPS;
+        pDevice->CreateShader(ShaderCI, &pPS);
+
+        // Define vertex layout
+        LayoutElement LayoutElems[] =
+        {
+            LayoutElement{0, 0, 2, VT_FLOAT32, False},  // pos
+            LayoutElement{1, 0, 2, VT_FLOAT32, False}   // uv
+        };
+        
+        PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
+        PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
+        PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 0;
+        PSOCreateInfo.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = True;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = True;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_ALWAYS;
+        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
+
+        PSOCreateInfo.pVS = pVS;
+        PSOCreateInfo.pPS = pPS;
+
+        pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pDepthWriteBackPSO);
+        m_pDepthWriteBackPSO->CreateShaderResourceBinding(&m_pDepthWriteBackSRB, true);
+    }
 }
 
 void CloudVolumeRenderer::LoadNoiseTextures()
@@ -861,7 +1128,7 @@ void CloudVolumeRenderer::LoadWeatherMap()
     if (m_pRenderCloudsSRB)
     {
 #ifdef _DEBUG
-        auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 6);
+        auto weatherMapVar = m_pRenderCloudsSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, 4);
         if (weatherMapVar)
             weatherMapVar->Set(m_pWeatherMapSRV);
 #else

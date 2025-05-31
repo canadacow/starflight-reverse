@@ -41,7 +41,7 @@ public:
             const HLSL::CameraAttribs& CamAttribs,
             const HLSL::LightAttribs& LightAttrs,
             const float4& LightColor,
-            ITextureView* pDepthBufferSRV,
+            ITexture* pDepthTexture,
             TEXTURE_FORMAT RTVFormat,
             TEXTURE_FORMAT DSVFormat);
 
@@ -52,6 +52,7 @@ private:
 
     void LoadNoiseTextures();
     void LoadWeatherMap();
+    void CreateDepthConversionShaders(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory);
 
     // Full-screen quad resources
     RefCntAutoPtr<IBuffer>                m_pVertexBuffer;
@@ -70,6 +71,18 @@ private:
     RefCntAutoPtr<ITextureView>           m_pLowFreqNoiseSRV;
     RefCntAutoPtr<ITextureView>           m_pWeatherMapSRV;
     
+    // Depth texture copy for UAV access
+    RefCntAutoPtr<ITexture>               m_pDepthCopyTexture;
+    RefCntAutoPtr<ITextureView>           m_pDepthBufferUAV;
+    Uint32                                m_DepthCopyWidth = 0;
+    Uint32                                m_DepthCopyHeight = 0;
+    
+    // Depth conversion shaders
+    RefCntAutoPtr<IPipelineState>         m_pDepthCopyComputePSO;
+    RefCntAutoPtr<IShaderResourceBinding> m_pDepthCopyComputeSRB;
+    RefCntAutoPtr<IPipelineState>         m_pDepthWriteBackPSO;
+    RefCntAutoPtr<IShaderResourceBinding> m_pDepthWriteBackSRB;
+
     CloudParams m_CloudParams;
     RefCntAutoPtr<IRenderDevice>          m_pDevice;
 };

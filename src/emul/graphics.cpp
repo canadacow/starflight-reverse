@@ -6990,7 +6990,7 @@ void InitializeCommonResources()
 
 void InitStation()
 {
-    InitModel("C:/dev/starflight-reverse/station29.glb", s_gc.station);
+    InitModel("C:/Users/Dean/Downloads/station29.glb", s_gc.station);
 
     for (int i = 0; i < s_gc.station.model->GetAnimations().size(); ++i) {
         auto& anim = s_gc.station.model->GetAnimations()[i];
@@ -7787,14 +7787,28 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         if (s_gc.cloudVolumeRenderer)
         {
             s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
-            ITextureView* pCurrDepthSRV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-            ITextureView* pCurrDepthUAV = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0)->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS);
+            ITexture* pDepthTexture = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0);
+            ITextureView* pCurrDepthSRV = pDepthTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+            TextureViewDesc uavDesc;
+            uavDesc.Name = "GBuffer Depth Buffer UAV";
+            uavDesc.ViewType = TEXTURE_VIEW_UNORDERED_ACCESS;
+            uavDesc.Format = TEX_FORMAT_R32_FLOAT;  // Explicitly specify R32_FLOAT format
+            uavDesc.TextureDim = RESOURCE_DIM_TEX_2D;  // Match your texture dimension
+            uavDesc.MostDetailedMip = 0;
+            uavDesc.NumMipLevels = 1;
+            uavDesc.FirstArraySlice = 0;
+            uavDesc.NumArraySlices = 1;
+            uavDesc.AccessFlags = UAV_ACCESS_FLAG_READ_WRITE; 
+
+            ITextureView* pCurrDepthUAV = nullptr;
+            pDepthTexture->CreateView(uavDesc, &pCurrDepthUAV);
 
             Uint32 BuffersMaskNoDepth = GBUFFER_RT_FLAG_ALL_COLOR_TARGETS;
             s_gc.gBuffer->Bind(s_gc.m_pImmediateContext, BuffersMaskNoDepth, nullptr, 0);
 
             StateTransitionDesc Barriers[] = {
-                {pCurrDepthSRV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE}
+                {pCurrDepthUAV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE}
             };
             s_gc.m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
 
@@ -7802,9 +7816,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                                         CurrCamAttribs,
                                         LightAttrs,
                                         float4(sunColor, 1.0f),
-                                        pCurrDepthSRV,
+                                        pDepthTexture,
                                         pRTV->GetTexture()->GetDesc().Format,
-                                        pDSV->GetTexture()->GetDesc().Format);
+                                        uavDesc.Format);
             s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
         }
     }
