@@ -49,12 +49,22 @@ void PerformanceMetrics::BeginFrame()
 
 void PerformanceMetrics::EndFrame()
 {
+    frameHistory.push_back({std::chrono::steady_clock::now()});
+    UpdateAverageFPS();
+    
+    frameCounter++;
+}
+
+double PerformanceMetrics::GetAverageFPS()
+{
+    UpdateAverageFPS();
+    return averageFPS;
+}
+
+void PerformanceMetrics::UpdateAverageFPS()
+{
     auto currentTime = std::chrono::steady_clock::now();
-    double frameTime = std::chrono::duration_cast<std::chrono::duration<double>>(currentTime - lastFrameTime).count();
-    
-    // Add current frame data to the history
-    frameHistory.push_back({currentTime, frameTime});
-    
+
     // Remove frames older than 2 seconds
     auto cutoffTime = currentTime - std::chrono::duration<double>(frameHistoryWindowSeconds);
     while (!frameHistory.empty() && frameHistory.front().timestamp < cutoffTime)
@@ -63,7 +73,4 @@ void PerformanceMetrics::EndFrame()
     }
     
     averageFPS = static_cast<double>(frameHistory.size()) / frameHistoryWindowSeconds;
-    
-    // Increment frame counter
-    frameCounter++;
 }

@@ -43,7 +43,6 @@ public:
     struct FrameData
     {
         std::chrono::steady_clock::time_point timestamp;
-        double frameTime;
     };
 
     std::unordered_map<QueryType, QueryData> queries;
@@ -75,5 +74,7 @@ public:
     }
     
     size_t GetFrameCount() const { return frameCounter; }
-    double GetAverageFPS() const { return averageFPS; }
+    double GetAverageFPS();
+private:
+    void UpdateAverageFPS();
 };

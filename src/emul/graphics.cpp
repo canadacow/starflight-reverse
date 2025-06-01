@@ -9101,6 +9101,16 @@ void GraphicsUpdate()
 
     s_gc.vc.render_frame();
 
+    auto cpuTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - now).count();
+
+    static constexpr float targetFrameTimeMs = 1000.0f / 30.0f; // ~33.33ms for 30 FPS
+
+    if(cpuTime < targetFrameTimeMs)
+    {
+        auto sleepTime = targetFrameTimeMs - cpuTime;
+        Sleep(sleepTime);
+    }
+
     int numkeys = 0;
     auto keys = SDL_GetKeyboardState(&numkeys);
     assert(numkeys < sizeof(s_keyboardState));
