@@ -595,7 +595,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
     m_Mesh->BB.Max = float3{ totalWidth * 2.0f, 10.0f, totalHeight * 4.0f };
 }
 #elif defined(TEST_LOW_LOD_TERRAIN)
-void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
+void DynamicMesh::ReplaceTerrain(const float3& terrainMovement, float heightFactor)
 {
     auto& node = Nodes[0];
 
@@ -785,7 +785,7 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement)
 
 #endif
 
-float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition)
+float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition, float heightFactor)
 {
     // Bicubic sampling helper function
     auto sampleBicubic = [](float v) {
@@ -839,10 +839,10 @@ float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tileP
     offset.w = c.w + ycubic.y/s.w + ycubic.w/s.w;
 
     // Sample using linear interpolation
-    float sample0 = sampleTerrainLinear(terrain, float2(offset.x, offset.z));
-    float sample1 = sampleTerrainLinear(terrain, float2(offset.y, offset.z));
-    float sample2 = sampleTerrainLinear(terrain, float2(offset.x, offset.w));
-    float sample3 = sampleTerrainLinear(terrain, float2(offset.y, offset.w));
+    float sample0 = sampleTerrainLinear(terrain, float2(offset.x, offset.z), heightFactor);
+    float sample1 = sampleTerrainLinear(terrain, float2(offset.y, offset.z), heightFactor);
+    float sample2 = sampleTerrainLinear(terrain, float2(offset.x, offset.w), heightFactor);
+    float sample3 = sampleTerrainLinear(terrain, float2(offset.y, offset.w), heightFactor);
 
     float sx = s.x / (s.x + s.y);
     float sy = s.z / (s.z + s.w);
@@ -853,13 +853,13 @@ float DynamicMesh::sampleTerrainBicubic(const TerrainData& terrain, float2 tileP
     return top * (1.0f - sy) + bottom * sy;
 }
 
-float DynamicMesh::sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv)
+float DynamicMesh::sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv, float heightFactor)
 {
     float2 tilePosition = uv * m_TextureSize;
-    return sampleTerrainLinear(terrain, tilePosition);
+    return sampleTerrainLinear(terrain, tilePosition, heightFactor);
 }
 
-float DynamicMesh::sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition)
+float DynamicMesh::sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition, float heightFactor)
 {
     // terrain is actually (m_TextureSize.x + 1, m_TextureSize.y + 1)
     // terrain represents the bounds of each individual tile
@@ -903,14 +903,14 @@ float DynamicMesh::sampleTerrainLinear(const TerrainData& terrain, float2 tilePo
     return height;
 }
 
-float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition)
+float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition, float heightFactor)
 {
-    return sampleTerrainLinear(terrain, tilePosition);
+    return sampleTerrainLinear(terrain, tilePosition, heightFactor);
 }
 
 // Takes the bounding rectangle of a model produces a rotation matrix that aligns the y-axis with the terrain slope
 // Think buildings and vehicles aligned properly with the terrain
-float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope)
+float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope, float heightFactor)
 {
     // Sample heights at the four corners and center
     float2 center = (ul + br) * 0.5f;
@@ -920,11 +920,11 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     float2 centerHeightMap = (float2{center.x, center.y} / m_TileSize) - float2{0.5f, 0.5f};
     
     float3 corners[5] = {
-        float3(ul.x, sampleTerrain(terrain, ulHeightMap), ul.y),      // Upper Left
-        float3(br.x, sampleTerrain(terrain, float2(brHeightMap.x, ulHeightMap.y)), ul.y),  // Upper Right
-        float3(ul.x, sampleTerrain(terrain, float2(ulHeightMap.x, brHeightMap.y)), br.y),  // Lower Left
-        float3(br.x, sampleTerrain(terrain, brHeightMap), br.y),      // Lower Right
-        float3(center.x, sampleTerrain(terrain, centerHeightMap), center.y)  // Center
+        float3(ul.x, sampleTerrain(terrain, ulHeightMap, heightFactor), ul.y),      // Upper Left
+        float3(br.x, sampleTerrain(terrain, float2(brHeightMap.x, ulHeightMap.y), heightFactor), ul.y),  // Upper Right
+        float3(ul.x, sampleTerrain(terrain, float2(ulHeightMap.x, brHeightMap.y), heightFactor), br.y),  // Lower Left
+        float3(br.x, sampleTerrain(terrain, brHeightMap, heightFactor), br.y),      // Lower Right
+        float3(center.x, sampleTerrain(terrain, centerHeightMap, heightFactor), center.y)  // Center
     };
 
     // Calculate normal using height differences
@@ -959,7 +959,7 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     return (corners[0] + corners[1] + corners[2] + corners[3] + corners[4]) / 5.0f;
 }
 
-void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain)
+void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor)
 {
     ClearTerrainItems();
 
@@ -1083,13 +1083,13 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             ul += (item.tilePosition + float2{0.5f, 0.5f}) * m_TileSize;
             br += (item.tilePosition + float2{0.5f, 0.5f}) * m_TileSize;
 
-            float3 worldOffset = levelPlane(ul, br, terrain, terrainSlopePtr);
+            float3 worldOffset = levelPlane(ul, br, terrain, terrainSlopePtr, heightFactor);
 
             //char debugStr[256];
             //sprintf_s(debugStr, "WorldOffset for %s (node %d): %.2f, %.2f, %.2f\n", item.name.c_str(), ourNode.Index, worldOffset.x, worldOffset.y, worldOffset.z);
             //OutputDebugStringA(debugStr);
 
-            float val = sampleTerrainLinear(terrain, item.tilePosition);
+            float val = sampleTerrainLinear(terrain, item.tilePosition, heightFactor);
             //worldOffset.x = (item.tilePosition.x + 0.5f) * m_TileSize.x;
             //worldOffset.z = (item.tilePosition.y + 0.5f) * m_TileSize.y;
 

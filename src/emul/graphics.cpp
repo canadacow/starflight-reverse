@@ -571,6 +571,7 @@ struct GraphicsContext
     RefCntAutoPtr<ITextureView> heightmapView;
 
     uint16_t planetInstanceIndex = 0x17a6;
+    bool renderClouds = false;
     int2 heightmapSize;
     std::vector<float> heightmapData;
 
@@ -1004,6 +1005,7 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                         InstanceAttribs[i].HeightmapAttribs.ScaleY = pNode->Instances[i].ScaleY;
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = pNode->Instances[i].OffsetX;
                         InstanceAttribs[i].HeightmapAttribs.OffsetY = pNode->Instances[i].OffsetY;
+                        InstanceAttribs[i].HeightmapAttribs.HeightFactor = s_gc.renderParams.HeightFactor;
                         InstanceAttribs[i].PlanetLocation = pNode->Instances[i].PlanetLocation;
                     }
 
@@ -5493,11 +5495,11 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
 #endif
 
-    s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement);
+    s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
-    s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData);
+    s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData, s_gc.renderParams.HeightFactor);
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
@@ -6407,6 +6409,17 @@ void DrawUI()
 
             if (nk_begin(&ctx, "Planet List", nk_rect(windowX, windowY, windowWidth, windowHeight),
                 NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
+
+                nk_bool renderClouds = s_gc.renderClouds;
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                if (nk_checkbox_label(&ctx, "Render Clouds", &renderClouds)) {
+                    s_gc.renderClouds = renderClouds != 0;
+                }
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_label(&ctx, "Height Factor:", NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_slider_float(&ctx, 1.0f, &s_gc.renderParams.HeightFactor, 2.6f, 0.02f);
 
                 nk_layout_row_dynamic(&ctx, 500, 1);
                 if (nk_group_begin(&ctx, "Planets", NK_WINDOW_BORDER)) {
@@ -7787,6 +7800,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
         if (s_gc.cloudVolumeRenderer)
         {
             s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
+
+            if(s_gc.renderClouds)
+            {
             ITexture* pDepthTexture = s_gc.gBuffer->GetBuffer((inFlightIndex & 0x01) ? GBUFFER_RT_DEPTH1 : GBUFFER_RT_DEPTH0);
             ITextureView* pCurrDepthSRV = pDepthTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 
@@ -7819,6 +7835,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                                         pDepthTexture,
                                         pRTV->GetTexture()->GetDesc().Format,
                                         uavDesc.Format);
+            }
+            
             s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::VolumetricClouds);
         }
     }
@@ -9072,9 +9090,9 @@ void GraphicsUpdate()
     .waiting_for(imageAvailableSemaphore >> avk::stage::color_attachment_output)
     .submit();
 
-    s_gc.m_pImmediateContext->Flush();
-
     s_gc.performanceMetrics.End(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::Total);
+
+    s_gc.m_pImmediateContext->Flush();
 
     s_gc.m_pImmediateContext->FinishFrame();
 

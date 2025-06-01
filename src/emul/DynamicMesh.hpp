@@ -49,8 +49,8 @@ public:
         return m_Model->GetMaterials();
     }
 
-    void ReplaceTerrain(const float3& terrainMovement);
-    void SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain);
+    void ReplaceTerrain(const float3& terrainMovement, float heightFactor);
+    void SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor);
     void ClearTerrainItems();
 
     virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
@@ -80,11 +80,11 @@ private:
     
     void InitializeVertexAndIndexData();
 
-    float sampleTerrain(const TerrainData& terrain, float2 tilePosition);
-    float sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition);
-    float sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv);
-    float sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition);
-    float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope);
+    float sampleTerrain(const TerrainData& terrain, float2 tilePosition, float heightFactor);
+    float sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition, float heightFactor);
+    float sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv, float heightFactor);
+    float sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition, float heightFactor);
+    float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope, float heightFactor);
 
     struct VertexIndexCounts
     {

@@ -922,6 +922,10 @@ float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
                     lerp(sample1, sample0, sx), 
                     sy);
 }
+float4 terrainTextureBicubic(Texture2D tex, SamplerState samplerState, float2 st, float heightFactor)
+{
+    return textureBicubic(tex, samplerState, st) * heightFactor;
+}
 #else
 float4 textureBicubic(Texture2D tex, SamplerState samplerState, float2 st)
 {

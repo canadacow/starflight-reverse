@@ -790,6 +790,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                         InstanceAttribs[i].HeightmapAttribs.ScaleY = Node.Instances[i].ScaleY;
                         InstanceAttribs[i].HeightmapAttribs.OffsetX = Node.Instances[i].OffsetX;
                         InstanceAttribs[i].HeightmapAttribs.OffsetY = Node.Instances[i].OffsetY;
+                        InstanceAttribs[i].HeightmapAttribs.HeightFactor = RenderParams.HeightFactor;
                         InstanceAttribs[i].PlanetLocation = Node.Instances[i].PlanetLocation;
                     }
 
@@ -805,6 +806,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                     HeightmapAttribs->ScaleY = Node.HeightmapScaleY.y;
                     HeightmapAttribs->OffsetX = Node.HeightmapOffsetX.x;
                     HeightmapAttribs->OffsetY = Node.HeightmapOffsetY.y;
+                    HeightmapAttribs->HeightFactor = RenderParams.HeightFactor;
                 }
             }
 

@@ -125,6 +125,8 @@ public:
         ITextureView* pWaterHeightMap = nullptr;
 
         bool UseEGA = false;
+
+        float HeightFactor = 1.0f;
     };
 
     /// GLTF Model shader resource binding information

@@ -107,8 +107,11 @@ void MeshVS(in  VSInput  VSIn,
         adjustedUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
     #endif
 
-    float height = textureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
-
+    #if USE_INSTANCING
+    float height = terrainTextureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV, instance.HeightmapAttribs.HeightFactor).r;
+    #else
+    float height = terrainTextureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV, g_HeightmapAttribs.HeightFactor).r;
+    #endif
     
     if(height < g_Terrain.waterHeight)
     {

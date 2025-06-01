@@ -456,7 +456,7 @@ void CloudVolumeRenderer::Initialize(IRenderDevice* pDevice, IDeviceContext* pIm
             float t_max = tFar;
             float3 campos = g_Camera.f4Position.xyz;
             
-            int stepCount = 64;
+            int stepCount = 16;
             float stepSize = (t_max - t_min) / float(stepCount);
 
             for (float t = t_min; t < t_max; t += stepSize) {
