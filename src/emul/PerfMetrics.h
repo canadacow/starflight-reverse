@@ -40,13 +40,19 @@ public:
         std::chrono::steady_clock::time_point startTime;
     };
 
+    struct FrameData
+    {
+        std::chrono::steady_clock::time_point timestamp;
+        double frameTime;
+    };
+
     std::unordered_map<QueryType, QueryData> queries;
 
     // FPS tracking
     size_t frameCounter = 0;
     std::chrono::steady_clock::time_point lastFrameTime;
-    std::deque<double> frameTimes;
-    size_t maxFrameTimesSamples = 60; // Store last 60 frame times for moving average
+    std::deque<FrameData> frameHistory;
+    static constexpr double frameHistoryWindowSeconds = 2.0; // Keep 2 seconds worth of frames
     double averageFPS = 0.0;
 
     void Initialize(IRenderDevice* pDevice);

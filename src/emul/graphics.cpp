@@ -6417,7 +6417,9 @@ void DrawUI()
                 }
 
                 nk_layout_row_dynamic(&ctx, 25, 1);
-                nk_label(&ctx, "Height Factor:", NK_TEXT_LEFT);
+                char heightFactorLabel[64];
+                sprintf(heightFactorLabel, "Height Factor: %.2f", s_gc.renderParams.HeightFactor);
+                nk_label(&ctx, heightFactorLabel, NK_TEXT_LEFT);
                 nk_layout_row_dynamic(&ctx, 25, 1);
                 nk_slider_float(&ctx, 1.0f, &s_gc.renderParams.HeightFactor, 2.6f, 0.02f);
 
@@ -6513,6 +6515,7 @@ void DrawUI()
         }
 
         // Weather Control
+        if(s_gc.renderClouds)
         {
             float windowWidth = 400.0f;
             float windowHeight = 350.0f;

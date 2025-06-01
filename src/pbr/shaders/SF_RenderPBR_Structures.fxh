@@ -47,6 +47,10 @@ struct PBRHeightmapAttribs
     float ScaleY;
     float OffsetX;
     float OffsetY;
+    float HeightFactor;
+    float padding0;
+    float padding1;
+    float padding2;
 };
 #ifdef CHECK_STRUCT_ALIGNMENT
 	CHECK_STRUCT_ALIGNMENT(PBRHeightmapAttribs);

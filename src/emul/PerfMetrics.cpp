@@ -14,7 +14,7 @@ void PerformanceMetrics::Initialize(IRenderDevice* pDevice)
     // Initialize frame counter
     frameCounter = 0;
     lastFrameTime = std::chrono::steady_clock::now();
-    frameTimes.clear();
+    frameHistory.clear();
     averageFPS = 0.0;
 }
 
@@ -52,26 +52,17 @@ void PerformanceMetrics::EndFrame()
     auto currentTime = std::chrono::steady_clock::now();
     double frameTime = std::chrono::duration_cast<std::chrono::duration<double>>(currentTime - lastFrameTime).count();
     
-    // Add current frame time to the queue
-    frameTimes.push_back(frameTime);
+    // Add current frame data to the history
+    frameHistory.push_back({currentTime, frameTime});
     
-    // Maintain the maximum number of samples
-    if (frameTimes.size() > maxFrameTimesSamples)
+    // Remove frames older than 2 seconds
+    auto cutoffTime = currentTime - std::chrono::duration<double>(frameHistoryWindowSeconds);
+    while (!frameHistory.empty() && frameHistory.front().timestamp < cutoffTime)
     {
-        frameTimes.pop_front();
+        frameHistory.pop_front();
     }
     
-    // Calculate average FPS from the collected frame times
-    double totalTime = 0.0;
-    for (const auto& time : frameTimes)
-    {
-        totalTime += time;
-    }
-    
-    if (totalTime > 0.0 && !frameTimes.empty())
-    {
-        averageFPS = static_cast<double>(frameTimes.size()) / totalTime;
-    }
+    averageFPS = static_cast<double>(frameHistory.size()) / frameHistoryWindowSeconds;
     
     // Increment frame counter
     frameCounter++;

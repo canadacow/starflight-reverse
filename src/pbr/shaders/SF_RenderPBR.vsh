@@ -164,16 +164,20 @@ void main(in  VSInput  VSIn,
         adjustedUV += float2(g_Terrain.textureOffsetX, g_Terrain.textureOffsetY);
     #endif
 
+    float heightFactor = 1.0;
+
     #if USE_INSTANCING
-        float height = terrainTextureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV, instance.HeightmapAttribs.HeightFactor).r;
+        heightFactor = instance.HeightmapAttribs.HeightFactor;
     #else
-        float height = terrainTextureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV, g_HeightmapAttribs.HeightFactor).r;
+        heightFactor = g_HeightmapAttribs.HeightFactor;
     #endif
+
+    float height = terrainTextureBicubic(g_Heightmap, g_Heightmap_sampler, adjustedUV).r;
 
     if(height < g_Terrain.waterHeight)
     {
         // Water is always flush with land
-        adjustedPos += float3(0.0, g_Terrain.waterHeight, 0.0);
+        adjustedPos += float3(0.0, g_Terrain.waterHeight * heightFactor, 0.0);
 
         float2 waterUv = float2(frac(adjustedUV.x * 9.0 * 38.0), frac(adjustedUV.y * 9.0 * 14.9));
 
@@ -182,7 +186,7 @@ void main(in  VSInput  VSIn,
     }
     else
     {
-        adjustedPos += float3(0.0, height, 0.0);
+        adjustedPos += float3(0.0, height * heightFactor, 0.0);
     }
 
     #if USE_TERRAINING

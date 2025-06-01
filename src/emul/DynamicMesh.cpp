@@ -664,6 +664,9 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement, float heightFact
     m_Mesh->BB.Min = float3{ -totalWidth, -2.0f, -totalHeight * 3.0f };
     m_Mesh->BB.Max = float3{ totalWidth * 2.0f, 10.0f, totalHeight * 4.0f };
 
+    m_Mesh->BB.Min.y *= heightFactor;
+    m_Mesh->BB.Max.y *= heightFactor;
+
     node.pMesh = m_Mesh.get();
 }
 #elif defined(TEST_MID_TERRAIN)
@@ -900,7 +903,7 @@ float DynamicMesh::sampleTerrainLinear(const TerrainData& terrain, float2 tilePo
     float bottom = h3 * (1.0f - fx) + h4 * fx;
     float height = top * (1.0f - fy) + bottom * fy;     
 
-    return height;
+    return height * heightFactor;
 }
 
 float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition, float heightFactor)
