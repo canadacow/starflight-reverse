@@ -6435,7 +6435,14 @@ void DrawUI()
 
                     nk_layout_row_dynamic(&ctx, 25, 1);
                     nk_label(&ctx, "Enter Planet ID (Hex):", NK_TEXT_LEFT);
-                    nk_edit_string_zero_terminated(&ctx, NK_EDIT_FIELD, planetIdInput, sizeof(planetIdInput), nk_filter_hex);
+                    nk_flags active = nk_edit_string_zero_terminated(&ctx, NK_EDIT_FIELD, planetIdInput, sizeof(planetIdInput), nk_filter_hex);
+
+                    if((active & NK_EDIT_ACTIVE) || (active & NK_EDIT_ACTIVATED)) {
+                        s_gc.nuklearHasFocus = true;
+                    }
+                    else {
+                        s_gc.nuklearHasFocus = false;
+                    }
 
                     // Check if the Enter key is pressed
                     if (nk_input_is_key_pressed(&ctx.input, NK_KEY_ENTER)) {
@@ -6505,7 +6512,52 @@ void DrawUI()
 
                         UpdatePlanetMap(s_gc.planetInstanceIndex);
                         nk_layout_row_static(&ctx, 240, 480, 1);
-                        nk_image(&ctx, s_gc.activePlanet.image);
+                        
+                        // Get the bounds for the image area
+                        struct nk_rect bounds = nk_widget_bounds(&ctx);
+                        
+                        // Check if mouse is over the image and left button is down
+                        struct nk_vec2 mouse_pos = ctx.input.mouse.pos;
+                        bool mouseOverImage = (mouse_pos.x >= bounds.x && mouse_pos.x <= bounds.x + bounds.w &&
+                                             mouse_pos.y >= bounds.y && mouse_pos.y <= bounds.y + bounds.h);
+                        
+                        bool shouldUpdatePosition = false;
+                        
+                        // Handle both click and drag
+                        if (nk_button_image(&ctx, s_gc.activePlanet.image)) {
+                            shouldUpdatePosition = true;
+                        } else if (mouseOverImage && ctx.input.mouse.buttons[NK_BUTTON_LEFT].down) {
+                            shouldUpdatePosition = true;
+                        }
+                        
+                        if (shouldUpdatePosition) {
+                            // Calculate relative position within the image (0.0 to 1.0)
+                            float relativeX = (mouse_pos.x - bounds.x) / bounds.w;
+                            float relativeY = (mouse_pos.y - bounds.y) / bounds.h;
+                            
+                            // Clamp to valid range
+                            relativeX = fmax(0.0f, fmin(1.0f, relativeX));
+                            relativeY = fmax(0.0f, fmin(1.0f, relativeY));
+                            
+                            // Convert to map coordinates (48x24 map)
+                            int mapX = (int)(relativeX * 48.0f);
+                            int mapY = (int)(relativeY * 24.0f);
+                            
+                            // Clamp to map bounds
+                            mapX = fmax(0, fmin(47, mapX));
+                            mapY = fmax(0, fmin(23, mapY));
+                            
+                            // Convert map coordinates to world coordinates
+                            float2 newPos = float2(mapX, mapY) / float2(48.0f, 24.0f) * s_gc.TerrainMaxSize;
+                            
+                            // Update terrain movement - FIXED: both X and Z coordinates
+                            s_gc.terrainMovement.x = newPos.x;
+                            s_gc.terrainMovement.z = newPos.y;  // This maps Y map coordinate to Z world coordinate
+                            
+                            // Update tvLocation as well (if needed for consistency)
+                            s_gc.tvLocation.x = newPos.x / s_gc.TileSize.x;
+                            s_gc.tvLocation.y = newPos.y / s_gc.TileSize.y;
+                        }
                     }
                     
                     nk_group_end(&ctx);
