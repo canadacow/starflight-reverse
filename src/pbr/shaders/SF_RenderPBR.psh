@@ -721,25 +721,33 @@ PSOutput main(in VSOutput VSOut,
     // c = c < 0 ? 0 : ((c >> 1) & 0x38);
     PBRInstanceAttribs instance = instanceBuffer[VSOut.InstanceID];
 
+    // Calculate the current location within the heightmap
+    // For large tiles, we need to offset based on UV2 position within the tile
+    int2 tileSize = int2(61, 101); // This should match numBigTiles from DynamicMesh.cpp
+    float2 exactLocation = float2(instance.PlanetLocation) + VSOut.UV2 * float2(tileSize);
+    int2 currentLocation = int2(floor(exactLocation));
+
     int heightIndex[9];
-    heightIndex[0] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y - 1, 0)).r); // top
-    heightIndex[1] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y, 0)).r); // left  
-    heightIndex[2] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y, 0)).r); // center
-    heightIndex[3] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y, 0)).r); // right
-    heightIndex[4] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x, instance.PlanetLocation.y + 1, 0)).r); // bottom
+    heightIndex[0] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x, currentLocation.y - 1, 0)).r); // top
+    heightIndex[1] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x - 1, currentLocation.y, 0)).r); // left  
+    heightIndex[2] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x, currentLocation.y, 0)).r); // center
+    heightIndex[3] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x + 1, currentLocation.y, 0)).r); // right
+    heightIndex[4] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x, currentLocation.y + 1, 0)).r); // bottom
 
     // Load corner heights
-    heightIndex[5] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y - 1, 0)).r); // top-left
-    heightIndex[6] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y - 1, 0)).r); // top-right
-    heightIndex[7] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x - 1, instance.PlanetLocation.y + 1, 0)).r); // bottom-left
-    heightIndex[8] = GetHeightIndex(g_Heightmap.Load(int3(instance.PlanetLocation.x + 1, instance.PlanetLocation.y + 1, 0)).r); // bottom-right
+    heightIndex[5] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x - 1, currentLocation.y - 1, 0)).r); // top-left
+    heightIndex[6] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x + 1, currentLocation.y - 1, 0)).r); // top-right
+    heightIndex[7] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x - 1, currentLocation.y + 1, 0)).r); // bottom-left
+    heightIndex[8] = GetHeightIndex(g_Heightmap.Load(int3(currentLocation.x + 1, currentLocation.y + 1, 0)).r); // bottom-right
 
     // Determine the EGA color based on the center height
     int centerHeightIndex = heightIndex[2];
     float4 tileColor = GetEGAColor(centerHeightIndex);
 
-    // Determine which quadrant we're in using UV2 coordinates
-    float2 quadPos = VSOut.UV2;
+    // Use the fractional part of the exact location for quadrant determination
+    // This gives us the sub-pixel position within each heightmap pixel
+    float2 quadPos = frac(exactLocation);
+    
     if (quadPos.x < 0.5 && quadPos.y < 0.5) {
         // Top-left quadrant
         if(heightIndex[0] != centerHeightIndex && heightIndex[1] != centerHeightIndex)
