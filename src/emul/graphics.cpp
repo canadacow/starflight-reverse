@@ -6494,9 +6494,22 @@ void DrawUI()
                         
                         sprintf(buffer, "Species: %d", planet.species);
                         nk_label(&ctx, buffer, NK_TEXT_LEFT);
+
+                        {
+                            float2 worldLocation = float2{ s_gc.terrainMovement.x / GraphicsContext::TileSize.x, s_gc.terrainMovement.z / GraphicsContext::TileSize.y };
+
+                            // Starflight Coordinates, uses worldLocation as int2, x subtracted by 1152 then * 10 then divided by 64, y is subtracted by 480 then * 10 then divided by 53 (see DrawLON)
+                            // for x, negative values absoluted to mean W, positive values mean E, negative values mean N, positive values mean S
+
+                            int2 starflightCoordinates = int2{ (int)(worldLocation.x - 1152.0f) * 10 / 64, (int)(worldLocation.y - 480.0f) * 10 / 53 };
                         
-                        sprintf(buffer, "System: %d x %d Orbit: %d", planet.x, planet.y, planet.orbit);
-                        nk_label(&ctx, buffer, NK_TEXT_LEFT);
+                            // Format coordinates with W/E N/S
+                            char xDir = (starflightCoordinates.x < 0) ? 'W' : 'E';
+                            char yDir = (starflightCoordinates.y < 0) ? 'N' : 'S';
+
+                            sprintf(buffer, "System: %d x %d Orbit: %d Pos: %d%c %d%c", planet.x, planet.y, planet.orbit, abs(starflightCoordinates.y), yDir, abs(starflightCoordinates.x), xDir);
+                            nk_label(&ctx, buffer, NK_TEXT_LEFT);                            
+                        }
 
                         const char* surfaceType;
                         switch (planettypes[planet.species].surftype) {
@@ -6539,16 +6552,8 @@ void DrawUI()
                             relativeX = fmax(0.0f, fmin(1.0f, relativeX));
                             relativeY = fmax(0.0f, fmin(1.0f, relativeY));
                             
-                            // Convert to map coordinates (48x24 map)
-                            int mapX = (int)(relativeX * 48.0f);
-                            int mapY = (int)(relativeY * 24.0f);
-                            
-                            // Clamp to map bounds
-                            mapX = fmax(0, fmin(47, mapX));
-                            mapY = fmax(0, fmin(23, mapY));
-                            
-                            // Convert map coordinates to world coordinates
-                            float2 newPos = float2(mapX, mapY) / float2(48.0f, 24.0f) * s_gc.TerrainMaxSize;
+                           // Convert map coordinates to world coordinates
+                            float2 newPos = float2(relativeX, relativeY) * s_gc.TerrainMaxSize;
                             
                             // Update terrain movement - FIXED: both X and Z coordinates
                             s_gc.terrainMovement.x = newPos.x;
@@ -7667,7 +7672,8 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     Renderer.LightCount = LightCount;
     Renderer.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - s_gc.epoch).count();
 
-    Renderer.DrawBorder = 1;
+    // Uncomment to draw the border of the terrain
+    // Renderer.DrawBorder = 1;
 
     auto RenderModel = [&](SF_GLTF_PBR_Renderer::RenderInfo::ALPHA_MODE_FLAGS AlphaModes) {
         const auto OrigAlphaModes = s_gc.renderParams.AlphaModes;
