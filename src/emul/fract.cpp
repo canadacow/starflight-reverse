@@ -1489,6 +1489,7 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstance
     }
 
     uint16_t seed = planets.at(planetInstanceIndex).seed;
+    const uint8_t* palette = GetPlanetColorMap(planets.at(planetInstanceIndex).species);
 
     std::vector<unsigned char> localMemory(SystemMemorySize);
 
@@ -1576,10 +1577,16 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstance
 
     auto userMarkRange = UserMarks::getInstance().createUserMarkRange("NEWCONTOUR");
 
-    for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ycon += yscale)
+    //for (int16_t ycon = 0; ycon < planet_usable_height * yscale; ycon += yscale)
+    for (int16_t yat = 0; yat < planet_usable_height; ++yat)
     {
-        for (int16_t xcon = 0; xcon < planet_usable_width * xscale; xcon += xscale)
+        //for (int16_t xcon = 0; xcon < planet_usable_width * xscale; xcon += xscale)
+        for (int16_t xat = 0; xat < planet_usable_width; ++xat)
         {
+
+            int16_t xcon = (xat * xscale);
+            int16_t ycon = (yat * yscale);
+
             Write16(0x5916, xcon);
             Write16(0x5921, ycon);
 
@@ -1593,11 +1600,19 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstance
                 {
                     uint8_t val = static_cast<uint8_t>(Read8Long(segment, y * planet_contour_width + x));
 
-                    int image_x = ((xcon / xscale) * planet_contour_width) + x;
-                    int image_y = (planet_usable_height * yscale - 1) - (((ycon / yscale) * planet_contour_height) + y);
-                    int image_index = image_y * (planet_contour_width * planet_usable_width) + image_x;
+                    int image_x = (xat * planet_contour_width) + x;
+                    image_x -= 7;
+                    int image_y = (planet_usable_height * yscale - 1) - ((yat * planet_contour_height) + y);
+                    image_y -= 44;
+                    if(image_x < 0 || image_x >= FractalGenerator::GetPlanetWidth() ||
+                       image_y < 0 || image_y >= FractalGenerator::GetPlanetHeight())
+                    {
+                        continue;
+                    }
+
+                    int image_index = image_y * FractalGenerator::GetPlanetWidth() + image_x;
                     result.image[image_index] = val;
-                    //planet_albedo[image_index] = ToAlbedo(palette, val);
+                    result.albedo[image_index] = ToAlbedo(palette, val);
                 }
             }
 
@@ -1614,17 +1629,33 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstance
     OutputDebugStringA(buf);   
 
     #if 0
-    std::vector<unsigned char> png;
-    unsigned error = lodepng::encode(png, result.image, planet_contour_width * planet_usable_width, planet_contour_height * planet_usable_height, LCT_GREY, 8);
-    if (!error)
-    {
-        std::string filename = "planets/" + std::to_string(seed) + ".png";
-        lodepng::save_file(png, filename);
-    }
-    else
-    {
-        fprintf(stderr, "Error encoding PNG: %u: %s\n", error, lodepng_error_text(error));
-    }
+        enum class map_type {
+            height,
+            albedo
+        };
+
+        for(map_type map : {map_type::height, map_type::albedo}) {
+            std::vector<unsigned char> png;
+
+            uint8_t* data = map == map_type::height ? result.image.data() : reinterpret_cast<uint8_t*>(result.albedo.data());
+            LodePNGColorType color_type = map == map_type::height ? LCT_GREY : LCT_RGBA;
+            //unsigned bitdepth = map == map_type::height ? 8 : 32;
+            unsigned bitdepth = 8;
+
+            unsigned error = lodepng::encode(png, data, FractalGenerator::GetPlanetWidth(), FractalGenerator::GetPlanetHeight(), color_type, bitdepth);
+            if (!error)
+            {
+                char filenameOut[256];
+                snprintf(filenameOut, sizeof(filenameOut), "planets/%04x_%s.png", seed, map == map_type::height ? "height" : "albedo");
+                lodepng::save_file(png, filenameOut);
+            }
+            else
+            {
+                fprintf(stdout, "Error encoding PNG: %u: %s\n", error, lodepng_error_text(error));
+            }
+        }
+
+        _exit(0);
     #endif
 
     return result;
