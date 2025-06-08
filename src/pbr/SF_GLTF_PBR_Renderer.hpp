@@ -126,7 +126,7 @@ public:
 
         bool UseEGA = false;
 
-        float HeightFactor = 1.0f;
+        float HeightFactor = 1.5f;
     };
 
     /// GLTF Model shader resource binding information

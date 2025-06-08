@@ -516,11 +516,13 @@ struct GraphicsContext
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
-    #define TV_LOCATION_START_X (1745.0f) // 2318
-    #define TERRAIN_MAX_X 2318
-    #define TERRAIN_MAX_Y 909
+    #define TV_LOCATION_START_X (2060.0f) // 2318
+    //#define TERRAIN_MAX_X 2318
+    //#define TERRAIN_MAX_Y 909
+    #define TERRAIN_MAX_X 2304
+    #define TERRAIN_MAX_Y 960
     //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
-    #define TV_LOCATION_START_Y (727.0f) // 909
+    #define TV_LOCATION_START_Y (702.0f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
@@ -570,7 +572,8 @@ struct GraphicsContext
     RefCntAutoPtr<ITexture> heightmap;
     RefCntAutoPtr<ITextureView> heightmapView;
 
-    uint16_t planetInstanceIndex = 0x17a6;
+    //uint16_t planetInstanceIndex = 0x17a6;
+    uint16_t planetInstanceIndex = 0x1728;
     bool renderClouds = false;
     int2 heightmapSize;
     std::vector<float> heightmapData;
@@ -3549,8 +3552,8 @@ static float2 InitHeightmap()
     auto fullRes = s_gc.fract.GetFullResPlanetData(s_gc.planetInstanceIndex);
 
     std::vector<unsigned char>& image = fullRes.image;
-    unsigned MapWidth = planet_usable_width * planet_contour_width;
-    unsigned MapHeight = planet_usable_height * planet_contour_height;
+    unsigned MapWidth = FractalGenerator::GetPlanetWidth();
+    unsigned MapHeight = FractalGenerator::GetPlanetHeight();
 
     int8_t* ptr = (int8_t*)image.data();
 

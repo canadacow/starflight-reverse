@@ -74,7 +74,7 @@ public:
 
 private:
 
-    const int2 numBigTiles = { 61, 101 };
+    const int2 numBigTiles = { 64, 96 };
     float2 m_TileSize = { 8.0f, 4.0f };
     float2 m_TextureSize = { 1024.0f, 1024.0f };
     

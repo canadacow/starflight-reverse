@@ -13,8 +13,8 @@ namespace Diligent
 namespace SF_GLTF
 {
 
-static constexpr float TERRAIN_MAX_X = 2318.0f;
-static constexpr float TERRAIN_MAX_Y = 909.0f;
+static constexpr float TERRAIN_MAX_X = 2304.0f;
+static constexpr float TERRAIN_MAX_Y = 960.0f;
 
 DynamicMesh::DynamicMesh(IRenderDevice* pDevice, IDeviceContext* pContext, const std::shared_ptr<SF_GLTF::Model>& model) :
     m_Model(model), m_pDevice(pDevice), m_pContext(pContext)
