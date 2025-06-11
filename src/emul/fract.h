@@ -35,6 +35,8 @@ void FRACT_FRACTALIZE();
 
 void FRACT_NEWCONTOUR();
 
+void FRACT_FRACT_CONTOUR();
+
 class FractalGenerator
 {
 public:

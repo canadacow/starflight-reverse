@@ -1174,7 +1174,43 @@ static Icon GetIcon(uint16_t index) {
 
         assert(!(icon.planet_to_sunX == icon.x && icon.planet_to_sunY == icon.y));
     }
+    if (it->second == "ELEMENT")
+    {
+        icon.icon_type = (uint32_t)IconType::Element;
 
+        icon.locationX = Read16(0x63ef + 0xd);
+        icon.locationY = Read16(0x63ef + 0xf);
+        icon.quantity = Read16(0x63ef + 0xb); // ???
+        icon.elementType = icon.species;
+    }
+    if (it->second == "TVEHICLE")
+    {
+        icon.icon_type = (uint32_t)IconType::TerrainVehicle;
+
+        icon.locationX = Read16(0x63ef + 0xd);
+        icon.locationY = Read16(0x63ef + 0xf);
+    }
+    if (it->second == "CREATURE")
+    {
+        icon.icon_type = (uint32_t)IconType::Creature;
+
+        icon.locationX = Read16(0x63ef + 0xd);
+        icon.locationY = Read16(0x63ef + 0xf);
+    }
+    if (it->second == "ARTIFACT")
+    {
+        icon.icon_type = (uint32_t)IconType::Artifact;
+
+        icon.locationX = Read16(0x63ef + 0xd);
+        icon.locationY = Read16(0x63ef + 0xf);
+    }
+    if (it->second == "RUIN")
+    {
+        icon.icon_type = (uint32_t)IconType::Ruin;
+
+        icon.locationX = Read16(0x63ef + 0xd);
+        icon.locationY = Read16(0x63ef + 0xf);
+    }
     ForthPopCurrent();
 
     return icon;
@@ -1288,6 +1324,22 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
     if (graphicsIsShutdown)
     {
         exit(0);
+    }
+
+    {
+        static uint16_t s_xabs = 0;
+        static uint16_t s_yabs = 0;
+
+        const unsigned short int pp_XABS = 0x5dae; // XABS size: 2
+        const unsigned short int pp_YABS = 0x5db9; // YABS size: 2
+
+        if(s_xabs != Read16(pp_XABS) || s_yabs != Read16(pp_YABS))
+        {
+            s_xabs = Read16(pp_XABS);
+            s_yabs = Read16(pp_YABS);
+
+            printf("XABS: %d, YABS: %d\n", s_xabs, s_yabs);
+        }
     }
 
     const char* baseOverlay = "";
@@ -2203,6 +2255,31 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             // Handled elsewhere
                             found = true;
                         }
+                        if (it->second == "ELEMENT")
+                        {
+                            printf("Element at index %d is at %d x %d of quantity %d of type %d\n", i, icon.locationX, icon.locationY, icon.quantity, icon.elementType);
+                            found = true;
+                        }
+                        if (it->second == "TVEHICLE")
+                        {
+                            printf("Terrain vehicle at index %d is at %d x %d\n", i, icon.locationX, icon.locationY);
+                            found = true;
+                        }
+                        if (it->second == "CREATURE")
+                        {
+                            printf("Creature at index %d is at %d x %d\n", i, icon.locationX, icon.locationY);
+                            found = true;
+                        }
+                        if (it->second == "ARTIFACT")
+                        {
+                            printf("Artifact at index %d is at %d x %d\n", i, icon.locationX, icon.locationY);
+                            found = true;
+                        }
+                        if (it->second == "RUIN")
+                        {
+                            printf("Ruin at index %d is at %d x %d species %d\n", i, icon.locationX, icon.locationY, icon.species);
+                            found = true;
+                        }
 
                         //printf("Object at index %d is %s, iaddr 0x%x found? %d\n", i, it->second.c_str(), current_iaddr, found);
 
@@ -2227,11 +2304,11 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
                             else
                             {
                                 printf("Object at index %d has unknown iaddr 0x%x\n", i, icon.iaddr);
-                                assert(false);
+                                //assert(false);
                             }
-                        }
 
-                        printf("Locus %d of %d index %d, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, i, icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
+                            printf("Locus %d of %d index %d inst type %s, X: %d (%d) (%d), Y: %d (%d) (%d), ID: %u, CLR: %u\n", i, localCount, i, it->second.c_str(), icon.x, icon.screenX, icon.bltX, icon.y, icon.screenY, icon.bltY, icon.id, icon.clr);
+                        }
 
                         s_currentIconList.push_back(icon);
                     }
@@ -2267,8 +2344,16 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     ForthCall(0x798c); // SET-CURRENT
                 }
-               
-                if(nextInstr == 0xe7ec)
+
+                if(nextInstr == 0xf108)
+                {
+                    FRACT_NEWCONTOUR();
+                }
+                else if(nextInstr == 0xea97)
+                {
+                    FRACT_FRACT_CONTOUR();
+                }
+                else if(nextInstr == 0xe7ec)
                 {
                     // -ENDURIUM
                     // Do nothing as this prevents expending fuel
@@ -2558,54 +2643,6 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
 
                     if (ret != STOP)
                         ret = OK;
-                }
-
-                if (nextInstr == 0xea97 && frameSync.pastHimus) // FRACT-CONTOUR
-                {
-                    int16_t xcon = (int16_t)Read16(0x5916);
-                    int16_t ycon = (int16_t)Read16(0x5921);
-
-                    uint16_t segment = 0x7cbe; // NEWCONTOUR segment
-
-                    printf("XCON: %d, YCON: %d { \n", xcon, ycon);
-
-#if 0
-                    for(int y = 0; y < planet_contour_height; ++y)
-                    {
-                        for(int x = 0; x < planet_contour_width; ++x)
-                        {
-                            int xat = xcon + x;
-                            int yat = ycon + y;
-
-                            if (xat < 0) {
-                                xat = 2318 + (xat % 2318);
-                            } else if (xat >= 2318) {
-                                xat = xat % 2318;
-                            }
-
-                            if (yat < 0) {
-                                yat = 909 + (yat % 909);
-                            } else if (yat >= 909) {
-                                yat = yat % 909;
-                            }
-
-                            yat = 908 - yat;
-
-                            int image_index = yat * (planet_contour_width * planet_usable_width) + xat;
-
-                            uint8_t val = planet_image[image_index];
-
-                            uint8_t actualVal = Read8Long(segment, y * planet_contour_width + x);
-
-                            Write8Long(segment, y * planet_contour_width + x, val);
-
-                            //printf("0x%02x (0x%02x), ", actualVal, val);
-                        }
-                        printf("\n");
-                    }
-#endif
-                    fflush(stdout);
-                    printf("\n");                  
                 }
 
                 if (nextInstr == 0xef37) // SET-DESTINATION
@@ -4937,6 +4974,7 @@ enum RETURNCODE Call(unsigned short addr, unsigned short bx)
         case 0xe770: FRACT_FILLARRAY(); break;
         case 0xe537: Ext_FRACT_StoreHeight(); break;
         case 0xe75e: FRACT_FRACTALIZE(); break;
+        case 0xf106: FRACT_NEWCONTOUR(); break;
         case 0xead1:
             {
                 // 0xead1: mov    [EACD],sp // WEACD

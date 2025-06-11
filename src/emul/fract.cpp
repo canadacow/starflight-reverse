@@ -1658,6 +1658,8 @@ FullResPlanetData FractalGenerator::GetFullResPlanetData(uint16_t planetInstance
         _exit(0);
     #endif
 
+    GlobalArrayDescriptor = nullptr;
+
     return result;
 }
 

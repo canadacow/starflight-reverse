@@ -268,6 +268,11 @@ target_link_libraries(emulatesdl PRIVATE
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
         ${CURL_LIBRARIES})
 
+# Set stack size to 2MB (2097152 bytes)
+if(WIN32)
+    set_target_properties(emulatesdl PROPERTIES LINK_FLAGS "/STACK:2097152,65536")
+endif()
+
 foreach(SHADER ${SHADER_LIST})
     add_dependencies(emulatesdl ${SHADER}_compilation)
 endforeach()

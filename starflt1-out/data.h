@@ -505,29 +505,29 @@ char *compounds[] =
 
 char *elements[] =
 { // 7 bytes of information are missing here
-  "                ",
-  "ALUMINUM........",
-  "ANTIMONY........",
-  "CHROMIUM........",
-  "COBALT..........",
-  "COPPER..........",
-  "ENDURIUM (FUEL).",
-  "GOLD............",
-  "IRON............",
-  "LEAD............",
-  "MAGNESIUM.......",
-  "MERCURY.........",
-  "MOLYBDENUM......",
-  "NICKEL..........",
-  "PLATINUM........",
-  "PLUTONIUM.......",
-  "PROMETHIUM......",
-  "RODNIUM.........",
-  "SILVER..........",
-  "TIN.............",
-  "TITANIUM........",
-  "TUNGSTEN........",
-  "ZINC............"
+  "                ", // 0
+  "ALUMINUM........", // 1
+  "ANTIMONY........", // 2
+  "CHROMIUM........", // 3
+  "COBALT..........", // 4
+  "COPPER..........", // 5
+  "ENDURIUM (FUEL).", // 6
+  "GOLD............", // 7
+  "IRON............", // 8
+  "LEAD............", // 9
+  "MAGNESIUM.......", // 10
+  "MERCURY.........", // 11
+  "MOLYBDENUM......", // 12
+  "NICKEL..........", // 13
+  "PLATINUM........", // 14
+  "PLUTONIUM.......", // 15
+  "PROMETHIUM......", // 16
+  "RODNIUM.........", // 17
+  "SILVER..........", // 18
+  "TIN.............", // 19
+  "TITANIUM........", // 20
+  "TUNGSTEN........", // 21
+  "ZINC............"  // 22
 };
 
 typedef struct { int idx; int d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15; } VESSELENTRY;

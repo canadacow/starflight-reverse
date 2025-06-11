@@ -525,6 +525,11 @@ enum IconType
     Flux,
     Ship,
     Vessel,
+    TerrainVehicle,
+    Element,
+    Creature,
+    Artifact,
+    Ruin,
 };
 
 // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
@@ -627,10 +632,25 @@ struct Icon {
 
     uint16_t species;
 
+    // Ship to ship interactions (combat/hailing/etc)
+
     float vesselHeading;
     uint16_t vesselSpeed;
     uint16_t vesselArmorHits;
     uint16_t vesselShieldHits;
+
+    // Terrain vehicle and planetfall
+
+    int16_t locationX;
+    int16_t locationY;
+
+    // Elements
+    int16_t quantity;
+    int16_t elementType;
+    
+    // Artifacts
+
+    // Creatures
 };
 
 struct TimePoint
