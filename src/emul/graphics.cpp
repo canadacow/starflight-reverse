@@ -516,13 +516,13 @@ struct GraphicsContext
     //float3 terrainMovement = { 0.0f, -15.0f, 0.0 };
     //#define TV_LOCATION_START_X 389.0f
     //#define TV_LOCATION_START_Y 245.0f
-    #define TV_LOCATION_START_X (2060.0f) // 2318
+    #define TV_LOCATION_START_X (2016.0f) // 2318
     //#define TERRAIN_MAX_X 2318
     //#define TERRAIN_MAX_Y 909
     #define TERRAIN_MAX_X 2304
     #define TERRAIN_MAX_Y 960
     //#define TV_LOCATION_START_Y (100.0f + 30.f) // 909
-    #define TV_LOCATION_START_Y (702.0f) // 909
+    #define TV_LOCATION_START_Y (674.0f) // 909
     float2 tvLocation = {TV_LOCATION_START_X, TV_LOCATION_START_Y};
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
@@ -3860,7 +3860,7 @@ static int GraphicsInitThread()
 
     EngineVkCreateInfo EngineCI;
     EngineCI.Features = DeviceFeatures{DEVICE_FEATURE_STATE_OPTIONAL};
-    EngineCI.DynamicHeapSize = 8 << 24;
+    EngineCI.DynamicHeapSize = 8 << 25;
     EngineCI.DeviceExtensionCount = 4;
     const char* deviceExtensions[] = { 
         "VK_KHR_create_renderpass2", 
@@ -5473,15 +5473,32 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
         terrainItems.push_back(miningSymbol);
     };
 
-    addMineral({1743.0f, 722.0f});
-    addMineral({1749.0f, 723.0f});
-    addMineral({1741.0f, 723.0f});
-
-    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{1740.0f, 720.0f}, float3{}, Quaternion<float>{}, true };
+    addMineral({2021.0f, 960.0f - 287.0f}); // Element at index 0, quantity 43, type 6
+    
+    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{2022.0f, 960.0f - 288.0f}, float3{}, Quaternion<float>{}, true }; // Ruin at index 1, species 2
     terrainItems.push_back(ruin);
-
-    SF_GLTF::TerrainItem ruin2{ "RecentRuin", float2{1748.0f, 724.0f}, float3{}, Quaternion<float>{}, true };
-    terrainItems.push_back(ruin2);
+    
+    addMineral({2031.0f, 960.0f - 290.0f}); // Element at index 2, quantity 41, type 12
+    addMineral({2026.0f, 960.0f - 274.0f}); // Element at index 3, quantity 81, type 11
+    addMineral({2025.0f, 960.0f - 293.0f}); // Element at index 4, quantity 11, type 5
+    addMineral({2023.0f, 960.0f - 271.0f}); // Element at index 5, quantity 18, type 11
+    addMineral({2021.0f, 960.0f - 290.0f}); // Element at index 6, quantity 61, type 12
+    addMineral({2028.0f, 960.0f - 275.0f}); // Element at index 7, quantity 31, type 12
+    addMineral({2027.0f, 960.0f - 279.0f}); // Element at index 8, quantity 21, type 5
+    addMineral({2022.0f, 960.0f - 295.0f}); // Element at index 9, quantity 33, type 12
+    addMineral({2019.0f, 960.0f - 289.0f}); // Element at index 10, quantity 25, type 15
+    addMineral({2019.0f, 960.0f - 289.0f}); // Element at index 11, quantity 89, type 11
+    addMineral({2016.0f, 960.0f - 287.0f}); // Element at index 12, quantity 58, type 3
+    addMineral({2016.0f, 960.0f - 277.0f}); // Element at index 13, quantity 66, type 11
+    addMineral({1998.0f, 960.0f - 293.0f}); // Element at index 14, quantity 40, type 15
+    addMineral({1998.0f, 960.0f - 280.0f}); // Element at index 15, quantity 40, type 11
+    addMineral({2005.0f, 960.0f - 283.0f}); // Element at index 16, quantity 95, type 11
+    addMineral({2001.0f, 960.0f - 287.0f}); // Element at index 17, quantity 62, type 11
+    addMineral({2014.0f, 960.0f - 293.0f}); // Element at index 18, quantity 41, type 11
+    addMineral({1999.0f, 960.0f - 296.0f}); // Element at index 19, quantity 80, type 11
+    addMineral({2019.0f, 960.0f - 298.0f}); // Element at index 20, quantity 99, type 11
+    addMineral({2016.0f, 960.0f - 299.0f}); // Element at index 21, quantity 92, type 11
+    addMineral({2034.0f, 960.0f - 274.0f}); // Element at index 23, quantity 76, type 12
 
     //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };

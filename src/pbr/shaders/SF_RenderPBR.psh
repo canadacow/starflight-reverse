@@ -723,7 +723,7 @@ PSOutput main(in VSOutput VSOut,
 
     // Calculate the current location within the heightmap
     // For large tiles, we need to offset based on UV2 position within the tile
-    int2 tileSize = int2(61, 101); // This should match numBigTiles from DynamicMesh.cpp
+    int2 tileSize = int2(64, 96); // This should match numBigTiles from DynamicMesh.cpp
     float2 exactLocation = float2(instance.PlanetLocation) + VSOut.UV2 * float2(tileSize);
     int2 currentLocation = int2(floor(exactLocation));
 
@@ -814,12 +814,14 @@ PSOutput main(in VSOutput VSOut,
         }
     }
 
-    if (g_Frame.Renderer.DrawBorder == 1 && (VSOut.UV2.x < 0.025 || VSOut.UV2.x > 0.975 || VSOut.UV2.y < 0.025 || VSOut.UV2.y > 0.975))
+    const float borderWidth = 0.02;
+    if (g_Frame.Renderer.DrawBorder == 1 && (VSOut.UV2.x < borderWidth || VSOut.UV2.x > (1.0 - borderWidth) || VSOut.UV2.y < borderWidth || VSOut.UV2.y > (1.0 - borderWidth)))
     {
         tileColor.rgb = float3(1.0, 1.0, 0.0); // Set to yellow
     }
 
     Shading = GetEGAColorSurface(VSOut, Shading, tileColor.rgb);
+    
 #endif // USE_EGA_COLOR
 
 #endif // USE_TERRAINING
