@@ -6589,6 +6589,71 @@ void DrawUI()
                 }
             }
             nk_end(&ctx);
+
+            {
+                static struct nk_image refImage = nk_image_id(0); // Initialize with null image
+                static bool refImageLoaded = false;
+
+                if (!refImageLoaded) {
+                    // Load reference image file into memory
+                    static std::vector<unsigned char> png;
+                    unsigned int w = 0;
+                    unsigned int h = 0;
+                    unsigned error = lodepng::decode(png, w, h, "reference_image.png", LCT_RGBA, 8);
+                    if(error) {
+                        printf("encoder error %d: %s\n", error, lodepng_error_text(error));
+                    } else {
+                        SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
+                            png.data(), w, h, 32, w * 4,
+                            0, 0, 0, 0);
+                        refImage = nk_image_ptr(surface);
+                        refImage.w = w;
+                        refImage.h = h;
+                    }
+
+                    refImageLoaded = true;
+                }
+
+                // Create a window for the reference image
+                float refWindowWidth = WINDOW_WIDTH;
+                float refWindowHeight = WINDOW_HEIGHT;
+                float refWindowX = 0.0f;
+                float refWindowY = 0.0f;
+
+                // Push transparent window style
+                nk_style_push_color(&ctx, &s->window.background, nk_rgba(0, 0, 0, 128)); // Semi-transparent black background
+                nk_style_push_style_item(&ctx, &s->window.fixed_background, nk_style_item_color(nk_rgba(0, 0, 0, 128)));
+
+                // Store original style values
+                struct nk_vec2 original_spacing = ctx.style.window.spacing;
+                struct nk_vec2 original_padding = ctx.style.window.padding;
+                struct nk_vec2 original_label_padding = ctx.style.window.header.label_padding;
+                struct nk_vec2 original_header_padding = ctx.style.window.header.padding;
+
+                // Set new style values
+                ctx.style.window.spacing = nk_vec2(0,0);
+                ctx.style.window.padding = nk_vec2(0,0);
+                ctx.style.window.header.label_padding = nk_vec2(0,0);
+                ctx.style.window.header.padding = nk_vec2(0,0);
+
+                if (nk_begin(&ctx, "Reference Image", nk_rect(refWindowX, refWindowY, refWindowWidth, refWindowHeight), 0)) {  // Removed window flags to make it fixed
+                    
+                    nk_layout_row_dynamic(&ctx, WINDOW_HEIGHT, 1);
+                    // Just use nk_image, not nk_image_color - the transparency comes from the window background
+                    nk_image(&ctx, refImage);
+                }
+                nk_end(&ctx);
+
+                // Restore original style values
+                ctx.style.window.spacing = original_spacing;
+                ctx.style.window.padding = original_padding;
+                ctx.style.window.header.label_padding = original_label_padding;
+                ctx.style.window.header.padding = original_header_padding;
+
+                // Pop the style changes
+                nk_style_pop_color(&ctx);
+                nk_style_pop_style_item(&ctx);
+            }
         }
 
         // Weather Control
@@ -8433,7 +8498,7 @@ void GraphicsUpdate()
 
     auto now = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
-    uniform.menuVisibility = frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
+    uniform.menuVisibility = 0.50f; // frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
     uniform.blurAmount = 20.0f; // emulationThreadRunning ? 20.0f : 0.0f;
     
     // If we're in a system, nebulas behave a little differently
