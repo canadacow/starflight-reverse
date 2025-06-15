@@ -500,70 +500,11 @@ SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime
 {
     SurfaceShadingInfo Shading;
     
-#if 0
-    // Calculate wave height/normal
-    float2 texcoord = VSOut.UV0;
-    float waves = CalculateOverlayedWaves2D(texcoord, AnimationTime, g_Noise, g_Noise_sampler);
-    
-    // Base water color
-    float3 deepWaterColor = float3(0.0, 0.1, 0.3); // Darker for deep areas
-    float3 shallowWaterColor = float3(0.0, 0.5, 0.8); // Lighter turquoise for shallow areas
-    float3 whiteCapColor = float3(1.0, 1.0, 1.0); // White caps for high waves
-
-    // Adjust color based on height
-    float depthFactor = ((g_Terrain.waterHeight - VSOut.Height) / g_Terrain.waterHeight);
-    float waveFactor = 0.5; // Adjust this factor for more/less white caps
-
-    float3 waterColor = lerp(deepWaterColor, shallowWaterColor, depthFactor);
-    waterColor = lerp(waterColor, whiteCapColor, waveFactor);
-
-    Shading.BaseLayer.Srf.Reflectance0 = waterColor;
-
-    // Adjust roughness based on wave height
-    Shading.BaseLayer.Metallic = 0.0;  // Non-metallic
-    Shading.BaseLayer.Srf.PerceptualRoughness = lerp(0.2, 0.8, waveFactor); // Smoother in calm areas, rougher in high waves
-    
-    // Compute normal based on waves
-    Shading.BaseLayer.Normal = float3(
-        ddx(waves),
-        ddy(waves),
-        0.0
-    );
-
-    //Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
-    Shading.BaseLayer.NdotV = 1.0;
-#elif 0
-    // Basic default water properties for debugging
+    // Simple solid blue water
     Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(float3(0.0, 0.5, 0.8), 0.0, 0.2);
     Shading.BaseLayer.Metallic = 0.0;
     Shading.BaseLayer.Normal = float3(0.0, 1.0, 0.0);
     Shading.BaseLayer.NdotV = 1.0;
-#else
-    float waterHeight = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0, 0).r;
-
-    // Lerp between blue water color and white foam based on wave height
-    float3 waterColor = lerp(float3(0.0, 0.5, 0.8), float3(1.0, 1.0, 1.0), waterHeight);
-
-    Shading.BaseLayer.Srf = GetSurfaceReflectanceMR(waterColor, 0.0, 0.2);
-    Shading.BaseLayer.Metallic = 0.0;
-    
-    // Compute tangent space normal from height map using central differences
-    float2 texelSize = g_Frame.Camera.f4ViewportSize.zw; // 1/width, 1/height
-    float heightL = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(-texelSize.x, 0), 0).r;
-    float heightR = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(texelSize.x, 0), 0).r;
-    float heightU = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(0, texelSize.y), 0).r;
-    float heightD = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, VSOut.UV0 + float2(0, -texelSize.y), 0).r;
-    
-    float3 normal = normalize(float3(
-        heightL - heightR,
-        heightD - heightU,
-        0.0
-    ));
-    Shading.BaseLayer.Normal = normal;
-
-    
-    Shading.BaseLayer.NdotV = 1.0;
-#endif
     
     // Set other SurfaceShadingInfo properties
     Shading.Pos = VSOut.WorldPos.xyz;

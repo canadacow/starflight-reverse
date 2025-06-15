@@ -179,10 +179,9 @@ void main(in  VSInput  VSIn,
         // Water is always flush with land
         adjustedPos += float3(0.0, g_Terrain.waterHeight * heightFactor, 0.0);
 
-        float2 waterUv = float2(frac(adjustedUV.x * 9.0 * 38.0), frac(adjustedUV.y * 9.0 * 14.9));
-
-        float waterHeight = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, waterUv, 0).r;
-        adjustedPos += float3(0.0, waterHeight, 0.0);
+        //float2 waterUv = float2(frac(adjustedUV.x * 9.0 * 38.0), frac(adjustedUV.y * 9.0 * 14.9));
+        //float waterHeight = g_WaterHeightMap.SampleLevel(g_WaterHeightMap_sampler, waterUv, 0).r;
+        //adjustedPos += float3(0.0, waterHeight, 0.0);
     }
     else
     {

@@ -50,7 +50,7 @@ public:
     }
 
     void ReplaceTerrain(const float3& terrainMovement, float heightFactor);
-    void SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor);
+    void SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor, float waterHeight);
     void ClearTerrainItems();
 
     float GetHeightAtTerrain(float2 position, const TerrainData& terrain, float heightFactor);
@@ -86,7 +86,7 @@ private:
     float sampleTerrainLinear(const TerrainData& terrain, float2 tilePosition, float heightFactor);
     float sampleTerrainLinearNormalizedUV(const TerrainData& terrain, float2 uv, float heightFactor);
     float sampleTerrainBicubic(const TerrainData& terrain, float2 tilePosition, float heightFactor);
-    float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope, float heightFactor);
+    float3 levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope, float heightFactor, float waterHeight = -1000.0f);
 
     struct VertexIndexCounts
     {

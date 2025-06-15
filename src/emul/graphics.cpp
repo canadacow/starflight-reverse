@@ -5519,10 +5519,11 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
-    s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData, s_gc.renderParams.HeightFactor);
+    s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData, s_gc.renderParams.HeightFactor, s_gc.waterHeight);
 
     // Update the terrain movement y position to the height of the terrain
     float height = s_gc.terrain.dynamicMesh->GetHeightAtTerrain(float2{ s_gc.terrainMovement.x, s_gc.terrainMovement.z }, terrainData, s_gc.renderParams.HeightFactor);
+    height = std::max(height, s_gc.waterHeight);
     s_gc.terrainMovement.y = -85.0f - height;
 
     float4x4 RotationMatrixCam = float4x4::Identity();
@@ -7814,17 +7815,20 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 */
 
                 std::string showPlanet = "Earth-like";
+                bool hasWater = true;
                 s_gc.waterHeight = 2.0f;
 
                 if(planetType.surftype == 4)
                 {
                     showPlanet = "Lava";
                     // No water on lava planets... Hmmm. Maybe do flowing lava at some level?
+                    hasWater = false;
                     s_gc.waterHeight = -1000.0f;
                 }
                 else if(planetType.surftype == 3)
                 {
                     showPlanet = "Ice";
+                    hasWater = false;
                     s_gc.waterHeight = -1000.0f;
                 }
 
@@ -7906,8 +7910,17 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
                 }
 
                 ri.pWaterHeightMap = s_gc.buffers[inFlightIndex].waterHeightMap->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-                ri.WaterHeight = s_gc.waterHeight;
-                
+                if(hasWater)
+                {
+                    ri.WaterHeight = ri.TerrainInfos.begin()->EndBiomHeight;
+                    s_gc.waterHeight = ri.WaterHeight;
+                }
+                else
+                {
+                    ri.WaterHeight = -1000.0f;
+                    s_gc.waterHeight = -1000.0f;
+                }
+
                 s_gc.pbrRenderer->Render(s_gc.m_pImmediateContext, *model.dynamicMesh, DynamicCurrTransforms, &DynamicPrevTransforms, ri, &model.bindings);
             }
             else

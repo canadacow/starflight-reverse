@@ -913,7 +913,7 @@ float DynamicMesh::sampleTerrain(const TerrainData& terrain, float2 tilePosition
 
 // Takes the bounding rectangle of a model produces a rotation matrix that aligns the y-axis with the terrain slope
 // Think buildings and vehicles aligned properly with the terrain
-float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope, float heightFactor)
+float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain, float4x4* outTerrainSlope, float heightFactor, float waterHeight)
 {
     // Sample heights at the four corners and center
     float2 center = (ul + br) * 0.5f;
@@ -929,6 +929,11 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
         float3(br.x, sampleTerrain(terrain, brHeightMap, heightFactor), br.y),      // Lower Right
         float3(center.x, sampleTerrain(terrain, centerHeightMap, heightFactor), center.y)  // Center
     };
+
+    // Ensure all corner heights are above water level
+    for (int i = 0; i < 5; ++i) {
+        corners[i].y = std::max(corners[i].y, waterHeight * heightFactor);
+    }    
 
     // Calculate normal using height differences
     float3 v1 = float3(br.x - ul.x, corners[1].y - corners[0].y, 0.0f);
@@ -968,7 +973,7 @@ float DynamicMesh::GetHeightAtTerrain(float2 position, const TerrainData& terrai
     return sampleTerrainLinear(terrain, tilePosition, heightFactor);
 }
 
-void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor)
+void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor, float waterHeight)
 {
     ClearTerrainItems();
 
@@ -1092,53 +1097,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             ul += (item.tilePosition + float2{0.5f, 0.5f}) * m_TileSize;
             br += (item.tilePosition + float2{0.5f, 0.5f}) * m_TileSize;
 
-            float3 worldOffset = levelPlane(ul, br, terrain, terrainSlopePtr, heightFactor);
-
-            //char debugStr[256];
-            //sprintf_s(debugStr, "WorldOffset for %s (node %d): %.2f, %.2f, %.2f\n", item.name.c_str(), ourNode.Index, worldOffset.x, worldOffset.y, worldOffset.z);
-            //OutputDebugStringA(debugStr);
-
-            float val = sampleTerrainLinear(terrain, item.tilePosition, heightFactor);
-            //worldOffset.x = (item.tilePosition.x + 0.5f) * m_TileSize.x;
-            //worldOffset.z = (item.tilePosition.y + 0.5f) * m_TileSize.y;
-
-#if 0
-            if(item.name == "Rover")
-            {
-                std::vector<float> yValues;
-                std::vector<float> sampledHeights;
-                std::vector<float> originalValues;
-
-                // Sample in 1/20th increments
-                for (float y = -3.0f; y <= 3.0f; y += 0.05f)  // 0.05 = 1/20
-                {
-                    int x = static_cast<int>(floor(item.tilePosition.x));
-                    int ogY = static_cast<int>(floor(y + item.tilePosition.y));
-                    float h1 = terrain[ogY * (m_TextureSize.x + 1) + x];
-                    originalValues.push_back(h1);
-
-                    yValues.push_back(y + item.tilePosition.y);
-                    float sampledHeight = sampleTerrain(terrain, item.tilePosition + float2{0.0f, y}, nullptr);
-                    sampledHeights.push_back(sampledHeight);
-                }
-
-                // Create JSON string
-                std::ostringstream jsonStream;
-                jsonStream << "{ \"values\": [";
-                for (size_t i = 0; i < yValues.size(); ++i)
-                {
-                    jsonStream << "[" << yValues[i] << ", " << sampledHeights[i] << ", " << originalValues[i] << "]";
-                    if (i < yValues.size() - 1) jsonStream << ", ";
-                }
-                jsonStream << "] }";
-
-                std::string jsonString = jsonStream.str();
-
-                printf("%s\n", jsonString.c_str());
-
-                _exit(0);
-            }
-#endif
+            float3 worldOffset = levelPlane(ul, br, terrain, terrainSlopePtr, heightFactor, waterHeight);
 
             worldOffset += item.worldOffset;
 
