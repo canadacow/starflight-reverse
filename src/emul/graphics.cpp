@@ -5521,6 +5521,10 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData, s_gc.renderParams.HeightFactor);
 
+    // Update the terrain movement y position to the height of the terrain
+    float height = s_gc.terrain.dynamicMesh->GetHeightAtTerrain(float2{ s_gc.terrainMovement.x, s_gc.terrainMovement.z }, terrainData, s_gc.renderParams.HeightFactor);
+    s_gc.terrainMovement.y = -85.0f - height;
+
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();
 
@@ -6423,7 +6427,7 @@ void DrawUI()
         // Planet List/Geography
         {
             float windowWidth = 600.0f;
-            float windowHeight = 600.0f;
+            float windowHeight = 700.0f;
             float windowX = (WINDOW_WIDTH - windowWidth) / 2.0f;
             float windowY = (WINDOW_HEIGHT - windowHeight) / 2.0f;
 
@@ -6441,7 +6445,21 @@ void DrawUI()
                 sprintf(heightFactorLabel, "Height Factor: %.2f", s_gc.renderParams.HeightFactor);
                 nk_label(&ctx, heightFactorLabel, NK_TEXT_LEFT);
                 nk_layout_row_dynamic(&ctx, 25, 1);
-                nk_slider_float(&ctx, 1.0f, &s_gc.renderParams.HeightFactor, 2.6f, 0.02f);
+                nk_slider_float(&ctx, 0.0f, &s_gc.renderParams.HeightFactor, 2.6f, 0.02f);
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                char terrainYLabel[64];
+                sprintf(terrainYLabel, "Terrain Y: %.2f", s_gc.terrainMovement.y);
+                nk_label(&ctx, terrainYLabel, NK_TEXT_LEFT);
+
+                {
+                    nk_layout_row_dynamic(&ctx, 25, 1);
+                    SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
+
+                    float height = s_gc.terrain.dynamicMesh->GetHeightAtTerrain(float2{ s_gc.terrainMovement.x, s_gc.terrainMovement.z }, terrainData, s_gc.renderParams.HeightFactor);
+                    sprintf(terrainYLabel, "Height at Terrain: %.2f", height);
+                    nk_label(&ctx, terrainYLabel, NK_TEXT_LEFT);
+                }
 
                 nk_layout_row_dynamic(&ctx, 500, 1);
                 if (nk_group_begin(&ctx, "Planets", NK_WINDOW_BORDER)) {
@@ -6590,6 +6608,7 @@ void DrawUI()
             }
             nk_end(&ctx);
 
+            if(false) // Skip reference image for now
             {
                 static struct nk_image refImage = nk_image_id(0); // Initialize with null image
                 static bool refImageLoaded = false;
@@ -6617,8 +6636,15 @@ void DrawUI()
                 // Create a window for the reference image
                 float refWindowWidth = WINDOW_WIDTH;
                 float refWindowHeight = WINDOW_HEIGHT;
-                float refWindowX = 0.0f;
-                float refWindowY = 0.0f;
+                
+                // Center the window at 25% horizontal and 30% vertical of the reference image
+                // Calculate the target point on the reference image
+                float targetX = refWindowWidth * 0.221f;
+                float targetY = refWindowHeight * 0.285f;
+                
+                // Position the window so its center aligns with the target point
+                float refWindowX = (refWindowWidth / 2.0f) - targetX;
+                float refWindowY = (refWindowHeight / 2.0f) - targetY;
 
                 // Push transparent window style
                 nk_style_push_color(&ctx, &s->window.background, nk_rgba(0, 0, 0, 128)); // Semi-transparent black background
@@ -8498,7 +8524,7 @@ void GraphicsUpdate()
 
     auto now = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration<float>(now - frameSync.uiTriggerTimestamp).count();
-    uniform.menuVisibility = 0.50f; // frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
+    uniform.menuVisibility = frameSync.uiTrigger.at(static_cast<Magnum::Float>(duration));
     uniform.blurAmount = 20.0f; // emulationThreadRunning ? 20.0f : 0.0f;
     
     // If we're in a system, nebulas behave a little differently

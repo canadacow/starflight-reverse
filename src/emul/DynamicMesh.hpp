@@ -53,6 +53,8 @@ public:
     void SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor);
     void ClearTerrainItems();
 
+    float GetHeightAtTerrain(float2 position, const TerrainData& terrain, float heightFactor);
+
     virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
 
     virtual void ComputeTransforms(Uint32           SceneIndex,

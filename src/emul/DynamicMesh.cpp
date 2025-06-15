@@ -962,6 +962,12 @@ float3 DynamicMesh::levelPlane(float2 ul, float2 br, const TerrainData& terrain,
     return (corners[0] + corners[1] + corners[2] + corners[3] + corners[4]) / 5.0f;
 }
 
+float DynamicMesh::GetHeightAtTerrain(float2 position, const TerrainData& terrain, float heightFactor)
+{
+    float2 tilePosition = position / m_TileSize;
+    return sampleTerrainLinear(terrain, tilePosition, heightFactor);
+}
+
 void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor)
 {
     ClearTerrainItems();
