@@ -562,6 +562,22 @@ PSOutput main(in VSOutput VSOut,
         waterPBRProperties = ComputeWaterProperties(VSOut, AnimationTime);        
 
         BaseColor = float4(waterPBRProperties.BaseLayer.Srf.Reflectance0, 1.0);
+
+        // Simple animated shoreline effect
+        float distanceToWaterHeight = g_Terrain.waterHeight - VSOut.Height;
+        float shorelineWidth = 0.1; // Width of the shoreline effect
+        
+        if (distanceToWaterHeight < shorelineWidth)
+        {
+            // Create a simple animated wave pattern
+            float waveHeight = sin(AnimationTime * 3.0 * distanceToWaterHeight) * 0.01;
+            
+            float lineIntensity = waveHeight;
+
+            //BaseColor.rgb = lerp(BaseColor.rgb, float3(1.0, 1.0, 1.0), lineIntensity);
+            //BaseColor.rgb = float3(1.0, 1.0, 1.0);
+            waterPBRProperties.BaseLayer.Srf = GetSurfaceReflectanceMR(float3(1.0, 1.0, 1.0), 0.0, 0.2);
+        }
     }
 #endif
 
