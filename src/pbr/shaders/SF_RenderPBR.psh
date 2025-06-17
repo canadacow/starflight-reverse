@@ -518,6 +518,129 @@ SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime
 
 #endif
 
+// Water map parameters
+const float large_wavesize = 1.0;
+const float large_waveheight = 0.4;
+const float small_wavesize = 3.0;
+const float small_waveheight = 0.15;
+const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+
+// Simple noise function
+float ocean_hash(float2 p) {
+    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float ocean_noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    
+    float a = ocean_hash(i);
+    float b = ocean_hash(i + float2(1.0, 0.0));
+    float c = ocean_hash(i + float2(0.0, 1.0));
+    float d = ocean_hash(i + float2(1.0, 1.0));
+    
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+// Water map function
+float water_map( float2 p, float height, float animationTime)
+{
+  float2 p2 = p*large_wavesize;
+  float2 shift1 = 0.001*float2( animationTime*160.0*2.0, animationTime*120.0*2.0 );
+  float2 shift2 = 0.001*float2( animationTime*190.0*2.0, -animationTime*130.0*2.0 );
+
+  // coarse crossing 'ocean' waves...
+  float f = 0.6000*ocean_noise( p );
+  f += 0.2500*ocean_noise( p*m );
+  f += 0.1666*ocean_noise( p*m*m );
+  float wave = sin(p2.x*0.622+p2.y*0.622+shift2.x*4.269)*large_waveheight*f*height*height ;
+
+  p *= small_wavesize;
+  f = 0.;
+  float amp = 1.0, s = .5;
+  for (int i=0; i<9; i++)
+  { p = m*p*.947; f -= amp*abs(sin((ocean_noise( p+shift1*s )-.5)*2.)); amp = amp*.59; s*=-1.329; }
+ 
+  return wave+f*small_waveheight;
+}
+
+// Multi-octave noise with realistic time scaling for ocean waves
+float fbmOcean(float2 p, float time) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+    float timeScale = 1.0;
+    
+    for (int i = 0; i < 4; i++) {
+        // Each octave moves at a different time scale - larger waves slower, smaller waves faster
+        value += amplitude * ocean_noise(p * frequency + time * timeScale * 0.1);
+        
+        amplitude *= 0.5;
+        frequency *= 2.0;
+        timeScale *= 1.8; // Smaller waves move faster
+    }
+    return value;
+}
+
+float3 getOceanColor(float2 uv, float animationTime, float waterHeight, float currentHeight)
+    float shorelineWidth = 0.75;
+    
+    float distanceToWaterHeight = waterHeight - currentHeight;
+
+    // Base ocean color based on depth
+    float depth = waterHeight - currentHeight;
+    float3 deepColor = float3(0.0, 0.1, 0.3);
+    float3 shallowColor = float3(0.1, 0.4, 0.7);
+    float depthFactor = clamp(depth / 3.0, 0.0, 1.0);
+    float3 color = lerp(shallowColor, deepColor, depthFactor);
+    
+    // Use water_map for ocean waves - zoomed in for better detail
+    float2 wavePos = uv / 3.0; // Zoom into the water map
+    float heightParam = 1.0 - clamp(distanceToWaterHeight / 3.0, 0.0, 1.0); // Height based on distance to shore
+    float waveValue = water_map(wavePos, heightParam + 0.5, animationTime); // Add base height
+    
+    // Blend with shoreline - keep your original shoreline blending
+    float shoreProximity = 1.0 - clamp(distanceToWaterHeight / shorelineWidth, 0.0, 1.0);
+    
+    // Apply shoreline wave blending if close to shore
+    if (distanceToWaterHeight < shorelineWidth) {
+        float effectiveDistance = distanceToWaterHeight;
+        
+        // Your exact same wave formula for shoreline
+        float spatialFreq = (1.5 * 2.0 * 3.14159) / shorelineWidth;
+        
+        // Realistic time-offset noise patterns
+        float2 intensityCoord = float2(uv.x, effectiveDistance * 4.0);
+        float waveIntensity = fbmOcean(intensityCoord, animationTime * 0.3);
+        
+        float2 freqCoord = float2(uv.x, effectiveDistance * 2.0);
+        float freqMod = 1.0 + fbmOcean(freqCoord, animationTime * 0.1) * 1.8;
+        
+        float2 phaseCoord = float2(uv.x, animationTime * 0.8);
+        float phaseNoise = fbmOcean(phaseCoord, animationTime * 0.4) * 2.5;
+        
+        // Main shoreline wave
+        float shorelineWave = sin(animationTime * 3.0 + effectiveDistance * spatialFreq * freqMod + phaseNoise);
+        float shorelineIntensity = waveIntensity * shoreProximity;
+        float finalShorelineWave = shorelineWave * shorelineIntensity;
+        
+        // Blend water_map with shoreline waves
+        waveValue = lerp(waveValue, finalShorelineWave, shoreProximity);
+    }
+    
+    // Apply wave effects to color
+    if (waveValue > 0.0) {
+        float foamIntensity = waveValue * (0.4 + shoreProximity * 0.5);
+        color = lerp(color, float3(0.95, 0.98, 1.0), clamp(foamIntensity, 0.0, 0.8));
+    }
+    
+    // Wave color variation
+    color += float3(waveValue * 0.3, waveValue * 0.4, waveValue * 0.5) * (0.5 + shoreProximity * 0.5);
+
+    return color;
+}
+
 PSOutput main(in VSOutput VSOut,
               in bool     IsFrontFace : SV_IsFrontFace)
 {
@@ -558,26 +681,8 @@ PSOutput main(in VSOutput VSOut,
 
     if(VSOut.Height < g_Terrain.waterHeight)
     {
-        float AnimationTime = g_Frame.Renderer.Time * 0.9;
-        waterPBRProperties = ComputeWaterProperties(VSOut, AnimationTime);        
-
-        BaseColor = float4(waterPBRProperties.BaseLayer.Srf.Reflectance0, 1.0);
-
-        // Simple animated shoreline effect
-        float distanceToWaterHeight = g_Terrain.waterHeight - VSOut.Height;
-        float shorelineWidth = 0.1; // Width of the shoreline effect
-        
-        if (distanceToWaterHeight < shorelineWidth)
-        {
-            // Create a simple animated wave pattern
-            float waveHeight = sin(AnimationTime * 3.0 * distanceToWaterHeight) * 0.01;
-            
-            float lineIntensity = waveHeight;
-
-            //BaseColor.rgb = lerp(BaseColor.rgb, float3(1.0, 1.0, 1.0), lineIntensity);
-            //BaseColor.rgb = float3(1.0, 1.0, 1.0);
-            waterPBRProperties.BaseLayer.Srf = GetSurfaceReflectanceMR(float3(1.0, 1.0, 1.0), 0.0, 0.2);
-        }
+        float3 oceanColor = getOceanColor(float2(VSOut.WorldPos.x, VSOut.WorldPos.z), (g_Frame.Renderer.Time * 0.9), g_Terrain.waterHeight, VSOut.Height);
+        BaseColor.rgb = oceanColor;
     }
 #endif
 
