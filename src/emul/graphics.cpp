@@ -5477,21 +5477,21 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
             SF_GLTF::TerrainItem mineral{ "Mineral", worldCoord, float3{}, Quaternion<float>{}, true };
             terrainItems.push_back(mineral);
         }
-        SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
+        SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
         terrainItems.push_back(miningSymbol);
     };
 
     auto addRuin = [&terrainItems](float2 worldCoord) {
         SF_GLTF::TerrainItem ruin{ "AncientRuin", worldCoord, float3{}, Quaternion<float>{}, true };
         terrainItems.push_back(ruin);
-        SF_GLTF::TerrainItem ruinSymbol{ "AncientRuinSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
+        SF_GLTF::TerrainItem ruinSymbol{ "AncientRuinSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
         terrainItems.push_back(ruinSymbol);
     };
 
     auto addSpaceship = [&terrainItems](float2 worldCoord) {
         SF_GLTF::TerrainItem spaceship{ "SF_Ramp", worldCoord, float3{}, Quaternion<float>{}, true };
         terrainItems.push_back(spaceship);
-        SF_GLTF::TerrainItem spaceshipSymbol{ "Starship", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
+        SF_GLTF::TerrainItem spaceshipSymbol{ "Starship", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
         terrainItems.push_back(spaceshipSymbol);
     };
     
