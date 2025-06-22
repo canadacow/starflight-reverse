@@ -1065,12 +1065,39 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
 
         if (it != m_Model->Nodes.end())
         {
-            Node ourNode{static_cast<int>(Nodes.size())};
-
-            ourNode.Name = it->Name;
-            ourNode.pMesh = it->pMesh;
-            ourNode.Translation = float3{0.0f, 0.0f, 0.0f};
-            ourNode.Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
+            // Special cases that always get their own node
+            bool isSpecialCase = (item.name == "Rover" || item.name == "SF_Ramp" || item.name == "Endurium");
+            
+            Node* targetNode = nullptr;
+            
+            if (!isSpecialCase)
+            {
+                // Check if a node with this name already exists
+                auto existingNodeIt = std::find_if(Nodes.begin() + 1, Nodes.end(), [&item](const Node& node) {
+                    return std::equal(node.Name.begin(), node.Name.end(), item.name.begin(), item.name.end(),
+                                    [](char a, char b) { return tolower(a) == tolower(b); });
+                });
+                
+                if (existingNodeIt != Nodes.end())
+                {
+                    targetNode = &(*existingNodeIt);
+                }
+            }
+            
+            // Create new node if needed
+            if (targetNode == nullptr)
+            {
+                Nodes.emplace_back(static_cast<int>(Nodes.size()));
+                targetNode = &Nodes.back();
+                
+                targetNode->Name = it->Name;
+                targetNode->pMesh = it->pMesh;
+                targetNode->Translation = float3{0.0f, 0.0f, 0.0f};
+                targetNode->Rotation = Quaternion<float>{0.0f, 0.0f, 0.0f, 1.0f};
+                
+                Scenes[0].LinearNodes.push_back(targetNode);
+                Scenes[0].RootNodes.push_back(targetNode);
+            }
 
             NodeInstance ni;
             float4x4 terrainSlope = float4x4::Identity();
@@ -1104,16 +1131,10 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
             
-            // Special handling for Rover - don't add instance, use Matrix directly
-            if (item.name == "Rover") {
-                ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
-                // Don't add any instances for the Rover
-            } else if (item.name == "SF_Ramp") {
-                ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
-                // Don't add any instances for the SF_Ramp
-            } else if (item.name == "Endurium") {
-                ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
-                // Don't add any instances for the Endurium
+            // Special handling for items that use Matrix directly instead of instances
+            if (isSpecialCase) {
+                targetNode->Matrix = rotationMatrix * terrainSlope * translationMatrix;
+                // Don't add any instances for special cases
             } else {
                 // For all other items, use the instance approach
                 ni.NodeMatrix = rotationMatrix * terrainSlope * translationMatrix;
@@ -1121,42 +1142,41 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
                 ni.ScaleY = 1.0f;
                 ni.OffsetX = 0.0f;
                 ni.OffsetY = 0.0f;
-                ourNode.Instances.push_back(ni);
+                targetNode->Instances.push_back(ni);
             }
 
-            Nodes.emplace_back(ourNode);
-            Scenes[0].LinearNodes.push_back(&Nodes.back());
-            Scenes[0].RootNodes.push_back(&Nodes.back());
-
-            // Check if this item has any light children
-            bool hasLights = false;
-            for (const auto& child : it->Children)
+            // Check if this item has any light children (only for newly created nodes)
+            if (targetNode == &Nodes.back()) // Only process lights for newly created nodes
             {
-                if (child->pLight != nullptr)
-                {
-                    hasLights = true;
-                    break;
-                }
-            }
-
-            if(hasLights)
-            {
-                Node* parentNode = &Nodes.back();
-                
+                bool hasLights = false;
                 for (const auto& child : it->Children)
                 {
                     if (child->pLight != nullptr)
                     {
-                        Node lightNode = *child;
-                        auto& newNode = Nodes.emplace_back(lightNode);
-                        newNode.Index = Nodes.size() - 1;
-                        
-                        newNode.Parent = parentNode;
-                        parentNode->Children.push_back(&newNode);
-                        
-                        Scenes[0].LinearNodes.push_back(&newNode);
+                        hasLights = true;
+                        break;
+                    }
+                }
 
-                        lights.push_back(&newNode);
+                if(hasLights)
+                {
+                    Node* parentNode = targetNode;
+                    
+                    for (const auto& child : it->Children)
+                    {
+                        if (child->pLight != nullptr)
+                        {
+                            Node lightNode = *child;
+                            auto& newNode = Nodes.emplace_back(lightNode);
+                            newNode.Index = Nodes.size() - 1;
+                            
+                            newNode.Parent = parentNode;
+                            parentNode->Children.push_back(&newNode);
+                            
+                            Scenes[0].LinearNodes.push_back(&newNode);
+
+                            lights.push_back(&newNode);
+                        }
                     }
                 }
             }
