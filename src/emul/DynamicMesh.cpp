@@ -1108,6 +1108,12 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             if (item.name == "Rover") {
                 ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
                 // Don't add any instances for the Rover
+            } else if (item.name == "SF_Ramp") {
+                ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
+                // Don't add any instances for the SF_Ramp
+            } else if (item.name == "Endurium") {
+                ourNode.Matrix = rotationMatrix * terrainSlope * translationMatrix;
+                // Don't add any instances for the Endurium
             } else {
                 // For all other items, use the instance approach
                 ni.NodeMatrix = rotationMatrix * terrainSlope * translationMatrix;
