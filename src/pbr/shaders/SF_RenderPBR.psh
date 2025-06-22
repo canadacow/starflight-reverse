@@ -519,20 +519,20 @@ SurfaceShadingInfo ComputeWaterProperties(in VSOutput VSOut, float AnimationTime
 #endif
 
 // Water map parameters
-const float large_wavesize = 1.0;
-const float large_waveheight = 0.4;
-const float small_wavesize = 3.0;
-const float small_waveheight = 0.15;
-const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+static const float large_wavesize = 1.0;
+static const float large_waveheight = 0.4;
+static const float small_wavesize = 3.0;
+static const float small_waveheight = 0.15;
+static const float2x2 m = float2x2(1.6, 1.2, -1.2, 1.6);
 
 // Simple noise function
 float ocean_hash(float2 p) {
-    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
 }
 
 float ocean_noise(float2 p) {
     float2 i = floor(p);
-    float2 f = fract(p);
+    float2 f = frac(p);
     
     float a = ocean_hash(i);
     float b = ocean_hash(i + float2(1.0, 0.0));
@@ -552,15 +552,15 @@ float water_map( float2 p, float height, float animationTime)
 
   // coarse crossing 'ocean' waves...
   float f = 0.6000*ocean_noise( p );
-  f += 0.2500*ocean_noise( p*m );
-  f += 0.1666*ocean_noise( p*m*m );
+  f += 0.2500*ocean_noise( mul(p, m) );
+  f += 0.1666*ocean_noise( mul(mul(p, m), m) );
   float wave = sin(p2.x*0.622+p2.y*0.622+shift2.x*4.269)*large_waveheight*f*height*height ;
 
   p *= small_wavesize;
   f = 0.;
   float amp = 1.0, s = .5;
   for (int i=0; i<9; i++)
-  { p = m*p*.947; f -= amp*abs(sin((ocean_noise( p+shift1*s )-.5)*2.)); amp = amp*.59; s*=-1.329; }
+  { p = mul(mul(p, m), .947); f -= amp*abs(sin((ocean_noise( p+shift1*s )-.5)*2.)); amp = amp*.59; s*=-1.329; }
  
   return wave+f*small_waveheight;
 }
@@ -584,6 +584,7 @@ float fbmOcean(float2 p, float time) {
 }
 
 float3 getOceanColor(float2 uv, float animationTime, float waterHeight, float currentHeight)
+{
     float shorelineWidth = 0.75;
     
     float distanceToWaterHeight = waterHeight - currentHeight;
@@ -681,7 +682,7 @@ PSOutput main(in VSOutput VSOut,
 
     if(VSOut.Height < g_Terrain.waterHeight)
     {
-        float3 oceanColor = getOceanColor(float2(VSOut.WorldPos.x, VSOut.WorldPos.z), (g_Frame.Renderer.Time * 0.9), g_Terrain.waterHeight, VSOut.Height);
+        float3 oceanColor = getOceanColor(float2(VSOut.WorldPos.x, VSOut.WorldPos.z) * 2.0, (g_Frame.Renderer.Time * 0.9), g_Terrain.waterHeight, VSOut.Height);
         BaseColor.rgb = oceanColor;
     }
 #endif
