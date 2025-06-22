@@ -5466,39 +5466,61 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float3{}, s_gc.tvRotation, true };
     terrainItems.push_back(rover);
 
-    auto addMineral = [&terrainItems](float2 worldCoord) {
-        SF_GLTF::TerrainItem mineral{ "Mineral", worldCoord, float3{}, Quaternion<float>{}, true };
-        terrainItems.push_back(mineral);
+    auto addMineral = [&terrainItems](float2 worldCoord, int type = 0) {
+        if( type == 6 )
+        {
+            SF_GLTF::TerrainItem mineral{ "Endurium", worldCoord, float3{}, Quaternion<float>{}, true };
+            terrainItems.push_back(mineral);
+        }
+        else
+        {
+            SF_GLTF::TerrainItem mineral{ "Mineral", worldCoord, float3{}, Quaternion<float>{}, true };
+            terrainItems.push_back(mineral);
+        }
         SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
         terrainItems.push_back(miningSymbol);
     };
 
-    addMineral({2021.0f, 960.0f - 287.0f}); // Element at index 0, quantity 43, type 6
+    auto addRuin = [&terrainItems](float2 worldCoord) {
+        SF_GLTF::TerrainItem ruin{ "AncientRuin", worldCoord, float3{}, Quaternion<float>{}, true };
+        terrainItems.push_back(ruin);
+        SF_GLTF::TerrainItem ruinSymbol{ "AncientRuinSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
+        terrainItems.push_back(ruinSymbol);
+    };
+
+    auto addSpaceship = [&terrainItems](float2 worldCoord) {
+        SF_GLTF::TerrainItem spaceship{ "SF_Ramp", worldCoord, float3{}, Quaternion<float>{}, true };
+        terrainItems.push_back(spaceship);
+        SF_GLTF::TerrainItem spaceshipSymbol{ "Starship", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, true };
+        terrainItems.push_back(spaceshipSymbol);
+    };
     
-    SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{2022.0f, 960.0f - 288.0f}, float3{}, Quaternion<float>{}, true }; // Ruin at index 1, species 2
-    terrainItems.push_back(ruin);
-    
-    addMineral({2031.0f, 960.0f - 290.0f}); // Element at index 2, quantity 41, type 12
-    addMineral({2026.0f, 960.0f - 274.0f}); // Element at index 3, quantity 81, type 11
-    addMineral({2025.0f, 960.0f - 293.0f}); // Element at index 4, quantity 11, type 5
-    addMineral({2023.0f, 960.0f - 271.0f}); // Element at index 5, quantity 18, type 11
-    addMineral({2021.0f, 960.0f - 290.0f}); // Element at index 6, quantity 61, type 12
-    addMineral({2028.0f, 960.0f - 275.0f}); // Element at index 7, quantity 31, type 12
-    addMineral({2027.0f, 960.0f - 279.0f}); // Element at index 8, quantity 21, type 5
-    addMineral({2022.0f, 960.0f - 295.0f}); // Element at index 9, quantity 33, type 12
-    addMineral({2019.0f, 960.0f - 289.0f}); // Element at index 10, quantity 25, type 15
-    addMineral({2019.0f, 960.0f - 289.0f}); // Element at index 11, quantity 89, type 11
-    addMineral({2016.0f, 960.0f - 287.0f}); // Element at index 12, quantity 58, type 3
-    addMineral({2016.0f, 960.0f - 277.0f}); // Element at index 13, quantity 66, type 11
-    addMineral({1998.0f, 960.0f - 293.0f}); // Element at index 14, quantity 40, type 15
-    addMineral({1998.0f, 960.0f - 280.0f}); // Element at index 15, quantity 40, type 11
-    addMineral({2005.0f, 960.0f - 283.0f}); // Element at index 16, quantity 95, type 11
-    addMineral({2001.0f, 960.0f - 287.0f}); // Element at index 17, quantity 62, type 11
-    addMineral({2014.0f, 960.0f - 293.0f}); // Element at index 18, quantity 41, type 11
-    addMineral({1999.0f, 960.0f - 296.0f}); // Element at index 19, quantity 80, type 11
-    addMineral({2019.0f, 960.0f - 298.0f}); // Element at index 20, quantity 99, type 11
-    addMineral({2016.0f, 960.0f - 299.0f}); // Element at index 21, quantity 92, type 11
-    addMineral({2034.0f, 960.0f - 274.0f}); // Element at index 23, quantity 76, type 12
+    addRuin({2022.0f, 960.0f - 288.0f}); // Ruin at index 1, species 2
+    addMineral({2021.0f, 960.0f - 287.0f}, 6); // Element at index 0, quantity 43, type 6
+
+    addMineral({2031.0f, 960.0f - 290.0f}, 12); // Element at index 2, quantity 41, type 12
+    addMineral({2026.0f, 960.0f - 274.0f}, 11); // Element at index 3, quantity 81, type 11
+    addMineral({2025.0f, 960.0f - 293.0f}, 5); // Element at index 4, quantity 11, type 5
+    addMineral({2023.0f, 960.0f - 271.0f}, 11); // Element at index 5, quantity 18, type 11
+    addMineral({2021.0f, 960.0f - 290.0f}, 12); // Element at index 6, quantity 61, type 12
+    addMineral({2028.0f, 960.0f - 275.0f}, 12); // Element at index 7, quantity 31, type 12
+    addMineral({2027.0f, 960.0f - 279.0f}, 5); // Element at index 8, quantity 21, type 5
+    addMineral({2022.0f, 960.0f - 295.0f}, 12); // Element at index 9, quantity 33, type 12
+    addMineral({2019.0f, 960.0f - 289.0f}, 15); // Element at index 10, quantity 25, type 15
+    addMineral({2019.0f, 960.0f - 289.0f}, 11); // Element at index 11, quantity 89, type 11
+    addMineral({2016.0f, 960.0f - 287.0f}, 3); // Element at index 12, quantity 58, type 3
+    addMineral({2016.0f, 960.0f - 277.0f}, 11); // Element at index 13, quantity 66, type 11
+    addMineral({1998.0f, 960.0f - 293.0f}, 15); // Element at index 14, quantity 40, type 15
+    addMineral({1998.0f, 960.0f - 280.0f}, 11); // Element at index 15, quantity 40, type 11
+    addMineral({2005.0f, 960.0f - 283.0f}, 11); // Element at index 16, quantity 95, type 11
+    addMineral({2001.0f, 960.0f - 287.0f}, 11); // Element at index 17, quantity 62, type 11
+    addMineral({2014.0f, 960.0f - 293.0f}, 11); // Element at index 18, quantity 41, type 11
+    addMineral({1999.0f, 960.0f - 296.0f}, 11); // Element at index 19, quantity 80, type 11
+    addMineral({2019.0f, 960.0f - 298.0f}, 11); // Element at index 20, quantity 99, type 11
+    addMineral({2016.0f, 960.0f - 299.0f}, 11); // Element at index 21, quantity 92, type 11
+    addMineral({2034.0f, 960.0f - 274.0f}, 12); // Element at index 23, quantity 76, type 12
+
+    addSpaceship({2011.0f, 960.0f - 287.0f});
 
     //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
     //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
@@ -7658,10 +7680,22 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
     {
         auto baseModelTransform = QuaternionF::RotationFromAxisAngle(float3{ -1.f, 0.0f, 0.0f }, -PI_F / 2.f).ToMatrix();
 
-        LightCount = std::min(static_cast<Uint32>(model.lights.size()), s_gc.pbrRenderer->GetSettings().MaxLightCount);
-        for (int i = 0; i < LightCount; ++i)
+        int i = 0;
+        for(auto& light : model.lights)
         {
-            const auto& LightNode = *model.lights[i];
+            const auto& LightNode = *light;
+
+            if(model.dynamicMesh)
+            {
+                if(std::find_if(model.dynamicMesh->Nodes.begin(), model.dynamicMesh->Nodes.end(), 
+                    [&LightNode](const auto& node) { 
+                        return node.pLight == LightNode.pLight; 
+                    }) != model.dynamicMesh->Nodes.end())
+                {
+                    continue;
+                }
+            }
+
             auto LightGlobalTransform = model.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[LightNode.Index];
 
             SF_GLTF::Light l = *LightNode.pLight;
@@ -7712,6 +7746,9 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFM
             }
             
             SF_GLTF_PBR_Renderer::WritePBRLightShaderAttribs(AttribsData, Lights + i);
+
+            ++LightCount;
+            ++i;
         }
     }
     else

@@ -1122,10 +1122,21 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             Scenes[0].LinearNodes.push_back(&Nodes.back());
             Scenes[0].RootNodes.push_back(&Nodes.back());
 
-            if(item.name == "Rover")
+            // Check if this item has any light children
+            bool hasLights = false;
+            for (const auto& child : it->Children)
             {
-                Node* roverNode = &Nodes.back();
+                if (child->pLight != nullptr)
+                {
+                    hasLights = true;
+                    break;
+                }
+            }
 
+            if(hasLights)
+            {
+                Node* parentNode = &Nodes.back();
+                
                 for (const auto& child : it->Children)
                 {
                     if (child->pLight != nullptr)
@@ -1134,8 +1145,8 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
                         auto& newNode = Nodes.emplace_back(lightNode);
                         newNode.Index = Nodes.size() - 1;
                         
-                        newNode.Parent = roverNode;
-                        roverNode->Children.push_back(&newNode);
+                        newNode.Parent = parentNode;
+                        parentNode->Children.push_back(&newNode);
                         
                         Scenes[0].LinearNodes.push_back(&newNode);
 
