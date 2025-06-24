@@ -5471,14 +5471,17 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
         {
             SF_GLTF::TerrainItem mineral{ "Endurium", worldCoord, float3{}, Quaternion<float>{}, true };
             terrainItems.push_back(mineral);
+            SF_GLTF::TerrainItem miningSymbol{ "EnduriumSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
+            terrainItems.push_back(miningSymbol);
         }
         else
         {
             SF_GLTF::TerrainItem mineral{ "Mineral", worldCoord, float3{}, Quaternion<float>{}, true };
             terrainItems.push_back(mineral);
+            SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
+            terrainItems.push_back(miningSymbol);
+
         }
-        SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
-        terrainItems.push_back(miningSymbol);
     };
 
     auto addRuin = [&terrainItems](float2 worldCoord) {
