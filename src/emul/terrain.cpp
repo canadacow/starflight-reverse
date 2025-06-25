@@ -149,13 +149,17 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
             
             // Random rotation for visual variety
             float rotAngle = RockNoise(worldX, worldY, 0.25f, seed + 500) * 6.28318f;
+
+            // Random scale for visual variety (0.8 to 1.2)
+            float scaleFactor = 0.8f + RockNoise(worldX, worldY, 0.15f, seed + 600) * 0.4f;
             
             TerrainItem rock{
                 rockName,
                 rockPos,
                 float3{0.0f, 0.0f, 0.0f},
                 Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotAngle),
-                false // no alignment to the ground
+                false, // no alignment to the ground
+                scaleFactor
             };
             
             terrainItems.push_back(rock);

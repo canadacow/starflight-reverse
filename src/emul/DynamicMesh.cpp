@@ -1130,14 +1130,16 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
 
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
+
+            float4x4 scaleMatrix = float4x4::Scale(item.scale, item.scale, item.scale);
             
             // Special handling for items that use Matrix directly instead of instances
             if (isSpecialCase) {
-                targetNode->Matrix = rotationMatrix * terrainSlope * translationMatrix;
+                targetNode->Matrix = scaleMatrix * rotationMatrix * terrainSlope * translationMatrix;
                 // Don't add any instances for special cases
             } else {
                 // For all other items, use the instance approach
-                ni.NodeMatrix = rotationMatrix * terrainSlope * translationMatrix;
+                ni.NodeMatrix = scaleMatrix * rotationMatrix * terrainSlope * translationMatrix;
                 ni.ScaleX = 1.0f;
                 ni.ScaleY = 1.0f;
                 ni.OffsetX = 0.0f;
