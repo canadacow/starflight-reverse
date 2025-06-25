@@ -109,6 +109,7 @@ void PrepareForNewFrame(void* pEpipolarLightScattering, EpipolarLightScattering:
 
 #include "../pbr/SF_GLTFLoader.hpp"
 #include "DynamicMesh.hpp"
+#include "terrain.h"
 
 //#define SF_PBR_Renderer GLTF_PBR_Renderer
 //#include "GLTF_PBR_Renderer.hpp"
@@ -5443,6 +5444,111 @@ void InitTerrain()
     }
 }
 
+void addRockFormations(std::vector<SF_GLTF::TerrainItem>& terrainItems, float2 centerPosition, float radius = 50.0f)
+{
+    // Simple noise implementation (you might want to use a proper noise library)
+    auto simpleNoise = [](float x, float y, float scale = 1.0f) -> float {
+        // Basic pseudo-random noise - replace with proper Perlin/Simplex noise
+        int ix = (int)(x * scale);
+        int iy = (int)(y * scale);
+        unsigned int seed = ix * 374761393 + iy * 668265263;
+        seed = (seed ^ (seed >> 13)) * 1274126177;
+        return (float)((seed & 0x7FFFFFFF) / (float)0x7FFFFFFF) * 2.0f - 1.0f;
+    };
+
+#if 0
+    // Rock placement parameters
+    const float rockDensity = 0.015f;        // Probability of rock placement
+    const float clusterStrength = 0.3f;      // How much rocks cluster together
+    const int sampleRate = 2;               // Sample every N units
+
+    // Sample area around center position
+    for (int x = -radius; x <= radius; x += sampleRate) {
+        for (int y = -radius; y <= radius; y += sampleRate) {
+            float2 worldPos = centerPosition + float2{(float)x, (float)y};
+            
+            // Distance-based falloff (fewer rocks at edges)
+            float distanceFromCenter = sqrt(x*x + y*y) / radius;
+            float falloff = 1.0f - (distanceFromCenter * distanceFromCenter);
+            if (falloff <= 0.0f) continue;
+            
+            // Primary noise for rock placement
+            float placementNoise = simpleNoise(worldPos.x, worldPos.y, 0.05f);
+            
+            // Secondary noise for clustering
+            float clusterNoise = simpleNoise(worldPos.x, worldPos.y, 0.02f);
+            
+            // Combine noises
+            float finalNoise = placementNoise + (clusterNoise * clusterStrength);
+            
+            // Determine if rock should be placed
+            float threshold = 0.7f - (rockDensity * falloff);
+            if (finalNoise > threshold) {
+                
+                // Select random rock variation (1-6)
+                int rockVariation = (int)(abs(simpleNoise(worldPos.x + 1000, worldPos.y + 1000, 0.1f)) * 6) + 1;
+                std::string rockName = "rock_moss_set_01_rock0" + std::to_string(rockVariation);
+                
+                // Random rotation
+                float rotationAngle = simpleNoise(worldPos.x + 500, worldPos.y + 500, 0.1f) * 3.14159f * 2.0f;
+                Quaternion<float> rotation = Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotationAngle);
+                
+                // Slight random height offset for variation
+                float heightOffset = simpleNoise(worldPos.x + 2000, worldPos.y + 2000, 0.2f) * 0.5f;
+                
+                SF_GLTF::TerrainItem rock{
+                    rockName,
+                    worldPos,
+                    float3{0.0f, heightOffset, 0.0f},
+                    rotation,
+                    false
+                };
+                
+                terrainItems.push_back(rock);
+            }
+        }
+    }
+#else
+    float2 samplePostion = { 2021.0f, 960.0f - 287.0f };
+    // Create a tight cluster of rocks exactly at samplePosition
+    centerPosition = samplePostion;
+    int clusterSize = 8; // Number of rocks in the cluster
+    float clusterRadius = 15.0f; // Tight radius for clustering
+    
+    for (int i = 0; i < clusterSize; i++) {
+        // Generate random offset within cluster radius
+        float angle = simpleNoise(centerPosition.x + i * 100, centerPosition.y + i * 100, 0.1f) * 3.14159f * 2.0f;
+        float distance = simpleNoise(centerPosition.x + i * 200, centerPosition.y + i * 200, 0.1f) * clusterRadius;
+        
+        float2 worldPos = centerPosition + float2{
+            cos(angle) * distance,
+            sin(angle) * distance
+        };
+        
+        // Select random rock variation (1-6)
+        int rockVariation = (int)(abs(simpleNoise(worldPos.x + 1000, worldPos.y + 1000, 0.1f)) * 6) + 1;
+        std::string rockName = "rock_moss_set_01_rock0" + std::to_string(rockVariation);
+        
+        // Random rotation
+        float rotationAngle = simpleNoise(worldPos.x + 500, worldPos.y + 500, 0.1f) * 3.14159f * 2.0f;
+        Quaternion<float> rotation = Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotationAngle);
+        
+        // Slight random height offset for variation
+        float heightOffset = simpleNoise(worldPos.x + 2000, worldPos.y + 2000, 0.2f) * 0.5f;
+        
+        SF_GLTF::TerrainItem rock{
+            rockName,
+            worldPos,
+            float3{0.0f, heightOffset, 0.0f},
+            rotation,
+            false
+        };
+        
+        terrainItems.push_back(rock);
+    }
+#endif
+}
+
 void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
@@ -5458,87 +5564,8 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     const float rotationLerpFactor = 0.1f;
     s_gc.tvRotation = slerp(s_gc.tvRotation, s_gc.tvNudge, rotationLerpFactor);
 
-    //s_gc.terrainTextureOffset.x = s_gc.terrainMovement.x / s_gc.terrainSize.x;
-    //s_gc.terrainTextureOffset.y = s_gc.terrainMovement.z / s_gc.terrainSize.y;
-
-    std::vector<SF_GLTF::TerrainItem> terrainItems;
-
-    SF_GLTF::TerrainItem rover{ "Rover", s_gc.tvLocation, float3{}, s_gc.tvRotation, true };
-    terrainItems.push_back(rover);
-
-    auto addMineral = [&terrainItems](float2 worldCoord, int type = 0) {
-        if( type == 6 )
-        {
-            SF_GLTF::TerrainItem mineral{ "Endurium", worldCoord, float3{}, Quaternion<float>{}, true };
-            terrainItems.push_back(mineral);
-            SF_GLTF::TerrainItem miningSymbol{ "EnduriumSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
-            terrainItems.push_back(miningSymbol);
-        }
-        else
-        {
-            SF_GLTF::TerrainItem mineral{ "Mineral", worldCoord, float3{}, Quaternion<float>{}, true };
-            terrainItems.push_back(mineral);
-            SF_GLTF::TerrainItem miningSymbol{ "MiningSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
-            terrainItems.push_back(miningSymbol);
-
-        }
-    };
-
-    auto addRuin = [&terrainItems](float2 worldCoord) {
-        SF_GLTF::TerrainItem ruin{ "AncientRuin", worldCoord, float3{}, Quaternion<float>{}, true };
-        terrainItems.push_back(ruin);
-        SF_GLTF::TerrainItem ruinSymbol{ "AncientRuinSymbol", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
-        terrainItems.push_back(ruinSymbol);
-    };
-
-    auto addSpaceship = [&terrainItems](float2 worldCoord) {
-        SF_GLTF::TerrainItem spaceship{ "SF_Ramp", worldCoord, float3{}, Quaternion<float>{}, true };
-        terrainItems.push_back(spaceship);
-        SF_GLTF::TerrainItem spaceshipSymbol{ "Starship", worldCoord, float3{0.0f, 5.0f, 0.0f}, Quaternion<float>{}, false };
-        terrainItems.push_back(spaceshipSymbol);
-    };
-    
-    addRuin({2022.0f, 960.0f - 288.0f}); // Ruin at index 1, species 2
-    addMineral({2021.0f, 960.0f - 287.0f}, 6); // Element at index 0, quantity 43, type 6
-
-    addMineral({2031.0f, 960.0f - 290.0f}, 12); // Element at index 2, quantity 41, type 12
-    addMineral({2026.0f, 960.0f - 274.0f}, 11); // Element at index 3, quantity 81, type 11
-    addMineral({2025.0f, 960.0f - 293.0f}, 5); // Element at index 4, quantity 11, type 5
-    addMineral({2023.0f, 960.0f - 271.0f}, 11); // Element at index 5, quantity 18, type 11
-    addMineral({2021.0f, 960.0f - 290.0f}, 12); // Element at index 6, quantity 61, type 12
-    addMineral({2028.0f, 960.0f - 275.0f}, 12); // Element at index 7, quantity 31, type 12
-    addMineral({2027.0f, 960.0f - 279.0f}, 5); // Element at index 8, quantity 21, type 5
-    addMineral({2022.0f, 960.0f - 295.0f}, 12); // Element at index 9, quantity 33, type 12
-    addMineral({2019.0f, 960.0f - 289.0f}, 15); // Element at index 10, quantity 25, type 15
-    addMineral({2019.0f, 960.0f - 289.0f}, 11); // Element at index 11, quantity 89, type 11
-    addMineral({2016.0f, 960.0f - 287.0f}, 3); // Element at index 12, quantity 58, type 3
-    addMineral({2016.0f, 960.0f - 277.0f}, 11); // Element at index 13, quantity 66, type 11
-    addMineral({1998.0f, 960.0f - 293.0f}, 15); // Element at index 14, quantity 40, type 15
-    addMineral({1998.0f, 960.0f - 280.0f}, 11); // Element at index 15, quantity 40, type 11
-    addMineral({2005.0f, 960.0f - 283.0f}, 11); // Element at index 16, quantity 95, type 11
-    addMineral({2001.0f, 960.0f - 287.0f}, 11); // Element at index 17, quantity 62, type 11
-    addMineral({2014.0f, 960.0f - 293.0f}, 11); // Element at index 18, quantity 41, type 11
-    addMineral({1999.0f, 960.0f - 296.0f}, 11); // Element at index 19, quantity 80, type 11
-    addMineral({2019.0f, 960.0f - 298.0f}, 11); // Element at index 20, quantity 99, type 11
-    addMineral({2016.0f, 960.0f - 299.0f}, 11); // Element at index 21, quantity 92, type 11
-    addMineral({2034.0f, 960.0f - 274.0f}, 12); // Element at index 23, quantity 76, type 12
-
-    addSpaceship({2011.0f, 960.0f - 287.0f});
-
-    //SF_GLTF::TerrainItem ruin{ "AncientRuin", float2{388.0f, 245.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    //SF_GLTF::TerrainItem endurium{ "Endurium", float2{389.0f, 246.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    //SF_GLTF::TerrainItem recentRuin{ "RecentRuin", float2{389.0f, 249.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    // tree-stylized-01
-    //SF_GLTF::TerrainItem tree{ "tree-stylized-01", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, false };
-
-#if 0
-    // Debug balls
-    SF_GLTF::TerrainItem ball{ "Ball", float2{389.0f, 248.0f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball1{ "Ball", float2{389.0f - 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball2{ "Ball", float2{389.0f + 0.25f, 248.0f - 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball3{ "Ball", float2{389.0f - 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-    SF_GLTF::TerrainItem ball4{ "Ball", float2{389.0f + 0.25f, 248.0f + 0.25f}, float2{ 0.0f, 0.0f }, Quaternion<float>{}, true };
-#endif
+    static SF_GLTF::TerrainGenerator terrainGenerator;
+    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation);
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 

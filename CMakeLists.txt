@@ -167,6 +167,7 @@ set(HEADER_FILES
     src/emul/sun_renderer.h
     src/emul/CloudVolumeRenderer.h
     src/emul/PerfMetrics.h
+    src/emul/terrain.h
 )
 
 add_executable(emulatesdl WIN32
@@ -197,6 +198,7 @@ add_executable(emulatesdl WIN32
     src/emul/sun_renderer.cpp
     src/emul/CloudVolumeRenderer.cpp
     src/emul/PerfMetrics.cpp
+    src/emul/terrain.cpp
 )
 
 include(DiligentUtils.cmake)
