@@ -30,7 +30,7 @@ public:
 
     struct TerrainConfig {
         // Rock formation settings
-        float rockFormationRadius = 10.0f;
+        float rockFormationRadius = 16.0f;
         
         // Terrain bounds (for coordinate conversion)
         float2 terrainMaxSize = {2304.0f * 6.666f, 960.0f * 4.0f}; // TERRAIN_MAX_X * TileSize.x, TERRAIN_MAX_Y * TileSize.y

@@ -1,12 +1,35 @@
 #include "terrain.h"
 #include <cmath>
 #include <random>
+#include <algorithm>
 
 namespace Diligent
 {
 
 namespace SF_GLTF
 {
+
+// Simple noise function for deterministic rock placement
+float RockNoise(float x, float y, float scale, int seed) {
+    int ix = (int)(x * scale * 1000.0f) + seed * 1000000;
+    int iy = (int)(y * scale * 1000.0f) + seed * 2000000;
+    unsigned int hash = ((ix * 73856093) ^ (iy * 19349663) ^ (seed * 83492791)) & 0x7FFFFFFF;
+    return ((float)hash / (float)0x7FFFFFFF) * 2.0f - 1.0f;
+}
+
+// Fractal noise for more natural patterns
+float RockFractalNoise(float x, float y, int octaves, float persistence, float scale, int seed) {
+    float value = 0.0f;
+    float amplitude = 1.0f;
+    float frequency = scale;
+    
+    for(int i = 0; i < octaves; i++) {
+        value += amplitude * RockNoise(x, y, frequency, seed + i);
+        amplitude *= persistence;
+        frequency *= 2.0f;
+    }
+    return value;
+}
 
 TerrainGenerator::TerrainGenerator() {
     // Constructor - could initialize random seed or other state if needed
@@ -81,7 +104,63 @@ void TerrainGenerator::AddSpaceship(std::vector<TerrainItem>& terrainItems,
 
 void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems, 
                                         const float2& centerPosition, float radius) const {
-    // TODO: Implement rock formations
+    const float sampleInterval = 0.5f;
+    const float densityThreshold = 0.85f;
+    const int seed = 12345;
+    const float worldSize = radius * 2.0f; // Use radius to determine sampling area
+
+    float2 wholeCenterPosition = {
+        std::floor(centerPosition.x),
+        std::floor(centerPosition.y)
+    };
+    
+    // Sample at regular intervals around the center position
+    for(float x = -radius; x < radius; x += sampleInterval) {
+        for(float y = -radius; y < radius; y += sampleInterval) {
+            
+            // World coordinates
+            float worldX = wholeCenterPosition.x + x;
+            float worldY = wholeCenterPosition.y + y;
+            
+            // Check if rock should be placed using fractal noise
+            float placementNoise = RockFractalNoise(worldX, worldY, 3, 0.5f, 0.1f, seed);
+            if(placementNoise <= densityThreshold) continue;
+            
+            // Position jitter for natural placement
+            float jitterX = RockNoise(worldX, worldY, 0.3f, seed + 100) * 0.2f;
+            float jitterY = RockNoise(worldX, worldY, 0.3f, seed + 200) * 0.2f;
+            
+            float2 rockPos = {
+                worldX + jitterX,
+                worldY + jitterY
+            };
+            
+            // Rock type (1-6 for rock_moss_set_01_rock01 through rock06)
+            float typeNoise = std::abs(RockNoise(worldX, worldY, 0.2f, seed + 400));
+            int rockType = (int)(typeNoise * 6.0f) + 1;
+            
+            // Construct rock name
+            std::string rockName = "rock_moss_set_01_rock";
+            if (rockType < 10) {
+                rockName += "0" + std::to_string(rockType);
+            } else {
+                rockName += std::to_string(rockType);
+            }
+            
+            // Random rotation for visual variety
+            float rotAngle = RockNoise(worldX, worldY, 0.25f, seed + 500) * 6.28318f;
+            
+            TerrainItem rock{
+                rockName,
+                rockPos,
+                float3{0.0f, 0.0f, 0.0f},
+                Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotAngle),
+                false // no alignment to the ground
+            };
+            
+            terrainItems.push_back(rock);
+        }
+    }
 }
 
 TerrainGenerator::TerrainConfig TerrainGenerator::GetDefaultTerrainConfig() const {
