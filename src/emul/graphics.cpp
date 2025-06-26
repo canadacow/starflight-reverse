@@ -481,9 +481,20 @@ struct GraphicsContext
 
         std::unordered_map<std::string, Uint32> biomMaterialIndex;
 
+        enum class BiomType {
+            None,
+            Rock,
+            Beach,
+            Water,
+            Grass,
+            Ice,
+            Lava,
+        };
+
         struct BiomBoundary
         {
             std::string name;
+            BiomType type;
             float startHeight;
         };
 
@@ -5397,31 +5408,31 @@ void InitTerrain()
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { 
-            { "Water", -15.01f }, 
-            { "Beach", 4.01f }, 
-            { "Grass2", 6.01f }, 
-            { "HighGrass", 8.01f }, 
-            { "Barren", 10.01f }, 
-            { "Rock", 14.01f },
-            { "Ice", 16.01f }, 
+            { "Water", -15.01f, BiomType::Water }, 
+            { "Beach", 4.01f, BiomType::Beach }, 
+            { "Grass2", 6.01f, BiomType::Grass }, 
+            { "HighGrass", 8.01f, BiomType::Grass }, 
+            { "Barren", 10.01f, BiomType::Rock }, 
+            { "Rock", 14.01f, BiomType::Rock },
+            { "Ice", 16.01f, BiomType::Ice }, 
         }},
         { "Earth-dead", { 
-            { "Water", -15.01f }, 
-            { "Beach", 4.01f }, 
-            { "Barren", 6.01f }, 
-            { "Rock", 12.01f }, 
-            { "Ice", 16.01f } 
+            { "Water", -15.01f, BiomType::Water }, 
+            { "Beach", 4.01f, BiomType::Beach }, 
+            { "Barren", 6.01f, BiomType::Rock }, 
+            { "Rock", 12.01f, BiomType::Rock }, 
+            { "Ice", 16.01f, BiomType::Ice } 
         }},
         { "Ice", {
-            { "Ice4", -15.01f },
-            { "Ice2", 4.01f },
-            { "Ice3", 8.01f},
-            { "Ice", 12.01f },
-            { "Ice5", 16.01f },
+            { "Ice4", -15.01f, BiomType::Ice },
+            { "Ice2", 4.01f, BiomType::Ice },
+            { "Ice3", 8.01f, BiomType::Ice },
+            { "Ice", 12.01f, BiomType::Ice },
+            { "Ice5", 16.01f, BiomType::Ice },
         }},
-        { "Moon", { { "Moon", -15.0f } } },
-        { "Lava", { { "Lava", -15.0f } } },
-        { "EGA", { { "EGASurface", -15.0f } } },
+        { "Moon", { { "Moon", -15.0f, BiomType::Rock } } },
+        { "Lava", { { "Lava", -15.0f, BiomType::Lava } } },
+        { "EGA", { { "EGASurface", -15.0f, BiomType::None } } },
     };
 
     for (const auto& planetType : s_gc.terrain.planetTypes)

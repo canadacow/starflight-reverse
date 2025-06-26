@@ -118,41 +118,39 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
     // Sample at regular intervals around the center position
     for(float x = -radius; x < radius; x += sampleInterval) {
         for(float y = -radius; y < radius; y += sampleInterval) {
-            
+           
             // World coordinates
-            float worldX = wholeCenterPosition.x + x;
-            float worldY = wholeCenterPosition.y + y;
+            float2 worldCord = { wholeCenterPosition.x + x, wholeCenterPosition.y + y };
+
+            float height = heightFunction(worldCord);
             
             // Check if rock should be placed using fractal noise
-            float placementNoise = RockFractalNoise(worldX, worldY, 3, 0.5f, 0.1f, seed);
+            float placementNoise = RockFractalNoise(worldCord.x, worldCord.y, 3, 0.5f, 0.1f, seed);
             if(placementNoise <= densityThreshold) continue;
             
             // Position jitter for natural placement
-            float jitterX = RockNoise(worldX, worldY, 0.3f, seed + 100) * 0.2f;
-            float jitterY = RockNoise(worldX, worldY, 0.3f, seed + 200) * 0.2f;
-            
-            float2 rockPos = {
-                worldX + jitterX,
-                worldY + jitterY
+            float2 jitter = {
+                RockNoise(worldCord.x, worldCord.y, 0.3f, seed + 100) * 0.2f,
+                RockNoise(worldCord.x, worldCord.y, 0.3f, seed + 200) * 0.2f
             };
             
+            float2 rockPos = worldCord + jitter;
+
+            const int MaxRockTypes = 6;
+            
             // Rock type (1-6 for rock_moss_set_01_rock01 through rock06)
-            float typeNoise = std::abs(RockNoise(worldX, worldY, 0.2f, seed + 400));
-            int rockType = (int)(typeNoise * 6.0f) + 1;
+            float typeNoise = std::abs(RockNoise(worldCord.x, worldCord.y, 0.2f, seed + 400));
+            int rockType = (int)(typeNoise * float(MaxRockTypes) + 1.0f);
             
             // Construct rock name
             std::string rockName = "rock_moss_set_01_rock";
-            if (rockType < 10) {
-                rockName += "0" + std::to_string(rockType);
-            } else {
-                rockName += std::to_string(rockType);
-            }
+            rockName += "0" + std::to_string(rockType);
             
             // Random rotation for visual variety
-            float rotAngle = RockNoise(worldX, worldY, 0.25f, seed + 500) * 6.28318f;
+            float rotAngle = RockNoise(worldCord.x, worldCord.y, 0.25f, seed + 500) * 6.28318f;
 
             // Random scale for visual variety (0.8 to 1.2)
-            float scaleFactor = 0.8f + RockNoise(worldX, worldY, 0.15f, seed + 600) * 0.4f;
+            float scaleFactor = 0.8f + RockNoise(worldCord.x, worldCord.y, 0.15f, seed + 600) * 0.4f;
             
             TerrainItem rock{
                 rockName,
