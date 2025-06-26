@@ -11,6 +11,8 @@ namespace Diligent
 namespace SF_GLTF
 {
 
+typedef std::function<float(float2)> TerrainHeightFunction;
+
 class TerrainGenerator {
 public:
     struct MineralData {
@@ -49,7 +51,8 @@ public:
     std::vector<TerrainItem> GenerateTerrainItems(
         const float2& currentPosition,
         const Quaternion<float>& currentRotation,
-        const TerrainConfig& config = TerrainConfig{}
+        TerrainConfig* config = nullptr,
+        const TerrainHeightFunction& heightFunction = nullptr
     );
 
 private:
@@ -64,7 +67,8 @@ private:
                      const float2& worldCoord) const;
     
     void AddRockFormations(std::vector<TerrainItem>& terrainItems, 
-                          const float2& centerPosition, float radius) const;
+                          const float2& centerPosition, float radius,
+                          const TerrainHeightFunction& heightFunction) const;
 
     // Default terrain configuration
     TerrainConfig GetDefaultTerrainConfig() const;

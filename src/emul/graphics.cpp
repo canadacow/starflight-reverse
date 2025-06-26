@@ -5460,11 +5460,16 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     s_gc.tvRotation = slerp(s_gc.tvRotation, s_gc.tvNudge, rotationLerpFactor);
 
     static SF_GLTF::TerrainGenerator terrainGenerator;
-    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation);
-
-    s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
+
+    SF_GLTF::TerrainHeightFunction heightFunction = [&](float2 pos) -> float {
+        return s_gc.terrain.dynamicMesh->GetHeightAtTerrain(pos, terrainData, s_gc.renderParams.HeightFactor);
+    };
+
+    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, nullptr, heightFunction);
+
+    s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 
     s_gc.terrain.dynamicMesh->SetTerrainItems(terrainItems, terrainData, s_gc.renderParams.HeightFactor, s_gc.waterHeight);
 

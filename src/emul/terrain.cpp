@@ -38,7 +38,8 @@ TerrainGenerator::TerrainGenerator() {
 std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     const float2& currentPosition,
     const Quaternion<float>& currentRotation,
-    const TerrainConfig& config
+    TerrainConfig* config,
+    const TerrainHeightFunction& heightFunction
 ) {
     std::vector<TerrainItem> terrainItems;
     
@@ -47,8 +48,7 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     terrainItems.push_back(rover);
     
     // Use provided config or get default
-    TerrainConfig actualConfig = config.minerals.empty() && config.ruins.empty() && config.spaceships.empty() 
-        ? GetDefaultTerrainConfig() : config;
+    TerrainConfig actualConfig = config == nullptr ? GetDefaultTerrainConfig() : *config;
     
     // Add all minerals
     for (const auto& mineral : actualConfig.minerals) {
@@ -66,7 +66,7 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     }
     
     // Add rock formations around current position
-    AddRockFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius);
+    AddRockFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction);
     
     return terrainItems;
 }
@@ -103,7 +103,8 @@ void TerrainGenerator::AddSpaceship(std::vector<TerrainItem>& terrainItems,
 }
 
 void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems, 
-                                        const float2& centerPosition, float radius) const {
+                                        const float2& centerPosition, float radius,
+                                        const TerrainHeightFunction& heightFunction) const {
     const float sampleInterval = 0.5f;
     const float densityThreshold = 0.85f;
     const int seed = 12345;
