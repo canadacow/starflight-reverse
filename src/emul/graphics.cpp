@@ -481,30 +481,7 @@ struct GraphicsContext
 
         std::unordered_map<std::string, Uint32> biomMaterialIndex;
 
-        enum class BiomType {
-            None,
-            Rock,
-            Beach,
-            Water,
-            Grass,
-            Ice,
-            Lava,
-        };
-
-        struct BiomBoundary
-        {
-            std::string name;
-            BiomType type;
-            float startHeight;
-        };
-
-        struct PlanetType
-        {
-            std::string name;
-            std::vector<BiomBoundary> boundaries;
-        };
-
-        std::vector<PlanetType> planetTypes;
+        std::vector<SF_GLTF::PlanetType> planetTypes;
     };
 
     SFModel station{};
@@ -5408,31 +5385,31 @@ void InitTerrain()
 
     s_gc.terrain.planetTypes = {
         { "Earth-like", { 
-            { "Water", -15.01f, BiomType::Water }, 
-            { "Beach", 4.01f, BiomType::Beach }, 
-            { "Grass2", 6.01f, BiomType::Grass }, 
-            { "HighGrass", 8.01f, BiomType::Grass }, 
-            { "Barren", 10.01f, BiomType::Rock }, 
-            { "Rock", 14.01f, BiomType::Rock },
-            { "Ice", 16.01f, BiomType::Ice }, 
+            { "Water", -15.01f, SF_GLTF::BiomType::Water }, 
+            { "Beach", 4.01f, SF_GLTF::BiomType::Beach },
+            { "Grass2", 6.01f, SF_GLTF::BiomType::Grass },
+            { "HighGrass", 8.01f, SF_GLTF::BiomType::Grass },
+            { "Barren", 10.01f, SF_GLTF::BiomType::Rock },
+            { "Rock", 14.01f, SF_GLTF::BiomType::Rock },
+            { "Ice", 16.01f, SF_GLTF::BiomType::Ice },
         }},
         { "Earth-dead", { 
-            { "Water", -15.01f, BiomType::Water }, 
-            { "Beach", 4.01f, BiomType::Beach }, 
-            { "Barren", 6.01f, BiomType::Rock }, 
-            { "Rock", 12.01f, BiomType::Rock }, 
-            { "Ice", 16.01f, BiomType::Ice } 
+            { "Water", -15.01f, SF_GLTF::BiomType::Water },
+            { "Beach", 4.01f, SF_GLTF::BiomType::Beach },
+            { "Barren", 6.01f, SF_GLTF::BiomType::Rock },
+            { "Rock", 12.01f, SF_GLTF::BiomType::Rock },
+            { "Ice", 16.01f, SF_GLTF::BiomType::Ice }
         }},
         { "Ice", {
-            { "Ice4", -15.01f, BiomType::Ice },
-            { "Ice2", 4.01f, BiomType::Ice },
-            { "Ice3", 8.01f, BiomType::Ice },
-            { "Ice", 12.01f, BiomType::Ice },
-            { "Ice5", 16.01f, BiomType::Ice },
+            { "Ice4", -15.01f, SF_GLTF::BiomType::Ice },
+            { "Ice2", 4.01f, SF_GLTF::BiomType::Ice },
+            { "Ice3", 8.01f, SF_GLTF::BiomType::Ice },
+            { "Ice", 12.01f, SF_GLTF::BiomType::Ice },
+            { "Ice5", 16.01f, SF_GLTF::BiomType::Ice },
         }},
-        { "Moon", { { "Moon", -15.0f, BiomType::Rock } } },
-        { "Lava", { { "Lava", -15.0f, BiomType::Lava } } },
-        { "EGA", { { "EGASurface", -15.0f, BiomType::None } } },
+        { "Moon", { { "Moon", -15.0f, SF_GLTF::BiomType::Rock } } },
+        { "Lava", { { "Lava", -15.0f, SF_GLTF::BiomType::Lava } } },
+        { "EGA", { { "EGASurface", -15.0f, SF_GLTF::BiomType::None } } },
     };
 
     for (const auto& planetType : s_gc.terrain.planetTypes)
@@ -5470,15 +5447,38 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     const float rotationLerpFactor = 0.1f;
     s_gc.tvRotation = slerp(s_gc.tvRotation, s_gc.tvNudge, rotationLerpFactor);
 
-    static SF_GLTF::TerrainGenerator terrainGenerator;
+    static SF_GLTF::TerrainGenerator terrainGenerator{ s_gc.terrain.planetTypes };
 
     SF_GLTF::TerrainData terrainData{ s_gc.heightmapData, s_gc.heightmapSize, {1.0f, 1.0f} };
 
     SF_GLTF::TerrainHeightFunction heightFunction = [&](float2 pos) -> float {
-        return s_gc.terrain.dynamicMesh->GetHeightAtTerrain(pos, terrainData, s_gc.renderParams.HeightFactor);
+        return s_gc.terrain.dynamicMesh->GetHeightAtTerrainWithoutTiling(pos, terrainData);
     };
 
-    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, nullptr, heightFunction);
+    std::string currentPlanetType = "Earth-like";
+
+    {
+        auto& ap = s_gc.activePlanet;
+        auto planetInfo = planets.at(ap.planetInstanceIndex);
+        auto planetType = planettypes[planetInfo.species];
+
+        currentPlanetType = "Earth-like";
+
+        if(planetType.surftype == 4)
+        {
+            currentPlanetType = "Lava";
+        }
+        else if(planetType.surftype == 3)
+        {
+            currentPlanetType = "Ice";
+        }
+        if(s_useEGATerrain)
+        {
+            currentPlanetType = "EGA";
+        }    
+    }
+
+    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, currentPlanetType, nullptr, heightFunction);
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 

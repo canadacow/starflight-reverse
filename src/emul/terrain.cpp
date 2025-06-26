@@ -31,13 +31,42 @@ float RockFractalNoise(float x, float y, int octaves, float persistence, float s
     return value;
 }
 
-TerrainGenerator::TerrainGenerator() {
+TerrainGenerator::TerrainGenerator(const std::vector<PlanetType>& planetTypes) : planetTypes(planetTypes) {
     // Constructor - could initialize random seed or other state if needed
+}
+
+// Helper function to get biome type based on height and planet type
+BiomType TerrainGenerator::GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const {
+    // Find the current planet type
+    const PlanetType* currentPlanet = nullptr;
+    for (const auto& planetType : planetTypes) {
+        if (planetType.name == currentPlanetType) {
+            currentPlanet = &planetType;
+            break;
+        }
+    }
+    
+    if (!currentPlanet || currentPlanet->boundaries.empty()) {
+        return BiomType::Rock; // Default fallback
+    }
+    
+    // Find the appropriate biome boundary for this height
+    BiomType result = currentPlanet->boundaries[0].type; // Default to first boundary
+    for (const auto& boundary : currentPlanet->boundaries) {
+        if (height >= boundary.startHeight) {
+            result = boundary.type;
+        } else {
+            break;
+        }
+    }
+    
+    return result;
 }
 
 std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     const float2& currentPosition,
     const Quaternion<float>& currentRotation,
+    const std::string& currentPlanetType,
     TerrainConfig* config,
     const TerrainHeightFunction& heightFunction
 ) {
@@ -66,7 +95,7 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     }
     
     // Add rock formations around current position
-    AddRockFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction);
+    AddRockFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
     
     return terrainItems;
 }
@@ -104,7 +133,8 @@ void TerrainGenerator::AddSpaceship(std::vector<TerrainItem>& terrainItems,
 
 void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems, 
                                         const float2& centerPosition, float radius,
-                                        const TerrainHeightFunction& heightFunction) const {
+                                        const TerrainHeightFunction& heightFunction,
+                                        const std::string& currentPlanetType) const {
     const float sampleInterval = 0.5f;
     const float densityThreshold = 0.85f;
     const int seed = 12345;
@@ -123,6 +153,12 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
             float2 worldCord = { wholeCenterPosition.x + x, wholeCenterPosition.y + y };
 
             float height = heightFunction(worldCord);
+            
+            // Get biome type at this height
+            BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+            
+            // Skip placement in non-rock biomes
+            if (biomeType != BiomType::Rock) continue;
             
             // Check if rock should be placed using fractal noise
             float placementNoise = RockFractalNoise(worldCord.x, worldCord.y, 3, 0.5f, 0.1f, seed);
@@ -204,7 +240,7 @@ TerrainGenerator::TerrainConfig TerrainGenerator::GetDefaultTerrainConfig() cons
     config.spaceships = {
         {{2011.0f, 960.0f - 287.0f}}
     };
-    
+       
     return config;
 }
 

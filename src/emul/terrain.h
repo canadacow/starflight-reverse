@@ -11,7 +11,32 @@ namespace Diligent
 namespace SF_GLTF
 {
 
-typedef std::function<float(float2)> TerrainHeightFunction;
+// Forward declaration
+using TerrainHeightFunction = std::function<float(const float2&)>;
+
+// Biome system structures (matching graphics.cpp)
+enum class BiomType {
+    None,
+    Rock,
+    Beach,
+    Water,
+    Grass,
+    Ice,
+    Lava,
+};
+
+struct BiomBoundary
+{
+    std::string name;
+    float startHeight;
+    BiomType type;
+};
+
+struct PlanetType
+{
+    std::string name;
+    std::vector<BiomBoundary> boundaries;
+};
 
 class TerrainGenerator {
 public:
@@ -44,13 +69,15 @@ public:
         std::vector<SpaceshipData> spaceships;
     };
 
-    TerrainGenerator();
+    TerrainGenerator(const std::vector<PlanetType>& planetTypes);
     ~TerrainGenerator() = default;
+    TerrainGenerator() = delete;
 
     // Main terrain generation function
     std::vector<TerrainItem> GenerateTerrainItems(
         const float2& currentPosition,
         const Quaternion<float>& currentRotation,
+        const std::string& currentPlanetType,
         TerrainConfig* config = nullptr,
         const TerrainHeightFunction& heightFunction = nullptr
     );
@@ -68,13 +95,19 @@ private:
     
     void AddRockFormations(std::vector<TerrainItem>& terrainItems, 
                           const float2& centerPosition, float radius,
-                          const TerrainHeightFunction& heightFunction) const;
+                          const TerrainHeightFunction& heightFunction,
+                          const std::string& currentPlanetType) const;
 
     // Default terrain configuration
     TerrainConfig GetDefaultTerrainConfig() const;
     
     // Noise function for rock placement
     float SimpleNoise(float x, float y, float scale = 1.0f) const;
+
+    // Helper function to get biome type based on height
+    BiomType GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const;
+
+    std::vector<PlanetType> planetTypes;
 };
 
 } // namespace SF_GLTF

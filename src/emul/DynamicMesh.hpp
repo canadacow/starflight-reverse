@@ -55,6 +55,7 @@ public:
     void ClearTerrainItems();
 
     float GetHeightAtTerrain(float2 position, const TerrainData& terrain, float heightFactor);
+    float GetHeightAtTerrainWithoutTiling(float2 position, const TerrainData& terrain);
 
     virtual bool CompatibleWithTransforms(const SF_GLTF::ModelTransforms& Transforms) const override;
 

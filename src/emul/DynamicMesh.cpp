@@ -973,6 +973,11 @@ float DynamicMesh::GetHeightAtTerrain(float2 position, const TerrainData& terrai
     return sampleTerrainLinear(terrain, tilePosition, heightFactor);
 }
 
+float DynamicMesh::GetHeightAtTerrainWithoutTiling(float2 position, const TerrainData& terrain)
+{
+    return sampleTerrainLinear(terrain, position, 1.0f);
+}
+
 void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const TerrainData& terrain, float heightFactor, float waterHeight)
 {
     ClearTerrainItems();
