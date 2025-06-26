@@ -2,6 +2,8 @@
 #include <cmath>
 #include <random>
 #include <algorithm>
+#include <vector>
+#include <queue>
 
 namespace Diligent
 {
@@ -131,73 +133,202 @@ void TerrainGenerator::AddSpaceship(std::vector<TerrainItem>& terrainItems,
     terrainItems.push_back(spaceshipSymbol);
 }
 
+// Deterministic Poisson Disc Sampling for a fixed tile
+std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileSize, float minDistance, int baseSeed, int tileX, int tileY) {
+    std::vector<float2> points;
+    std::vector<float2> activeList;
+    
+    // Create unique seed for this tile
+    int tileSeed = baseSeed + tileX * 73856093 + tileY * 19349663;
+    std::mt19937 rng(tileSeed);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    
+    // Grid for spatial hashing to speed up nearest neighbor checks
+    float cellSize = minDistance / std::sqrt(2.0f);
+    int gridWidth = (int)std::ceil(tileSize / cellSize);
+    int gridHeight = (int)std::ceil(tileSize / cellSize);
+    std::vector<std::vector<int>> grid(gridWidth * gridHeight);
+    
+    float2 tileMin = { tileCenter.x - tileSize * 0.5f, tileCenter.y - tileSize * 0.5f };
+    float2 tileMax = { tileCenter.x + tileSize * 0.5f, tileCenter.y + tileSize * 0.5f };
+    
+    auto getGridIndex = [&](float2 point) -> int {
+        int x = (int)((point.x - tileMin.x) / cellSize);
+        int y = (int)((point.y - tileMin.y) / cellSize);
+        if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return -1;
+        return y * gridWidth + x;
+    };
+    
+    auto isValidPoint = [&](float2 candidate) -> bool {
+        // Check if point is within tile bounds
+        if (candidate.x < tileMin.x || candidate.x > tileMax.x || 
+            candidate.y < tileMin.y || candidate.y > tileMax.y) return false;
+        
+        // Check minimum distance to existing points using grid
+        int gridIdx = getGridIndex(candidate);
+        if (gridIdx == -1) return false;
+        
+        // Check surrounding grid cells
+        int gx = gridIdx % gridWidth;
+        int gy = gridIdx / gridWidth;
+        
+        for (int dy = -2; dy <= 2; dy++) {
+            for (int dx = -2; dx <= 2; dx++) {
+                int nx = gx + dx;
+                int ny = gy + dy;
+                if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                
+                int neighborIdx = ny * gridWidth + nx;
+                for (int pointIdx : grid[neighborIdx]) {
+                    float2 existingPoint = points[pointIdx];
+                    float distSq = (candidate.x - existingPoint.x) * (candidate.x - existingPoint.x) +
+                                  (candidate.y - existingPoint.y) * (candidate.y - existingPoint.y);
+                    if (distSq < minDistance * minDistance) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    };
+    
+    // Start with initial point at tile center
+    float2 initialPoint = tileCenter;
+    points.push_back(initialPoint);
+    activeList.push_back(initialPoint);
+    
+    int gridIdx = getGridIndex(initialPoint);
+    if (gridIdx >= 0) {
+        grid[gridIdx].push_back(0);
+    }
+    
+    const int maxAttempts = 30;
+    
+    while (!activeList.empty()) {
+        // Pick random point from active list
+        int randomIndex = (int)(dist(rng) * activeList.size());
+        float2 activePoint = activeList[randomIndex];
+        
+        bool foundValidPoint = false;
+        
+        // Try to generate new points around the active point
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            // Generate random point in annulus (ring) around active point
+            float angle = dist(rng) * 2.0f * 3.14159f;
+            float distance = minDistance + dist(rng) * minDistance; // Between minDistance and 2*minDistance
+            
+            float2 candidate = {
+                activePoint.x + distance * std::cos(angle),
+                activePoint.y + distance * std::sin(angle)
+            };
+            
+            if (isValidPoint(candidate)) {
+                points.push_back(candidate);
+                activeList.push_back(candidate);
+                
+                int candidateGridIdx = getGridIndex(candidate);
+                if (candidateGridIdx >= 0) {
+                    grid[candidateGridIdx].push_back((int)points.size() - 1);
+                }
+                foundValidPoint = true;
+                break;
+            }
+        }
+        
+        // If no valid point found, remove from active list
+        if (!foundValidPoint) {
+            activeList.erase(activeList.begin() + randomIndex);
+        }
+    }
+    
+    return points;
+}
+
 void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems, 
                                         const float2& centerPosition, float radius,
                                         const TerrainHeightFunction& heightFunction,
                                         const std::string& currentPlanetType) const {
-    const float sampleInterval = 0.5f;
-    const float densityThreshold = 0.85f;
+    const float minRockDistance = 0.7f; // Reduced from 1.0f - allows rocks closer together
+    const float densityThreshold = 0.7f; // Reduced from 0.85f - less filtering
     const int seed = 12345;
-    const float worldSize = radius * 2.0f; // Use radius to determine sampling area
-
-    float2 wholeCenterPosition = {
-        std::floor(centerPosition.x),
-        std::floor(centerPosition.y)
-    };
+    const float tileSize = 16.0f; // Size of each world tile
     
-    // Sample at regular intervals around the center position
-    for(float x = -radius; x < radius; x += sampleInterval) {
-        for(float y = -radius; y < radius; y += sampleInterval) {
-           
-            // World coordinates
-            float2 worldCord = { wholeCenterPosition.x + x, wholeCenterPosition.y + y };
-
-            float height = heightFunction(worldCord);
-            
-            // Get biome type at this height
-            BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
-            
-            // Skip placement in non-rock biomes
-            if (biomeType != BiomType::Rock) continue;
-            
-            // Check if rock should be placed using fractal noise
-            float placementNoise = RockFractalNoise(worldCord.x, worldCord.y, 3, 0.5f, 0.1f, seed);
-            if(placementNoise <= densityThreshold) continue;
-            
-            // Position jitter for natural placement
-            float2 jitter = {
-                RockNoise(worldCord.x, worldCord.y, 0.3f, seed + 100) * 0.2f,
-                RockNoise(worldCord.x, worldCord.y, 0.3f, seed + 200) * 0.2f
+    // Determine which tiles intersect with the sampling radius
+    float2 minBounds = { centerPosition.x - radius, centerPosition.y - radius };
+    float2 maxBounds = { centerPosition.x + radius, centerPosition.y + radius };
+    
+    int minTileX = (int)std::floor(minBounds.x / tileSize);
+    int maxTileX = (int)std::floor(maxBounds.x / tileSize);
+    int minTileY = (int)std::floor(minBounds.y / tileSize);
+    int maxTileY = (int)std::floor(maxBounds.y / tileSize);
+    
+    // Generate rocks for each intersecting tile
+    for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
+        for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
+            // Calculate tile center
+            float2 tileCenter = {
+                (float)tileX * tileSize + tileSize * 0.5f,
+                (float)tileY * tileSize + tileSize * 0.5f
             };
             
-            float2 rockPos = worldCord + jitter;
+            // Generate candidate positions for this tile
+            std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
+                tileCenter, tileSize, minRockDistance, seed, tileX, tileY);
+            
+            // Process each candidate position
+            for (const float2& worldCoord : candidatePositions) {
+                // Check if this position is within the rover's sampling radius
+                float dx = worldCoord.x - centerPosition.x;
+                float dy = worldCoord.y - centerPosition.y;
+                if (dx*dx + dy*dy > radius*radius) continue;
+                
+                float height = heightFunction(worldCoord);
+                
+                // Get biome type at this height
+                BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+                
+                // Skip placement in non-rock biomes
+                if (biomeType != BiomType::Rock) continue;
+                
+                // Check if rock should be placed using fractal noise (for additional filtering)
+                float placementNoise = RockFractalNoise(worldCoord.x, worldCoord.y, 3, 0.5f, 0.1f, seed);
+                if(placementNoise <= densityThreshold) continue;
+                
+                // Position jitter for natural placement
+                float2 jitter = {
+                    RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) * 0.2f,
+                    RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) * 0.2f
+                };
+                
+                float2 rockPos = worldCoord + jitter;
 
-            const int MaxRockTypes = 6;
-            
-            // Rock type (1-6 for rock_moss_set_01_rock01 through rock06)
-            float typeNoise = std::abs(RockNoise(worldCord.x, worldCord.y, 0.2f, seed + 400));
-            int rockType = (int)(typeNoise * float(MaxRockTypes) + 1.0f);
-            
-            // Construct rock name
-            std::string rockName = "rock_moss_set_01_rock";
-            rockName += "0" + std::to_string(rockType);
-            
-            // Random rotation for visual variety
-            float rotAngle = RockNoise(worldCord.x, worldCord.y, 0.25f, seed + 500) * 6.28318f;
+                const int MaxRockTypes = 6;
+                
+                // Rock type (1-6 for rock_moss_set_01_rock01 through rock06)
+                float typeNoise = std::abs(RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400));
+                int rockType = (int)(typeNoise * float(MaxRockTypes) + 1.0f);
+                
+                // Construct rock name
+                std::string rockName = "rock_moss_set_01_rock";
+                rockName += "0" + std::to_string(rockType);
+                
+                // Random rotation for visual variety
+                float rotAngle = RockNoise(worldCoord.x, worldCoord.y, 0.25f, seed + 500) * 6.28318f;
 
-            // Random scale for visual variety (0.8 to 1.2)
-            float scaleFactor = 0.8f + RockNoise(worldCord.x, worldCord.y, 0.15f, seed + 600) * 0.4f;
-            
-            TerrainItem rock{
-                rockName,
-                rockPos,
-                float3{0.0f, 0.0f, 0.0f},
-                Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotAngle),
-                false, // no alignment to the ground
-                scaleFactor
-            };
-            
-            terrainItems.push_back(rock);
+                // Random scale for visual variety (0.6 to 1.5)
+                float scaleFactor = 0.6f + RockNoise(worldCoord.x, worldCoord.y, 0.15f, seed + 600) * 0.9f;
+                
+                TerrainItem rock{
+                    rockName,
+                    rockPos,
+                    float3{0.0f, 0.0f, 0.0f},
+                    Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotAngle),
+                    false, // no alignment to the ground
+                    scaleFactor
+                };
+                
+                terrainItems.push_back(rock);
+            }
         }
     }
 }
