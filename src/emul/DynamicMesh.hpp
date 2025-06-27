@@ -23,7 +23,7 @@ struct TerrainItem
     float3 worldOffset;
     Quaternion<float> rotation;
     bool alignToTerrain = false;
-    float scale = 1.0f;
+    float3 scale = {1.0f, 1.0f, 1.0f};
 };
 
 typedef std::vector<TerrainItem> TerrainItems;

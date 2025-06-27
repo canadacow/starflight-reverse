@@ -99,6 +99,9 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     // Add rock formations around current position
     AddRockFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
     
+    // Add grass formations around current position
+    AddGrassFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
+    
     return terrainItems;
 }
 
@@ -324,10 +327,91 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
                     float3{0.0f, 0.0f, 0.0f},
                     Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotAngle),
                     false, // no alignment to the ground
-                    scaleFactor
+                    float3{scaleFactor, scaleFactor, scaleFactor}
                 };
                 
                 terrainItems.push_back(rock);
+            }
+        }
+    }
+}
+
+void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems, 
+                                         const float2& centerPosition, float radius,
+                                         const TerrainHeightFunction& heightFunction,
+                                         const std::string& currentPlanetType) const {
+    const float minGrassDistance = 0.5f; // Grass can be placed closer together than rocks
+    const float densityThreshold = 0.6f; // Allow more grass placement
+    const int seed = 54321; // Different seed from rocks
+    const float tileSize = 16.0f; // Same tile size as rocks
+    
+    // Determine which tiles intersect with the sampling radius
+    float2 minBounds = { centerPosition.x - radius, centerPosition.y - radius };
+    float2 maxBounds = { centerPosition.x + radius, centerPosition.y + radius };
+    
+    int minTileX = (int)std::floor(minBounds.x / tileSize);
+    int maxTileX = (int)std::floor(maxBounds.x / tileSize);
+    int minTileY = (int)std::floor(minBounds.y / tileSize);
+    int maxTileY = (int)std::floor(maxBounds.y / tileSize);
+    
+    // Generate grass for each intersecting tile
+    for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
+        for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
+            // Calculate tile center
+            float2 tileCenter = {
+                (float)tileX * tileSize + tileSize * 0.5f,
+                (float)tileY * tileSize + tileSize * 0.5f
+            };
+            
+            // Generate candidate positions for this tile
+            std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
+                tileCenter, tileSize, minGrassDistance, seed, tileX, tileY);
+            
+            // Process each candidate position
+            for (const float2& worldCoord : candidatePositions) {
+                // Check if this position is within the rover's sampling radius
+                float dx = worldCoord.x - centerPosition.x;
+                float dy = worldCoord.y - centerPosition.y;
+                if (dx*dx + dy*dy > radius*radius) continue;
+                
+                float height = heightFunction(worldCoord);
+                
+                // Get biome type at this height
+                BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+                
+                // Only place grass in grass biomes
+                if (biomeType != BiomType::Grass) continue;
+                
+                // Check if grass should be placed using fractal noise (for additional filtering)
+                float placementNoise = RockFractalNoise(worldCoord.x, worldCoord.y, 3, 0.5f, 0.1f, seed);
+                if(placementNoise <= densityThreshold) continue;
+                
+                // Position jitter for natural placement
+                float2 jitter = {
+                    RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) * 0.1f,
+                    RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) * 0.1f
+                };
+                
+                float2 grassPos = worldCoord + jitter;
+
+                // Generate random scale for x and y axes only (z remains 1.0)
+                float scale = 0.8f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.7f; // 0.8 to 1.5
+
+                // Generate random rotation around Z axis only
+                float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * PI_F;
+                Quaternion<float> grassRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
+               
+                // Simple grass item - no rotation or scaling as requested
+                TerrainItem grass{
+                    "grass_wild_01",
+                    grassPos,
+                    float3{0.0f, 0.0f, 0.0f},
+                    grassRotation, // No rotation
+                    true, // no alignment to the ground
+                    float3{scale, scale, 1.0f}
+                };
+                
+                terrainItems.push_back(grass);
             }
         }
     }

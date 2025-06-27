@@ -1136,7 +1136,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
             float4x4 translationMatrix = float4x4::Translation(worldOffset);
             float4x4 rotationMatrix = item.rotation.ToMatrix();
 
-            float4x4 scaleMatrix = float4x4::Scale(item.scale, item.scale, item.scale);
+            float4x4 scaleMatrix = float4x4::Scale(item.scale.x, item.scale.y, item.scale.z);
             
             // Special handling for items that use Matrix directly instead of instances
             if (isSpecialCase) {
