@@ -516,6 +516,7 @@ struct GraphicsContext
     float2 tvDelta{};
     Quaternion<float> tvNudge = {};
     Quaternion<float> tvRotation = {};
+    float zoomOffset = 0.0f;
 
     //float3 terrainMovement = { TV_LOCATION_START_X * TileSize, -40.0f, TV_LOCATION_START_Y * TileSize };
     float3 terrainMovement = { TV_LOCATION_START_X * TileSize.x, -99.0f, TV_LOCATION_START_Y * TileSize.y };
@@ -5195,12 +5196,14 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     if (currentCameraIndex == 0)
                     {
                         MoveDirection.z -= 10.0f;
+                        s_gc.zoomOffset += 2.0f;
                     }
                     break;
                 case SDLK_e:
                     if (currentCameraIndex == 0)
                     {
                         MoveDirection.z += 10.0f;
+                        s_gc.zoomOffset -= 2.0f;
                     }
                     break;
                 case SDLK_a:
@@ -5388,9 +5391,8 @@ void InitTerrain()
             { "Water", -15.01f, SF_GLTF::BiomType::Water }, 
             { "Beach", 4.01f, SF_GLTF::BiomType::Beach },
             { "Grass2", 6.01f, SF_GLTF::BiomType::Grass },
-            { "HighGrass", 8.01f, SF_GLTF::BiomType::Grass },
-            { "Barren", 10.01f, SF_GLTF::BiomType::Rock },
-            { "Rock", 14.01f, SF_GLTF::BiomType::Rock },
+            { "HighGrass", 10.01f, SF_GLTF::BiomType::Grass },
+            { "Rock", 12.01f, SF_GLTF::BiomType::Rock },
             { "Ice", 16.01f, SF_GLTF::BiomType::Ice },
         }},
         { "Earth-dead", { 
@@ -5487,7 +5489,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     // Update the terrain movement y position to the height of the terrain
     float height = s_gc.terrain.dynamicMesh->GetHeightAtTerrain(float2{ s_gc.terrainMovement.x, s_gc.terrainMovement.z }, terrainData, s_gc.renderParams.HeightFactor);
     height = std::max(height, s_gc.waterHeight);
-    s_gc.terrainMovement.y = -85.0f - height;
+    s_gc.terrainMovement.y = -85.0f - height + s_gc.zoomOffset;
 
     float4x4 RotationMatrixCam = float4x4::Identity();
     float4x4 RotationMatrixModel = float4x4::Identity();

@@ -103,6 +103,11 @@ private:
                           const TerrainHeightFunction& heightFunction,
                           const std::string& currentPlanetType) const;
 
+    void AddTreeFormations(std::vector<TerrainItem>& terrainItems, 
+                          const float2& centerPosition, float radius,
+                          const TerrainHeightFunction& heightFunction,
+                          const std::string& currentPlanetType) const;
+
     // Default terrain configuration
     TerrainConfig GetDefaultTerrainConfig() const;
     

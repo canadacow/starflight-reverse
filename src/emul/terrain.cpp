@@ -102,6 +102,9 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     // Add grass formations around current position
     AddGrassFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
     
+    // Add tree formations around current position
+    AddTreeFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
+    
     return terrainItems;
 }
 
@@ -315,18 +318,26 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
                 std::string rockName = "rock_moss_set_01_rock";
                 rockName += "0" + std::to_string(rockType);
                 
-                // Random rotation for visual variety
-                float rotAngle = RockNoise(worldCoord.x, worldCoord.y, 0.25f, seed + 500) * 6.28318f;
+                // Random rotation for visual variety on all axes
+                //float rotX = RockNoise(worldCoord.x, worldCoord.y, 0.25f, seed + 500) * 6.28318f;
+                float rotY = RockNoise(worldCoord.x, worldCoord.y, 0.25f, seed + 501) * 6.28318f;
+                //float rotZ = RockNoise(worldCoord.x, worldCoord.y, 0.25f, seed + 502) * 6.28318f;
+
+                // Create quaternion from Euler angles (XYZ order)
+                //Quaternion<float> rotXQuat = Quaternion<float>::RotationFromAxisAngle({1, 0, 0}, rotX);
+                Quaternion<float> rotYQuat = Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotY);
+                //Quaternion<float> rotZQuat = Quaternion<float>::RotationFromAxisAngle({0, 0, 1}, rotZ);
+                //Quaternion<float> finalRotation = rotZQuat * rotYQuat * rotXQuat;
 
                 // Random scale for visual variety (0.6 to 1.5)
-                float scaleFactor = 0.6f + RockNoise(worldCoord.x, worldCoord.y, 0.15f, seed + 600) * 0.9f;
+                float scaleFactor = 0.5f + RockNoise(worldCoord.x, worldCoord.y, 0.15f, seed + 600) * 2.5f;
                 
                 TerrainItem rock{
                     rockName,
                     rockPos,
                     float3{0.0f, 0.0f, 0.0f},
-                    Quaternion<float>::RotationFromAxisAngle({0, 1, 0}, rotAngle),
-                    false, // no alignment to the ground
+                    rotYQuat, // finalRotation,
+                    true, // no alignment to the ground
                     float3{scaleFactor, scaleFactor, scaleFactor}
                 };
                 
@@ -406,12 +417,92 @@ void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems
                     "grass_wild_01",
                     grassPos,
                     float3{0.0f, 0.0f, 0.0f},
-                    grassRotation, // No rotation
+                    grassRotation,
                     true, // no alignment to the ground
-                    float3{scale, scale, 1.0f}
+                    float3{scale, scale, scale}
                 };
                 
                 terrainItems.push_back(grass);
+            }
+        }
+    }
+}
+
+void TerrainGenerator::AddTreeFormations(std::vector<TerrainItem>& terrainItems, 
+                                        const float2& centerPosition, float radius,
+                                        const TerrainHeightFunction& heightFunction,
+                                        const std::string& currentPlanetType) const {
+    const float minTreeDistance = 3.0f; // Trees need more space than grass
+    const float densityThreshold = 0.8f; // Trees are less dense than grass
+    const int seed = 67890; // Different seed from rocks and grass
+    const float tileSize = 16.0f; // Same tile size as other elements
+    
+    // Determine which tiles intersect with the sampling radius
+    float2 minBounds = { centerPosition.x - radius, centerPosition.y - radius };
+    float2 maxBounds = { centerPosition.x + radius, centerPosition.y + radius };
+    
+    int minTileX = (int)std::floor(minBounds.x / tileSize);
+    int maxTileX = (int)std::floor(maxBounds.x / tileSize);
+    int minTileY = (int)std::floor(minBounds.y / tileSize);
+    int maxTileY = (int)std::floor(maxBounds.y / tileSize);
+    
+    // Generate trees for each intersecting tile
+    for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
+        for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
+            // Calculate tile center
+            float2 tileCenter = {
+                (float)tileX * tileSize + tileSize * 0.5f,
+                (float)tileY * tileSize + tileSize * 0.5f
+            };
+            
+            // Generate candidate positions for this tile
+            std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
+                tileCenter, tileSize, minTreeDistance, seed, tileX, tileY);
+            
+            // Process each candidate position
+            for (const float2& worldCoord : candidatePositions) {
+                // Check if this position is within the rover's sampling radius
+                float dx = worldCoord.x - centerPosition.x;
+                float dy = worldCoord.y - centerPosition.y;
+                if (dx*dx + dy*dy > radius*radius) continue;
+                
+                float height = heightFunction(worldCoord);
+                
+                // Get biome type at this height
+                BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+                
+                // Only place trees in grass biomes
+                if (biomeType != BiomType::Grass) continue;
+                
+                // Check if tree should be placed using fractal noise (for additional filtering)
+                float placementNoise = RockFractalNoise(worldCoord.x, worldCoord.y, 3, 0.5f, 0.1f, seed);
+                if(placementNoise <= densityThreshold) continue;
+                
+                // Position jitter for natural placement
+                float2 jitter = {
+                    RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) * 0.3f,
+                    RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) * 0.3f
+                };
+                
+                float2 treePos = worldCoord + jitter;
+
+                // Generate random scale for variety (0.8 to 1.4)
+                float scale = 0.8f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.6f;
+
+                // Generate random rotation around Y axis for natural variety
+                float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * 3.14159f;
+                Quaternion<float> treeRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
+               
+                TerrainItem tree{
+                    "tree-stylized-01",
+                    treePos,
+                    float3{0.0f, 0.0f, 0.0f},
+                    treeRotation,
+                    true, // align to ground
+                    float3{scale, scale, scale}
+                };
+                
+                terrainItems.push_back(tree);
             }
         }
     }
