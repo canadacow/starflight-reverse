@@ -412,9 +412,13 @@ void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems
                 float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * PI_F;
                 Quaternion<float> grassRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
                
+                // Randomly select one of the 5 grass cluster types
+                int grassTypeIndex = (int)(RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500) * 5.0f);
+                std::string grassType = "grass_cluster_0" + std::to_string(grassTypeIndex);
+                
                 // Simple grass item - no rotation or scaling as requested
                 TerrainItem grass{
-                    "grass_wild_01",
+                    grassType,
                     grassPos,
                     float3{0.0f, 0.0f, 0.0f},
                     grassRotation,
