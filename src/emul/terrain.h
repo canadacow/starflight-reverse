@@ -59,6 +59,8 @@ public:
     struct TerrainConfig {
         // Rock formation settings
         float rockFormationRadius = 16.0f;
+
+        float terrainAspectRatio = ( 6.666f / 4.0f );
         
         // Terrain bounds (for coordinate conversion)
         float2 terrainMaxSize = {2304.0f * 6.666f, 960.0f * 4.0f}; // TERRAIN_MAX_X * TileSize.x, TERRAIN_MAX_Y * TileSize.y
@@ -104,6 +106,7 @@ public:
     std::vector<TerrainItem> GenerateTerrainItems(
         const float2& currentPosition,
         const Quaternion<float>& currentRotation,
+        float tileAspectRatio,
         const std::string& currentPlanetType,
         TerrainConfig* config = nullptr,
         const TerrainHeightFunction& heightFunction = nullptr
@@ -126,17 +129,17 @@ private:
                      const float2& worldCoord) const;
     
     void AddRockFormations(std::vector<TerrainItem>& terrainItems, 
-                          const float2& centerPosition, float radius,
+                          const float2& centerPosition, const TerrainConfig& config,
                           const TerrainHeightFunction& heightFunction,
                           const std::string& currentPlanetType);
 
     void AddGrassFormations(std::vector<TerrainItem>& terrainItems, 
-                          const float2& centerPosition, float radius,
+                          const float2& centerPosition, const TerrainConfig& config,
                           const TerrainHeightFunction& heightFunction,
                           const std::string& currentPlanetType);
 
     void AddTreeFormations(std::vector<TerrainItem>& terrainItems, 
-                          const float2& centerPosition, float radius,
+                          const float2& centerPosition, const TerrainConfig& config,
                           const TerrainHeightFunction& heightFunction,
                           const std::string& currentPlanetType);
 

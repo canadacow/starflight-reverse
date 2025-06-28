@@ -110,6 +110,7 @@ BiomType TerrainGenerator::GetBiomeTypeAtHeight(float height, const std::string&
 std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     const float2& currentPosition,
     const Quaternion<float>& currentRotation,
+    float tileAspectRatio,
     const std::string& currentPlanetType,
     TerrainConfig* config,
     const TerrainHeightFunction& heightFunction
@@ -122,6 +123,8 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     
     // Use provided config or get default
     TerrainConfig actualConfig = config == nullptr ? GetDefaultTerrainConfig() : *config;
+
+    actualConfig.terrainAspectRatio = tileAspectRatio;
     
     // Add all minerals
     for (const auto& mineral : actualConfig.minerals) {
@@ -139,13 +142,13 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     }
     
     // Add rock formations around current position
-    AddRockFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
+    AddRockFormations(terrainItems, currentPosition, actualConfig, heightFunction, currentPlanetType);
     
     // Add grass formations around current position
-    AddGrassFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
+    //AddGrassFormations(terrainItems, currentPosition, actualConfig, heightFunction, currentPlanetType);
     
     // Add tree formations around current position
-    //AddTreeFormations(terrainItems, currentPosition, actualConfig.rockFormationRadius, heightFunction, currentPlanetType);
+    AddTreeFormations(terrainItems, currentPosition, actualConfig, heightFunction, currentPlanetType);
     
     return terrainItems;
 }
@@ -369,19 +372,26 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Generate new tile
     std::vector<TerrainItem> tileItems;
     
-    const float minTreeDistance = 3.0f;
-    const float densityThreshold = 0.8f;
+    const float treeSpacing = 0.3f; // Place a tree every 0.1 meters for debugging
     const int seed = 67890;
     
-    // Calculate tile center
-    float2 tileCenter = {
-        (float)tileX * tileSize + tileSize * 0.5f,
-        (float)tileY * tileSize + tileSize * 0.5f
+    // Calculate tile bounds
+    float2 tileMin = {
+        (float)tileX * tileSize,
+        (float)tileY * tileSize
+    };
+    float2 tileMax = {
+        (float)tileX * tileSize + tileSize,
+        (float)tileY * tileSize + tileSize
     };
     
-    // Generate candidate positions for this tile
-    std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
-        tileCenter, tileSize, minTreeDistance, seed, tileX, tileY);
+    // Generate uniform grid of candidate positions instead of Poisson sampling
+    std::vector<float2> candidatePositions;
+    for (float x = tileMin.x; x < tileMax.x; x += treeSpacing) {
+        for (float y = tileMin.y; y < tileMax.y; y += treeSpacing) {
+            candidatePositions.push_back({x, y});
+        }
+    }
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
@@ -392,28 +402,25 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         
         // Only place trees in grass biomes
         if (biomeType != BiomType::Grass) continue;
-        
-        // Check if tree should be placed using fractal noise (for additional filtering)
-        float placementNoise = RockFractalNoise(worldCoord.x, worldCoord.y, 3, 0.5f, 0.1f, seed);
-        if(placementNoise <= densityThreshold) continue;
-        
-        // Position jitter for natural placement
-        float2 jitter = {
-            RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) * 0.3f,
-            RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) * 0.3f
-        };
+
+        float2 jitter = { 0.0f, 0.0f };
         
         float2 treePos = worldCoord + jitter;
 
         // Generate random scale for variety (0.8 to 1.4)
-        float scale = 0.8f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.6f;
+        float scale = 1.0f; //0.8f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.6f;
 
         // Generate random rotation around Y axis for natural variety
         float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * 3.14159f;
+        randomAngle = 0.0f;
         Quaternion<float> treeRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
        
+        // Generate random tree type (01-11)
+        int treeType = 1 + (int)(RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500) * 11.0f);
+        std::string treeName = std::string("tree_") + (treeType < 10 ? "0" : "") + std::to_string(treeType);
+        
         TerrainItem tree{
-            "tree-stylized-01",
+            treeName,
             treePos,
             float3{0.0f, 0.0f, 0.0f},
             treeRotation,
@@ -544,14 +551,14 @@ std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileSize
 }
 
 void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems, 
-                                        const float2& centerPosition, float radius,
+                                        const float2& centerPosition, const TerrainConfig& config,
                                         const TerrainHeightFunction& heightFunction,
                                         const std::string& currentPlanetType) {
     const float tileSize = 16.0f; // Size of each world tile
     
     // Determine which tiles intersect with the sampling radius
-    float2 minBounds = { centerPosition.x - radius, centerPosition.y - radius };
-    float2 maxBounds = { centerPosition.x + radius, centerPosition.y + radius };
+    float2 minBounds = { centerPosition.x - config.rockFormationRadius, centerPosition.y - config.rockFormationRadius };
+    float2 maxBounds = { centerPosition.x + config.rockFormationRadius, centerPosition.y + config.rockFormationRadius };
     
     int minTileX = (int)std::floor(minBounds.x / tileSize);
     int maxTileX = (int)std::floor(maxBounds.x / tileSize);
@@ -569,7 +576,7 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
             for (const TerrainItem& item : tileItems) {
                 float dx = item.tilePosition.x - centerPosition.x;
                 float dy = item.tilePosition.y - centerPosition.y;
-                if (dx*dx + dy*dy <= radius*radius) {
+                if (dx*dx + dy*dy <= config.rockFormationRadius*config.rockFormationRadius) {
                     terrainItems.push_back(item);
                 }
             }
@@ -578,14 +585,14 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
 }
 
 void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems, 
-                                         const float2& centerPosition, float radius,
+                                         const float2& centerPosition, const TerrainConfig& config,
                                          const TerrainHeightFunction& heightFunction,
                                          const std::string& currentPlanetType) {
     const float tileSize = 16.0f; // Same tile size as rocks
     
     // Determine which tiles intersect with the sampling radius
-    float2 minBounds = { centerPosition.x - radius, centerPosition.y - radius };
-    float2 maxBounds = { centerPosition.x + radius, centerPosition.y + radius };
+    float2 minBounds = { centerPosition.x - config.rockFormationRadius, centerPosition.y - config.rockFormationRadius };
+    float2 maxBounds = { centerPosition.x + config.rockFormationRadius, centerPosition.y + config.rockFormationRadius };
     
     int minTileX = (int)std::floor(minBounds.x / tileSize);
     int maxTileX = (int)std::floor(maxBounds.x / tileSize);
@@ -603,7 +610,7 @@ void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems
             for (const TerrainItem& item : tileItems) {
                 float dx = item.tilePosition.x - centerPosition.x;
                 float dy = item.tilePosition.y - centerPosition.y;
-                if (dx*dx + dy*dy <= radius*radius) {
+                if (dx*dx + dy*dy <= config.rockFormationRadius*config.rockFormationRadius) {
                     terrainItems.push_back(item);
                 }
             }
@@ -612,14 +619,14 @@ void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems
 }
 
 void TerrainGenerator::AddTreeFormations(std::vector<TerrainItem>& terrainItems, 
-                                        const float2& centerPosition, float radius,
+                                        const float2& centerPosition, const TerrainConfig& config,
                                         const TerrainHeightFunction& heightFunction,
                                         const std::string& currentPlanetType) {
     const float tileSize = 16.0f; // Same tile size as other elements
     
     // Determine which tiles intersect with the sampling radius
-    float2 minBounds = { centerPosition.x - radius, centerPosition.y - radius };
-    float2 maxBounds = { centerPosition.x + radius, centerPosition.y + radius };
+    float2 minBounds = { centerPosition.x - config.rockFormationRadius, centerPosition.y - config.rockFormationRadius };
+    float2 maxBounds = { centerPosition.x + config.rockFormationRadius, centerPosition.y + config.rockFormationRadius };
     
     int minTileX = (int)std::floor(minBounds.x / tileSize);
     int maxTileX = (int)std::floor(maxBounds.x / tileSize);
@@ -637,7 +644,7 @@ void TerrainGenerator::AddTreeFormations(std::vector<TerrainItem>& terrainItems,
             for (const TerrainItem& item : tileItems) {
                 float dx = item.tilePosition.x - centerPosition.x;
                 float dy = item.tilePosition.y - centerPosition.y;
-                if (dx*dx + dy*dy <= radius*radius) {
+                if (dx*dx + dy*dy <= config.rockFormationRadius*config.rockFormationRadius) {
                     terrainItems.push_back(item);
                 }
             }

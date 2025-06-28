@@ -5459,7 +5459,9 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
         }    
     }
 
-    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, currentPlanetType, nullptr, heightFunction);
+    float tileAspectRatio = GraphicsContext::TileSize.x / GraphicsContext::TileSize.y;
+
+    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, tileAspectRatio, currentPlanetType, nullptr, heightFunction);
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 
