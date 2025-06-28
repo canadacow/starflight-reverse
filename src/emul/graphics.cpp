@@ -5171,26 +5171,12 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     shiftDown = true;
                     break;
                 case SDLK_w:
-                    if (currentCameraIndex == 0)
-                    {
-                        s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI);
-                        MoveDirection.y += 10.0f;
-                    }
-                    else
-                    {
-                        MoveDirection.z -= 1.0f;
-                    }
+                    s_gc.tvNudge = Quaternion<float>::RotationFromAxisAngle(float3(0.0f, 1.0f, 0.0f), PI);
+                    MoveDirection.y += 10.0f;
                     break;
                 case SDLK_s:
-                    if (currentCameraIndex == 0)
-                    {
-                         MoveDirection.y -= 10.0f;
-                         s_gc.tvNudge = {};
-                    }
-                    else
-                    {
-                        MoveDirection.z += 1.0f;
-                    }
+                    MoveDirection.y -= 10.0f;
+                    s_gc.tvNudge = {};
                     break;
                 case SDLK_q:
                     if (currentCameraIndex == 0)
@@ -5216,15 +5202,8 @@ void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex)
                     break;
                 case SDLK_c:
                     {
-                        #if 0
-                        s_gc.terrainMovement = { 388.0f * GraphicsContext::TileSize.x, -40.0f, 245.0f * GraphicsContext::TileSize.y };
-                        s_gc.terrainFPVRotation = float4x4::Identity();
-                        s_gc.FPVyawAngle = 0.0f;
-                        s_gc.FPVpitchAngle = 0.0f;
-                        s_gc.mouseState = {};
                         currentCameraIndex = (currentCameraIndex + 1) % cameras.size();
                         s_gc.terrain.camera = cameras[currentCameraIndex];
-                        #endif
                     }
                     break;
                 case SDLK_m:
@@ -5507,16 +5486,9 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     MaxDim = std::max(MaxDim, ModelDim.z);
 
     float4x4 InvYAxis = float4x4::Identity();
-    //InvYAxis._22 = -1;
 
-#if 0
-    s_gc.terrain.scale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
-    auto     Translate = -s_gc.terrain.aabb.Min - 0.5f * ModelDim;
-    InvYAxis._22 = -1;
-#else
     s_gc.terrain.scale = 1.0f;
     float3 Translate = { 0.f, 0.f, 0.f };
-#endif
 
     s_gc.terrain.modelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.terrain.scale) * InvYAxis;
     s_gc.terrain.scaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.terrain.scale);
@@ -5533,16 +5505,23 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float ZFar = 100.f;
 
     float4x4 CameraView;
-
+    float4x4 CameraRotationMatrix;
     const auto* pCameraNode = s_gc.terrain.camera;
     const auto* pCamera = pCameraNode->pCamera;
     const auto& CameraGlobalTransform = s_gc.terrain.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
 
-    auto camRotation =
-        QuaternionF::RotationFromAxisAngle(float3{ 1, 0, 0 }, -s_gc.FPVpitchAngle) *
-        QuaternionF::RotationFromAxisAngle(float3{ 0, 1, 0 }, -s_gc.FPVyawAngle);
+    if(pCameraNode->Name == "TopDown")
+    {
+        auto camRotation =
+            QuaternionF::RotationFromAxisAngle(float3{ 1, 0, 0 }, -s_gc.FPVpitchAngle) *
+            QuaternionF::RotationFromAxisAngle(float3{ 0, 1, 0 }, -s_gc.FPVyawAngle);
 
-    auto CameraRotationMatrix = camRotation.ToMatrix();
+        CameraRotationMatrix = camRotation.ToMatrix();
+    }
+    else
+    {
+        CameraRotationMatrix = CameraGlobalTransform;
+    }
 
     // GLTF camera is defined such that the local +X axis is to the right,
     // the lens looks towards the local -Z axis, and the top of the camera
@@ -5552,42 +5531,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
     float4x4 InvZAxis = float4x4::Identity();
     InvZAxis._33 = -1;
 
-    #if 0
-
-    float finalCameraY = 0.0f;
-
-    {
-        const float TILE_SIZE = 4.0f; // Size of each tile
-        const float DESIRED_GRID = 15.0f; // We want to see 15x15 tiles
-        const float TOTAL_VISIBLE_WORLD_SIZE = DESIRED_GRID * TILE_SIZE;
-
-        // Define the desired pixel size for the region
-        //const float DESIRED_PIXEL_SIZE = 860.0f; // Desired pixel size for the region
-        const float DESIRED_PIXEL_SIZE = 860.0f / 1.5f; // Desired pixel size for the region
-
-        // Calculate the aspect ratio of the desired pixel size
-        float aspectRatio = pCamera->Perspective.AspectRatio;
-
-        // Calculate the world size that corresponds to the desired pixel size
-        float halfWorldSize = TOTAL_VISIBLE_WORLD_SIZE * 0.5f;
-
-        // Calculate the required Y position of the camera to fit the world size into the desired pixel size
-        float fovY = pCamera->Perspective.YFov;
-        float requiredCameraY = halfWorldSize / std::tan(fovY * 0.5f);
-
-        // Adjust for aspect ratio to ensure we see the same number of tiles horizontally
-        float horizontalHalfSize = halfWorldSize * aspectRatio;
-        float requiredCameraYHorizontal = horizontalHalfSize / std::tan(fovY * 0.5f);
-
-        // Use the larger Y position to ensure both dimensions are fully visible
-        finalCameraY = std::max(requiredCameraY, requiredCameraYHorizontal);
-    }
-
-    finalCameraY = 99.0f;
-    auto trans = float4x4::Translation(-s_gc.terrainMovement.x, -finalCameraY, -s_gc.terrainMovement.z);
-    #else
     auto trans = float4x4::Translation(-s_gc.terrainMovement.x, s_gc.terrainMovement.y, -s_gc.terrainMovement.z);
-    #endif
     
     //CameraView = trans * s_gc.terrainFPVRotation * CameraGlobalTransform.Inverse() * InvZAxis;
     CameraView = trans * CameraRotationMatrix * InvZAxis;
