@@ -186,7 +186,7 @@ void TerrainGenerator::AddSpaceship(std::vector<TerrainItem>& terrainItems,
 
 // Cache-aware tile generation methods
 std::vector<TerrainItem> TerrainGenerator::GetOrGenerateRockTile(
-    int tileX, int tileY, float tileSize,
+    int tileX, int tileY, const TerrainConfig& config,
     const TerrainHeightFunction& heightFunction,
     const std::string& currentPlanetType) {
     
@@ -207,13 +207,13 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateRockTile(
     
     // Calculate tile center
     float2 tileCenter = {
-        (float)tileX * tileSize + tileSize * 0.5f,
-        (float)tileY * tileSize + tileSize * 0.5f
+        (float)tileX * config.formationRadius + config.formationRadius * 0.5f,
+        (float)tileY * config.formationRadius + config.formationRadius * 0.5f
     };
     
     // Generate candidate positions for this tile
     std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
-        tileCenter, tileSize, minRockDistance, seed, tileX, tileY);
+        tileCenter, config.formationRadius, minRockDistance, seed, tileX, tileY);
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
@@ -275,7 +275,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateRockTile(
 }
 
 std::vector<TerrainItem> TerrainGenerator::GetOrGenerateGrassTile(
-    int tileX, int tileY, float tileSize,
+    int tileX, int tileY, const TerrainConfig& config,
     const TerrainHeightFunction& heightFunction,
     const std::string& currentPlanetType) {
     
@@ -296,13 +296,13 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateGrassTile(
     
     // Calculate tile center
     float2 tileCenter = {
-        (float)tileX * tileSize + tileSize * 0.5f,
-        (float)tileY * tileSize + tileSize * 0.5f
+        (float)tileX * config.formationRadius + config.formationRadius * 0.5f,
+        (float)tileY * config.formationRadius + config.formationRadius * 0.5f
     };
     
     // Generate candidate positions for this tile
     std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
-        tileCenter, tileSize, minGrassDistance, seed, tileX, tileY);
+        tileCenter, config.formationRadius, minGrassDistance, seed, tileX, tileY);
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
@@ -357,7 +357,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateGrassTile(
 }
 
 std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
-    int tileX, int tileY, float tileSize,
+    int tileX, int tileY, const TerrainConfig& config,
     const TerrainHeightFunction& heightFunction,
     const std::string& currentPlanetType) {
     
@@ -377,12 +377,12 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     
     // Calculate tile bounds
     float2 tileMin = {
-        (float)tileX * tileSize,
-        (float)tileY * tileSize
+        (float)tileX * config.formationRadius,
+        (float)tileY * config.formationRadius
     };
     float2 tileMax = {
-        (float)tileX * tileSize + tileSize,
-        (float)tileY * tileSize + tileSize
+        (float)tileX * config.formationRadius + config.formationRadius,
+        (float)tileY * config.formationRadius + config.formationRadius
     };
     
     // Generate uniform grid of candidate positions instead of Poisson sampling
@@ -554,29 +554,28 @@ void TerrainGenerator::AddRockFormations(std::vector<TerrainItem>& terrainItems,
                                         const float2& centerPosition, const TerrainConfig& config,
                                         const TerrainHeightFunction& heightFunction,
                                         const std::string& currentPlanetType) {
-    const float tileSize = 16.0f; // Size of each world tile
     
     // Determine which tiles intersect with the sampling radius
-    float2 minBounds = { centerPosition.x - config.rockFormationRadius, centerPosition.y - config.rockFormationRadius };
-    float2 maxBounds = { centerPosition.x + config.rockFormationRadius, centerPosition.y + config.rockFormationRadius };
+    float2 minBounds = { centerPosition.x - config.formationRadius, centerPosition.y - config.formationRadius };
+    float2 maxBounds = { centerPosition.x + config.formationRadius, centerPosition.y + config.formationRadius };
     
-    int minTileX = (int)std::floor(minBounds.x / tileSize);
-    int maxTileX = (int)std::floor(maxBounds.x / tileSize);
-    int minTileY = (int)std::floor(minBounds.y / tileSize);
-    int maxTileY = (int)std::floor(maxBounds.y / tileSize);
+    int minTileX = (int)std::floor(minBounds.x / config.formationRadius);
+    int maxTileX = (int)std::floor(maxBounds.x / config.formationRadius);
+    int minTileY = (int)std::floor(minBounds.y / config.formationRadius);
+    int maxTileY = (int)std::floor(maxBounds.y / config.formationRadius);
     
     // Generate rocks for each intersecting tile using cache
     for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
         for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
             // Get cached or generate tile items
             std::vector<TerrainItem> tileItems = GetOrGenerateRockTile(
-                tileX, tileY, tileSize, heightFunction, currentPlanetType);
+                tileX, tileY, config, heightFunction, currentPlanetType);
             
             // Filter items within radius and add to result
             for (const TerrainItem& item : tileItems) {
                 float dx = item.tilePosition.x - centerPosition.x;
                 float dy = item.tilePosition.y - centerPosition.y;
-                if (dx*dx + dy*dy <= config.rockFormationRadius*config.rockFormationRadius) {
+                if (dx*dx + dy*dy <= config.formationRadius*config.formationRadius) {
                     terrainItems.push_back(item);
                 }
             }
@@ -588,29 +587,28 @@ void TerrainGenerator::AddGrassFormations(std::vector<TerrainItem>& terrainItems
                                          const float2& centerPosition, const TerrainConfig& config,
                                          const TerrainHeightFunction& heightFunction,
                                          const std::string& currentPlanetType) {
-    const float tileSize = 16.0f; // Same tile size as rocks
     
     // Determine which tiles intersect with the sampling radius
-    float2 minBounds = { centerPosition.x - config.rockFormationRadius, centerPosition.y - config.rockFormationRadius };
-    float2 maxBounds = { centerPosition.x + config.rockFormationRadius, centerPosition.y + config.rockFormationRadius };
+    float2 minBounds = { centerPosition.x - config.formationRadius, centerPosition.y - config.formationRadius };
+    float2 maxBounds = { centerPosition.x + config.formationRadius, centerPosition.y + config.formationRadius };
     
-    int minTileX = (int)std::floor(minBounds.x / tileSize);
-    int maxTileX = (int)std::floor(maxBounds.x / tileSize);
-    int minTileY = (int)std::floor(minBounds.y / tileSize);
-    int maxTileY = (int)std::floor(maxBounds.y / tileSize);
+    int minTileX = (int)std::floor(minBounds.x / config.formationRadius);
+    int maxTileX = (int)std::floor(maxBounds.x / config.formationRadius);
+    int minTileY = (int)std::floor(minBounds.y / config.formationRadius);
+    int maxTileY = (int)std::floor(maxBounds.y / config.formationRadius);
     
     // Generate grass for each intersecting tile using cache
     for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
         for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
             // Get cached or generate tile items
             std::vector<TerrainItem> tileItems = GetOrGenerateGrassTile(
-                tileX, tileY, tileSize, heightFunction, currentPlanetType);
+                tileX, tileY, config, heightFunction, currentPlanetType);
             
             // Filter items within radius and add to result
             for (const TerrainItem& item : tileItems) {
                 float dx = item.tilePosition.x - centerPosition.x;
                 float dy = item.tilePosition.y - centerPosition.y;
-                if (dx*dx + dy*dy <= config.rockFormationRadius*config.rockFormationRadius) {
+                if (dx*dx + dy*dy <= config.formationRadius*config.formationRadius) {
                     terrainItems.push_back(item);
                 }
             }
@@ -622,29 +620,28 @@ void TerrainGenerator::AddTreeFormations(std::vector<TerrainItem>& terrainItems,
                                         const float2& centerPosition, const TerrainConfig& config,
                                         const TerrainHeightFunction& heightFunction,
                                         const std::string& currentPlanetType) {
-    const float tileSize = 16.0f; // Same tile size as other elements
     
     // Determine which tiles intersect with the sampling radius
-    float2 minBounds = { centerPosition.x - config.rockFormationRadius, centerPosition.y - config.rockFormationRadius };
-    float2 maxBounds = { centerPosition.x + config.rockFormationRadius, centerPosition.y + config.rockFormationRadius };
+    float2 minBounds = { centerPosition.x - config.formationRadius, centerPosition.y - config.formationRadius };
+    float2 maxBounds = { centerPosition.x + config.formationRadius, centerPosition.y + config.formationRadius };
     
-    int minTileX = (int)std::floor(minBounds.x / tileSize);
-    int maxTileX = (int)std::floor(maxBounds.x / tileSize);
-    int minTileY = (int)std::floor(minBounds.y / tileSize);
-    int maxTileY = (int)std::floor(maxBounds.y / tileSize);
+    int minTileX = (int)std::floor(minBounds.x / config.formationRadius);
+    int maxTileX = (int)std::floor(maxBounds.x / config.formationRadius);
+    int minTileY = (int)std::floor(minBounds.y / config.formationRadius);
+    int maxTileY = (int)std::floor(maxBounds.y / config.formationRadius);
     
     // Generate trees for each intersecting tile using cache
     for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
         for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
             // Get cached or generate tile items
             std::vector<TerrainItem> tileItems = GetOrGenerateTreeTile(
-                tileX, tileY, tileSize, heightFunction, currentPlanetType);
+                tileX, tileY, config, heightFunction, currentPlanetType);
             
             // Filter items within radius and add to result
             for (const TerrainItem& item : tileItems) {
                 float dx = item.tilePosition.x - centerPosition.x;
                 float dy = item.tilePosition.y - centerPosition.y;
-                if (dx*dx + dy*dy <= config.rockFormationRadius*config.rockFormationRadius) {
+                if (dx*dx + dy*dy <= config.formationRadius*config.formationRadius) {
                     terrainItems.push_back(item);
                 }
             }

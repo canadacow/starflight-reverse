@@ -58,7 +58,7 @@ public:
 
     struct TerrainConfig {
         // Rock formation settings
-        float rockFormationRadius = 16.0f;
+        float formationRadius = 16.0f;
 
         float terrainAspectRatio = ( 6.666f / 4.0f );
         
@@ -145,17 +145,17 @@ private:
 
     // Cache-aware tile generation methods
     std::vector<TerrainItem> GetOrGenerateRockTile(
-        int tileX, int tileY, float tileSize,
+        int tileX, int tileY, const TerrainConfig& config,
         const TerrainHeightFunction& heightFunction,
         const std::string& currentPlanetType);
 
     std::vector<TerrainItem> GetOrGenerateGrassTile(
-        int tileX, int tileY, float tileSize,
+        int tileX, int tileY, const TerrainConfig& config,
         const TerrainHeightFunction& heightFunction,
         const std::string& currentPlanetType);
 
     std::vector<TerrainItem> GetOrGenerateTreeTile(
-        int tileX, int tileY, float tileSize,
+        int tileX, int tileY, const TerrainConfig& config,
         const TerrainHeightFunction& heightFunction,
         const std::string& currentPlanetType);
 
