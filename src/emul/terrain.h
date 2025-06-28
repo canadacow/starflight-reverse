@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <functional>
+#include <unordered_map>
 #include "BasicMath.hpp"
 #include "DynamicMesh.hpp"
 
@@ -69,6 +70,32 @@ public:
         std::vector<SpaceshipData> spaceships;
     };
 
+    // Tile cache types
+    enum class TileItemType {
+        Rock,
+        Grass,
+        Tree
+    };
+
+    struct TileCoord {
+        int x, y;
+        
+        bool operator==(const TileCoord& other) const {
+            return x == other.x && y == other.y;
+        }
+    };
+
+    struct TileCoordHash {
+        std::size_t operator()(const TileCoord& coord) const {
+            return std::hash<int>()(coord.x) ^ (std::hash<int>()(coord.y) << 1);
+        }
+    };
+
+    struct CachedTileData {
+        std::vector<TerrainItem> items;
+        bool isGenerated = false;
+    };
+
     TerrainGenerator(const std::vector<PlanetType>& planetTypes);
     ~TerrainGenerator() = default;
     TerrainGenerator() = delete;
@@ -81,6 +108,11 @@ public:
         TerrainConfig* config = nullptr,
         const TerrainHeightFunction& heightFunction = nullptr
     );
+
+    // Cache management
+    void ClearCache();
+    void ClearCacheForType(TileItemType itemType);
+    size_t GetCacheSize() const;
 
 private:
     // Helper functions for adding different types of terrain objects
@@ -96,17 +128,36 @@ private:
     void AddRockFormations(std::vector<TerrainItem>& terrainItems, 
                           const float2& centerPosition, float radius,
                           const TerrainHeightFunction& heightFunction,
-                          const std::string& currentPlanetType) const;
+                          const std::string& currentPlanetType);
 
     void AddGrassFormations(std::vector<TerrainItem>& terrainItems, 
                           const float2& centerPosition, float radius,
                           const TerrainHeightFunction& heightFunction,
-                          const std::string& currentPlanetType) const;
+                          const std::string& currentPlanetType);
 
     void AddTreeFormations(std::vector<TerrainItem>& terrainItems, 
                           const float2& centerPosition, float radius,
                           const TerrainHeightFunction& heightFunction,
-                          const std::string& currentPlanetType) const;
+                          const std::string& currentPlanetType);
+
+    // Cache-aware tile generation methods
+    std::vector<TerrainItem> GetOrGenerateRockTile(
+        int tileX, int tileY, float tileSize,
+        const TerrainHeightFunction& heightFunction,
+        const std::string& currentPlanetType);
+
+    std::vector<TerrainItem> GetOrGenerateGrassTile(
+        int tileX, int tileY, float tileSize,
+        const TerrainHeightFunction& heightFunction,
+        const std::string& currentPlanetType);
+
+    std::vector<TerrainItem> GetOrGenerateTreeTile(
+        int tileX, int tileY, float tileSize,
+        const TerrainHeightFunction& heightFunction,
+        const std::string& currentPlanetType);
+
+    // Helper methods for cache key generation
+    std::string MakeCacheKey(TileItemType itemType, int tileX, int tileY) const;
 
     // Default terrain configuration
     TerrainConfig GetDefaultTerrainConfig() const;
@@ -118,6 +169,9 @@ private:
     BiomType GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const;
 
     std::vector<PlanetType> planetTypes;
+    
+    // Tile caches - separate cache for each item type
+    std::unordered_map<std::string, CachedTileData> tileCache;
 };
 
 } // namespace SF_GLTF
