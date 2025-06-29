@@ -371,8 +371,10 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     
     // Generate new tile
     std::vector<TerrainItem> tileItems;
+
+    float spacing = 0.3f;
     
-    const float treeSpacing = 0.3f; // Place a tree every 0.1 meters for debugging
+    float2 treeSpacing = float2(spacing * config.terrainAspectRatio, spacing);
     const int seed = 67890;
     
     // Calculate tile bounds
@@ -387,8 +389,8 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     
     // Generate uniform grid of candidate positions instead of Poisson sampling
     std::vector<float2> candidatePositions;
-    for (float x = tileMin.x; x < tileMax.x; x += treeSpacing) {
-        for (float y = tileMin.y; y < tileMax.y; y += treeSpacing) {
+    for (float x = tileMin.x; x < tileMax.x; x += treeSpacing.x) {
+        for (float y = tileMin.y; y < tileMax.y; y += treeSpacing.y) {
             candidatePositions.push_back({x, y});
         }
     }
@@ -403,7 +405,10 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         // Only place trees in grass biomes
         if (biomeType != BiomType::Grass) continue;
 
-        float2 jitter = { 0.0f, 0.0f };
+        float2 jitter = {
+            (RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) - 0.5f) * treeSpacing.x * 0.5f,
+            (RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) - 0.5f) * treeSpacing.y * 0.5f
+        };
         
         float2 treePos = worldCoord + jitter;
 
@@ -424,7 +429,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
             treePos,
             float3{0.0f, 0.0f, 0.0f},
             treeRotation,
-            true,
+            false,
             float3{scale, scale, scale}
         };
         

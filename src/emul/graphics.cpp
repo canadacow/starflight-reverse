@@ -988,7 +988,17 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
 
                 if(pNode->Instances.size() > 0)
                 {
+                    #if defined(WIN32)
+                    if(pNode->Instances.size() >= SF_PBR_Renderer::MaxInstanceCount)
+                    {
+                        if(IsDebuggerPresent())
+                        {
+                            __debugbreak();
+                        }
+                    }
+                    #else
                     assert(pNode->Instances.size() <= SF_PBR_Renderer::MaxInstanceCount);
+                    #endif
 
                     MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, s_gc.instanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
                     for(int i = 0; i < pNode->Instances.size(); ++i)
@@ -5459,7 +5469,7 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
         }    
     }
 
-    float tileAspectRatio = GraphicsContext::TileSize.x / GraphicsContext::TileSize.y;
+    float tileAspectRatio = GraphicsContext::TileSize.y / GraphicsContext::TileSize.x;
 
     std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, tileAspectRatio, currentPlanetType, nullptr, heightFunction);
 
