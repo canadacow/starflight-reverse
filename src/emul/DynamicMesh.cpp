@@ -127,149 +127,14 @@ void DynamicMesh::GeneratePlanes(float width, float height, float tileHeight, fl
     m_TextureSize = textureSize;
 
     VertexIndexCounts counts = {};
-
-    // Generate high LOD mesh (current implementation)
-    generateHighLODMesh(counts, numQuadsPerTile, tileHeight);
-    
-    // Generate medium LOD mesh (single quad per tile)
-    generateMediumLODMesh(counts, tileHeight);
-    
+   
     // Generate low LOD mesh (large quads covering 61x61 tile areas)
     generateLowLODMesh(counts, tileHeight);
-
-    generateNonInstancedMesh(counts, tileHeight);
 
     CreateBuffers();
     m_GPUDataInitialized = false;
 
     InitializeVertexAndIndexData();
-}
-
-void DynamicMesh::generateHighLODMesh(VertexIndexCounts& counts, int numQuadsPerTile, float tileHeight)
-{
-    const int numVerticesPerRow = numQuadsPerTile + 1;
-    const int numVertices = numVerticesPerRow * numVerticesPerRow;
-    
-    m_HighLODVertices.resize(numVertices);
-    m_HighLODIndices.resize(numQuadsPerTile * numQuadsPerTile * 6); // 6 indices per quad (2 triangles)
-
-    int vertexIndex = 0;
-    int indexIndex = 0;
-
-    m_HighLODOffsets.vertexCount = vertexIndex;
-    m_HighLODOffsets.indexCount = indexIndex;
-
-    for (int row = 0; row <= numQuadsPerTile; ++row)
-    {
-        for (int col = 0; col <= numQuadsPerTile; ++col)
-        {
-            float x = (col / static_cast<float>(numQuadsPerTile)) * m_TileSize.x;
-            float z = (row / static_cast<float>(numQuadsPerTile)) * m_TileSize.y;
-            float y = tileHeight;
-
-            auto& vert = m_HighLODVertices[vertexIndex++];
-            vert.posX = x;
-            vert.posY = y;
-            vert.posZ = z;
-
-            // Compute normals
-            vert.normalX = 0.0f;
-            vert.normalY = 1.0f;
-            vert.normalZ = 0.0f;
-
-            // Compute UV coordinates
-            vert.texU0 = col / static_cast<float>(numQuadsPerTile);
-            vert.texV0 = row / static_cast<float>(numQuadsPerTile);
-
-            if (row < numQuadsPerTile && col < numQuadsPerTile)
-            {
-                int topLeft = row * numVerticesPerRow + col;
-                int topRight = topLeft + 1;
-                int bottomLeft = topLeft + numVerticesPerRow;
-                int bottomRight = bottomLeft + 1;
-
-                // First triangle
-                m_HighLODIndices[indexIndex++] = topLeft;
-                m_HighLODIndices[indexIndex++] = bottomLeft;
-                m_HighLODIndices[indexIndex++] = topRight;
-
-                // Second triangle
-                m_HighLODIndices[indexIndex++] = topRight;
-                m_HighLODIndices[indexIndex++] = bottomLeft;
-                m_HighLODIndices[indexIndex++] = bottomRight;
-            }
-        }
-    }
-
-    counts.vertexCount = vertexIndex;
-    counts.indexCount = indexIndex;
-}
-
-void DynamicMesh::generateMediumLODMesh(VertexIndexCounts& counts, float tileHeight)
-{
-    // Medium LOD - single quad per tile
-    const int numVerticesPerQuad = 4;
-    const int numIndicesPerQuad = 6;
-
-    m_MediumLODOffsets.vertexCount = counts.vertexCount;
-    m_MediumLODOffsets.indexCount = counts.indexCount;
-    
-    m_MediumLODVertices.resize(numVerticesPerQuad);
-    m_MediumLODIndices.resize(numIndicesPerQuad);
-
-    // Create a single quad covering the entire tile
-    // Top-left vertex
-    m_MediumLODVertices[0].posX = 0.0f;
-    m_MediumLODVertices[0].posY = tileHeight;
-    m_MediumLODVertices[0].posZ = 0.0f;
-    m_MediumLODVertices[0].normalX = 0.0f;
-    m_MediumLODVertices[0].normalY = 1.0f;
-    m_MediumLODVertices[0].normalZ = 0.0f;
-    m_MediumLODVertices[0].texU0 = 0.0f;
-    m_MediumLODVertices[0].texV0 = 0.0f;
-
-    // Top-right vertex
-    m_MediumLODVertices[1].posX = m_TileSize.x;
-    m_MediumLODVertices[1].posY = tileHeight;
-    m_MediumLODVertices[1].posZ = 0.0f;
-    m_MediumLODVertices[1].normalX = 0.0f;
-    m_MediumLODVertices[1].normalY = 1.0f;
-    m_MediumLODVertices[1].normalZ = 0.0f;
-    m_MediumLODVertices[1].texU0 = 1.0f;
-    m_MediumLODVertices[1].texV0 = 0.0f;
-
-    // Bottom-left vertex
-    m_MediumLODVertices[2].posX = 0.0f;
-    m_MediumLODVertices[2].posY = tileHeight;
-    m_MediumLODVertices[2].posZ = m_TileSize.y;
-    m_MediumLODVertices[2].normalX = 0.0f;
-    m_MediumLODVertices[2].normalY = 1.0f;
-    m_MediumLODVertices[2].normalZ = 0.0f;
-    m_MediumLODVertices[2].texU0 = 0.0f;
-    m_MediumLODVertices[2].texV0 = 1.0f;
-
-    // Bottom-right vertex
-    m_MediumLODVertices[3].posX = m_TileSize.x;
-    m_MediumLODVertices[3].posY = tileHeight;
-    m_MediumLODVertices[3].posZ = m_TileSize.y;
-    m_MediumLODVertices[3].normalX = 0.0f;
-    m_MediumLODVertices[3].normalY = 1.0f;
-    m_MediumLODVertices[3].normalZ = 0.0f;
-    m_MediumLODVertices[3].texU0 = 1.0f;
-    m_MediumLODVertices[3].texV0 = 1.0f;
-
-    // First triangle
-    m_MediumLODIndices[0] = counts.vertexCount + 0; // top-left
-    m_MediumLODIndices[1] = counts.vertexCount + 2; // bottom-left
-    m_MediumLODIndices[2] = counts.vertexCount + 1; // top-right
-
-    // Second triangle
-    m_MediumLODIndices[3] = counts.vertexCount + 1; // top-right
-    m_MediumLODIndices[4] = counts.vertexCount + 2; // bottom-left
-    m_MediumLODIndices[5] = counts.vertexCount + 3; // bottom-right
-
-    counts.indexCount += 6;
-    counts.vertexCount += 4;
 }
 
 void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight)
@@ -342,95 +207,11 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
     counts.vertexCount += 4;
 }
 
-void DynamicMesh::generateNonInstancedMesh(VertexIndexCounts& counts, float tileHeight)
-{
-    // Clear existing vertices and indices
-    m_NonInstancedVertices.clear();
-    m_NonInstancedIndices.clear();
-
-    m_NonInstancedOffsets.vertexCount = counts.vertexCount;
-    m_NonInstancedOffsets.indexCount = counts.indexCount;
-    
-    // Calculate the size of the entire grid of tiles
-    float totalWidth = TERRAIN_MAX_X * m_TileSize.x;
-    float totalHeight = TERRAIN_MAX_Y * m_TileSize.y;
-    
-    // Calculate how many low LOD tiles we need to cover one terrain section
-    // Each low LOD tile covers numBigTiles x numBigTiles area
-    int lowLODTilesX = (TERRAIN_MAX_X + numBigTiles.x - 1) / numBigTiles.x;
-    int lowLODTilesY = (TERRAIN_MAX_Y + numBigTiles.y - 1) / numBigTiles.y;
-    
-    // Create 3x5 repeating pattern of the terrain (3 columns, 5 rows)
-    for (int repeatX = -1; repeatX <= 1; ++repeatX) {
-        for (int repeatY = -3; repeatY <= 3; ++repeatY) {
-            // Calculate the offset for this terrain section
-            float xOffset = repeatX * totalWidth;
-            float zOffset = repeatY * totalHeight;
-            
-            // Create low LOD tiles to cover this terrain section
-            for (int x = 0; x < lowLODTilesX; ++x) {
-                for (int y = 0; y < lowLODTilesY; ++y) {
-                    // Calculate the actual tile position
-                    int2 tile = int2{x * numBigTiles.x, y * numBigTiles.y};
-                    
-                    // Calculate position for this low LOD tile
-                    float posX = xOffset + (float)tile.x * m_TileSize.x;
-                    float posZ = zOffset + (float)tile.y * m_TileSize.y;
-                   
-                    // Generate vertices for this tile
-                    Uint32 baseIndex = static_cast<Uint32>(m_NonInstancedVertices.size()) + m_NonInstancedOffsets.vertexCount;
-                    
-                    // Add four vertices for this tile (quad)
-                    // Bottom-left
-                    m_NonInstancedVertices.push_back({
-                        posX, tileHeight, posZ,                      // Position
-                        0.0f, 1.0f, 0.0f,                            // Normal
-                        0.0f, 0.0f                             // UV
-                    });
-                    
-                    // Bottom-right
-                    m_NonInstancedVertices.push_back({
-                        posX + numBigTiles.x * m_TileSize.x, tileHeight, posZ,
-                        0.0f, 1.0f, 0.0f,
-                        1.0f, 0.0f, // UV
-                    });
-                    
-                    // Top-right
-                    m_NonInstancedVertices.push_back({
-                        posX + numBigTiles.x * m_TileSize.x, tileHeight, posZ + numBigTiles.y * m_TileSize.y,
-                        0.0f, 1.0f, 0.0f,
-                        1.0f, 1.0f // UV
-                    });
-                    
-                    // Top-left
-                    m_NonInstancedVertices.push_back({
-                        posX, tileHeight, posZ + numBigTiles.y * m_TileSize.y,
-                        0.0f, 1.0f, 0.0f,
-                        0.0f, 1.0f // UV
-                    });
-                    
-                    // Add indices for two triangles (forming a quad)
-                    m_NonInstancedIndices.push_back(baseIndex);
-                    m_NonInstancedIndices.push_back(baseIndex + 1);
-                    m_NonInstancedIndices.push_back(baseIndex + 2);
-                    
-                    m_NonInstancedIndices.push_back(baseIndex);
-                    m_NonInstancedIndices.push_back(baseIndex + 2);
-                    m_NonInstancedIndices.push_back(baseIndex + 3);
-                }
-            }
-        }
-    }
-    
-    counts.vertexCount += static_cast<int>(m_NonInstancedVertices.size());
-    counts.indexCount += static_cast<int>(m_NonInstancedIndices.size());
-}
-
 void DynamicMesh::CreateBuffers()
 {
     // Calculate total buffer sizes needed for all LOD levels
-    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size() + m_NonInstancedVertices.size();
-    size_t totalIndices = m_HighLODIndices.size() + m_MediumLODIndices.size() + m_LowLODIndices.size() + m_NonInstancedIndices.size();
+    size_t totalVertices = m_LowLODVertices.size();
+    size_t totalIndices = m_LowLODIndices.size();
 
     // Initialize vertex buffer
     BufferDesc VertBuffDesc;
@@ -477,26 +258,12 @@ void DynamicMesh::PrepareResources()
     // Update vertex buffer with all LOD levels
     MapHelper<VertexBuff> Vertices(m_pContext, m_VertexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
     
-    // Copy high LOD vertices
-    size_t vertexOffset = 0;
-    memcpy(Vertices + vertexOffset, m_HighLODVertices.data(), sizeof(VertexBuff) * m_HighLODVertices.size());
-    vertexOffset += m_HighLODVertices.size();
-    
-    // Copy medium LOD vertices
-    memcpy(Vertices + vertexOffset, m_MediumLODVertices.data(), sizeof(VertexBuff) * m_MediumLODVertices.size());
-    vertexOffset += m_MediumLODVertices.size();
-    
     // Copy low LOD vertices
-    memcpy(Vertices + vertexOffset, m_LowLODVertices.data(), sizeof(VertexBuff) * m_LowLODVertices.size());
-    vertexOffset += m_LowLODVertices.size();
-
-    // Copy non-instanced vertices
-    memcpy(Vertices + vertexOffset, m_NonInstancedVertices.data(), sizeof(VertexBuff) * m_NonInstancedVertices.size());
-    vertexOffset += m_NonInstancedVertices.size();
+    memcpy(Vertices, m_LowLODVertices.data(), sizeof(VertexBuff) * m_LowLODVertices.size());
 
     // Update second vertex buffer (initialize with zeros)
     MapHelper<VertexBuff2> Vertices2(m_pContext, m_VertexBuffer2, MAP_WRITE, MAP_FLAG_DISCARD);
-    size_t totalVertices = m_HighLODVertices.size() + m_MediumLODVertices.size() + m_LowLODVertices.size() + m_NonInstancedVertices.size();
+    size_t totalVertices = m_LowLODVertices.size();
     memset(Vertices2, 0, sizeof(VertexBuff2) * totalVertices);
 
     // Update third vertex buffer (initialize with zeros)
@@ -506,22 +273,8 @@ void DynamicMesh::PrepareResources()
     // Update index buffer with all LOD levels
     MapHelper<Uint32> Indices(m_pContext, m_IndexBuffer, MAP_WRITE, MAP_FLAG_DISCARD);
     
-    // Copy high LOD indices
-    size_t indexOffset = 0;
-    memcpy(Indices + indexOffset, m_HighLODIndices.data(), sizeof(Uint32) * m_HighLODIndices.size());
-    indexOffset += m_HighLODIndices.size();
-    
-    // Copy medium LOD indices
-    memcpy(Indices + indexOffset, m_MediumLODIndices.data(), sizeof(Uint32) * m_MediumLODIndices.size());
-    indexOffset += m_MediumLODIndices.size();
-    
     // Copy low LOD indices
-    memcpy(Indices + indexOffset, m_LowLODIndices.data(), sizeof(Uint32) * m_LowLODIndices.size());
-    indexOffset += m_LowLODIndices.size();
-
-    // Copy non-instanced indices
-    memcpy(Indices + indexOffset, m_NonInstancedIndices.data(), sizeof(Uint32) * m_NonInstancedIndices.size());
-    indexOffset += m_NonInstancedIndices.size();
+    memcpy(Indices, m_LowLODIndices.data(), sizeof(Uint32) * m_LowLODIndices.size());
 
     m_GPUDataInitialized = true;
 }
