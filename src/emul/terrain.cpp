@@ -12,7 +12,7 @@ namespace SF_GLTF
 {
 
 // Forward declaration for Poisson disc sampling function
-std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileSize, float minDistance, int baseSeed, int tileX, int tileY);
+std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileWidth, float tileHeight, float minDistance, int baseSeed, int tileX, int tileY);
 
 // Simple noise function for deterministic rock placement
 float RockNoise(float x, float y, float scale, int seed) {
@@ -213,7 +213,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateRockTile(
     
     // Generate candidate positions for this tile
     std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
-        tileCenter, config.formationRadius, minRockDistance, seed, tileX, tileY);
+        tileCenter, config.formationRadius, config.formationRadius, minRockDistance, seed, tileX, tileY);
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
@@ -302,7 +302,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateGrassTile(
     
     // Generate candidate positions for this tile
     std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
-        tileCenter, config.formationRadius, minGrassDistance, seed, tileX, tileY);
+        tileCenter, config.formationRadius, config.formationRadius, minGrassDistance, seed, tileX, tileY);
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
@@ -372,28 +372,22 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Generate new tile
     std::vector<TerrainItem> tileItems;
 
-    float spacing = 0.3f;
-    
-    float2 treeSpacing = float2(spacing * config.terrainAspectRatio, spacing);
+    const float minTreeDistance = 0.5f;
     const int seed = 67890;
     
-    // Calculate tile bounds
-    float2 tileMin = {
-        (float)tileX * config.formationRadius,
-        (float)tileY * config.formationRadius
-    };
-    float2 tileMax = {
-        (float)tileX * config.formationRadius + config.formationRadius,
-        (float)tileY * config.formationRadius + config.formationRadius
+    // Calculate tile dimensions based on aspect ratio
+    float tileWidth = config.formationRadius * config.terrainAspectRatio;
+    float tileHeight = config.formationRadius;
+    
+    // Calculate tile center
+    float2 tileCenter = {
+        (float)tileX * tileWidth + tileWidth * 0.5f,
+        (float)tileY * tileHeight + tileHeight * 0.5f
     };
     
-    // Generate uniform grid of candidate positions instead of Poisson sampling
-    std::vector<float2> candidatePositions;
-    for (float x = tileMin.x; x < tileMax.x; x += treeSpacing.x) {
-        for (float y = tileMin.y; y < tileMax.y; y += treeSpacing.y) {
-            candidatePositions.push_back({x, y});
-        }
-    }
+    // Generate candidate positions for this tile using Poisson disc sampling
+    std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
+        tileCenter, tileWidth, tileHeight, minTreeDistance, seed, tileX, tileY);
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
@@ -405,15 +399,16 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         // Only place trees in grass biomes
         if (biomeType != BiomType::Grass) continue;
 
+        // Position jitter for natural placement
         float2 jitter = {
-            (RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) - 0.5f) * treeSpacing.x * 0.5f,
-            (RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) - 0.5f) * treeSpacing.y * 0.5f
+            RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 100) * 0.1f,
+            RockNoise(worldCoord.x, worldCoord.y, 0.3f, seed + 200) * 0.1f
         };
         
         float2 treePos = worldCoord + jitter;
 
-        // Generate random scale for variety (0.8 to 1.4)
-        float scale = 1.0f; //0.8f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.6f;
+        // Generate random scale for variety (0.5 to 1.2)
+        float scale = 0.5f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.7f;
 
         // Generate random rotation around Y axis for natural variety
         float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * 3.14159f;
@@ -445,7 +440,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
 }
 
 // Deterministic Poisson Disc Sampling for a fixed tile
-std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileSize, float minDistance, int baseSeed, int tileX, int tileY) {
+std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileWidth, float tileHeight, float minDistance, int baseSeed, int tileX, int tileY) {
     std::vector<float2> points;
     std::vector<float2> activeList;
     
@@ -456,12 +451,12 @@ std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileSize
     
     // Grid for spatial hashing to speed up nearest neighbor checks
     float cellSize = minDistance / std::sqrt(2.0f);
-    int gridWidth = (int)std::ceil(tileSize / cellSize);
-    int gridHeight = (int)std::ceil(tileSize / cellSize);
+    int gridWidth = (int)std::ceil(tileWidth / cellSize);
+    int gridHeight = (int)std::ceil(tileHeight / cellSize);
     std::vector<std::vector<int>> grid(gridWidth * gridHeight);
     
-    float2 tileMin = { tileCenter.x - tileSize * 0.5f, tileCenter.y - tileSize * 0.5f };
-    float2 tileMax = { tileCenter.x + tileSize * 0.5f, tileCenter.y + tileSize * 0.5f };
+    float2 tileMin = { tileCenter.x - tileWidth * 0.5f, tileCenter.y - tileHeight * 0.5f };
+    float2 tileMax = { tileCenter.x + tileWidth * 0.5f, tileCenter.y + tileHeight * 0.5f };
     
     auto getGridIndex = [&](float2 point) -> int {
         int x = (int)((point.x - tileMin.x) / cellSize);
@@ -626,14 +621,18 @@ void TerrainGenerator::AddTreeFormations(std::vector<TerrainItem>& terrainItems,
                                         const TerrainHeightFunction& heightFunction,
                                         const std::string& currentPlanetType) {
     
+    // Calculate tile dimensions based on aspect ratio
+    float tileWidth = config.formationRadius * config.terrainAspectRatio;
+    float tileHeight = config.formationRadius;
+    
     // Determine which tiles intersect with the sampling radius
     float2 minBounds = { centerPosition.x - config.formationRadius, centerPosition.y - config.formationRadius };
     float2 maxBounds = { centerPosition.x + config.formationRadius, centerPosition.y + config.formationRadius };
     
-    int minTileX = (int)std::floor(minBounds.x / config.formationRadius);
-    int maxTileX = (int)std::floor(maxBounds.x / config.formationRadius);
-    int minTileY = (int)std::floor(minBounds.y / config.formationRadius);
-    int maxTileY = (int)std::floor(maxBounds.y / config.formationRadius);
+    int minTileX = (int)std::floor(minBounds.x / tileWidth);
+    int maxTileX = (int)std::floor(maxBounds.x / tileWidth);
+    int minTileY = (int)std::floor(minBounds.y / tileHeight);
+    int maxTileY = (int)std::floor(maxBounds.y / tileHeight);
     
     // Generate trees for each intersecting tile using cache
     for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
