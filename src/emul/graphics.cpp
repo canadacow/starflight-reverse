@@ -1625,10 +1625,10 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     //BoundBox box = aabb.Transform(float4x4::Translation(cameraPos));
 
     BoundBox box = aabb;
-    box.Min.x = -18.0f * 2.0f;
-    box.Max.x = 18.0f * 2.0f;
-    box.Min.z = -18.0f * 2.0f;
-    box.Max.z = 18.0f * 2.0f;
+    box.Min.x = -32.0f * 2.0f;
+    box.Max.x = 32.0f * 2.0f;
+    box.Min.z = -32.0f * 2.0f;
+    box.Max.z = 32.0f * 2.0f;
 
     box = box.Transform(modelTransform);
     box = box.Transform(float4x4::Translation(cameraPos));
