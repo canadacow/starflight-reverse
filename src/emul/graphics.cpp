@@ -3860,7 +3860,7 @@ static int GraphicsInitThread()
 
     EngineVkCreateInfo EngineCI;
     EngineCI.Features = DeviceFeatures{DEVICE_FEATURE_STATE_OPTIONAL};
-    EngineCI.DynamicHeapSize = 8 << 25;
+    EngineCI.DynamicHeapSize = 8 << 25; // 256MB
     EngineCI.DeviceExtensionCount = 4;
     const char* deviceExtensions[] = { 
         "VK_KHR_create_renderpass2", 

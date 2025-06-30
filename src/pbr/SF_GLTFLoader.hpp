@@ -489,6 +489,8 @@ struct NodeInstance
     float OffsetY;
 
     int2 PlanetLocation;
+
+    BoundBox BB;
 };
 
 struct Node

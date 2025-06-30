@@ -205,6 +205,9 @@ void DynamicMesh::generateLowLODMesh(VertexIndexCounts& counts, float tileHeight
 
     counts.indexCount += 6;
     counts.vertexCount += 4;
+
+    m_LowLODBoundBox.Min = float3{ 0.0f, 0.0f, 0.0f };
+    m_LowLODBoundBox.Max = float3{ lowLODSize.x, 1.0f, lowLODSize.y };
 }
 
 void DynamicMesh::CreateBuffers()
@@ -308,6 +311,10 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement, float heightFact
     // Calculate the size of the entire grid of tiles
     float totalWidth = TERRAIN_MAX_X * m_TileSize.x;
     float totalHeight = TERRAIN_MAX_Y * m_TileSize.y;
+
+    // FIXME: Input from graphics.cpp the actual ranges
+    float minHeight = -2.0f * heightFactor;
+    float maxHeight = 18.0f * heightFactor;
     
     // Clear existing instances
     node.Instances.clear();
@@ -356,6 +363,9 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement, float heightFact
                     
                     instance.PlanetLocation = tile;
                     instance.NodeMatrix = translation;
+                    instance.BB = m_LowLODBoundBox.Transform(translation);
+                    instance.BB.Min.y = minHeight;
+                    instance.BB.Max.y = maxHeight;
                     
                     node.Instances.push_back(instance);
                 }
@@ -367,11 +377,8 @@ void DynamicMesh::ReplaceTerrain(const float3& terrainMovement, float heightFact
     m_Mesh->Primitives.emplace_back(m_LowLODOffsets.indexCount, m_LowLODIndices.size(), m_LowLODVertices.size() / 4, 0, float3{}, float3{});
 
     // Set the bounding box to encompass the entire 3x5 terrain pattern
-    m_Mesh->BB.Min = float3{ -totalWidth, -2.0f, -totalHeight * 3.0f };
-    m_Mesh->BB.Max = float3{ totalWidth * 2.0f, 10.0f, totalHeight * 4.0f };
-
-    m_Mesh->BB.Min.y *= heightFactor;
-    m_Mesh->BB.Max.y *= heightFactor;
+    m_Mesh->BB.Min = float3{ -totalWidth, minHeight, -totalHeight * 3.0f };
+    m_Mesh->BB.Max = float3{ totalWidth * 2.0f, maxHeight, totalHeight * 4.0f };
 
     node.pMesh = m_Mesh.get();
 }
@@ -737,6 +744,7 @@ void DynamicMesh::SetTerrainItems(const TerrainItems& terrainItems, const Terrai
                 ni.ScaleY = 1.0f;
                 ni.OffsetX = 0.0f;
                 ni.OffsetY = 0.0f;
+                ni.BB = targetNode->pMesh->BB.Transform(ni.NodeMatrix);
                 targetNode->Instances.push_back(ni);
             }
 

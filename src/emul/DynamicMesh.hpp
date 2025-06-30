@@ -97,6 +97,7 @@ private:
     };
 
     VertexIndexCounts m_LowLODOffsets;
+    BoundBox m_LowLODBoundBox;
 
     void generateLowLODMesh(VertexIndexCounts& counts, float tileHeight);
 
