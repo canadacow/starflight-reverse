@@ -724,7 +724,7 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
             {
                 void* pAttribsData = nullptr;
-                pCtx->MapBuffer(m_PBRPrimitiveAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD, pAttribsData);
+                pCtx->MapBuffer(m_PBRPrimitiveAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD, 0, m_PBRPrimitiveAttribsCB->GetDesc().Size, pAttribsData);
                 if (pAttribsData != nullptr)
                 {
                     static_assert(static_cast<PBR_WORKFLOW>(SF_GLTF::Material::PBR_WORKFLOW_METALL_ROUGH) == PBR_WORKFLOW_METALL_ROUGH, "SF_GLTF::Material::PBR_WORKFLOW_METALL_ROUGH != PBR_WORKFLOW_METALL_ROUGH");
@@ -782,7 +782,9 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
 
                 if(Node.Instances.size() > 0)
                 {
-                    MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, m_InstanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    Uint64 InstanceAttribsSize = Node.Instances.size() * sizeof(HLSL::PBRInstanceAttribs);
+
+                    MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, m_InstanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD, 0, InstanceAttribsSize };
                     for(int i = 0; i < Node.Instances.size(); ++i)
                     {
                         InstanceAttribs[i].NodeMatrix = Node.Instances[i].NodeMatrix.Transpose();
@@ -801,7 +803,9 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 }
                 else if(Node.isHeightmap)
                 {
-                    MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ pCtx, m_HeightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    Uint64 HeightmapAttribsSize = sizeof(HLSL::PBRHeightmapAttribs);
+
+                    MapHelper<HLSL::PBRHeightmapAttribs> HeightmapAttribs{ pCtx, m_HeightmapAttribsCB, MAP_WRITE, MAP_FLAG_DISCARD, 0, HeightmapAttribsSize };
                     HeightmapAttribs->ScaleX = Node.HeightmapScaleX.x;
                     HeightmapAttribs->ScaleY = Node.HeightmapScaleY.y;
                     HeightmapAttribs->OffsetX = Node.HeightmapOffsetX.x;
