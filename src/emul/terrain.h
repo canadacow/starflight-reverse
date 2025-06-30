@@ -33,6 +33,12 @@ struct BiomBoundary
     BiomType type;
 };
 
+struct BiomInfo
+{
+    BiomType type;
+    float normalizedDistance; // 0.0 to 1.0, how far into this biome we are
+};
+
 struct PlanetType
 {
     std::string name;
@@ -169,7 +175,7 @@ private:
     float SimpleNoise(float x, float y, float scale = 1.0f) const;
 
     // Helper function to get biome type based on height
-    BiomType GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const;
+    BiomInfo GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const;
 
     std::vector<PlanetType> planetTypes;
     

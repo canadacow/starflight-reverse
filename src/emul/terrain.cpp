@@ -80,7 +80,7 @@ std::string TerrainGenerator::MakeCacheKey(TileItemType itemType, int tileX, int
 }
 
 // Helper function to get biome type based on height and planet type
-BiomType TerrainGenerator::GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const {
+BiomInfo TerrainGenerator::GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const {
     // Find the current planet type
     const PlanetType* currentPlanet = nullptr;
     for (const auto& planetType : planetTypes) {
@@ -91,20 +91,48 @@ BiomType TerrainGenerator::GetBiomeTypeAtHeight(float height, const std::string&
     }
     
     if (!currentPlanet || currentPlanet->boundaries.empty()) {
-        return BiomType::Rock; // Default fallback
+        return {BiomType::Rock, 0.0f}; // Default fallback
     }
     
     // Find the appropriate biome boundary for this height
-    BiomType result = currentPlanet->boundaries[0].type; // Default to first boundary
-    for (const auto& boundary : currentPlanet->boundaries) {
+    BiomType resultType = currentPlanet->boundaries[0].type; // Default to first boundary
+    int currentBoundaryIndex = 0;
+    
+    for (int i = 0; i < (int)currentPlanet->boundaries.size(); i++) {
+        const auto& boundary = currentPlanet->boundaries[i];
         if (height >= boundary.startHeight) {
-            result = boundary.type;
+            resultType = boundary.type;
+            currentBoundaryIndex = i;
         } else {
             break;
         }
     }
     
-    return result;
+    // Calculate normalized distance within the current biome
+    float normalizedDistance = 0.0f;
+    
+    if (currentBoundaryIndex < (int)currentPlanet->boundaries.size()) {
+        float currentBiomeStart = currentPlanet->boundaries[currentBoundaryIndex].startHeight;
+        float nextBiomeStart;
+        
+        // If this is the last biome, use a reasonable upper bound
+        if (currentBoundaryIndex == (int)currentPlanet->boundaries.size() - 1) {
+            // For the last biome, assume it extends for a reasonable range
+            // FIXME: Input from graphics.cpp the actual ranges
+            nextBiomeStart = 18.0f;
+        } else {
+            nextBiomeStart = currentPlanet->boundaries[currentBoundaryIndex + 1].startHeight;
+        }
+        
+        // Calculate normalized position within this biome
+        if (nextBiomeStart > currentBiomeStart) {
+            normalizedDistance = (height - currentBiomeStart) / (nextBiomeStart - currentBiomeStart);
+            // Clamp to [0, 1] range
+            normalizedDistance = std::max(0.0f, std::min(1.0f, normalizedDistance));
+        }
+    }
+    
+    return {resultType, normalizedDistance};
 }
 
 std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
@@ -220,10 +248,10 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateRockTile(
         float height = heightFunction(worldCoord);
         
         // Get biome type at this height
-        BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+        BiomInfo biomeInfo = GetBiomeTypeAtHeight(height, currentPlanetType);
         
         // Skip placement in non-rock biomes
-        if (biomeType != BiomType::Rock) continue;
+        if (biomeInfo.type != BiomType::Rock) continue;
         
         // Check if rock should be placed using fractal noise (for additional filtering)
         float placementNoise = RockFractalNoise(worldCoord.x, worldCoord.y, 3, 0.5f, 0.1f, seed);
@@ -309,10 +337,10 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateGrassTile(
         float height = heightFunction(worldCoord);
         
         // Get biome type at this height
-        BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+        BiomInfo biomeInfo = GetBiomeTypeAtHeight(height, currentPlanetType);
         
         // Only place grass in grass biomes
-        if (biomeType != BiomType::Grass) continue;
+        if (biomeInfo.type != BiomType::Grass) continue;
         
         // Check if grass should be placed using fractal noise (for additional filtering)
         float placementNoise = RockFractalNoise(worldCoord.x, worldCoord.y, 3, 0.5f, 0.1f, seed);
@@ -372,7 +400,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Generate new tile
     std::vector<TerrainItem> tileItems;
 
-    const float minTreeDistance = 0.5f;
+    const float minTreeDistance = 0.3f;
     const int seed = 67890;
     
     // Calculate tile dimensions based on aspect ratio
@@ -394,10 +422,10 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         float height = heightFunction(worldCoord);
         
         // Get biome type at this height
-        BiomType biomeType = GetBiomeTypeAtHeight(height, currentPlanetType);
+        BiomInfo biomeInfo = GetBiomeTypeAtHeight(height, currentPlanetType);
         
         // Only place trees in grass biomes
-        if (biomeType != BiomType::Grass) continue;
+        if (biomeInfo.type != BiomType::Grass) continue;
 
         // Position jitter for natural placement
         float2 jitter = {
@@ -408,7 +436,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         float2 treePos = worldCoord + jitter;
 
         // Generate random scale for variety (0.5 to 1.2)
-        float scale = 0.5f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.7f;
+        float scale = 1.0f; //0.5f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.7f;
 
         // Generate random rotation around Y axis for natural variety
         float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * 3.14159f;
@@ -416,7 +444,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         Quaternion<float> treeRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
        
         // Generate random tree type (01-11)
-        int treeType = 1 + (int)(RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500) * 11.0f);
+        int treeType = 6; //1 + (int)(RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500) * 11.0f);
         std::string treeName = std::string("tree_") + (treeType < 10 ? "0" : "") + std::to_string(treeType);
         
         TerrainItem tree{
