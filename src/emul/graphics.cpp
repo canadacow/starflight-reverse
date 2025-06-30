@@ -1000,7 +1000,9 @@ void ShadowMap::DrawMesh(IDeviceContext* pCtx,
                     assert(pNode->Instances.size() <= SF_PBR_Renderer::MaxInstanceCount);
                     #endif
 
-                    MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, s_gc.instanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD };
+                    Uint64 InstanceAttribsSize = pNode->Instances.size() * sizeof(HLSL::PBRInstanceAttribs);
+
+                    MapHelper<HLSL::PBRInstanceAttribs> InstanceAttribs{ pCtx, s_gc.instanceAttribsSB, MAP_WRITE, MAP_FLAG_DISCARD, 0, InstanceAttribsSize };
                     for(int i = 0; i < pNode->Instances.size(); ++i)
                     {
                         InstanceAttribs[i].NodeMatrix = pNode->Instances[i].NodeMatrix.Transpose();
