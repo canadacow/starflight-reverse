@@ -400,7 +400,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Generate new tile
     std::vector<TerrainItem> tileItems;
 
-    const float minTreeDistance = 0.3f;
+    const float minTreeDistance = 0.6f;
     const int seed = 67890;
     
     // Calculate tile dimensions based on aspect ratio
@@ -420,12 +420,30 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
         float height = heightFunction(worldCoord);
+
+        // FIXME: Input from graphics.cpp the actual ranges
+        float latitude = worldCoord.y / 960.0f;
         
         // Get biome type at this height
         BiomInfo biomeInfo = GetBiomeTypeAtHeight(height, currentPlanetType);
         
         // Only place trees in grass biomes
         if (biomeInfo.type != BiomType::Grass) continue;
+        
+        // Adjust tree density based on position within biome
+        // Trees are densest at biome center (0.5) and sparser at extremes:
+        // - Beach level (0.0): sparse, harsh conditions
+        // - Mountain peak (1.0): sparse, harsh conditions  
+        // - Sweet spot (0.5): dense, optimal growing conditions
+        float distanceFromCenter = std::abs(biomeInfo.normalizedDistance - 0.5f); // 0.0 at center, 0.5 at extremes
+        float densityProbability = 1.0f - (distanceFromCenter * 1.4f); // Peak at center, drops to 0.3 at extremes
+        
+        // Add some noise to make density variation more natural
+        float densityNoise = RockNoise(worldCoord.x, worldCoord.y, 0.05f, seed + 700);
+        densityProbability += densityNoise * 0.2f; // ±0.2 variation
+        
+        // Skip this tree based on density probability
+        if (densityProbability < 0.5f) continue;
 
         // Position jitter for natural placement
         float2 jitter = {
@@ -443,8 +461,33 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         randomAngle = 0.0f;
         Quaternion<float> treeRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
        
-        // Generate random tree type (01-11)
-        int treeType = 6; //1 + (int)(RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500) * 11.0f);
+        // Generate tree type based on latitude and biome distance
+        // Tree types from image analysis:
+        // Conifers/Evergreens: 1 (tiered), 4 (dark green), 8 (pine), 10 (tall evergreen)
+        // Bare/Dead trees: 2 (bare branches), 7 (white/birch-like)  
+        // Leafy deciduous: 3 (round green), 5 (dense foliage), 9 (round canopy)
+        // Special: 6 (willow-like), 11 (broad tropical)
+        
+        int treeType;
+        float noiseValue = RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500);
+        
+        if (latitude < 0.25f || latitude > 0.75f) {
+            // Polar/Arctic regions - mainly conifers and some bare trees
+            std::vector<int> polarTrees = {1, 4, 8, 10, 2}; // mostly evergreens, some bare
+            int index = (int)((std::abs(noiseValue) + biomeInfo.normalizedDistance * 0.5f) * polarTrees.size());
+            treeType = polarTrees[index % polarTrees.size()];
+        } else if (latitude > 0.45f && latitude < 0.55f) {
+            // Equatorial/tropical regions - lush and broad trees
+            std::vector<int> tropicalTrees = {11, 5, 9, 6, 3}; // broad canopy, dense foliage
+            int index = (int)((std::abs(noiseValue) + biomeInfo.normalizedDistance * 0.5f) * tropicalTrees.size());
+            treeType = tropicalTrees[index % tropicalTrees.size()];
+        } else {
+            // Temperate regions - mixed deciduous and some evergreens
+            std::vector<int> temperateTrees = {3, 5, 9, 4, 6, 7}; // varied mix
+            int index = (int)((std::abs(noiseValue) + biomeInfo.normalizedDistance * 0.5f) * temperateTrees.size());
+            treeType = temperateTrees[index % temperateTrees.size()];
+        }
+        
         std::string treeName = std::string("tree_") + (treeType < 10 ? "0" : "") + std::to_string(treeType);
         
         TerrainItem tree{
