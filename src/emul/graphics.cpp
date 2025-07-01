@@ -567,6 +567,11 @@ struct GraphicsContext
     bool renderClouds = false;
     int2 heightmapSize;
     std::vector<float> heightmapData;
+    float objectScaleFactor_Height = 1.0f;
+    float objectScaleFactor_Width = 1.0f;
+    float objectRotationAngle = 0.0f;
+    float objectTiltAngle = 0.0f;
+    float objectTiltDirection = 0.0f;
 
     std::unique_ptr<PostFXContext> postFXContext;
     std::unique_ptr<Bloom> bloom;
@@ -5473,7 +5478,15 @@ void UpdateTerrain(VulkanContext::frame_id_t inFlightIndex)
 
     float tileAspectRatio = GraphicsContext::TileSize.y / GraphicsContext::TileSize.x;
 
-    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, tileAspectRatio, currentPlanetType, nullptr, heightFunction);
+    std::unordered_map<std::string, float> keyValueConfig;
+
+    keyValueConfig["tree_scale_height"] = s_gc.objectScaleFactor_Height;
+    keyValueConfig["tree_scale_width"] = s_gc.objectScaleFactor_Width;
+    keyValueConfig["tree_rotation"] = s_gc.objectRotationAngle * (PI_F / 180.0f);
+    keyValueConfig["tree_tilt"] = s_gc.objectTiltAngle * (PI_F / 180.0f);
+    keyValueConfig["tree_tilt_direction"] = s_gc.objectTiltDirection * (PI_F / 180.0f);
+
+    std::vector<SF_GLTF::TerrainItem> terrainItems = terrainGenerator.GenerateTerrainItems(s_gc.tvLocation, s_gc.tvRotation, tileAspectRatio, currentPlanetType, keyValueConfig, heightFunction);
 
     s_gc.terrain.dynamicMesh->ReplaceTerrain(s_gc.terrainMovement, s_gc.renderParams.HeightFactor);
 
@@ -6370,6 +6383,41 @@ void DrawUI()
                 nk_label(&ctx, heightFactorLabel, NK_TEXT_LEFT);
                 nk_layout_row_dynamic(&ctx, 25, 1);
                 nk_slider_float(&ctx, 0.0f, &s_gc.renderParams.HeightFactor, 2.6f, 0.02f);
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                char scaleFactorHeightLabel[64];
+                sprintf(scaleFactorHeightLabel, "Object Scale Factor (H): %.2f", s_gc.objectScaleFactor_Height);
+                nk_label(&ctx, scaleFactorHeightLabel, NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_slider_float(&ctx, 0.1f, &s_gc.objectScaleFactor_Height, 2.0f, 0.05f);
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                char scaleFactorWidthLabel[64];
+                sprintf(scaleFactorWidthLabel, "Object Scale Factor (W): %.2f", s_gc.objectScaleFactor_Width);
+                nk_label(&ctx, scaleFactorWidthLabel, NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_slider_float(&ctx, 0.1f, &s_gc.objectScaleFactor_Width, 2.0f, 0.05f);
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                char rotationAngleLabel[64];
+                sprintf(rotationAngleLabel, "Object Rotation Angle: %.2f", s_gc.objectRotationAngle);
+                nk_label(&ctx, rotationAngleLabel, NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_slider_float(&ctx, 0.0f, &s_gc.objectRotationAngle, 360.0f, 1.0f);
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                char tiltAngleLabel[64];
+                sprintf(tiltAngleLabel, "Object Tilt Angle: %.2f", s_gc.objectTiltAngle);
+                nk_label(&ctx, tiltAngleLabel, NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_slider_float(&ctx, -90.0f, &s_gc.objectTiltAngle, 90.0f, 1.0f);
+
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                char tiltDirectionLabel[64];
+                sprintf(tiltDirectionLabel, "Object Tilt Direction: %.2f", s_gc.objectTiltDirection);
+                nk_label(&ctx, tiltDirectionLabel, NK_TEXT_LEFT);
+                nk_layout_row_dynamic(&ctx, 25, 1);
+                nk_slider_float(&ctx, 0.0f, &s_gc.objectTiltDirection, 360.0f, 1.0f);
 
                 nk_layout_row_dynamic(&ctx, 25, 1);
                 char terrainYLabel[64];

@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include "BasicMath.hpp"
 #include "DynamicMesh.hpp"
+#include <xxhash.h>
 
 namespace Diligent
 {
@@ -114,7 +115,7 @@ public:
         const Quaternion<float>& currentRotation,
         float tileAspectRatio,
         const std::string& currentPlanetType,
-        TerrainConfig* config = nullptr,
+        std::unordered_map<std::string, float>& keyValueConfig,
         const TerrainHeightFunction& heightFunction = nullptr
     );
 
@@ -167,6 +168,9 @@ private:
 
     // Helper methods for cache key generation
     std::string MakeCacheKey(TileItemType itemType, int tileX, int tileY) const;
+    
+    // Helper method to calculate hash of keyValueConfig
+    XXH64_hash_t CalculateConfigHash(const std::unordered_map<std::string, float>& config) const;
 
     // Default terrain configuration
     TerrainConfig GetDefaultTerrainConfig() const;
@@ -181,6 +185,11 @@ private:
     
     // Tile caches - separate cache for each item type
     std::unordered_map<std::string, CachedTileData> tileCache;
+    
+    // Hash of the current keyValueConfig for cache invalidation
+    XXH64_hash_t currentConfigHash = 0;
+
+    static std::unordered_map<std::string, float>* activeKeyValueConfig;
 };
 
 } // namespace SF_GLTF

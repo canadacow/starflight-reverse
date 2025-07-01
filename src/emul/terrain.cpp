@@ -14,6 +14,10 @@ namespace SF_GLTF
 // Forward declaration for Poisson disc sampling function
 std::vector<float2> PoissonDiscSamplingForTile(float2 tileCenter, float tileWidth, float tileHeight, float minDistance, int baseSeed, int tileX, int tileY);
 
+static std::unordered_map<std::string, float> defaultKeyValueConfig;
+
+std::unordered_map<std::string, float>* TerrainGenerator::activeKeyValueConfig = &defaultKeyValueConfig;
+
 // Simple noise function for deterministic rock placement
 float RockNoise(float x, float y, float scale, int seed) {
     int ix = (int)(x * scale * 1000.0f) + seed * 1000000;
@@ -79,6 +83,28 @@ std::string TerrainGenerator::MakeCacheKey(TileItemType itemType, int tileX, int
     return prefix + std::to_string(tileX) + "_" + std::to_string(tileY);
 }
 
+XXH64_hash_t TerrainGenerator::CalculateConfigHash(const std::unordered_map<std::string, float>& config) const {
+    // Create a vector of key-value pairs for consistent ordering
+    std::vector<std::pair<std::string, float>> sortedConfig(config.begin(), config.end());
+    std::sort(sortedConfig.begin(), sortedConfig.end());
+    
+    // Serialize sorted config into a buffer for hashing
+    std::vector<char> buffer;
+    for (const auto& pair : sortedConfig) {
+        // Add key string
+        const std::string& key = pair.first;
+        buffer.insert(buffer.end(), key.begin(), key.end());
+        buffer.push_back('\0'); // Null terminator for string separation
+        
+        // Add float value as bytes
+        const char* valueBytes = reinterpret_cast<const char*>(&pair.second);
+        buffer.insert(buffer.end(), valueBytes, valueBytes + sizeof(float));
+    }
+    
+    // Use XXH64 to hash the serialized buffer
+    return XXH64(buffer.data(), buffer.size(), 0);
+}
+
 // Helper function to get biome type based on height and planet type
 BiomInfo TerrainGenerator::GetBiomeTypeAtHeight(float height, const std::string& currentPlanetType) const {
     // Find the current planet type
@@ -140,17 +166,28 @@ std::vector<TerrainItem> TerrainGenerator::GenerateTerrainItems(
     const Quaternion<float>& currentRotation,
     float tileAspectRatio,
     const std::string& currentPlanetType,
-    TerrainConfig* config,
+    std::unordered_map<std::string, float>& keyValueConfig,
     const TerrainHeightFunction& heightFunction
 ) {
     std::vector<TerrainItem> terrainItems;
+
+    // Calculate hash of the current keyValueConfig
+    std::size_t newConfigHash = CalculateConfigHash(keyValueConfig);
+    
+    // If the configuration has changed, clear the entire cache
+    if (newConfigHash != currentConfigHash) {
+        ClearCache();
+        currentConfigHash = newConfigHash;
+    }
+
+    activeKeyValueConfig = &keyValueConfig;
     
     // Add the rover/player at current position
     TerrainItem rover{ "Rover", currentPosition, float3{}, currentRotation, true };
     terrainItems.push_back(rover);
     
     // Use provided config or get default
-    TerrainConfig actualConfig = config == nullptr ? GetDefaultTerrainConfig() : *config;
+    TerrainConfig actualConfig = GetDefaultTerrainConfig();
 
     actualConfig.terrainAspectRatio = tileAspectRatio;
     
@@ -400,7 +437,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Generate new tile
     std::vector<TerrainItem> tileItems;
 
-    const float minTreeDistance = 0.6f;
+    const float minTreeDistance = 0.9f;
     const int seed = 67890;
     
     // Calculate tile dimensions based on aspect ratio
@@ -416,34 +453,50 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
     // Generate candidate positions for this tile using Poisson disc sampling
     std::vector<float2> candidatePositions = PoissonDiscSamplingForTile(
         tileCenter, tileWidth, tileHeight, minTreeDistance, seed, tileX, tileY);
+
+    float configuredScaleHeight = (*activeKeyValueConfig)["tree_scale_height"];
+    float configuredScaleWidth = (*activeKeyValueConfig)["tree_scale_width"];
+    float configuredRotation = (*activeKeyValueConfig)["tree_rotation"];
+    float configuredTilt = (*activeKeyValueConfig)["tree_tilt"];
+    float configuredTiltDirection = (*activeKeyValueConfig)["tree_tilt_direction"];
     
     // Process each candidate position
     for (const float2& worldCoord : candidatePositions) {
         float height = heightFunction(worldCoord);
-
-        // FIXME: Input from graphics.cpp the actual ranges
-        float latitude = worldCoord.y / 960.0f;
-        
+       
         // Get biome type at this height
         BiomInfo biomeInfo = GetBiomeTypeAtHeight(height, currentPlanetType);
         
-        // Only place trees in grass biomes
+        // Allow trees in grass biomes (including high grass areas > 0.75 transitioning to high elevation)
         if (biomeInfo.type != BiomType::Grass) continue;
         
-        // Adjust tree density based on position within biome
-        // Trees are densest at biome center (0.5) and sparser at extremes:
-        // - Beach level (0.0): sparse, harsh conditions
-        // - Mountain peak (1.0): sparse, harsh conditions  
-        // - Sweet spot (0.5): dense, optimal growing conditions
+        // Calculate environmental hardiness factors
+        float altitude = biomeInfo.normalizedDistance; // 0.0 = sea level, 1.0 = mountain peak
+        // FIXME: Input from graphics.cpp the actual ranges
+        float latitude = worldCoord.y / 960.0f; // 0.0 = south pole, 1.0 = north pole
+        
+        // Calculate hardiness requirements (0.0 = easy conditions, 1.0 = extreme conditions)
+        float altitudeHardiness = altitude; // Higher altitude = harder conditions
+        float latitudeHardiness = (latitude < 0.25f || latitude > 0.75f) ? 0.8f : 0.2f; // Polar regions are harsh
+        float combinedHardiness = std::min(1.0f, altitudeHardiness + latitudeHardiness * 0.5f);
+        
+        // Adjust tree density based on environmental conditions
+        // Trees are densest in moderate conditions and sparser in extreme conditions
+        float optimalZone = (biomeInfo.type == BiomType::Grass && biomeInfo.normalizedDistance < 0.75f) ? 1.0f : 0.6f;
         float distanceFromCenter = std::abs(biomeInfo.normalizedDistance - 0.5f); // 0.0 at center, 0.5 at extremes
-        float densityProbability = 1.0f - (distanceFromCenter * 1.4f); // Peak at center, drops to 0.3 at extremes
+        
+        // Altitude-based thinning: trees become dramatically sparser at high elevation
+        // 0.0 altitude = 100% density, 0.5 altitude = 50% density, 1.0 altitude = 10% density
+        float altitudeThinning = 1.0f - (altitude * altitude * 0.9f); // Quadratic falloff for dramatic effect
+        
+        float densityProbability = optimalZone * (1.0f - (distanceFromCenter * 1.2f)) * altitudeThinning * (1.0f - combinedHardiness * 0.2f);
         
         // Add some noise to make density variation more natural
         float densityNoise = RockNoise(worldCoord.x, worldCoord.y, 0.05f, seed + 700);
-        densityProbability += densityNoise * 0.2f; // ±0.2 variation
+        densityProbability += densityNoise * 0.1f; // ±0.1 variation
         
         // Skip this tree based on density probability
-        if (densityProbability < 0.5f) continue;
+        if (densityProbability < 0.2f) continue;
 
         // Position jitter for natural placement
         float2 jitter = {
@@ -453,39 +506,59 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
         
         float2 treePos = worldCoord + jitter;
 
-        // Generate random scale for variety (0.5 to 1.2)
-        float scale = 1.0f; //0.5f + RockNoise(worldCoord.x, worldCoord.y, 0.5f, seed + 300) * 0.7f;
+        // Override configured scale with random variation
+        configuredScaleHeight = 0.75f + RockNoise(worldCoord.x, worldCoord.y, 0.15f, seed + 300) * 0.5f; // 0.75 to 1.25
+        configuredScaleWidth = 0.90f + RockNoise(worldCoord.x, worldCoord.y, 0.15f, seed + 400) * 0.2f; // 0.90 to 1.10
 
         // Generate random rotation around Y axis for natural variety
         float randomAngle = RockNoise(worldCoord.x, worldCoord.y, 0.2f, seed + 400) * 2.0f * 3.14159f;
-        randomAngle = 0.0f;
         Quaternion<float> treeRotation = Quaternion<float>::RotationFromAxisAngle(float3{0.0f, 1.0f, 0.0f}, randomAngle);
+
+        // Add small random tilt for natural tree leaning
+        float tiltAngle = RockNoise(worldCoord.x, worldCoord.y, 0.4f, seed + 600) * 0.15f; // ±0.15 radians (~8.6 degrees)
+        // Calculate tilt axis from configurable direction (0 = north/+Z, π/2 = east/+X, π = south/-Z, 3π/2 = west/-X)
+        configuredTiltDirection = RockNoise(worldCoord.x, worldCoord.y, 0.25f, seed + 800) * 2.0f * PI_F;
+        float3 tiltAxis = float3{std::sin(configuredTiltDirection), 0.0f, std::cos(configuredTiltDirection)};
+        Quaternion<float> tiltRotation = Quaternion<float>::RotationFromAxisAngle(tiltAxis, tiltAngle);
+        
+        // Combine the Y rotation with the tilt
+        treeRotation = tiltRotation * treeRotation;
        
-        // Generate tree type based on latitude and biome distance
-        // Tree types from image analysis:
-        // Conifers/Evergreens: 1 (tiered), 4 (dark green), 8 (pine), 10 (tall evergreen)
-        // Bare/Dead trees: 2 (bare branches), 7 (white/birch-like)  
-        // Leafy deciduous: 3 (round green), 5 (dense foliage), 9 (round canopy)
-        // Special: 6 (willow-like), 11 (broad tropical)
+        // Generate tree type based on environmental hardiness
+        // Tree hardiness categories:
+        // Ultra-hardy (0.8-1.0): 2 (bare), 7 (bare/birch), 1 (conifer) - extreme conditions
+        // Hardy (0.6-0.8): 4 (dark conifer), 8 (pine), 10 (tall evergreen) - harsh conditions
+        // Moderate (0.3-0.6): 3 (round green), 6 (willow), 9 (round canopy) - temperate conditions
+        // Tender (0.0-0.3): 5 (dense foliage), 11 (broad tropical) - optimal conditions
         
         int treeType;
         float noiseValue = RockNoise(worldCoord.x, worldCoord.y, 0.1f, seed + 500);
+        float selectionNoise = std::abs(noiseValue) + altitude * 0.3f + latitude * 0.2f;
         
-        if (latitude < 0.25f || latitude > 0.75f) {
-            // Polar/Arctic regions - mainly conifers and some bare trees
-            std::vector<int> polarTrees = {1, 4, 8, 10, 2}; // mostly evergreens, some bare
-            int index = (int)((std::abs(noiseValue) + biomeInfo.normalizedDistance * 0.5f) * polarTrees.size());
-            treeType = polarTrees[index % polarTrees.size()];
-        } else if (latitude > 0.45f && latitude < 0.55f) {
-            // Equatorial/tropical regions - lush and broad trees
-            std::vector<int> tropicalTrees = {11, 5, 9, 6, 3}; // broad canopy, dense foliage
-            int index = (int)((std::abs(noiseValue) + biomeInfo.normalizedDistance * 0.5f) * tropicalTrees.size());
-            treeType = tropicalTrees[index % tropicalTrees.size()];
+        if (combinedHardiness >= 0.8f) {
+            // Ultra-harsh conditions - only the most resilient trees survive
+            // High altitude + polar conditions, low oxygen, extreme cold, no seasons
+            std::vector<int> ultraHardyTrees = {2, 7, 1}; // bare trees and hardy conifers
+            int index = (int)(selectionNoise * ultraHardyTrees.size());
+            treeType = ultraHardyTrees[index % ultraHardyTrees.size()];
+        } else if (combinedHardiness >= 0.6f) {
+            // Harsh conditions - hardy conifers dominate
+            // High altitude or polar conditions, cold, low oxygen or no seasons
+            std::vector<int> hardyTrees = {4, 8, 10, 1}; // mostly evergreens
+            int index = (int)(selectionNoise * hardyTrees.size());
+            treeType = hardyTrees[index % hardyTrees.size()];
+        } else if (combinedHardiness >= 0.3f) {
+            // Moderate conditions - mixed deciduous and some evergreens
+            // Mid-altitude temperate zones with reasonable growing conditions
+            std::vector<int> moderateTrees = {3, 6, 9, 4}; // mixed deciduous and some conifers
+            int index = (int)(selectionNoise * moderateTrees.size());
+            treeType = moderateTrees[index % moderateTrees.size()];
         } else {
-            // Temperate regions - mixed deciduous and some evergreens
-            std::vector<int> temperateTrees = {3, 5, 9, 4, 6, 7}; // varied mix
-            int index = (int)((std::abs(noiseValue) + biomeInfo.normalizedDistance * 0.5f) * temperateTrees.size());
-            treeType = temperateTrees[index % temperateTrees.size()];
+            // Optimal conditions - lush growth possible
+            // Low altitude, temperate to tropical, good oxygen, mild seasons
+            std::vector<int> tenderTrees = {5, 11, 9, 3}; // lush foliage and broad canopy
+            int index = (int)(selectionNoise * tenderTrees.size());
+            treeType = tenderTrees[index % tenderTrees.size()];
         }
         
         std::string treeName = std::string("tree_") + (treeType < 10 ? "0" : "") + std::to_string(treeType);
@@ -496,7 +569,7 @@ std::vector<TerrainItem> TerrainGenerator::GetOrGenerateTreeTile(
             float3{0.0f, 0.0f, 0.0f},
             treeRotation,
             false,
-            float3{scale, scale, scale}
+            float3{configuredScaleWidth, configuredScaleHeight, configuredScaleWidth}
         };
         
         tileItems.push_back(tree);
