@@ -705,7 +705,7 @@ struct ShadowMap
         bool           EqualizeExtents = true;
         bool           SearchBestCascade = true;
         bool           FilterAcrossCascades = true;
-        int            Resolution = 2048;
+        int            Resolution = 4096;
         float          PartitioningFactor = 0.95f;
         TEXTURE_FORMAT Format = TEX_FORMAT_D32_FLOAT;
         int            iShadowMode = SHADOW_MODE_PCF;
