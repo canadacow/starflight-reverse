@@ -15,7 +15,7 @@ def clear_scene():
     bpy.ops.object.delete(use_global=False)
 
 def create_lava_rock_material(name="LavaRock_Material"):
-    """Create a realistic lava rock material with glowing cracks"""
+    """Create a realistic lava rock material with interconnected glowing lava cracks"""
     
     # Create new material
     mat = bpy.data.materials.new(name=name)
@@ -27,65 +27,138 @@ def create_lava_rock_material(name="LavaRock_Material"):
     
     # Output node
     output = nodes.new(type='ShaderNodeOutputMaterial')
-    output.location = (800, 0)
+    output.location = (1200, 0)
     
     # Mix shader for combining surface and emission
     mix_shader = nodes.new(type='ShaderNodeMixShader')
-    mix_shader.location = (600, 0)
+    mix_shader.location = (1000, 0)
     
     # Principled BSDF for base rock surface
     principled = nodes.new(type='ShaderNodeBsdfPrincipled')
-    principled.location = (400, 100)
-    principled.inputs['Base Color'].default_value = (0.1, 0.05, 0.05, 1.0)  # Dark rock color
-    principled.inputs['Roughness'].default_value = 0.9
+    principled.location = (800, 200)
+    principled.inputs['Base Color'].default_value = (0.02, 0.02, 0.02, 1.0)  # Very dark charcoal
+    principled.inputs['Roughness'].default_value = 0.95
     principled.inputs['IOR'].default_value = 1.3
     
-    # Emission shader for glowing cracks
+    # Emission shader for glowing lava
     emission = nodes.new(type='ShaderNodeEmission')
-    emission.location = (400, -100)
-    emission.inputs['Color'].default_value = (1.0, 0.3, 0.1, 1.0)  # Bright orange-red
-    emission.inputs['Strength'].default_value = 3.0
-    
-    # Noise texture for crack patterns
-    noise_tex = nodes.new(type='ShaderNodeTexNoise')
-    noise_tex.location = (0, 0)
-    noise_tex.inputs['Scale'].default_value = 8.0
-    noise_tex.inputs['Detail'].default_value = 15.0
-    noise_tex.inputs['Roughness'].default_value = 0.7
-    noise_tex.inputs['Lacunarity'].default_value = 2.0
-    
-    # Voronoi texture for more organic crack patterns
-    voronoi = nodes.new(type='ShaderNodeTexVoronoi')
-    voronoi.location = (0, -200)
-    voronoi.inputs['Scale'].default_value = 12.0
-    voronoi.voronoi_dimensions = '3D'
-    voronoi.feature = 'F1'
-    
-    # Mix the noise textures
-    mix_noise = nodes.new(type='ShaderNodeMix')
-    mix_noise.location = (200, -100)
-    mix_noise.data_type = 'RGBA'
-    mix_noise.inputs['Factor'].default_value = 0.5
-    
-    # ColorRamp for controlling crack intensity
-    color_ramp = nodes.new(type='ShaderNodeValToRGB')
-    color_ramp.location = (400, -300)
-    color_ramp.color_ramp.elements[0].position = 0.4
-    color_ramp.color_ramp.elements[0].color = (0, 0, 0, 1)
-    color_ramp.color_ramp.elements[1].position = 0.6
-    color_ramp.color_ramp.elements[1].color = (1, 1, 1, 1)
+    emission.location = (800, -200)
+    emission.inputs['Strength'].default_value = 8.0
     
     # Texture coordinate
     tex_coord = nodes.new(type='ShaderNodeTexCoord')
-    tex_coord.location = (-200, 0)
+    tex_coord.location = (-800, 0)
     
-    # Links
-    links.new(tex_coord.outputs['Generated'], noise_tex.inputs['Vector'])
-    links.new(tex_coord.outputs['Generated'], voronoi.inputs['Vector'])
-    links.new(noise_tex.outputs['Color'], mix_noise.inputs['A'])
-    links.new(voronoi.outputs['Distance'], mix_noise.inputs['B'])
-    links.new(mix_noise.outputs['Result'], color_ramp.inputs['Fac'])
-    links.new(color_ramp.outputs['Color'], mix_shader.inputs['Fac'])
+    # === ALGORITHMIC LAVA CRACK GENERATION ===
+    
+    # Primary Voronoi for main crack network (like lava rivers)
+    voronoi_main = nodes.new(type='ShaderNodeTexVoronoi')
+    voronoi_main.location = (-600, 200)
+    voronoi_main.inputs['Scale'].default_value = 3.0  # Large scale for main flows
+    voronoi_main.voronoi_dimensions = '3D'
+    voronoi_main.feature = 'F1'  # F1 distance creates river-like patterns
+    
+    # Secondary Voronoi for tributary cracks
+    voronoi_detail = nodes.new(type='ShaderNodeTexVoronoi')
+    voronoi_detail.location = (-600, 0)
+    voronoi_detail.inputs['Scale'].default_value = 8.0  # Smaller tributaries
+    voronoi_detail.voronoi_dimensions = '3D'
+    voronoi_detail.feature = 'F1'
+    
+    # Noise for organic crack variation
+    noise_organic = nodes.new(type='ShaderNodeTexNoise')
+    noise_organic.location = (-600, -200)
+    noise_organic.inputs['Scale'].default_value = 15.0
+    noise_organic.inputs['Detail'].default_value = 8.0
+    noise_organic.inputs['Roughness'].default_value = 0.8
+    noise_organic.inputs['Lacunarity'].default_value = 2.5
+    
+    # Math nodes to create crack networks
+    # Invert main voronoi to make cracks (not cells)
+    invert_main = nodes.new(type='ShaderNodeMath')
+    invert_main.location = (-400, 200)
+    invert_main.operation = 'SUBTRACT'
+    invert_main.inputs[0].default_value = 1.0
+    
+    invert_detail = nodes.new(type='ShaderNodeMath')
+    invert_detail.location = (-400, 0)
+    invert_detail.operation = 'SUBTRACT'
+    invert_detail.inputs[0].default_value = 1.0
+    
+    # Combine crack networks
+    add_cracks = nodes.new(type='ShaderNodeMath')
+    add_cracks.location = (-200, 100)
+    add_cracks.operation = 'ADD'
+    
+    # Multiply with noise for organic variation
+    multiply_organic = nodes.new(type='ShaderNodeMath')
+    multiply_organic.location = (-200, -100)
+    multiply_organic.operation = 'MULTIPLY'
+    
+    # Power node to sharpen crack edges
+    power_sharpen = nodes.new(type='ShaderNodeMath')
+    power_sharpen.location = (0, 0)
+    power_sharpen.operation = 'POWER'
+    power_sharpen.inputs[1].default_value = 3.0  # Sharp falloff
+    
+    # Main color ramp for crack definition
+    color_ramp_cracks = nodes.new(type='ShaderNodeValToRGB')
+    color_ramp_cracks.location = (200, 0)
+    # Create sharp crack boundaries
+    color_ramp_cracks.color_ramp.elements[0].position = 0.1
+    color_ramp_cracks.color_ramp.elements[0].color = (0, 0, 0, 1)
+    color_ramp_cracks.color_ramp.elements[1].position = 0.2
+    color_ramp_cracks.color_ramp.elements[1].color = (1, 1, 1, 1)
+    
+    # Temperature gradient color ramp for lava colors
+    color_ramp_temp = nodes.new(type='ShaderNodeValToRGB')
+    color_ramp_temp.location = (400, -200)
+    # Create realistic lava temperature gradient
+    # Add more color points for realistic gradient
+    elements = color_ramp_temp.color_ramp.elements
+    elements[0].position = 0.0
+    elements[0].color = (0.05, 0.0, 0.0, 1.0)  # Dark red
+    elements[1].position = 1.0
+    elements[1].color = (3.0, 1.5, 0.2, 1.0)  # Bright yellow (HDR)
+    
+    # Add intermediate color points
+    elements.new(0.3)
+    elements[1].color = (0.8, 0.1, 0.0, 1.0)  # Deep red
+    elements.new(0.6)
+    elements[2].color = (1.5, 0.4, 0.05, 1.0)  # Orange
+    elements.new(0.8)
+    elements[3].color = (2.0, 0.8, 0.1, 1.0)  # Bright orange
+    
+    # Bump map for surface detail
+    bump = nodes.new(type='ShaderNodeBump')
+    bump.location = (600, 300)
+    bump.inputs['Strength'].default_value = 0.2
+    
+    # Links for algorithmic crack generation
+    links.new(tex_coord.outputs['Generated'], voronoi_main.inputs['Vector'])
+    links.new(tex_coord.outputs['Generated'], voronoi_detail.inputs['Vector'])
+    links.new(tex_coord.outputs['Generated'], noise_organic.inputs['Vector'])
+    
+    # Create crack network
+    links.new(voronoi_main.outputs['Distance'], invert_main.inputs[1])
+    links.new(voronoi_detail.outputs['Distance'], invert_detail.inputs[1])
+    links.new(invert_main.outputs['Value'], add_cracks.inputs[0])
+    links.new(invert_detail.outputs['Value'], add_cracks.inputs[1])
+    links.new(add_cracks.outputs['Value'], multiply_organic.inputs[0])
+    links.new(noise_organic.outputs['Color'], multiply_organic.inputs[1])
+    links.new(multiply_organic.outputs['Value'], power_sharpen.inputs[0])
+    links.new(power_sharpen.outputs['Value'], color_ramp_cracks.inputs['Fac'])
+    
+    # Apply temperature gradient to emission
+    links.new(color_ramp_cracks.outputs['Color'], color_ramp_temp.inputs['Fac'])
+    links.new(color_ramp_temp.outputs['Color'], emission.inputs['Color'])
+    
+    # Surface bump detail
+    links.new(multiply_organic.outputs['Value'], bump.inputs['Height'])
+    links.new(bump.outputs['Normal'], principled.inputs['Normal'])
+    
+    # Final shader mixing
+    links.new(color_ramp_cracks.outputs['Color'], mix_shader.inputs['Fac'])
     links.new(principled.outputs['BSDF'], mix_shader.inputs['Shader'])
     links.new(emission.outputs['Emission'], mix_shader.inputs['Shader_001'])
     links.new(mix_shader.outputs['Shader'], output.inputs['Surface'])
