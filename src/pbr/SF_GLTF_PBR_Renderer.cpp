@@ -645,6 +645,11 @@ void SF_GLTF_PBR_Renderer::Render(IDeviceContext*              pCtx,
                 }
             }
 
+            if (material.Name == "Robot_Eyes")
+            {
+                PSOFlags |= PSO_FLAG_ENABLE_ROBOT_SCAN_LINES;
+            }            
+
             if (RenderParams.Wireframe)
                 PSOFlags |= PSO_FLAG_UNSHADED;
 

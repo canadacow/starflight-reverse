@@ -83,6 +83,10 @@
 #   define ENABLE_SHADOWS 0
 #endif
 
+#ifndef ENABLE_ROBOT_SCAN_LINES
+#   define ENABLE_ROBOT_SCAN_LINES 0
+#endif
+
 #if ENABLE_SHADOWS
 #   ifndef PCF_FILTER_SIZE
 #       define PCF_FILTER_SIZE 3

@@ -300,6 +300,63 @@ AnisotropyShadingInfo ReadAnisotropyProperties(in VSOutput              VSOut,
 }
 #endif
 
+#if ENABLE_ROBOT_SCAN_LINES
+float3 GetEmissiveRobotScanLines(VSOutput              VSOut,
+                                 PBRMaterialShaderInfo Material,
+                                 float                 MipBias)
+{
+    float3 emissive = float3(0.0, 1.0, 0.0);
+    
+    // Get the UV coordinates
+    float2 uv = VSOut.UV0;
+    
+    // Only apply scan lines in the eye region (Y range 0.4 to 0.6)
+    if (uv.y >= 0.4 && uv.y <= 0.6) {
+        float time = g_Frame.Renderer.Time;
+        
+        // Normalize Y coordinate within the eye strip (0.4-0.6 becomes 0.0-1.0)
+        float normalizedY = (uv.y - 0.4) / 0.2;
+        
+        // Original ShaderToy effect parameters
+        float scanLineSpeed = 2.0;
+        float scanLineWidth = 0.05;
+        float scanLineIntensity = 0.4;
+        
+        // Multiple scan line patterns (using normalizedY for proper mapping)
+        float scanLine1 = sin((normalizedY * 20.0 + time * scanLineSpeed) * 3.14159);
+        float scanLine2 = sin((normalizedY * 15.0 + time * scanLineSpeed * 1.3) * 3.14159);
+        
+        // Horizontal sweep effect that moves from top to bottom
+        float sweepY = frac(time * scanLineSpeed * 0.3);
+        float sweepMask = 1.0 - smoothstep(0.0, scanLineWidth, abs(normalizedY - sweepY));
+        
+        // Combine scan line effects
+        float scanEffect = (scanLine1 + scanLine2) * 0.5;
+        scanEffect = smoothstep(0.7, 1.0, scanEffect);
+        scanEffect += sweepMask * 2.0;
+        
+        // Apply scan line color (bright cyan/green)
+        float3 scanColor = float3(0.0, 1.0, 0.8);
+        
+        // Base emissive color for the eyes (dim glow)
+        float3 baseEyeColor = float3(0.05, 0.3, 0.6);
+        
+        // Mix base color with scan effect
+        emissive = lerp(baseEyeColor, scanColor, scanEffect * scanLineIntensity);
+        
+        // Add flickering effect
+        float flicker = sin(time * 30.0) * 0.1 + 0.9;
+        emissive *= flicker;
+        
+        // Add subtle glow effect
+        float glow = smoothstep(0.3, 1.0, scanEffect);
+        emissive += scanColor * glow * 0.2;
+    }
+    
+    return emissive;
+}
+#endif
+
 SurfaceShadingInfo GetSurfaceShadingInfo(in VSOutput              VSOut,
                                          in PBRMaterialShaderInfo Material,
                                          in float4                BaseColor,
@@ -313,7 +370,11 @@ SurfaceShadingInfo GetSurfaceShadingInfo(in VSOutput              VSOut,
     Shading.View      = normalize(g_Frame.Camera.f4Position.xyz - VSOut.WorldPos.xyz); // Direction from surface point to camera
     Shading.BaseLayer = ReadBaseLayerProperties(VSOut, Material, BaseColor, NormalInfo, NMUVInfo, Shading.View);
     Shading.Occlusion = GetOcclusion(VSOut, Material, g_Frame.Renderer.MipBias);
-    Shading.Emissive  = GetEmissive(VSOut, Material, g_Frame.Renderer.MipBias);
+#if ENABLE_ROBOT_SCAN_LINES    
+    Shading.Emissive = GetEmissiveRobotScanLines(VSOut, Material, g_Frame.Renderer.MipBias);
+#else
+    Shading.Emissive = GetEmissive(VSOut, Material, g_Frame.Renderer.MipBias);
+#endif
 
     Shading.IBLScale  = g_Frame.Renderer.IBLScale.rgb;
     Shading.Occlusion = lerp(1.0, Shading.Occlusion, g_Frame.Renderer.OcclusionStrength);
