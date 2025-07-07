@@ -305,10 +305,14 @@ float3 GetEmissiveRobotScanLines(VSOutput              VSOut,
                                  PBRMaterialShaderInfo Material,
                                  float                 MipBias)
 {
-    float3 emissive = float3(0.0, 1.0, 0.0);
-    
-    // Get the UV coordinates
-    float2 uv = VSOut.UV0;
+    float3 emissive = float3(0.0, 0.0, 0.0);
+
+    float2 uv = SelectUV(VSOut, Material.Textures[EmissiveTextureAttribId].UVSelector);
+#   if ENABLE_TEXCOORD_TRANSFORM
+    {
+        uv = TransformUV(uv, Material.Textures[EmissiveTextureAttribId]);
+    }
+#   endif    
     
     // Only apply scan lines in the eye region (Y range 0.4 to 0.6)
     if (uv.y >= 0.4 && uv.y <= 0.6) {
