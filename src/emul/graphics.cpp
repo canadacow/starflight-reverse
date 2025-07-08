@@ -110,6 +110,7 @@ void PrepareForNewFrame(void* pEpipolarLightScattering, EpipolarLightScattering:
 #include "../pbr/SF_GLTFLoader.hpp"
 #include "DynamicMesh.hpp"
 #include "terrain.h"
+#include "SFModel.h"
 
 //#define SF_PBR_Renderer GLTF_PBR_Renderer
 //#include "GLTF_PBR_Renderer.hpp"
@@ -127,6 +128,8 @@ namespace Diligent
 {   
 #include "../pbr/shaders_inc/Shaders.h"
 }
+
+#include "CommsSystem.h"
 
 using namespace Diligent;
 
@@ -462,28 +465,6 @@ struct GraphicsContext
 
     FractalGenerator fract;
 
-    struct SFModel
-    {
-        std::shared_ptr<SF_GLTF::Model> model;
-        SF_GLTF_PBR_Renderer::ModelResourceBindings bindings;
-        BoundBox aabb;
-        BoundBox worldspaceAABB;
-        std::array<SF_GLTF::ModelTransforms, 2> transforms; // [0] - current frame, [1] - previous frame
-        float4x4                             modelTransform;
-        float                                scale = 1.f;
-        float4x4                             scaleAndTransform;
-        RefCntAutoPtr<ITextureView> env;
-        const SF_GLTF::Node* camera;
-        std::vector<const SF_GLTF::Node*> lights;
-
-        std::unique_ptr<SF_GLTF::DynamicMesh> dynamicMesh;
-        std::array<SF_GLTF::ModelTransforms, 2> dynamicMeshTransforms; // [0] - current frame, [1] - previous frame
-
-        std::unordered_map<std::string, Uint32> biomMaterialIndex;
-
-        std::vector<SF_GLTF::PlanetType> planetTypes;
-    };
-
     SFModel station{};
     SFModel planet{};
     SFModel terrain{};
@@ -723,7 +704,7 @@ struct ShadowMap
                 const HLSL::CameraAttribs& cameraAttribs,
                 const SF_GLTF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model);
+    void RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model);
 
     ITextureView* GetShadowMap()
     {
@@ -755,7 +736,7 @@ private:
     //DXSDKMesh m_Mesh;
 };
 
-void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex = 0);
+void InitModel(std::string modelPath, SFModel& model, int defaultCameraIndex = 0);
 void InitStation();
 void InitPlanet();
 void InitTerrain();
@@ -772,7 +753,7 @@ static SunBehaviorFn DefaultSunBehavior = [](const float4x4& lightGlobalTransfor
     return Direction;
 };
 
-void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior = DefaultSunBehavior);
+void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, SFModel& model, const SunBehaviorFn& sunBehavior = DefaultSunBehavior);
 
 /*
 
@@ -1645,7 +1626,7 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     return res;
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, GraphicsContext::SFModel& model)
+void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
     auto camWorld = CurrCamAttribs.f4Position;
@@ -3380,7 +3361,7 @@ void main(in  float4 Pos          : SV_Position,
 )";
 
 
-static void LoadEnvironmentMap(const char* Path, GraphicsContext::SFModel& model, bool blowUp)
+static void LoadEnvironmentMap(const char* Path, SFModel& model, bool blowUp)
 {
 
     EnvMapRenderer::CreateInfo EnvMapRendererCI;
@@ -4970,7 +4951,7 @@ std::vector<avk::recorded_commands_t> TextPass(VulkanContext::frame_id_t inFligh
     };
 }
 
-static float4x4 GetAdjustedProjectionMatrix(float FOV, float NearPlane, float FarPlane)
+float4x4 GetAdjustedProjectionMatrix(float FOV, float NearPlane, float FarPlane)
 {
     float AspectRatio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
     float XScale, YScale;
@@ -4985,12 +4966,12 @@ static float4x4 GetAdjustedProjectionMatrix(float FOV, float NearPlane, float Fa
     return Proj;
 }
 
-static float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
+float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 {
     return float4x4::Identity();
 }
 
-void InitModel(std::string modelPath, GraphicsContext::SFModel& model, int defaultCameraIndex)
+void InitModel(std::string modelPath, SFModel& model, int defaultCameraIndex)
 {
     SF_GLTF::ModelCreateInfo ModelCI;
     ModelCI.FileName = modelPath.c_str();
@@ -5170,101 +5151,10 @@ void InitComms()
     InitModel("mechan9.glb", s_gc.comms, 0);
 }
 
-void UpdateComms(VulkanContext::frame_id_t inFlightIndex)
-{
-    VulkanContext::frame_id_t frameCount = s_gc.vc.current_frame();
-
-    double currentTimeInSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count();
-
-    float4x4 RotationMatrixCam = float4x4::Identity();
-    float4x4 RotationMatrixModel = float4x4::Identity();
-
-    s_gc.comms.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.comms.transforms[0]);
-    s_gc.comms.aabb = s_gc.comms.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.comms.transforms[0], nullptr);
-    s_gc.comms.worldspaceAABB = s_gc.comms.aabb;
-
-    // Center and scale model
-    float  MaxDim = 0;
-    float3 ModelDim{ s_gc.comms.aabb.Max - s_gc.comms.aabb.Min };
-    MaxDim = std::max(MaxDim, ModelDim.x);
-    MaxDim = std::max(MaxDim, ModelDim.y);
-    MaxDim = std::max(MaxDim, ModelDim.z);
-
-    float4x4 InvYAxis = float4x4::Identity();
-    InvYAxis._22 = -1;
-
-    s_gc.comms.scale = (1.0f / std::max(MaxDim, 0.01f)) * 0.5f;
-    auto     Translate = -s_gc.comms.aabb.Min - 0.5f * ModelDim;
-    InvYAxis._22 = -1;
-
-    s_gc.comms.modelTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.comms.scale) * InvYAxis;
-    s_gc.comms.scaleAndTransform = float4x4::Translation(Translate) * float4x4::Scale(s_gc.comms.scale);
-
-    s_gc.comms.model->ComputeTransforms(s_gc.renderParams.SceneIndex, s_gc.comms.transforms[0], s_gc.comms.modelTransform);
-        
-    s_gc.comms.aabb = s_gc.comms.model->ComputeBoundingBox(s_gc.renderParams.SceneIndex, s_gc.comms.transforms[0], nullptr);
-    s_gc.comms.transforms[1] = s_gc.comms.transforms[0];
-
-    float YFov = PI_F / 4.0f;
-    float ZNear = 0.1f;
-    float ZFar = 100.f;
-
-    float4x4 CameraView;
-
-    const auto* pCameraNode = s_gc.comms.camera;
-    const auto* pCamera = pCameraNode->pCamera;
-    const auto& CameraGlobalTransform = s_gc.comms.transforms[inFlightIndex & 0x01].NodeGlobalMatrices[pCameraNode->Index];
-
-    // GLTF camera is defined such that the local +X axis is to the right,
-    // the lens looks towards the local -Z axis, and the top of the camera
-    // is aligned with the local +Y axis.
-    // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#cameras
-    // We need to inverse the Z axis as our camera looks towards +Z.
-    float4x4 InvZAxis = float4x4::Identity();
-    InvZAxis._33 = -1;
-
-    CameraView = CameraGlobalTransform.Inverse() * InvZAxis;
-    s_gc.renderParams.ModelTransform = RotationMatrixModel;
-
-    YFov = pCamera->Perspective.YFov;
-    ZNear = pCamera->Perspective.ZNear;
-    ZFar = pCamera->Perspective.ZFar;
-
-    // Apply pretransform matrix that rotates the scene according the surface orientation
-    CameraView *= GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
-
-    float4x4 CameraWorld = CameraView.Inverse();
-
-    // Get projection matrix adjusted to the current screen orientation
-    const auto CameraProj = GetAdjustedProjectionMatrix(YFov, ZNear, ZFar);
-    const auto CameraViewProj = CameraView * CameraProj;
-
-    float3 CameraWorldPos = float3::MakeVector(CameraWorld[3]);
-
-    auto& CurrCamAttribs = s_gc.cameraAttribs[inFlightIndex & 0x01];
-
-    CurrCamAttribs.f4ViewportSize = float4{ static_cast<float>(WINDOW_WIDTH), static_cast<float>(WINDOW_HEIGHT), 1.f / (float)WINDOW_WIDTH, 1.f / (float)WINDOW_HEIGHT };
-    CurrCamAttribs.fHandness = CameraView.Determinant() > 0 ? 1.f : -1.f;
-    CurrCamAttribs.mView = CameraView.Transpose();
-    CurrCamAttribs.mProj = CameraProj.Transpose();
-    CurrCamAttribs.mViewProj = CameraViewProj.Transpose();
-    CurrCamAttribs.mViewInv = CameraView.Inverse().Transpose();
-    CurrCamAttribs.mProjInv = CameraProj.Inverse().Transpose();
-    CurrCamAttribs.mViewProjInv = CameraViewProj.Inverse().Transpose();
-    CurrCamAttribs.f4Position = float4(CameraWorldPos, 1);
-    CurrCamAttribs.fNearPlaneZ = ZNear;
-    CurrCamAttribs.fFarPlaneZ = ZFar;
-
-    s_gc.cameraAttribs[(inFlightIndex + 1) & 0x01] = CurrCamAttribs;
-}
-
 void RenderComms(VulkanContext::frame_id_t inFlightIndex)
 {
     RenderSFModel(inFlightIndex, s_gc.comms);
 }
-
-
-
 
 float bicubicOffset = -0.5f;
 
@@ -5982,7 +5872,11 @@ std::vector<avk::recorded_commands_t> DemoPass(VulkanContext::frame_id_t inFligh
     }
     else if (frameSync.demoMode == 3)
     {
-        UpdateComms(inFlightIndex);
+        UpdateComms(inFlightIndex, s_gc.vc.current_frame(), 
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - s_gc.epoch).count(), 
+            s_gc.renderParams, 
+            s_gc.cameraAttribs, 
+            s_gc.comms, int2{ (int32_t)WINDOW_WIDTH, (int32_t)WINDOW_HEIGHT });
         RenderComms(inFlightIndex);
     }
 
@@ -7671,7 +7565,7 @@ std::string GetEGAColorName(const float3& color) {
     return closestColorName;
 }
 
-void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, GraphicsContext::SFModel& model, const SunBehaviorFn& sunBehavior)
+void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, SFModel& model, const SunBehaviorFn& sunBehavior)
 {
     s_gc.performanceMetrics.Mark(s_gc.m_pImmediateContext, PerformanceMetrics::QueryType::SceneRender);
 
