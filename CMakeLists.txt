@@ -119,6 +119,7 @@ find_package(Magnum REQUIRED)
 find_package(unofficial-nuklear CONFIG REQUIRED)
 find_package(cereal CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_path(MINIMP3_INCLUDE_DIRS "minimp3/minimp3.h")
 
 # Include FidelityFX headers
 include_directories(3rdparty/ffx/include)
@@ -240,6 +241,7 @@ PRIVATE
     ${diligenttools_SOURCE_DIR}
     ${diligentfx_SOURCE_DIR}
     ${SDL2_INCLUDE_DIRS}
+    ${MINIMP3_INCLUDE_DIRS}
 )
 
 target_precompile_headers(emulatesdl PRIVATE src/emul/common.pch)

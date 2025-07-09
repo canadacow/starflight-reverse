@@ -16,4 +16,8 @@ namespace Diligent {
         std::unique_ptr<HLSL::CameraAttribs[]>& cameraAttribs,
         SFModel& comms,
         int2 screenSize);
+
+    // MP3 playback functions
+    void InitCommsAudio();
+    void PlayCommsAudio(const char* mp3FilePath, double currentTimeInSeconds);
 }

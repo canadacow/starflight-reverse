@@ -2787,6 +2787,13 @@ void BeepOff()
     s_audioPlaying = false;
 }
 
+void StartAudioPlayback()
+{
+    if (audioDevice != 0) {
+        SDL_PauseAudioDevice(audioDevice, 0); // Unpause the audio device
+    }
+}
+
 int GetFramesPerGameFrame()
 {
     if (frameSync.gameContext != 4)
@@ -3785,6 +3792,12 @@ static int GraphicsInitThread()
     OFFSCREEN_WINDOW_HEIGHT = (OFFSCREEN_WINDOW_HEIGHT * dm.h) / TARGET_RESOLUTION_HEIGHT;
 
     audioDevice = SDL_OpenAudioDevice(NULL, 0, &spec, NULL, 0);
+    if (audioDevice == 0) {
+        printf("Failed to open audio device: %s\n", SDL_GetError());
+        // Continue without audio
+    } else {
+        printf("Audio device opened successfully (ID: %d)\n", audioDevice);
+    }
 
     window = SDL_CreateWindow("Starflight", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL)
