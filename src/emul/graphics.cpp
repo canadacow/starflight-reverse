@@ -2708,15 +2708,14 @@ double square(double hz, unsigned long time) {
 std::mutex audioSource1Mutex;
 std::deque<Sint16> audioSource1;
 
-// All speech is single track 22050 hz mono.
+// Queue speech audio at native sample rate (SDL audio device is reconfigured to match)
 void queue_speech(int16_t* voiceAudio, uint64_t length)
 {
     std::lock_guard<std::mutex> lock1(audioSource1Mutex);
 
     for(int i = 0; i < length; ++i)
     {
-        // Double the playback rate as the playback rate is 44100 hz
-        audioSource1.push_back((Sint16)voiceAudio[i]);
+        // Push samples directly at native rate (no resampling)
         audioSource1.push_back((Sint16)voiceAudio[i]);
     }
 }
@@ -2791,6 +2790,33 @@ void StartAudioPlayback()
 {
     if (audioDevice != 0) {
         SDL_PauseAudioDevice(audioDevice, 0); // Unpause the audio device
+    }
+}
+
+void ReconfigureAudioDevice(int sampleRate)
+{
+    // Close existing audio device if it exists
+    if (audioDevice != 0) {
+        SDL_CloseAudioDevice(audioDevice);
+        audioDevice = 0;
+    }
+    
+    // Create new audio spec with the correct sample rate
+    SDL_AudioSpec newSpec = {
+        .freq = sampleRate,
+        .format = AUDIO_S16SYS, // Signed 16 bit integer format
+        .channels = 1,
+        .samples = 512, // The size of each "chunk"
+        .callback = play_buffer, // user-defined function that provides the audio data
+        .userdata = NULL // an argument to the callback function (we dont need any)
+    };
+    
+    // Open new audio device with the correct sample rate
+    audioDevice = SDL_OpenAudioDevice(NULL, 0, &newSpec, NULL, 0);
+    if (audioDevice == 0) {
+        printf("Failed to reconfigure audio device for %d Hz: %s\n", sampleRate, SDL_GetError());
+    } else {
+        printf("Audio device reconfigured for %d Hz (ID: %d)\n", sampleRate, audioDevice);
     }
 }
 

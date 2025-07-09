@@ -24,6 +24,7 @@ using namespace Magnum::Math::Literals;
 // Forward declarations for audio functions from graphics.cpp
 extern void queue_speech(int16_t* voiceAudio, uint64_t length);
 extern void StartAudioPlayback();
+extern void ReconfigureAudioDevice(int sampleRate);
 
 // MP3 playback globals
 static std::vector<int16_t> s_mp3AudioData;
@@ -31,6 +32,7 @@ static std::mutex s_mp3Mutex;
 static double s_mp3StartTime = -1.0;
 static bool s_mp3Loaded = false;
 static double s_mp3Duration = 8.3; // Will be calculated from actual MP3 file
+static int s_mp3SampleRate = 44100; // Will be set from actual MP3 file
 
 // Returns a literal string containing the JSON animation keyframes for the comms system head movement
 const char* GetCommsHeadAnimationJSON()
@@ -316,13 +318,17 @@ void Diligent::PlayCommsAudio(const char* mp3FilePath, double currentTimeInSecon
             s_mp3AudioData.resize(samples / 2);
         }
         
-        // Calculate MP3 duration from sample count and sample rate
-        s_mp3Duration = static_cast<double>(s_mp3AudioData.size()) / static_cast<double>(dec.info.hz);
+        // Store MP3 sample rate and calculate duration
+        s_mp3SampleRate = dec.info.hz;
+        s_mp3Duration = static_cast<double>(s_mp3AudioData.size()) / static_cast<double>(s_mp3SampleRate);
         
         mp3dec_ex_close(&dec);
         
         printf("MP3 loaded: %zu samples, %d Hz, %d channels, duration: %.3f seconds\n", 
-               s_mp3AudioData.size(), dec.info.hz, dec.info.channels, s_mp3Duration);
+               s_mp3AudioData.size(), s_mp3SampleRate, dec.info.channels, s_mp3Duration);
+        
+        // Reconfigure SDL audio device to use the MP3's native sample rate
+        ReconfigureAudioDevice(s_mp3SampleRate);
         
         s_mp3Loaded = true;
     }
