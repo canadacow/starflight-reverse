@@ -740,7 +740,6 @@ void InitModel(std::string modelPath, SFModel& model, int defaultCameraIndex = 0
 void InitStation();
 void InitPlanet();
 void InitTerrain();
-void InitComms();
 void InitializeCommonResources();
 void DoDemoKeys(SDL_Event event, VulkanContext::frame_id_t inFlightIndex);
 
@@ -3939,7 +3938,7 @@ static int GraphicsInitThread()
             InitTerrain();
             break;
         case 3:
-            InitComms();
+            InitComms(s_gc.comms);
             break;
         default:
             break;
@@ -5144,11 +5143,6 @@ void UpdatePlanet(VulkanContext::frame_id_t inFlightIndex)
 void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
 {
     RenderSFModel(inFlightIndex, s_gc.planet);
-}
-
-void InitComms()
-{
-    InitModel("mechan9.glb", s_gc.comms, 0);
 }
 
 void RenderComms(VulkanContext::frame_id_t inFlightIndex)

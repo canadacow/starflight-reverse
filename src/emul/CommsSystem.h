@@ -6,6 +6,9 @@
 #include <memory>
 
 namespace Diligent {
+
+    void InitComms(SFModel& comms);
+
     void UpdateComms(VulkanContext::frame_id_t inFlightIndex, 
         VulkanContext::frame_id_t frameCount, 
         double currentTimeInSeconds,
