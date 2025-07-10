@@ -358,7 +358,8 @@ enum Scene {
     SCENE_NONE,
     SCENE_STATION,
     SCENE_PLANET,
-    SCENE_TERRAIN
+    SCENE_TERRAIN,
+    SCENE_COMMS
 };
 
 struct GraphicsContext
@@ -5186,6 +5187,12 @@ void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
 
 void RenderComms(VulkanContext::frame_id_t inFlightIndex)
 {
+    if(s_gc.currentScene != SCENE_COMMS)
+    {
+        s_gc.shadowMap->InitializeResourceBindings(s_gc.comms.model);
+        s_gc.currentScene = SCENE_COMMS;
+    }
+
     RenderSFModel(inFlightIndex, s_gc.comms);
 }
 
