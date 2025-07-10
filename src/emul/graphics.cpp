@@ -697,6 +697,7 @@ struct ShadowMap
     } m_ShadowSettings;
 
     void Initialize();
+    void InitializeForScene(Scene scene);
 
     void DrawMesh(IDeviceContext* pCtx,                                 
                 const SF_GLTF::Model& GLTFModel,
@@ -705,7 +706,7 @@ struct ShadowMap
                 const HLSL::CameraAttribs& cameraAttribs,
                 const SF_GLTF_PBR_Renderer::RenderInfo & RenderParams);
 
-    void RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model);
+    void RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model, const float3& sunPosition = float3(0.0f, 0.0f, 0.0f));
 
     ITextureView* GetShadowMap()
     {
@@ -870,6 +871,63 @@ void ShadowMap::InitializeResourceBindings(const std::shared_ptr<SF_GLTF::Model>
             m_ShadowSRBs[shaderIdx][mat] = std::move(pShadowSRB);
         }
     }
+}
+
+void ShadowMap::InitializeForScene(Scene scene)
+{
+    // Configure shadow settings based on scene
+    switch (scene) {
+        case SCENE_COMMS:
+            m_LightAttribs.ShadowAttribs.iNumCascades = 1;  // Single cascade for comms
+            m_ShadowSettings.SnapCascades = false;          // Disable snapping for simplicity
+            m_ShadowSettings.StabilizeExtents = false;      // Disable stabilization
+            break;
+        case SCENE_TERRAIN:
+            m_LightAttribs.ShadowAttribs.iNumCascades = 2;  // Keep 2 cascades for terrain
+            m_ShadowSettings.SnapCascades = true;
+            m_ShadowSettings.StabilizeExtents = true;
+            break;
+        default:
+            m_LightAttribs.ShadowAttribs.iNumCascades = 1;  // Default to single cascade
+            m_ShadowSettings.SnapCascades = false;
+            m_ShadowSettings.StabilizeExtents = false;
+            break;
+    }
+    
+    m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
+    m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
+    
+    // Rest of initialization stays the same
+    DiligentShadowMapManager::InitInfo SMMgrInitInfo;
+    SMMgrInitInfo.Format = m_ShadowSettings.Format;
+    SMMgrInitInfo.Resolution = m_ShadowSettings.Resolution;
+    SMMgrInitInfo.NumCascades = static_cast<Uint32>(m_LightAttribs.ShadowAttribs.iNumCascades);
+    SMMgrInitInfo.ShadowMode = m_ShadowSettings.iShadowMode;
+    SMMgrInitInfo.Is32BitFilterableFmt = m_ShadowSettings.Is32BitFilterableFmt;
+
+    if (!m_pComparisonSampler)
+    {
+        SamplerDesc ComparsionSampler;
+        ComparsionSampler.ComparisonFunc = COMPARISON_FUNC_LESS;
+        ComparsionSampler.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
+        ComparsionSampler.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
+        ComparsionSampler.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
+        s_gc.m_pDevice->CreateSampler(ComparsionSampler, &m_pComparisonSampler);
+    }
+    SMMgrInitInfo.pComparisonSampler = m_pComparisonSampler;
+
+    if (!m_pFilterableShadowMapSampler)
+    {
+        SamplerDesc SamplerDesc;
+        SamplerDesc.MinFilter = FILTER_TYPE_ANISOTROPIC;
+        SamplerDesc.MagFilter = FILTER_TYPE_ANISOTROPIC;
+        SamplerDesc.MipFilter = FILTER_TYPE_ANISOTROPIC;
+        SamplerDesc.MaxAnisotropy = m_LightAttribs.ShadowAttribs.iMaxAnisotropy;
+        s_gc.m_pDevice->CreateSampler(SamplerDesc, &m_pFilterableShadowMapSampler);
+    }
+    SMMgrInitInfo.pFilterableShadowMapSampler = m_pFilterableShadowMapSampler;
+
+    m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
 }
 
 void ShadowMap::DrawMesh(IDeviceContext* pCtx,
@@ -1626,7 +1684,40 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     return res;
 }
 
-void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model)
+CascadeMatrices ComputeSimpleCommsShadowViewProj(const BoundBox& modelAABB, const float3& lightDirection, const float3& sunPosition)
+{
+    CascadeMatrices result;
+    
+    // Use the actual sun position for the shadow map calculation
+    float3 lightPos = sunPosition;
+    float3 lightTarget = float3(0.0f, 0.0f, 0.0f);  // Look at origin
+    float3 lightUp = float3(0.0f, -1.0f, 0.0f);      // Up vector
+    
+    // Calculate the center of the model for the light to look at
+    float3 center = (modelAABB.Min + modelAABB.Max) * 0.5f;
+    float3 extent = modelAABB.Max - modelAABB.Min;
+    float maxExtent = std::max({extent.x, extent.y, extent.z});
+    lightTarget = center;
+
+    result.WorldToLightView = LookAt(lightPos, -lightTarget, lightUp);
+    
+    // Create a simple orthographic projection that encompasses the model
+    float orthoSize = maxExtent * 1.5f;  // Add some margin
+    float orthoNear = 0.1f;
+    float orthoFar = maxExtent * 4.0f;
+    
+    result.Orthographic = Orthographic(
+        -orthoSize, orthoSize,    // left, right
+        -orthoSize, orthoSize,    // bottom, top
+        orthoNear, orthoFar       // near, far
+    );
+    
+    result.ViewProj = result.WorldToLightView * result.Orthographic;
+    
+    return result;
+}
+
+void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model, const float3& sunPosition)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
     auto camWorld = CurrCamAttribs.f4Position;
@@ -1641,88 +1732,41 @@ void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const
 
     CascadeMatrices cascadeViewProj{};
 
+    if (s_gc.currentScene == SCENE_COMMS && m_LightAttribs.ShadowAttribs.iNumCascades == 1)
+    {
+        // For comms scene, use simple shadow map computation
+        cascadeViewProj = ComputeSimpleCommsShadowViewProj(model.aabb, Direction, sunPosition);
+        
+        // Set up shadow camera attributes directly
+        HLSL::CameraAttribs ShadowCameraAttribs = {};
+        ShadowCameraAttribs.mView = cascadeViewProj.WorldToLightView.Transpose();
+        ShadowCameraAttribs.mProj = cascadeViewProj.Orthographic.Transpose();
+        ShadowCameraAttribs.mViewProj = cascadeViewProj.ViewProj.Transpose();
+        ShadowCameraAttribs.f4ViewportSize.x = static_cast<float>(m_ShadowSettings.Resolution);
+        ShadowCameraAttribs.f4ViewportSize.y = static_cast<float>(m_ShadowSettings.Resolution);
+        ShadowCameraAttribs.f4ViewportSize.z = 1.f / ShadowCameraAttribs.f4ViewportSize.x;
+        ShadowCameraAttribs.f4ViewportSize.w = 1.f / ShadowCameraAttribs.f4ViewportSize.y;
+
+        auto* pCascadeDSV = m_ShadowMapMgr.GetCascadeDSV(0);
+        s_gc.m_pImmediateContext->SetRenderTargets(0, nullptr, pCascadeDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        s_gc.m_pImmediateContext->ClearDepthStencil(pCascadeDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        DrawMesh(s_gc.m_pImmediateContext, *model.model, model.transforms[inFlightIndex & 0x01], frameAttribs, ShadowCameraAttribs, RenderParams);
+        
+        // Set up shadow info for PBR renderer
+        shadowInfo->WorldToLightProjSpace = cascadeViewProj.ViewProj.Transpose();
+        shadowInfo->UVScale = float2(0.5f, 0.5f);
+        shadowInfo->UVBias = float2(0.5f, 0.5f);
+        shadowInfo->ShadowMapSlice = 0.0f;  // First cascade
+        
+        return;
+    }    
+
     DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model, inFlightIndex](int CascadeIdx, float& MinZ, float& MaxZ) {
 
         // Adjust the whole range only
         if(CascadeIdx == -1)
         {
-#if 0
-            // Get the corners of the model's bounding box
-            const auto& aabb = model.aabb;
-            std::array<float3, 8> corners = {
-                float3(aabb.Min.x, aabb.Min.y, aabb.Min.z),
-                float3(aabb.Max.x, aabb.Min.y, aabb.Min.z),
-                float3(aabb.Min.x, aabb.Max.y, aabb.Min.z),
-                float3(aabb.Max.x, aabb.Max.y, aabb.Min.z),
-                float3(aabb.Min.x, aabb.Min.y, aabb.Max.z),
-                float3(aabb.Max.x, aabb.Min.y, aabb.Max.z),
-                float3(aabb.Min.x, aabb.Max.y, aabb.Max.z),
-                float3(aabb.Max.x, aabb.Max.y, aabb.Max.z)
-            };
-
-            // Transform the corners to light space
-            float minZ = std::numeric_limits<float>::max();
-            float maxZ = std::numeric_limits<float>::lowest();
-
-            //OutputDebugString(("AABB Min: " + std::to_string(aabb.Min.z) + "\n").c_str());
-            //OutputDebugString(("AABB Max: " + std::to_string(aabb.Max.z) + "\n").c_str());
-
-#if 0
-            for (const auto& corner : corners)
-            {
-                float4 transformed = float4(corner, 1.0f) * viewProj;
-                float z = transformed.z / transformed.w; // Perspective divide
-
-                if (z < minZ) minZ = z;
-                if (z > maxZ) maxZ = z;
-            }
-
-            if (minZ < 0.10f)
-            {
-                minZ = 0.10f;
-            }
-
-            MinZ = minZ;
-            MaxZ = maxZ;
-#else
-            for (const auto& corner : corners)
-            {
-                float4 test = { -122.0f, -2.0f, -122.0f, 1.0f };
-                float4 testTrans = test * model.modelTransform;
-                testTrans = testTrans * viewProj;
-
-                float4 transformed = float4(corner, 1.0f);
-                transformed = transformed * viewProj;
-                transformed /= transformed.w;
-                float z = transformed.z;
-
-                if (z < minZ) minZ = z;
-                if (z > maxZ) maxZ = z;
-            }
-
-            //OutputDebugString(("View Space MinZ: " + std::to_string(minZ) + "\n").c_str());
-            //OutputDebugString(("View Space MaxZ: " + std::to_string(maxZ) + "\n").c_str());
-
-            // Convert to positive distances
-            float nearPlane = std::max(0.1f, minZ);  // Closest point (least negative becomes smallest positive)
-            float farPlane = maxZ;   // Farthest point (most negative becomes largest positive)
-
-            // Debug: Print converted distances
-            //OutputDebugString(("Near Plane: " + std::to_string(nearPlane) + "\n").c_str());
-            //OutputDebugString(("Far Plane: " + std::to_string(farPlane) + "\n").c_str());
-
-            // Add padding
-            MinZ = nearPlane;
-            MaxZ = farPlane;
-
-            //MinZ = 1.0f;
-            //MaxZ = 12.0f;
-
-            // Debug: Print final values
-            //OutputDebugString(("Final MinZ: " + std::to_string(MinZ) + "\n").c_str());
-            //OutputDebugString(("Final MaxZ: " + std::to_string(MaxZ) + "\n").c_str());
-#endif
-#endif
 
         }
 
@@ -5189,6 +5233,7 @@ void RenderComms(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_COMMS)
     {
+        s_gc.shadowMap->InitializeForScene(SCENE_COMMS);
         s_gc.shadowMap->InitializeResourceBindings(s_gc.comms.model);
         s_gc.currentScene = SCENE_COMMS;
     }
@@ -5847,6 +5892,7 @@ void RenderTerrain(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_TERRAIN)
     {
+        s_gc.shadowMap->InitializeForScene(SCENE_TERRAIN);
         s_gc.shadowMap->InitializeResourceBindings(s_gc.terrain.model);
         s_gc.currentScene = SCENE_TERRAIN;
     }
@@ -7743,7 +7789,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, SFModel& model, cons
 
             if (LightNode.Name == "Sun")
             {
-                s_gc.shadowMap->RenderShadowMap(FrameAttribsLocal, CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model);
+                s_gc.shadowMap->RenderShadowMap(FrameAttribsLocal, CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model, Position);
                 AttribsData.ShadowMapIndex = 0;
                 AttribsData.NumCascades = 2;
 
