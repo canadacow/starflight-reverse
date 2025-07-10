@@ -3741,7 +3741,7 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     }
     else if (frameSync.demoMode == 3)
     {
-        LoadEnvironmentMap("starfield.ktx", s_gc.comms, false);
+        LoadEnvironmentMap("mechan9.hdr", s_gc.comms, false);
     }
 
     // Initialize the sun renderer
@@ -7415,7 +7415,7 @@ struct ShaderParams
 {
     float OcclusionStrength = 1;
     float EmissionScale = 1;
-    float IBLScale = 2.0f;
+    float IBLScale = 0.3f;
     float AverageLogLum = 0.3f;
     float MiddleGray = 0.18f;
     float WhitePoint = 3.f;
