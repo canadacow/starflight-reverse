@@ -879,55 +879,14 @@ void ShadowMap::InitializeForScene(Scene scene)
     switch (scene) {
         case SCENE_COMMS:
             m_LightAttribs.ShadowAttribs.iNumCascades = 1;  // Single cascade for comms
-            m_ShadowSettings.SnapCascades = false;          // Disable snapping for simplicity
-            m_ShadowSettings.StabilizeExtents = false;      // Disable stabilization
             break;
         case SCENE_TERRAIN:
             m_LightAttribs.ShadowAttribs.iNumCascades = 2;  // Keep 2 cascades for terrain
-            m_ShadowSettings.SnapCascades = true;
-            m_ShadowSettings.StabilizeExtents = true;
             break;
         default:
             m_LightAttribs.ShadowAttribs.iNumCascades = 1;  // Default to single cascade
-            m_ShadowSettings.SnapCascades = false;
-            m_ShadowSettings.StabilizeExtents = false;
             break;
-    }
-    
-    m_LightAttribs.ShadowAttribs.iFixedFilterSize = 5;
-    m_LightAttribs.ShadowAttribs.fFilterWorldSize = 0.1f;
-    
-    // Rest of initialization stays the same
-    DiligentShadowMapManager::InitInfo SMMgrInitInfo;
-    SMMgrInitInfo.Format = m_ShadowSettings.Format;
-    SMMgrInitInfo.Resolution = m_ShadowSettings.Resolution;
-    SMMgrInitInfo.NumCascades = static_cast<Uint32>(m_LightAttribs.ShadowAttribs.iNumCascades);
-    SMMgrInitInfo.ShadowMode = m_ShadowSettings.iShadowMode;
-    SMMgrInitInfo.Is32BitFilterableFmt = m_ShadowSettings.Is32BitFilterableFmt;
-
-    if (!m_pComparisonSampler)
-    {
-        SamplerDesc ComparsionSampler;
-        ComparsionSampler.ComparisonFunc = COMPARISON_FUNC_LESS;
-        ComparsionSampler.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
-        ComparsionSampler.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
-        ComparsionSampler.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
-        s_gc.m_pDevice->CreateSampler(ComparsionSampler, &m_pComparisonSampler);
-    }
-    SMMgrInitInfo.pComparisonSampler = m_pComparisonSampler;
-
-    if (!m_pFilterableShadowMapSampler)
-    {
-        SamplerDesc SamplerDesc;
-        SamplerDesc.MinFilter = FILTER_TYPE_ANISOTROPIC;
-        SamplerDesc.MagFilter = FILTER_TYPE_ANISOTROPIC;
-        SamplerDesc.MipFilter = FILTER_TYPE_ANISOTROPIC;
-        SamplerDesc.MaxAnisotropy = m_LightAttribs.ShadowAttribs.iMaxAnisotropy;
-        s_gc.m_pDevice->CreateSampler(SamplerDesc, &m_pFilterableShadowMapSampler);
-    }
-    SMMgrInitInfo.pFilterableShadowMapSampler = m_pFilterableShadowMapSampler;
-
-    m_ShadowMapMgr.Initialize(s_gc.m_pDevice, nullptr, SMMgrInitInfo);
+    }    
 }
 
 void ShadowMap::DrawMesh(IDeviceContext* pCtx,
@@ -1761,17 +1720,6 @@ void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const
         
         return;
     }    
-
-    DistrInfo.AdjustCascadeRange = [view, proj, viewProj, &model, inFlightIndex](int CascadeIdx, float& MinZ, float& MaxZ) {
-
-        // Adjust the whole range only
-        if(CascadeIdx == -1)
-        {
-
-        }
-
-    };
-
     m_ShadowMapMgr.DistributeCascades(DistrInfo, m_LightAttribs.ShadowAttribs);
 
     const int iNumShadowCascades = m_LightAttribs.ShadowAttribs.iNumCascades;
@@ -7766,7 +7714,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, SFModel& model, cons
             float3 lightDir = {};
             float3 Direction = {};
 
-            if (LightNode.Name == "Sun")
+            if (LightNode.Name == "Sun" && s_gc.currentScene == SCENE_TERRAIN)
             {
                 l.Type = SF_GLTF::Light::TYPE::DIRECTIONAL;
                 l.Intensity = 1.0f;
@@ -7791,15 +7739,20 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, SFModel& model, cons
             {
                 s_gc.shadowMap->RenderShadowMap(FrameAttribsLocal, CurrCamAttribs, Direction, inFlightIndex, s_gc.renderParams, &ShadowMaps[0], model, Position);
                 AttribsData.ShadowMapIndex = 0;
-                AttribsData.NumCascades = 2;
 
                 if(s_gc.currentScene == SCENE_TERRAIN)
                 {
-                    CamAttribs = CurrCamAttribs;
+                    AttribsData.NumCascades = 2;
+                }
+                else
+                {
+                    AttribsData.NumCascades = 1;
+                }
 
-                    LightAttrs = s_gc.shadowMap->GetLightAttribs();
-                    LightAttrs.f4Direction = float4(Direction, 1.0f);                    
-                }                
+                CamAttribs = CurrCamAttribs;
+
+                LightAttrs = s_gc.shadowMap->GetLightAttribs();
+                LightAttrs.f4Direction = float4(Direction, 1.0f);                    
             }
             else
             {
