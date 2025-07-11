@@ -1488,7 +1488,7 @@ struct CascadeMatrices {
      return Result;
  }
 
-CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs,const float3& lightDirection, const BoundBox& aabb, const ShadowMap::ShadowSettings& shadowSettings)
+CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs,const float3& lightDirection, const BoundBox& aabb, const ShadowMap::ShadowSettings& shadowSettings, bool lowSunAdjustment = true)
 {
     float4x4 WorldToLightView = LookAt(float3(0), -lightDirection, float3(0.0f, 1.0f, 0.0f));
 
@@ -1537,60 +1537,65 @@ CascadeMatrices ComputeCascadeViewProj(const HLSL::CameraAttribs& cameraAttribs,
     // Scale up largestDimension for low sun angles - adjust based on Y component of light direction
     // This ensures we have enough shadow coverage when sun is near horizon
     float lowSunFactor = 1.0f;
-    float absLightY = std::abs(lightDirection.y);
-    if (absLightY < 0.4f) {
-        // As the sun gets closer to the horizon, we need a larger shadow volume
-        // Apply increasing scale as the Y component approaches zero
-        lowSunFactor = std::max(1.0f, 3.0f * (0.4f - absLightY) / 0.4f + 1.0f);
-        
-        // For extremely low sun angles, apply an even larger factor
-        if (absLightY < 0.1f) {
-            lowSunFactor = 8.0f;
-        }
-    }
-    
-    largestDimension *= marginScale * lowSunFactor;
-    
-    minCorner.x = centerX - largestDimension * 0.5f;
-    maxCorner.x = centerX + largestDimension * 0.5f;
-    minCorner.y = centerY - largestDimension * 0.5f;
-    maxCorner.y = centerY + largestDimension * 0.5f;
 
-    // Calculate primary light direction to extend the Z range asymmetrically
-    // This is especially important for low sun angles
-    float3 absLight = float3(std::abs(lightDirection.x), std::abs(lightDirection.y), std::abs(lightDirection.z));
-    float dominantComponent = std::max(std::max(absLight.x, absLight.y), absLight.z);
-    float3 normalizedLight = lightDirection / dominantComponent;
-    
-    // Extend Z range proportionally and add bias
-    float zExtension = std::max(0.2f, 0.5f * (1.0f - absLightY)); // More extension for lower sun
-    float zRange = maxCorner.z - minCorner.z;
-    
-    // Make zRange larger for low sun angles by factoring in the light direction
-    zRange *= (1.0f / (1.0f - zExtension * 2.0f)) * lowSunFactor;
-    
-    float zCenter = (maxCorner.z + minCorner.z) * 0.5f;
-    
-    // Asymmetric Z extension in the primary light direction
-    if (absLight.x > absLight.z) {
-        // Light is primarily along X axis
-        float xBias = (lightDirection.x > 0) ? 0.3f : -0.3f;
-        minCorner.z = zCenter - zRange * (1.0f + xBias * (1.0f - absLightY));
-        maxCorner.z = zCenter + zRange * (1.0f - xBias * (1.0f - absLightY));
-    } else {
-        // Light is primarily along Z axis
-        float zBias = (lightDirection.z > 0) ? 0.3f : -0.3f;
-        minCorner.z = zCenter - zRange * (1.0f + zBias * (1.0f - absLightY));
-        maxCorner.z = zCenter + zRange * (1.0f - zBias * (1.0f - absLightY));
-    }
-    
-    // Apply a minimum Z range to avoid numerical precision issues
-    float minZRange = 10.0f; // Minimum Z range in world units
-    if (maxCorner.z - minCorner.z < minZRange) {
-        float currentZRange = maxCorner.z - minCorner.z;
-        float extraZRange = minZRange - currentZRange;
-        minCorner.z -= extraZRange * 0.5f;
-        maxCorner.z += extraZRange * 0.5f;
+    if (lowSunAdjustment)
+    {
+        float absLightY = std::abs(lightDirection.y);
+        if (absLightY < 0.4f) {
+            // As the sun gets closer to the horizon, we need a larger shadow volume
+            // Apply increasing scale as the Y component approaches zero
+            lowSunFactor = std::max(1.0f, 3.0f * (0.4f - absLightY) / 0.4f + 1.0f);
+
+            // For extremely low sun angles, apply an even larger factor
+            if (absLightY < 0.1f) {
+                lowSunFactor = 8.0f;
+            }
+        }
+
+        largestDimension *= marginScale * lowSunFactor;
+
+        minCorner.x = centerX - largestDimension * 0.5f;
+        maxCorner.x = centerX + largestDimension * 0.5f;
+        minCorner.y = centerY - largestDimension * 0.5f;
+        maxCorner.y = centerY + largestDimension * 0.5f;
+
+        // Calculate primary light direction to extend the Z range asymmetrically
+        // This is especially important for low sun angles
+        float3 absLight = float3(std::abs(lightDirection.x), std::abs(lightDirection.y), std::abs(lightDirection.z));
+        float dominantComponent = std::max(std::max(absLight.x, absLight.y), absLight.z);
+        float3 normalizedLight = lightDirection / dominantComponent;
+
+        // Extend Z range proportionally and add bias
+        float zExtension = std::max(0.2f, 0.5f * (1.0f - absLightY)); // More extension for lower sun
+        float zRange = maxCorner.z - minCorner.z;
+
+        // Make zRange larger for low sun angles by factoring in the light direction
+        zRange *= (1.0f / (1.0f - zExtension * 2.0f)) * lowSunFactor;
+
+        float zCenter = (maxCorner.z + minCorner.z) * 0.5f;
+
+        // Asymmetric Z extension in the primary light direction
+        if (absLight.x > absLight.z) {
+            // Light is primarily along X axis
+            float xBias = (lightDirection.x > 0) ? 0.3f : -0.3f;
+            minCorner.z = zCenter - zRange * (1.0f + xBias * (1.0f - absLightY));
+            maxCorner.z = zCenter + zRange * (1.0f - xBias * (1.0f - absLightY));
+        }
+        else {
+            // Light is primarily along Z axis
+            float zBias = (lightDirection.z > 0) ? 0.3f : -0.3f;
+            minCorner.z = zCenter - zRange * (1.0f + zBias * (1.0f - absLightY));
+            maxCorner.z = zCenter + zRange * (1.0f - zBias * (1.0f - absLightY));
+        }
+
+        // Apply a minimum Z range to avoid numerical precision issues
+        float minZRange = 10.0f; // Minimum Z range in world units
+        if (maxCorner.z - minCorner.z < minZRange) {
+            float currentZRange = maxCorner.z - minCorner.z;
+            float extraZRange = minZRange - currentZRange;
+            minCorner.z -= extraZRange * 0.5f;
+            maxCorner.z += extraZRange * 0.5f;
+        }
     }
 
     // Compute the projection matrix for the light
@@ -1643,39 +1648,6 @@ CascadeMatrices ComputeCameraFrustumCascade(const HLSL::CameraAttribs& cameraAtt
     return res;
 }
 
-CascadeMatrices ComputeSimpleCommsShadowViewProj(const BoundBox& modelAABB, const float3& lightDirection, const float3& sunPosition)
-{
-    CascadeMatrices result;
-    
-    // Use the actual sun position for the shadow map calculation
-    float3 lightPos = sunPosition;
-    float3 lightTarget = float3(0.0f, 0.0f, 0.0f);  // Look at origin
-    float3 lightUp = float3(0.0f, -1.0f, 0.0f);      // Up vector
-    
-    // Calculate the center of the model for the light to look at
-    float3 center = (modelAABB.Min + modelAABB.Max) * 0.5f;
-    float3 extent = modelAABB.Max - modelAABB.Min;
-    float maxExtent = std::max({extent.x, extent.y, extent.z});
-    lightTarget = center;
-
-    result.WorldToLightView = LookAt(lightPos, -lightTarget, lightUp);
-    
-    // Create a simple orthographic projection that encompasses the model
-    float orthoSize = maxExtent * 1.5f;  // Add some margin
-    float orthoNear = 0.1f;
-    float orthoFar = maxExtent * 4.0f;
-    
-    result.Orthographic = Orthographic(
-        -orthoSize, orthoSize,    // left, right
-        -orthoSize, orthoSize,    // bottom, top
-        orthoNear, orthoFar       // near, far
-    );
-    
-    result.ViewProj = result.WorldToLightView * result.Orthographic;
-    
-    return result;
-}
-
 void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const HLSL::CameraAttribs& CurrCamAttribs, float3 Direction, VulkanContext::frame_id_t inFlightIndex, const SF_GLTF_PBR_Renderer::RenderInfo& RenderParams, HLSL::PBRShadowMapInfo* shadowInfo, SFModel& model, const float3& sunPosition)
 {
     DiligentShadowMapManager::DistributeCascadeInfo DistrInfo;
@@ -1694,7 +1666,7 @@ void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const
     if (s_gc.currentScene == SCENE_COMMS && m_LightAttribs.ShadowAttribs.iNumCascades == 1)
     {
         // For comms scene, use simple shadow map computation
-        cascadeViewProj = ComputeSimpleCommsShadowViewProj(model.aabb, Direction, sunPosition);
+        cascadeViewProj = ComputeCascadeViewProj(CurrCamAttribs, Direction, model.aabb, m_ShadowSettings);
         
         // Set up shadow camera attributes directly
         HLSL::CameraAttribs ShadowCameraAttribs = {};
@@ -1714,8 +1686,8 @@ void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const
         
         // Set up shadow info for PBR renderer
         shadowInfo->WorldToLightProjSpace = cascadeViewProj.ViewProj.Transpose();
-        shadowInfo->UVScale = float2(0.5f, 0.5f);
-        shadowInfo->UVBias = float2(0.5f, 0.5f);
+        shadowInfo->UVScale = float2(1.0f, 1.0f);
+        shadowInfo->UVBias = float2(0.0f, 0.0f); 
         shadowInfo->ShadowMapSlice = 0.0f;  // First cascade
         
         return;
@@ -1735,7 +1707,7 @@ void ShadowMap::RenderShadowMap(const HLSL::PBRFrameAttribs& frameAttribs, const
         ShadowCameraAttribs.mView = m_LightAttribs.ShadowAttribs.mWorldToLightView;
         ShadowCameraAttribs.mProj = CascadeProjMatr.Transpose();
         
-        if(iCascade == 0)
+        if(iCascade == 0 && s_gc.currentScene == SCENE_TERRAIN)
         {
             cascadeViewProj = ComputeCameraFrustumCascade(CurrCamAttribs, model.modelTransform, model.worldspaceAABB, Direction, m_ShadowSettings);
         }
@@ -5177,6 +5149,31 @@ void RenderPlanet(VulkanContext::frame_id_t inFlightIndex)
     RenderSFModel(inFlightIndex, s_gc.planet);
 }
 
+static SunBehaviorFn CommsSunBehavior = [](const float4x4& lightGlobalTransform, double currentTimeInSeconds, float* outSunlightIntensity) {
+#if 1
+    // Use a fixed light direction that points towards the model
+    // Fastest zero to 60: pull mouse relative to the window to derive the x and z axis of our direction.
+    // We'll use the mouse position relative to the window center to compute a direction vector in the XZ plane.
+    int winW = WINDOW_WIDTH;
+    int winH = WINDOW_HEIGHT;
+    float2 mouseNorm = float2(
+        (s_gc.mouseState.pos.x - winW * 0.5f) / (winW * 0.5f),
+        (s_gc.mouseState.pos.y - winH * 0.5f) / (winH * 0.5f)
+    );
+    // Clamp to [-1, 1]
+    mouseNorm.x = std::max(-1.0f, std::min(1.0f, mouseNorm.x));
+    mouseNorm.y = std::max(-1.0f, std::min(1.0f, mouseNorm.y));
+    // Map mouse X to world X, mouse Y to world Z (forward/back)
+    float3 Direction = -normalize(float3(mouseNorm.x, mouseNorm.y, 1.0f));
+    *outSunlightIntensity = 0.7f;
+    return Direction;
+#endif
+
+    //float3 Direction = -normalize(float3(-0.5f, -0.5f, 1.0f));
+    //*outSunlightIntensity = 1.0f;
+    //return Direction;
+};
+
 void RenderComms(VulkanContext::frame_id_t inFlightIndex)
 {
     if(s_gc.currentScene != SCENE_COMMS)
@@ -5186,7 +5183,7 @@ void RenderComms(VulkanContext::frame_id_t inFlightIndex)
         s_gc.currentScene = SCENE_COMMS;
     }
 
-    RenderSFModel(inFlightIndex, s_gc.comms);
+    RenderSFModel(inFlightIndex, s_gc.comms, CommsSunBehavior);
 }
 
 float bicubicOffset = -0.5f;
@@ -7714,7 +7711,7 @@ void RenderSFModel(VulkanContext::frame_id_t inFlightIndex, SFModel& model, cons
             float3 lightDir = {};
             float3 Direction = {};
 
-            if (LightNode.Name == "Sun" && s_gc.currentScene == SCENE_TERRAIN)
+            if (LightNode.Name == "Sun")
             {
                 l.Type = SF_GLTF::Light::TYPE::DIRECTIONAL;
                 l.Intensity = 1.0f;
