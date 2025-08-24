@@ -119,8 +119,10 @@ void PrepareForNewFrame(void* pEpipolarLightScattering, EpipolarLightScattering:
 #include "BasicMath.hpp"
 #include "GBuffer.hpp"
 
+#if defined(FX_SSR)
 #include "FidelityFX/host/backends/vk/ffx_vk.h"
 #include "FidelityFX/host/ffx_sssr.h"
+#endif
 
 #include "ShaderSourceFactoryUtils.hpp"
 
@@ -7524,6 +7526,7 @@ VkImageCreateInfo TextureDescToVkImageCreateInfo(const TextureDesc& Desc, const 
 }
 }
 
+#if defined(FX_SSR)
 static FfxResource ffxGetResource(ITextureView* textureView)
 {
     VkImage image = (VkImage)textureView->GetTexture()->GetNativeHandle();
@@ -7532,6 +7535,7 @@ static FfxResource ffxGetResource(ITextureView* textureView)
 
     return ffxGetResourceVK((void*)image, ffxGetImageResourceDescriptionVK(image, vkici, FFX_RESOURCE_USAGE_RENDERTARGET), nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 }
+#endif
 
 void RenderStation(VulkanContext::frame_id_t inFlightIndex)
 {
