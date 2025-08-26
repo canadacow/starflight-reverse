@@ -275,9 +275,11 @@ target_link_libraries(emulatesdl PRIVATE
         $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
         ${CURL_LIBRARIES})
 
-# Set stack size to 2MB (2097152 bytes)
+# Set stack size to 2MB (2097152 bytes) and working directory for Visual Studio
 if(WIN32)
-    set_target_properties(emulatesdl PROPERTIES LINK_FLAGS "/STACK:2097152,65536")
+    set_target_properties(emulatesdl PROPERTIES 
+        LINK_FLAGS "/STACK:2097152,65536"
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 foreach(SHADER ${SHADER_LIST})

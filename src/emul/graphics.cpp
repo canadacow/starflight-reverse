@@ -3697,18 +3697,18 @@ static void InitPBRRenderer(ITextureView* shadowMap)
 
     s_gc.m_pImmediateContext->TransitionResourceStates(barriers.size(), barriers.data());
 
-    LoadEnvironmentMap("starfield.ktx", s_gc.station, true);
+    LoadEnvironmentMap("\\assets\\starfield.ktx", s_gc.station, true);
     if (frameSync.demoMode == 1)
     {
-        LoadEnvironmentMap("starfield.ktx", s_gc.planet, false);
+        LoadEnvironmentMap("\\assets\\starfield.ktx", s_gc.planet, false);
     }
     else if(frameSync.demoMode == 2)
     {
-        LoadEnvironmentMap("starfield.ktx", s_gc.terrain, false);
+        LoadEnvironmentMap("\\assets\\starfield.ktx", s_gc.terrain, false);
     }
     else if (frameSync.demoMode == 3)
     {
-        LoadEnvironmentMap("mechan9.hdr", s_gc.comms, false);
+        LoadEnvironmentMap("\\assets\\mechan9.hdr", s_gc.comms, false);
     }
 
     // Initialize the sun renderer
@@ -4979,7 +4979,8 @@ float4x4 GetSurfacePretransformMatrix(const float3& f3CameraViewAxis)
 void InitModel(std::string modelPath, SFModel& model, int defaultCameraIndex)
 {
     SF_GLTF::ModelCreateInfo ModelCI;
-    ModelCI.FileName = modelPath.c_str();
+    std::string assetPath = "\\assets\\" + modelPath;
+    ModelCI.FileName = assetPath.c_str();
 
     try
     {
@@ -7206,7 +7207,7 @@ void InitializeCommonResources()
 
 void InitStation()
 {
-    InitModel("C:/Users/Dean/Downloads/station29.glb", s_gc.station);
+    InitModel("station29.glb", s_gc.station);
 
     for (int i = 0; i < s_gc.station.model->GetAnimations().size(); ++i) {
         auto& anim = s_gc.station.model->GetAnimations()[i];
