@@ -434,7 +434,7 @@ SF_PBR_Renderer::SF_PBR_Renderer(IRenderDevice*     pDevice,
             LoadInfo.Format = TEX_FORMAT_RG8_UNORM;
             LoadInfo.BindFlags = BIND_SHADER_RESOURCE;
             LoadInfo.Usage = USAGE_IMMUTABLE;
-            CreateTextureFromFile("perlin_noise.png", LoadInfo, pDevice, &pNoiseTexture);
+            CreateTextureFromFile("\\assets\\perlin_noise.png", LoadInfo, pDevice, &pNoiseTexture);
             if (pNoiseTexture)
             {
                 m_pNoiseTextureSRV = pNoiseTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);

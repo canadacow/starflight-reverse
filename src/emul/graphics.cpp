@@ -294,7 +294,7 @@ void ApplyPosteffects::Initialize(IRenderDevice* pDevice, TEXTURE_FORMAT RTVForm
 
     ShaderMacroHelper Macros;
     Macros.Add("CONVERT_OUTPUT_TO_SRGB", RTVFormat == TEX_FORMAT_RGBA8_UNORM || RTVFormat == TEX_FORMAT_BGRA8_UNORM);
-    Macros.Add("TONE_MAPPING_MODE", TONE_MAPPING_MODE_UNCHARTED2);
+    Macros.Add("TONE_MAPPING_MODE", TONE_MAPPING_AGX);
     ShaderCI.Macros = Macros;
 
     RefCntAutoPtr<IShader> pVS;
@@ -3704,7 +3704,8 @@ static void InitPBRRenderer(ITextureView* shadowMap)
     }
     else if(frameSync.demoMode == 2)
     {
-        LoadEnvironmentMap("\\assets\\starfield.ktx", s_gc.terrain, false);
+        LoadEnvironmentMap("\\assets\\DaySkyHDRI058B_1K-HDR.hdr", s_gc.terrain, false);
+        //LoadEnvironmentMap("\\assets\\NightSkyHDRI016B_1K-HDR.hdr", s_gc.terrain, false);
     }
     else if (frameSync.demoMode == 3)
     {
@@ -6414,11 +6415,6 @@ void DrawUI()
     nk_style_push_color(&ctx, &s->window.background, nk_rgba(64,64,64,230));
     nk_style_push_style_item(&ctx, &s->window.fixed_background, nk_style_item_color(nk_rgba(64,64,64,230)));
 
-    if(saveGames.empty() && !emulationThreadRunning && !s_helpShown) {
-        s_showHelp = true;
-        s_helpShown = true;
-    }
-
     // Planet development mode
     if(frameSync.demoMode == 2)
     {
@@ -6979,36 +6975,49 @@ void DrawUI()
 
             nk_layout_row_dynamic(&ctx, 320, 1); // Height for the save game display
             if (nk_group_begin(&ctx, "Save Games", NK_WINDOW_BORDER)) {
-                // Display only one save game at a time
-                const auto& saveGame = saveGames[screenshotIndex]; // Use the current index to get the save game
+                if (saveGames.empty()) {
+                    // Placeholder when no save games exist
+                    nk_layout_row_dynamic(&ctx, 230, 1);
+                    nk_label(&ctx, "No save games yet", NK_TEXT_CENTERED);
 
-                nk_layout_row_begin(&ctx, NK_DYNAMIC, 230, 3); // Three elements in the row: < button, screenshot, > button
-                {
-                    // Previous save game button
-                    nk_layout_row_push(&ctx, 0.10f);
-                    if (nk_button_label(&ctx, "<")) {
-                        screenshotIndex = (screenshotIndex + saveGames.size() - 1) % saveGames.size(); // Decrement index with wrap-around
+                    nk_layout_row_dynamic(&ctx, 20, 1);
+                    nk_label(&ctx, "Start a game to create your first save.", NK_TEXT_CENTERED);
+
+                    // Subtle spacer to balance layout against the normal Load button area
+                    nk_layout_row_dynamic(&ctx, 30, 1);
+                    nk_label(&ctx, "", NK_TEXT_LEFT);
+                } else {
+                    // Display only one save game at a time
+                    const auto& saveGame = saveGames[screenshotIndex]; // Use the current index to get the save game
+
+                    nk_layout_row_begin(&ctx, NK_DYNAMIC, 230, 3); // Three elements in the row: < button, screenshot, > button
+                    {
+                        // Previous save game button
+                        nk_layout_row_push(&ctx, 0.10f);
+                        if (nk_button_label(&ctx, "<")) {
+                            screenshotIndex = (screenshotIndex + saveGames.size() - 1) % saveGames.size(); // Decrement index with wrap-around
+                        }
+                        // Display save game screenshot
+                        nk_layout_row_push(&ctx, 0.80f);
+                        nk_image(&ctx, saveGame.screenshot);
+                        // Next save game button
+                        nk_layout_row_push(&ctx, 0.10f);
+                        if (nk_button_label(&ctx, ">")) {
+                            screenshotIndex = (screenshotIndex + 1) % saveGames.size(); // Increment index with wrap-around
+                        }
                     }
-                    // Display save game screenshot
-                    nk_layout_row_push(&ctx, 0.80f);
-                    nk_image(&ctx, saveGame.screenshot);
-                    // Next save game button
-                    nk_layout_row_push(&ctx, 0.10f);
-                    if (nk_button_label(&ctx, ">")) {
-                        screenshotIndex = (screenshotIndex + 1) % saveGames.size(); // Increment index with wrap-around
+                    nk_layout_row_end(&ctx);
+
+                    // Display save game timestamp below the screenshot
+                    nk_layout_row_dynamic(&ctx, 20, 1); // Adjust height as needed for the timestamp
+                    nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_CENTERED);
+
+                    // Load button for the current save game
+                    nk_layout_row_dynamic(&ctx, 30, 1); // Adjust height as needed for the load button
+                    if (nk_button_label(&ctx, "Load")) {
+                        loadWindowOpen = true;
+                        loadWindowIndex = screenshotIndex;
                     }
-                }
-                nk_layout_row_end(&ctx);
-
-                // Display save game timestamp below the screenshot
-                nk_layout_row_dynamic(&ctx, 20, 1); // Adjust height as needed for the timestamp
-                nk_label(&ctx, saveGame.timestamp.c_str(), NK_TEXT_CENTERED);
-
-                // Load button for the current save game
-                nk_layout_row_dynamic(&ctx, 30, 1); // Adjust height as needed for the load button
-                if (nk_button_label(&ctx, "Load")) {
-                    loadWindowOpen = true;
-                    loadWindowIndex = screenshotIndex;
                 }
                 nk_group_end(&ctx);
             }
@@ -9339,7 +9348,7 @@ void GraphicsUpdate()
 
     auto cpuTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - now).count();
 
-    static constexpr float targetFrameTimeMs = 1000.0f / 30.0f; // ~33.33ms for 30 FPS
+    static constexpr float targetFrameTimeMs = 1000.0f / 120.0f; // ~33.33ms for 30 FPS
 
     if(cpuTime < targetFrameTimeMs)
     {

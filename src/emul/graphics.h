@@ -1014,7 +1014,8 @@ struct FrameSync {
     // 0 = No demo
     // 1 = planet
     // 2 = terrain
-    uint32_t demoMode = 3;
+    // 3 = comms
+    uint32_t demoMode = 2;
 
     // V= CONTEXT-ID#   ( 0=planet surface, 1=orbit, 2=system)         
     // (3 = hyperspace, 4 = encounter, 5 = starport)

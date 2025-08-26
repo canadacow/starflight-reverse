@@ -54,7 +54,9 @@ float4 main(in FullScreenTriangleVSOutput VSOut) : SV_Target
     if (DebugMode == 0.0)
     {
         OutColor.rgb += (SSR.rgb - SpecularIBL.rgb) * SSRRadiance.w * OutColor.a * SSRScale;
-        OutColor.rgb *= SSAOValue;
+        // Old: OutColor.rgb *= SSAOValue;
+        float3 diffuseApprox = OutColor.rgb - SpecularIBL.rgb * OutColor.a;
+        OutColor.rgb = diffuseApprox * SSAOValue + SpecularIBL.rgb * OutColor.a;
     }
     else if (DebugMode == 1.0)
     {
